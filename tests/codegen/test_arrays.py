@@ -218,3 +218,59 @@ def test_array_literal_element_widens_to_the_declared_element_type(env):
     value = emit_coerced(gen, builder, literal, "i64[]", {})
     assert value.type == resolve_type("i64[]")
     assert "alloca [2 x i64]" in str(builder.function)
+
+
+def test_array_decays_to_its_element_pointer(env):
+    """
+    An array coerced to its element pointer type lowers to its data field.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    value = emit_coerced(gen, builder, Var("a"), "i32*", scope)
+    assert value.opname == "extractvalue"
+    assert value.type == ir.PointerType(ir.IntType(32))
+
+
+def test_array_does_not_decay_to_a_mismatched_pointer(env):
+    """
+    An array only decays to a pointer of its own element type.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    with pytest.raises(TypeError, match="cannot implicitly convert"):
+        emit_coerced(gen, builder, Var("a"), "i64*", scope)
+
+
+def test_array_casts_to_its_element_pointer(env):
+    """
+    An 'arr as X*' cast extracts the array's data pointer.
+    """
+    from siec.ast import Cast
+    from siec.codegen.expressions import emit_cast
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    value = emit_cast(gen, builder, Cast(Var("a"), "i32*"), scope)
+    assert value.opname == "extractvalue"
+    assert value.type == ir.PointerType(ir.IntType(32))
+
+
+def test_array_cast_to_a_mismatched_pointer_is_an_error(env):
+    """
+    Casting an array to a pointer of a different element type is rejected.
+    """
+    from siec.ast import Cast
+    from siec.codegen.expressions import emit_cast
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    with pytest.raises(TypeError, match="cannot cast"):
+        emit_cast(gen, builder, Cast(Var("a"), "i64*"), scope)

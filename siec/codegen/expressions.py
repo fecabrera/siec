@@ -225,6 +225,14 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
     """
     target = numeric_class(expr.type)
     if target is None:
+        # an array casts to its element pointer: 'arr as X*' extracts the data field
+        target_type = resolve_type(expr.type, gen.structs)
+        value = emit_expression(gen, builder, expr.operand, None, scope)
+
+        if (isinstance(target_type, ir.PointerType) and is_array_struct(value.type)
+                and value.type.elements[0] == target_type):
+            return builder.extract_value(value, 0, name="decay")
+
         raise TypeError(f"cannot cast to non-numeric type {expr.type!r}")
 
     value = emit_expression(gen, builder, expr.operand, None, scope)
@@ -295,6 +303,11 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_array(gen, builder, expr, target_type, scope, element_name)
 
     value = emit_expression(gen, builder, expr, target_type, scope)
+
+    # an array lowers to its data pointer where a plain pointer is expected
+    if (isinstance(target_type, ir.PointerType) and is_array_struct(value.type)
+            and value.type.elements[0] == target_type):
+        return builder.extract_value(value, 0, name="decay")
 
     # only scalar numeric targets widen; everything else demands an exact match
     target = numeric_class(target_name)

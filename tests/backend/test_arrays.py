@@ -126,6 +126,37 @@ def test_array_literal_of_string_pointers(run):
     assert run(source).returncode == 7
 
 
+def test_array_decays_at_a_pointer_parameter(run):
+    """
+    An array passed where a plain pointer is expected lowers to its data pointer.
+    """
+    source = """
+    fn second(values: i32*) -> i32 {
+        return values[1];
+    }
+
+    fn main() -> i32 {
+        let arr: i32[] = [1, 2, 3];
+        return second(arr);
+    }
+    """
+    assert run(source).returncode == 2
+
+
+def test_array_casts_to_its_element_pointer(run):
+    """
+    An 'arr as X*' cast yields the array's data pointer.
+    """
+    source = """
+    fn main() -> i32 {
+        let arr: i32[] = [1, 2, 3];
+        let ptr: i32* = arr as i32*;
+        return ptr[2];
+    }
+    """
+    assert run(source).returncode == 3
+
+
 def test_nested_array_literal_of_strings(run):
     """
     A 'char[][]' literal holds each string as its own fat array, each
