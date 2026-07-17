@@ -109,6 +109,15 @@ Constants are compile-time constant expressions declared through `@const`. Unlik
 @const name = <value>; // type inferred
 ```
 
+`@const` also declares compile-time macros, taking parameters between `(...)`. A call to `name` substitutes it with the block, `emit` optional since the macro doesn't have to produce a value:
+
+```
+@const name(param1, param2) {
+    // ...
+    emit <expr>; // optional
+}
+```
+
 ### Arithmetic
 
 Numeric values can be combined through the usual arithmetic operators:
@@ -218,6 +227,68 @@ if (<expr>) {
     // ...
 }
 ```
+
+### Blocks
+
+Code enclosed by `{}` is a block, its own scope:
+
+```
+{
+    // ...
+}
+```
+
+A block can also be used as a value, in which case it must produce one through the `emit` keyword:
+
+```
+a = {
+    // ...
+    emit <expr>;
+};
+```
+
+This is how a block initializes a variable:
+
+```
+let a: T = {
+    // ...
+    emit <expr>;
+};
+```
+
+### Defer
+
+`defer` pushes an expression or block onto a stack that runs at the end of the current scope, exactly before it returns:
+
+```
+defer <expr>;
+defer func();
+defer {
+    // ...
+}
+```
+
+This is commonly used to release a resource right next to where it's acquired:
+
+```
+fn f() -> i32 {
+    let a: T* = malloc(1) as T*;
+    defer free(a);
+    return 0;
+}
+```
+
+The deferred call runs after the return value is computed but before control actually leaves the function:
+
+```
+f:
+    mov $a, malloc(1)
+    mov $out, 0
+    call free(a)
+    ret
+```
+
+With more than one `defer` in the same scope, they run in reverse order, last deferred first.
 
 ### Functions
 
