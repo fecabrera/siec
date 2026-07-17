@@ -70,8 +70,14 @@ def main() -> int:
                            "passing along any following arguments")
     opts = args.parse_args()
 
+    # '.o' files on the command line skip the front end and join the link
+    objects = [s for s in opts.sources if s.endswith(".o")]
+    sources = [Path(s) for s in opts.sources if not s.endswith(".o")]
+    if not sources:
+        print("siec: no source files", file=sys.stderr)
+        return 1
+
     # 'lib/' next to each source file is always on the include path
-    sources = [Path(s) for s in opts.sources]
     include_paths = [Path(p) for p in opts.include]
     for source in sources:
         lib = source.resolve().parent / "lib"
@@ -83,9 +89,9 @@ def main() -> int:
     # first compile error in human-readable form instead of a traceback
     try:
         program = load_program(sources, include_paths)
-        module = codegen(program, opts.sources[0])
+        module = codegen(program, str(sources[0]))
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:
-        print(format_error(opts.sources[0], error), file=sys.stderr)
+        print(format_error(str(sources[0]), error), file=sys.stderr)
         return 1
 
     if opts.emit_llvm:
@@ -100,13 +106,14 @@ def main() -> int:
     # the program's argv is the source path plus the arguments after --run
     if opts.run is not None:
         try:
-            return run_jit(module, [opts.sources[0], *opts.run])
+            return run_jit(module, [str(sources[0]), *opts.run], objects)
         except NameError as error:
-            print(format_error(opts.sources[0], error), file=sys.stderr)
+            print(format_error(str(sources[0]), error), file=sys.stderr)
             return 1
 
-    # back end: LLVM module -> object file -> executable
+    # back end: LLVM module -> object file -> executable, joined by the
+    # object files given on the command line
     obj_path = opts.output + ".o"
     compile_to_object(module, obj_path)
-    link(obj_path, opts.output, opts.libs, opts.lib_dirs)
+    link([obj_path, *objects], opts.output, opts.libs, opts.lib_dirs)
     return 0

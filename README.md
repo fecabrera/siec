@@ -21,6 +21,12 @@ Programs are compiled through `siec`, which takes one or more source files and l
 siec main.sie -o main
 ```
 
+Precompiled object files may be given alongside the sources; they skip compilation and link into the executable (and `--run` resolves their symbols too):
+
+```
+siec main.sie file1.o file2.o -o main
+```
+
 - `-o <path>` names the output executable, `a.out` by default.
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library.

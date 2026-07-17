@@ -116,6 +116,57 @@ def test_struct_may_be_declared_in_a_later_source(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, use_src, decl_src, "--run") == 30
 
 
+def test_object_files_join_the_link(tmp_path, monkeypatch):
+    """
+    '.o' files on the command line skip the front end and link into the build.
+    """
+    obj_src = tmp_path / "magic.c"
+    obj_src.write_text("int magic(void) { return 21; }\n")
+    obj = tmp_path / "magic.o"
+    subprocess.run(["cc", "-c", str(obj_src), "-o", str(obj)], check=True)
+
+    source = """\
+    @extern fn magic() -> i32;
+    fn main() -> i32 { return magic() * 2; }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, obj, "-o", exe) == 0
+    assert subprocess.run([str(exe)]).returncode == 42
+
+
+def test_object_files_resolve_under_run(tmp_path, monkeypatch):
+    """
+    --run loads given '.o' files into the JIT, resolving their symbols.
+    """
+    obj_src = tmp_path / "magic.c"
+    obj_src.write_text("int magic(void) { return 21; }\n")
+    obj = tmp_path / "magic.o"
+    subprocess.run(["cc", "-c", str(obj_src), "-o", str(obj)], check=True)
+
+    source = """\
+    @extern fn magic() -> i32;
+    fn main() -> i32 { return magic() * 2; }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+    assert run_cli(monkeypatch, src, obj, "--run") == 42
+
+
+def test_only_object_files_is_an_error(tmp_path, monkeypatch, capsys):
+    """
+    A command line with no Sie sources exits non-zero with a readable error.
+    """
+    obj = tmp_path / "x.o"
+    obj.write_bytes(b"")
+    assert run_cli(monkeypatch, obj) == 1
+    assert "no source files" in capsys.readouterr().err
+
+
 def test_links_against_libraries(tmp_path, monkeypatch):
     """
     -L adds a library search path and -l links the named library into the build.

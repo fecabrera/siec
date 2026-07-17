@@ -41,7 +41,7 @@ def run(tmp_path):
     def _run(source: str, *args: str) -> subprocess.CompletedProcess:
         obj, exe = tmp_path / "m.o", tmp_path / "m"
         compile_to_object(compile_module(source), str(obj))
-        link(str(obj), str(exe))
+        link([str(obj)], str(exe))
         return subprocess.run([str(exe), *args], capture_output=True, text=True)
 
     return _run

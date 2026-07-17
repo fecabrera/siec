@@ -43,13 +43,19 @@ def emit_assembly(module: ir.Module) -> str:
     return target_machine.emit_assembly(llvm_module)
 
 
-def run_jit(module: ir.Module, argv: list[str]) -> int:
+def run_jit(module: ir.Module, argv: list[str], objects: list[str] = ()) -> int:
     """
     JIT-compile a module in-process and run its main, returning its exit code.
+
+    Extra object files are loaded into the engine, their symbols resolvable
+    from the program like any linked code.
     """
     target_machine, llvm_module = prepare_module(module)
 
     with binding.create_mcjit_compiler(llvm_module, target_machine) as engine:
+        for path in objects:
+            engine.add_object_file(binding.ObjectFileRef.from_path(path))
+
         engine.finalize_object()
         engine.run_static_constructors()
 
@@ -72,11 +78,11 @@ def run_jit(module: ir.Module, argv: list[str]) -> int:
         return code
 
 
-def link(obj_path: str, output: str, libs: list[str] = (),
+def link(obj_paths: list[str], output: str, libs: list[str] = (),
          lib_dirs: list[str] = ()) -> None:
     """
-    Link an object file into an executable using the system C compiler,
+    Link object files into an executable using the system C compiler,
     against the named libraries, searched in the given directories.
     """
     flags = [f"-L{d}" for d in lib_dirs] + [f"-l{name}" for name in libs]
-    subprocess.run(["cc", obj_path, "-o", output, *flags], check=True)
+    subprocess.run(["cc", *obj_paths, "-o", output, *flags], check=True)
