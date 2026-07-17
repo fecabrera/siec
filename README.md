@@ -368,6 +368,13 @@ Arrays can be initialiazed with elements `a`, `b`, etc. enclosed by `[]` and sep
 let arr: i32[] = [1, 2, 3];
 ```
 
+Elements can themselves be pointers or arrays, so an array literal can build an array of strings or an array of arrays.
+
+```
+let cmds: char*[] = ["ls", "cd", "cp"];
+let msgs: char[][] = ["hello", "world"];
+```
+
 They can also be initialized with a pointer `ptr` and length `n` enclosed by `{}` and separated by commas.
 
 ```
