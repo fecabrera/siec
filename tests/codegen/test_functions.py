@@ -100,3 +100,50 @@ def test_non_void_function_must_return(gen):
     declare_function(gen, fn)
     with pytest.raises(TypeError, match="must return a value"):
         emit_function(gen, fn)
+
+
+def test_main_without_a_return_type_is_i32(gen):
+    """
+    'fn main()' declares as i32 and falls off the end returning 0.
+    """
+    fn = Function("main", [], None, [])
+    declare_function(gen, fn)
+    emit_function(gen, fn)
+
+    body = str(gen.module)
+    assert 'define i32 @"main"' in body
+    assert "ret i32 0" in body
+
+
+def test_bare_return_in_main_yields_zero(gen):
+    """
+    A 'return;' inside main returns the implicit exit code 0.
+    """
+    fn = Function("main", [], None, [Return(None)])
+    declare_function(gen, fn)
+    emit_function(gen, fn)
+    assert "ret i32 0" in str(gen.module)
+
+
+def test_main_args_form_keeps_the_c_signature(gen):
+    """
+    'fn main(args: char*[])' declares the C-level (i32, char**) underneath.
+    """
+    fn = Function("main", [Param("args", "char*[]")], None, [])
+    func = declare_function(gen, fn)
+    assert func.function_type.args == (
+        ir.IntType(32), ir.PointerType(ir.PointerType(ir.IntType(8))))
+
+
+def test_main_args_form_builds_the_fat_array(gen):
+    """
+    The args parameter spills as {argv, argc as u64} into its slot.
+    """
+    fn = Function("main", [Param("args", "char*[]")], None, [])
+    declare_function(gen, fn)
+    emit_function(gen, fn)
+
+    body = str(gen.module)
+    assert "zext" in body
+    assert "insertvalue" in body
+    assert "args.addr" in body

@@ -70,7 +70,14 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_if(gen, builder, stmt, scope)
     elif isinstance(stmt, Return):
         if stmt.value is None:
-            builder.ret_void()
+            # a bare 'return' in main yields its implicit exit code 0: only
+            # main is declared without a return type yet lowered to i32
+            ret_type = builder.function.function_type.return_type
+            if (not isinstance(ret_type, ir.VoidType)
+                    and gen.return_types.get(builder.function.name) is None):
+                builder.ret(ir.Constant(ret_type, 0))
+            else:
+                builder.ret_void()
         else:
             ret_type = gen.return_types[builder.function.name]
             builder.ret(emit_coerced(gen, builder, stmt.value, ret_type, scope))

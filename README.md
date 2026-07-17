@@ -244,6 +244,36 @@ fn f3(t: T) -> T {
 }
 ```
 
+#### Entry point
+
+A program's entry point is a function named `main`, which can take one of a few forms.
+
+Taking no parameters and returning nothing implicitly returns `0`:
+
+```
+fn main() {
+    // ...
+} // equivalent to returning 0
+```
+
+Taking `argc` and `argv` is the C-style form, giving direct access to the raw count and pointer:
+
+```
+fn main(argc: i32, argv: char**) {
+    // ...
+}
+```
+
+Taking a single `char*[]` parameter gets `args` as a ready-made array, with `argv[0]`'s program name still included:
+
+```
+fn main(args: char*[]) {
+    // ...
+} // equivalent to prefixing the body with 'let args: char*[] = {argv, argc as u64};'
+```
+
+Any of these forms may also return `i32` explicitly, in which case the returned value becomes the program's exit code instead of `0`.
+
 #### Const parameters
 
 A parameter can be marked `const` by prefixing its type, through `const T` instead of `T`. Despite the shared keyword, this is unrelated to the `const` used for constant expressions: here it's a contract between caller and callee rather than a compile-time substitution. `a: T` and `a: const T` are represented identically; the latter is simply the callee's promise not to mutate `a`. A `const` parameter cannot be reassigned, and no mutating method can be called on it.

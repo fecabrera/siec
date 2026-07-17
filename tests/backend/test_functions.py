@@ -96,6 +96,31 @@ def test_void_function_falls_off_the_end(run):
     assert run(source).returncode == 8
 
 
+def test_main_without_a_return_type_exits_zero(run):
+    """
+    'fn main()' implicitly exits with code 0, from a bare return or the end.
+    """
+    source = """
+    fn main() {
+        return;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_main_args_form_receives_the_arguments(run):
+    """
+    'fn main(args: char*[])' gets argv wrapped as a fat array, program name included.
+    """
+    source = """
+    fn main(args: char*[]) -> i32 {
+        // the program name plus the two passed arguments
+        return args.length as i32;
+    }
+    """
+    assert run(source, "a", "b").returncode == 3
+
+
 def test_extern_varargs_call_prints(run):
     """
     An extern varargs function (printf) links and runs, writing to stdout.
