@@ -1,6 +1,7 @@
 """Parsing of statements."""
 
-from ..ast import Assign, BinaryOp, ExprStmt, If, Let, Member, MemberAssign, Return, Var
+from ..ast import (Assign, BinaryOp, ExprStmt, If, Index, IndexAssign, Let, Member,
+                   MemberAssign, Return, Var)
 from .expressions import parse_expression
 from .stream import TokenStream
 from .types import parse_type
@@ -95,12 +96,16 @@ def parse_statement(ts: TokenStream):
 
 def make_assignment(target, value, line: int):
     """
-    Build the assignment for an lvalue target: a variable or a struct field.
+    Build the assignment for an lvalue target: a variable, a struct field,
+    or an indexed element.
     """
     if isinstance(target, Var):
         return Assign(target.name, value, line=line)
 
     if isinstance(target, Member):
         return MemberAssign(target.base, target.field, value, line=line)
+
+    if isinstance(target, Index):
+        return IndexAssign(target.base, target.index, value, line=line)
 
     raise SyntaxError(f"line {line}: invalid assignment target")

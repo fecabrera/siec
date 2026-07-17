@@ -2,9 +2,10 @@
 
 from llvmlite import ir
 
-from ..ast import Assign, ExprStmt, If, Let, Member, MemberAssign, Return
+from ..ast import Assign, ExprStmt, If, Index, IndexAssign, Let, Member, MemberAssign, Return
 from .errors import source_location
-from .expressions import emit_bool, emit_coerced, emit_expression, emit_lvalue, member_field
+from .expressions import (emit_bool, emit_coerced, emit_expression, emit_lvalue,
+                          expr_sie_type, member_field)
 from .generator import CodeGenerator, Variable
 from .types import resolve_type
 
@@ -53,6 +54,18 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         field_type = member_field(gen, member, scope)[1]
         slot = emit_lvalue(gen, builder, member, scope)
         builder.store(emit_coerced(gen, builder, stmt.value, field_type, scope), slot)
+    elif isinstance(stmt, IndexAssign):
+        # store the value into the element's slot, typed by the element
+        target = Index(stmt.base, stmt.index)
+        slot = emit_lvalue(gen, builder, target, scope)
+
+        element_type = expr_sie_type(gen, target, scope)
+        if element_type is not None:
+            value = emit_coerced(gen, builder, stmt.value, element_type, scope)
+        else:
+            value = emit_expression(gen, builder, stmt.value, slot.type.pointee, scope)
+
+        builder.store(value, slot)
     elif isinstance(stmt, If):
         emit_if(gen, builder, stmt, scope)
     elif isinstance(stmt, Return):

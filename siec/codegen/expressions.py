@@ -2,8 +2,22 @@
 
 from llvmlite import ir
 
-from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr,
-                   Field, Index, IntLiteral, Member, StrLiteral, UnaryOp, Var)
+from siec.ast import (
+    AggregateLiteral,
+    ArrayLiteral,
+    BinaryOp,
+    BoolLiteral,
+    Call,
+    Cast,
+    Expr,
+    Field,
+    Index,
+    IntLiteral,
+    Member,
+    StrLiteral,
+    UnaryOp,
+    Var,
+)
 from .generator import CodeGenerator, StructInfo
 from .types import fn_type_parts, is_array_struct, resolve_type, type_signedness
 
@@ -405,7 +419,8 @@ def member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, st
 
 def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict):
     """
-    Emit the address of an assignable expression: a variable or a struct/array field.
+    Emit the address of an assignable expression: a variable, a struct/array
+    field, or a pointer-indexed element.
     """
     if isinstance(expr, Var):
         if expr.name not in scope:
@@ -419,6 +434,15 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         base = emit_lvalue(gen, builder, expr.base, scope)
         return builder.gep(base, [ir.Constant(ir.IntType(32), 0),
                                   ir.Constant(ir.IntType(32), index)], name=expr.field)
+
+    if isinstance(expr, Index):
+        # offset the base pointer's value to the element's address, C-style
+        base = emit_expression(gen, builder, expr.base, None, scope)
+        if not isinstance(base.type, ir.PointerType):
+            raise TypeError(f"cannot index a value of type {base.type}")
+
+        index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
+        return builder.gep(base, [index])
 
     raise TypeError(f"expression is not assignable: {expr!r}")
 

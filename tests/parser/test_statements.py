@@ -2,8 +2,8 @@
 
 import pytest
 
-from siec.ast import (Assign, BinaryOp, Call, ExprStmt, If, IntLiteral, Let, Member,
-                      MemberAssign, Return, Var)
+from siec.ast import (Assign, BinaryOp, Call, ExprStmt, If, Index, IndexAssign, IntLiteral,
+                      Let, Member, MemberAssign, Return, Var)
 from siec.parser.statements import parse_block, parse_statement
 
 
@@ -117,6 +117,31 @@ def test_compound_member_assignment_desugars(ts):
     """
     assert parse_statement(ts("p.x += 2;")) == MemberAssign(
         Var("p"), "x", BinaryOp("+", Member(Var("p"), "x"), IntLiteral(2)))
+
+
+def test_index_assignment(ts):
+    """
+    'base[i] = expr;' parses to an IndexAssign over the base.
+    """
+    assert parse_statement(ts("p[0] = 5;")) == IndexAssign(
+        Var("p"), IntLiteral(0), IntLiteral(5))
+
+
+def test_compound_index_assignment_desugars(ts):
+    """
+    'base[i] += v' desugars to 'base[i] = base[i] + v'.
+    """
+    assert parse_statement(ts("p[1] += 2;")) == IndexAssign(
+        Var("p"), IntLiteral(1),
+        BinaryOp("+", Index(Var("p"), IntLiteral(1)), IntLiteral(2)))
+
+
+def test_member_of_indexed_element_assignment(ts):
+    """
+    'base[i].field = expr;' parses to a MemberAssign over the indexed base.
+    """
+    assert parse_statement(ts("p[0].x = 5;")) == MemberAssign(
+        Index(Var("p"), IntLiteral(0)), "x", IntLiteral(5))
 
 
 def test_invalid_assignment_target_is_an_error(ts):

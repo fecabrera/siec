@@ -3,7 +3,7 @@
 import pytest
 from llvmlite import ir
 
-from siec.ast import Assign, ExprStmt, If, IntLiteral, Let, Return, Var
+from siec.ast import Assign, ExprStmt, If, IndexAssign, IntLiteral, Let, Return, Var
 from siec.codegen.generator import Variable
 from siec.codegen.statements import emit_block, emit_if, emit_statement
 
@@ -38,6 +38,41 @@ def test_assign_stores_into_the_slot(env):
     emit_statement(gen, builder, Let("num", "i64", None), scope)
     emit_statement(gen, builder, Assign("num", IntLiteral(9)), scope)
     assert "store i64 9" in str(builder.function)
+
+
+def test_index_assign_stores_through_the_pointer(env):
+    """
+    An index assignment geps the base pointer and stores the element's type.
+    """
+    gen, builder = env
+    scope = {"p": Variable(builder.alloca(ir.PointerType(ir.IntType(32)), name="p"), "i32*")}
+
+    emit_statement(gen, builder, IndexAssign(Var("p"), IntLiteral(1), IntLiteral(30)), scope)
+    body = str(builder.function)
+    assert "getelementptr" in body
+    assert "store i32 30" in body
+
+
+def test_index_assign_widens_to_the_element_type(env):
+    """
+    The stored value coerces to the pointer's element type.
+    """
+    gen, builder = env
+    scope = {"p": Variable(builder.alloca(ir.PointerType(ir.IntType(64)), name="p"), "i64*")}
+
+    emit_statement(gen, builder, IndexAssign(Var("p"), IntLiteral(0), IntLiteral(7)), scope)
+    assert "store i64 7" in str(builder.function)
+
+
+def test_index_assign_to_a_non_pointer_is_an_error(env):
+    """
+    Index-assigning a value that is not a pointer raises a TypeError.
+    """
+    gen, builder = env
+    scope = {"n": Variable(builder.alloca(ir.IntType(32), name="n"), "i32")}
+
+    with pytest.raises(TypeError, match="cannot index"):
+        emit_statement(gen, builder, IndexAssign(Var("n"), IntLiteral(0), IntLiteral(1)), scope)
 
 
 def test_assign_to_undefined_variable_is_an_error(env):

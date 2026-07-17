@@ -371,6 +371,25 @@ let c: u32 = a; // error: signed to unsigned
 let d: f32 = a; // error: integer to float
 ```
 
+#### Pointers
+
+A pointer to `T` is written `T*`. Indexing a pointer with `ptr[i]` accesses the `i`th `T` past it, C-style, and can be read or assigned to.
+
+```
+let ptr: i32*;
+
+let first: i32 = ptr[0]; // read
+ptr[1] = 5;              // write
+ptr[1] += 5;             // compound write
+```
+
+Indexing a pointer to a struct reaches into the indexed element's fields the same way:
+
+```
+let points: Point*;
+points[0].x = 5;
+```
+
 #### Arrays
 
 Arrays are collections of same-type values. They are represented by `X[]` and their internal representation is always `{X*, u64}`, where `X*` is a pointer to `X` and `u64` is the number of elements. These are exposed as the members `data` and `length`, accessed like a struct's:

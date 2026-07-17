@@ -179,6 +179,17 @@ class MemberAssign:
 
 
 @dataclass
+class IndexAssign:
+    """
+    An assignment of a new value to an element indexed from a base expression.
+    """
+    base: Expr
+    index: Expr
+    value: Expr
+    line: int = _line()
+
+
+@dataclass
 class ExprStmt:
     """
     An expression evaluated as a statement, its result discarded.

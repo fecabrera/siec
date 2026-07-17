@@ -174,6 +174,56 @@ def test_pointers_and_arrays_decay_to_opaque(run):
     assert run(source).returncode == 9
 
 
+def test_index_assignment_writes_through_pointers(run):
+    """
+    Elements are written through indexed pointers: plain, compound, and
+    through an array's data pointer.
+    """
+    source = """
+    @extern fn malloc(size: u64) -> opaque*;
+    @extern fn free(ptr: opaque*);
+
+    fn main() -> i32 {
+        let values: i32* = malloc(12) as i32*;
+        values[0] = 30;
+        values[1] = 10;
+        values[1] += 2;
+        let total: i32 = values[0] + values[1];
+        free(values);
+
+        let arr: i32[] = [1, 2, 3];
+        arr.data[2] = 58;
+        return total + arr.data[2]; // 42 + 58
+    }
+    """
+    assert run(source).returncode == 100
+
+
+def test_member_assignment_through_an_indexed_pointer(run):
+    """
+    A struct field behind an indexed pointer is assignable: 'points[i].x = v'.
+    """
+    source = """
+    @extern fn malloc(size: u64) -> opaque*;
+    @extern fn free(ptr: opaque*);
+
+    struct Point {
+        x: i32;
+        y: i32;
+    }
+
+    fn main() -> i32 {
+        let points: Point* = malloc(16) as Point*;
+        points[1].x = 25;
+        points[1].x += 25;
+        let x: i32 = points[1].x;
+        free(points);
+        return x;
+    }
+    """
+    assert run(source).returncode == 50
+
+
 def test_opaque_casts_back_to_a_typed_pointer(run):
     """
     An 'opaque*' becomes a typed pointer through an explicit cast: the
