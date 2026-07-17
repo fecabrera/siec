@@ -72,8 +72,11 @@ def run_jit(module: ir.Module, argv: list[str]) -> int:
         return code
 
 
-def link(obj_path: str, output: str) -> None:
+def link(obj_path: str, output: str, libs: list[str] = (),
+         lib_dirs: list[str] = ()) -> None:
     """
-    Link an object file into an executable using the system C compiler.
+    Link an object file into an executable using the system C compiler,
+    against the named libraries, searched in the given directories.
     """
-    subprocess.run(["cc", obj_path, "-o", output], check=True)
+    flags = [f"-L{d}" for d in lib_dirs] + [f"-l{name}" for name in libs]
+    subprocess.run(["cc", obj_path, "-o", output, *flags], check=True)

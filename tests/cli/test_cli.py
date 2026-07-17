@@ -116,6 +116,39 @@ def test_struct_may_be_declared_in_a_later_source(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, use_src, decl_src, "--run") == 30
 
 
+def test_links_against_libraries(tmp_path, monkeypatch):
+    """
+    -L adds a library search path and -l links the named library into the build.
+    """
+    import os
+    import sys as _sys
+
+    # a one-function C library for the program to call
+    c_source = """\
+    int magic(void) { return 33; }
+    """
+
+    lib_src = tmp_path / "magic.c"
+    lib_src.write_text(c_source)
+
+    suffix = "dylib" if _sys.platform == "darwin" else "so"
+    subprocess.run(["cc", "-shared", str(lib_src), "-o", str(tmp_path / f"libmagic.{suffix}")], check=True)
+
+    source = """\
+    @extern fn magic() -> i32;
+    fn main() -> i32 { return magic(); }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, "-L", tmp_path, "-l", "magic", "-o", exe) == 0
+
+    env = {**os.environ, "LD_LIBRARY_PATH": str(tmp_path), "DYLD_LIBRARY_PATH": str(tmp_path)}
+    assert subprocess.run([str(exe)], env=env).returncode == 33
+
+
 def test_run_jits_the_program(tmp_path, monkeypatch):
     """
     --run executes the program in-process and returns its exit code.

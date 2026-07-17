@@ -58,6 +58,10 @@ def main() -> int:
     args.add_argument("-o", "--output", default="a.out")
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
+    args.add_argument("-l", action="append", default=[], dest="libs", metavar="LIB",
+                      help="link against a library (passed to the linker as -l<lib>)")
+    args.add_argument("-L", action="append", default=[], dest="lib_dirs", metavar="DIR",
+                      help="add a directory to the library search path")
     args.add_argument("--emit-llvm", action="store_true", help="print LLVM IR and exit")
     args.add_argument("--emit-asm", action="store_true",
                       help="print native assembly and exit")
@@ -104,5 +108,5 @@ def main() -> int:
     # back end: LLVM module -> object file -> executable
     obj_path = opts.output + ".o"
     compile_to_object(module, obj_path)
-    link(obj_path, opts.output)
+    link(obj_path, opts.output, opts.libs, opts.lib_dirs)
     return 0
