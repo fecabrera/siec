@@ -42,6 +42,27 @@ def test_sized_array_type(ts):
     assert parse_type(ts("u8[4]")) == "u8[4]"
 
 
+def test_array_of_pointers_type(ts):
+    """
+    An array's element type may itself be a pointer.
+    """
+    assert parse_type(ts("char*[]")) == "char*[]"
+
+
+def test_nested_array_type(ts):
+    """
+    An array's element type may itself be an array.
+    """
+    assert parse_type(ts("char[][]")) == "char[][]"
+
+
+def test_pointer_to_array_type(ts):
+    """
+    A '*' may follow an array suffix, making a pointer to the array.
+    """
+    assert parse_type(ts("char[]*")) == "char[]*"
+
+
 def test_nested_pointer_type(ts):
     """
     Multiple trailing '*'s all fold into the type name.

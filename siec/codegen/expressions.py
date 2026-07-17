@@ -2,10 +2,10 @@
 
 from llvmlite import ir
 
-from ..ast import (AggregateLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr, Field, Index,
-                   IntLiteral, Member, StrLiteral, UnaryOp, Var)
+from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr,
+                   Field, Index, IntLiteral, Member, StrLiteral, UnaryOp, Var)
 from .generator import CodeGenerator, StructInfo
-from .types import fn_type_parts, resolve_type, type_signedness
+from .types import fn_type_parts, is_array_struct, resolve_type, type_signedness
 
 # arithmetic and bitwise operators and the IRBuilder method emitting each;
 # division, remainder, and right shift change instruction on unsigned operands
@@ -26,7 +26,17 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return ir.Constant(int_type, expr.value)
 
     if isinstance(expr, StrLiteral):
-        return emit_string(gen, builder, expr.value)
+        ptr = emit_string(gen, builder, expr.value)
+
+        # a string literal fills a 'char[]' context as the fat {char*, u64}
+        # value, its length excluding the null terminator
+        if is_array_struct(expected_type) and expected_type.elements[0] == ptr.type:
+            value = ir.Constant(expected_type, ir.Undefined)
+            value = builder.insert_value(value, ptr, 0)
+            return builder.insert_value(
+                value, ir.Constant(ir.IntType(64), len(expr.value.encode())), 1)
+
+        return ptr
 
     if isinstance(expr, BoolLiteral):
         # boolean literals are i1 constants, independent of the context type
@@ -34,6 +44,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     if isinstance(expr, AggregateLiteral):
         return emit_aggregate(gen, builder, expr, expected_type, scope)
+
+    if isinstance(expr, ArrayLiteral):
+        return emit_array(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, Var):
         # variables load their current value from their stack slot
@@ -276,6 +289,11 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         field_names = [f.type for f in info.fields] if info is not None else None
         return emit_aggregate(gen, builder, expr, target_type, scope, field_names)
 
+    # an array literal coerces each element to the array's declared element type
+    if isinstance(expr, ArrayLiteral):
+        element_name = target_name[:-2] if target_name and target_name.endswith("[]") else None
+        return emit_array(gen, builder, expr, target_type, scope, element_name)
+
     value = emit_expression(gen, builder, expr, target_type, scope)
 
     # only scalar numeric targets widen; everything else demands an exact match
@@ -486,6 +504,45 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
 
         value = builder.insert_value(value, field, index)
 
+    return value
+
+
+def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
+              expected_type: ir.Type | None, scope: dict, element_name: str | None = None):
+    """
+    Emit an array literal, storing its elements into a backing array and
+    wrapping a pointer to it with their count in the fat '{X*, u64}' array value.
+
+    When the element's Sie type name is known, each element is coerced to it
+    with the same widening rules as any other typed context.
+    """
+    # the literal takes its element type from context: an 'i32[]' target's
+    # first field is a pointer to the element type it must build
+    if not is_array_struct(expected_type):
+        raise TypeError(f"array literal needs an array type, not {expected_type}")
+
+    element_type = expected_type.elements[0].pointee
+
+    # store each element into a stack-allocated backing array
+    backing = builder.alloca(ir.ArrayType(element_type, len(expr.elements)), name="arr.lit")
+    for index, element in enumerate(expr.elements):
+        if element_name is not None:
+            value = emit_coerced(gen, builder, element, element_name, scope)
+        else:
+            value = emit_expression(gen, builder, element, element_type, scope)
+
+        slot = builder.gep(backing, [ir.Constant(ir.IntType(32), 0),
+                                     ir.Constant(ir.IntType(32), index)])
+        builder.store(value, slot)
+
+    # decay the backing array to a pointer at its first element, and pair it
+    # with the element count in the fat array value
+    data = builder.gep(backing, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)],
+                       name="arr.lit.data")
+
+    value = ir.Constant(expected_type, ir.Undefined)
+    value = builder.insert_value(value, data, 0)
+    value = builder.insert_value(value, ir.Constant(ir.IntType(64), len(expr.elements)), 1)
     return value
 
 

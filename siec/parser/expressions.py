@@ -1,7 +1,7 @@
 """Parsing of expressions: literals, variables, and calls."""
 
-from ..ast import (AggregateLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr, Index,
-                   IntLiteral, Member, StrLiteral, UnaryOp, Var)
+from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr,
+                   Index, IntLiteral, Member, StrLiteral, UnaryOp, Var)
 from .stream import TokenStream
 from .types import parse_type
 
@@ -107,6 +107,18 @@ def parse_primary(ts: TokenStream) -> Expr:
         ts.expect("sym", "}")
 
         return AggregateLiteral(elements)
+
+    # '[a, b, ...]' is an array literal, building a fat array from its elements
+    if tok.value == "[":
+        elements = []
+        while ts.peek().value != "]":
+            if elements:
+                ts.expect("sym", ",")
+
+            elements.append(parse_expression(ts))
+        ts.expect("sym", "]")
+
+        return ArrayLiteral(elements)
 
     if tok.kind == "int":
         return IntLiteral(int(tok.value))

@@ -77,6 +77,15 @@ def fn_type_parts(name: str) -> tuple[list[str], str | None, str]:
     return params, ret, rest
 
 
+def is_array_struct(type_: ir.Type | None) -> bool:
+    """
+    Whether an LLVM type has the fat array shape: a {pointer, i64} struct literal.
+    """
+    return (isinstance(type_, ir.LiteralStructType) and len(type_.elements) == 2
+            and isinstance(type_.elements[0], ir.PointerType)
+            and type_.elements[1] == ir.IntType(64))
+
+
 def resolve_type(name: str | None, structs: dict | None = None) -> ir.Type:
     """
     Resolve a Sie type name to an LLVM type; None resolves to void.

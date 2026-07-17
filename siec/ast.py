@@ -71,6 +71,14 @@ class AggregateLiteral:
 
 
 @dataclass
+class ArrayLiteral:
+    """
+    An array literal '[a, b, ...]', building a fat array from its elements.
+    """
+    elements: list
+
+
+@dataclass
 class Cast:
     """
     An explicit conversion of an expression to a named type: 'expr as T'.
@@ -98,8 +106,8 @@ class BinaryOp:
     right: "Expr"
 
 
-Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | Var | Call | Index
-        | Member | Cast | UnaryOp | BinaryOp)
+Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | ArrayLiteral | Var | Call
+        | Index | Member | Cast | UnaryOp | BinaryOp)
 
 
 def _line():

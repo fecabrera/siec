@@ -55,3 +55,91 @@ def test_aggregate_initialization_from_pointer_and_length(run):
     }
     """
     assert run(source).returncode == 3
+
+
+def test_array_literal_builds_the_fat_array(run):
+    """
+    A '[a, b, c]' literal stores its elements into a backing array, whose
+    data and length read back through '.data' and '.length'.
+    """
+    source = """
+    fn main() -> i32 {
+        let ops: i32[] = [10, 20, 30];
+        if (ops.length == 3 and ops.data[0] == 10
+                and ops.data[1] == 20 and ops.data[2] == 30) {
+            return 4;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 4
+
+
+def test_array_literal_element_widens_to_the_declared_type(run):
+    """
+    An array literal's elements widen to the array's declared element type,
+    the same as any other typed initializer.
+    """
+    source = """
+    fn main() -> i32 {
+        let ops: i64[] = [1, 2, 3];
+        if (ops.data[2] == 3) {
+            return 5;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 5
+
+
+def test_string_literal_fills_a_char_array(run):
+    """
+    A string literal initializes a 'char[]', its length excluding the null.
+    """
+    source = """
+    fn main() -> i32 {
+        let msg: char[] = "hello";
+        // 'h' is 104; the length counts the five letters, not the null
+        if (msg.length == 5 and msg.data[0] == 104) {
+            return 6;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 6
+
+
+def test_array_literal_of_string_pointers(run):
+    """
+    A 'char*[]' literal holds each string as a plain pointer element.
+    """
+    source = """
+    fn main() -> i32 {
+        let cmds: char*[] = ["ls", "cd", "cp"];
+        // 'c' is 99: the second command's first letter
+        if (cmds.length == 3 and cmds.data[1][0] == 99) {
+            return 7;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 7
+
+
+def test_nested_array_literal_of_strings(run):
+    """
+    A 'char[][]' literal holds each string as its own fat array, each
+    carrying its own length.
+    """
+    source = """
+    fn main() -> i32 {
+        let msgs: char[][] = ["hello", "world"];
+        // 'w' is 119: the second message's first letter
+        if (msgs.length == 2 and msgs.data[0].length == 5
+                and msgs.data[1].data[0] == 119) {
+            return 8;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 8

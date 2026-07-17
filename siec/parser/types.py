@@ -5,31 +5,32 @@ from .stream import TokenStream
 
 def parse_type(ts: TokenStream) -> str:
     """
-    Parse a type annotation, including pointer suffixes (e.g. 'u8**').
+    Parse a type annotation, including pointer and array suffixes
+    (e.g. 'u8**', 'char*[]', 'char[][]').
     """
     # 'fn(A, B) -> T' is a function reference type; anything else is a base
-    # type name; either may be followed by '*'s, which the lexer may have
-    # glued into '**' tokens
+    # type name; either may be followed by any mix of '*'s (which the lexer
+    # may have glued into '**' tokens) and '[]' or '[N]' suffixes
     if ts.peek().value == "fn":
         name = parse_fn_type(ts)
     else:
         name = ts.expect("ident").value
 
-    while ts.peek().value in ("*", "**"):
-        name += ts.next().value
-    
-    if ts.peek().value == "[":
-        ts.next()
+    while True:
+        if ts.peek().value in ("*", "**"):
+            name += ts.next().value
+        elif ts.peek().value == "[":
+            ts.next()
 
-        if ts.peek().value != "]":
-            size = ts.expect("int").value
-            ts.expect("sym", "]")
-            name += f"[{size}]"
+            if ts.peek().value != "]":
+                size = ts.expect("int").value
+                ts.expect("sym", "]")
+                name += f"[{size}]"
+            else:
+                ts.expect("sym", "]")
+                name += "[]"
         else:
-            ts.expect("sym", "]")
-            name += "[]"
-
-    return name
+            return name
 
 
 def parse_fn_type(ts: TokenStream) -> str:

@@ -3,7 +3,7 @@
 import pytest
 from llvmlite import ir
 
-from siec.ast import AggregateLiteral, IntLiteral, Member, MemberAssign, Var
+from siec.ast import AggregateLiteral, ArrayLiteral, IntLiteral, Member, MemberAssign, StrLiteral, Var
 from siec.codegen.expressions import emit_expression, emit_lvalue, member_field, signedness
 from siec.codegen.generator import Variable
 from siec.codegen.types import resolve_type
@@ -119,3 +119,102 @@ def test_array_built_from_a_pointer_and_length(env):
     value = emit_expression(gen, builder, literal, resolve_type("i32[]"), scope)
     assert value.opname == "insertvalue"
     assert value.type == resolve_type("i32[]")
+
+
+def test_array_literal_builds_a_fat_array(env):
+    """
+    An '[a, b, c]' literal stores its elements into a backing array and wraps
+    a pointer to it with their count in the fat array value.
+    """
+    gen, builder = env
+
+    literal = ArrayLiteral([IntLiteral(1), IntLiteral(2), IntLiteral(3)])
+    value = emit_expression(gen, builder, literal, resolve_type("i32[]"), {})
+    assert value.opname == "insertvalue"
+    assert value.type == resolve_type("i32[]")
+    assert "alloca [3 x i32]" in str(builder.function)
+    assert "store i32 1" in str(builder.function)
+    assert "store i32 2" in str(builder.function)
+    assert "store i32 3" in str(builder.function)
+
+
+def test_array_literal_length_matches_element_count(env):
+    """
+    The fat array's length field is a constant equal to the element count.
+    """
+    gen, builder = env
+
+    literal = ArrayLiteral([IntLiteral(1)] * 5)
+    emit_expression(gen, builder, literal, resolve_type("i32[]"), {})
+    assert "insertvalue {i32*, i64} %\"" in str(builder.function)
+    assert "i64 5, 1" in str(builder.function)
+
+
+def test_empty_array_literal_needs_an_array_type(env):
+    """
+    An array literal used without an array-type context raises a TypeError.
+    """
+    gen, builder = env
+    with pytest.raises(TypeError, match="needs an array type"):
+        emit_expression(gen, builder, ArrayLiteral([IntLiteral(3)]), ir.IntType(32), {})
+
+
+def test_string_literal_fills_a_char_array(env):
+    """
+    A string literal in a 'char[]' context builds the fat {char*, u64} value,
+    its length excluding the null terminator.
+    """
+    gen, builder = env
+
+    value = emit_expression(gen, builder, StrLiteral("hello"), resolve_type("char[]"), {})
+    assert value.opname == "insertvalue"
+    assert value.type == resolve_type("char[]")
+    assert "i64 5, 1" in str(builder.function)
+
+
+def test_string_literal_stays_a_pointer_without_an_array_context(env):
+    """
+    A string literal without a 'char[]' context still emits as a plain char*.
+    """
+    gen, builder = env
+
+    value = emit_expression(gen, builder, StrLiteral("hello"), None, {})
+    assert value.type == ir.PointerType(ir.IntType(8))
+
+
+def test_array_literal_of_strings_stores_pointers(env):
+    """
+    A 'char*[]' literal stores each string's pointer into the backing array.
+    """
+    gen, builder = env
+
+    literal = ArrayLiteral([StrLiteral("ls"), StrLiteral("cd")])
+    value = emit_expression(gen, builder, literal, resolve_type("char*[]"), {})
+    assert value.type == resolve_type("char*[]")
+    assert "alloca [2 x i8*]" in str(builder.function)
+
+
+def test_nested_array_literal_stores_fat_arrays(env):
+    """
+    A 'char[][]' literal stores each string's fat array into the backing array.
+    """
+    gen, builder = env
+
+    literal = ArrayLiteral([StrLiteral("hello"), StrLiteral("world")])
+    value = emit_expression(gen, builder, literal, resolve_type("char[][]"), {})
+    assert value.type == resolve_type("char[][]")
+    assert "alloca [2 x {i8*, i64}]" in str(builder.function)
+
+
+def test_array_literal_element_widens_to_the_declared_element_type(env):
+    """
+    Coercing an array literal through a Let-style context widens each
+    element to the array's declared element Sie type.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    literal = ArrayLiteral([IntLiteral(1), IntLiteral(2)])
+    value = emit_coerced(gen, builder, literal, "i64[]", {})
+    assert value.type == resolve_type("i64[]")
+    assert "alloca [2 x i64]" in str(builder.function)
