@@ -116,6 +116,51 @@ def test_struct_may_be_declared_in_a_later_source(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, use_src, decl_src, "--run") == 30
 
 
+def test_compile_only_emits_an_object_file(tmp_path, monkeypatch):
+    """
+    -c compiles a source to an object file, named after it, without linking;
+    the object then links into a later build.
+    """
+    helper_source = """\
+    fn triple(x: i32) -> i32 { return x * 3; }
+    """
+    main_source = """\
+    fn triple(x: i32) -> i32;
+    fn main() -> i32 { return triple(14); }
+    """
+
+    helper = tmp_path / "helper.sie"
+    helper.write_text(helper_source)
+
+    # the default object name is the source's, cc-style, in the working directory
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, helper, "-c") == 0
+    assert (tmp_path / "helper.o").exists()
+
+    src = tmp_path / "p.sie"
+    src.write_text(main_source)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, tmp_path / "helper.o", "-o", exe) == 0
+    assert subprocess.run([str(exe)]).returncode == 42
+
+
+def test_compile_only_honors_the_output_path(tmp_path, monkeypatch):
+    """
+    -c with -o writes the object exactly where -o points.
+    """
+    source = """\
+    fn f() -> i32 { return 1; }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    obj = tmp_path / "custom.o"
+    assert run_cli(monkeypatch, src, "-c", "-o", obj) == 0
+    assert obj.exists()
+
+
 def test_object_files_join_the_link(tmp_path, monkeypatch):
     """
     '.o' files on the command line skip the front end and link into the build.

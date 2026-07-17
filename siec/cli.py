@@ -55,7 +55,9 @@ def main() -> int:
     """
     args = argparse.ArgumentParser(prog="siec", description="Sie language compiler")
     args.add_argument("sources", nargs="+")
-    args.add_argument("-o", "--output", default="a.out")
+    args.add_argument("-o", "--output", default=None)
+    args.add_argument("-c", action="store_true", dest="compile_only",
+                      help="compile to an object file, without linking")
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("-l", action="append", default=[], dest="libs", metavar="LIB",
@@ -102,6 +104,12 @@ def main() -> int:
         print(emit_assembly(module), end="")
         return 0
 
+    # '-c' stops after native code generation, leaving only the object file,
+    # named after the first source, cc-style, unless '-o' says otherwise
+    if opts.compile_only:
+        compile_to_object(module, opts.output or str(Path(sources[0].name).with_suffix(".o")))
+        return 0
+
     # jit-run in place of building, exiting with the program's own code;
     # the program's argv is the source path plus the arguments after --run
     if opts.run is not None:
@@ -113,7 +121,8 @@ def main() -> int:
 
     # back end: LLVM module -> object file -> executable, joined by the
     # object files given on the command line
-    obj_path = opts.output + ".o"
+    output = opts.output or "a.out"
+    obj_path = output + ".o"
     compile_to_object(module, obj_path)
-    link([obj_path, *objects], opts.output, opts.libs, opts.lib_dirs)
+    link([obj_path, *objects], output, opts.libs, opts.lib_dirs)
     return 0

@@ -28,6 +28,7 @@ siec main.sie file1.o file2.o -o main
 ```
 
 - `-o <path>` names the output executable, `a.out` by default.
+- `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise.
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library.
 - `-L <dir>` adds a directory to the library search path.
