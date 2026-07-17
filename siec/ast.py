@@ -1,0 +1,241 @@
+"""AST node definitions for the Sie language."""
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class IntLiteral:
+    """
+    An integer literal expression.
+    """
+    value: int
+
+
+@dataclass
+class StrLiteral:
+    """
+    A string literal expression.
+    """
+    value: str
+
+
+@dataclass
+class BoolLiteral:
+    """
+    A boolean literal expression: 'true' or 'false'.
+    """
+    value: bool
+
+
+@dataclass
+class Var:
+    """
+    A reference to a variable by name.
+    """
+    name: str
+
+
+@dataclass
+class Call:
+    """
+    A call to a function by name with a list of argument expressions.
+    """
+    name: str
+    args: list
+
+
+@dataclass
+class Index:
+    """
+    An indexing expression: a base expression subscripted by an index.
+    """
+    base: "Expr"
+    index: "Expr"
+
+
+@dataclass
+class Member:
+    """
+    A member access: a field selected from a struct-valued base expression.
+    """
+    base: "Expr"
+    field: str
+
+
+@dataclass
+class AggregateLiteral:
+    """
+    An aggregate literal '{a, b, ...}' filling a struct or array's fields in order.
+    """
+    elements: list
+
+
+@dataclass
+class Cast:
+    """
+    An explicit conversion of an expression to a named type: 'expr as T'.
+    """
+    operand: "Expr"
+    type: str
+
+
+@dataclass
+class UnaryOp:
+    """
+    A unary operation applying a prefix operator to one subexpression.
+    """
+    op: str
+    operand: "Expr"
+
+
+@dataclass
+class BinaryOp:
+    """
+    A binary operation applying an operator to two subexpressions.
+    """
+    op: str
+    left: "Expr"
+    right: "Expr"
+
+
+Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | Var | Call | Index
+        | Member | Cast | UnaryOp | BinaryOp)
+
+
+def _line():
+    """
+    A source-line field for error reporting, kept out of equality so tests can
+    compare nodes without pinning line numbers.
+    """
+    return field(default=0, compare=False, repr=False)
+
+
+def _file():
+    """
+    A source-file field for error reporting, tagged by the loader and kept out
+    of equality so tests can compare nodes without pinning file paths.
+    """
+    return field(default="", compare=False, repr=False)
+
+
+@dataclass
+class Return:
+    """
+    A return statement with an optional value expression.
+    """
+    value: Expr | None
+    line: int = _line()
+
+
+@dataclass
+class Let:
+    """
+    A variable declaration with its type and an optional initializer.
+    """
+    name: str
+    type: str
+    value: Expr | None
+    line: int = _line()
+
+
+@dataclass
+class If:
+    """
+    An if statement with a condition, a body, and an optional else block.
+    """
+    condition: Expr
+    body: list
+    orelse: list | None = None
+    line: int = _line()
+
+
+@dataclass
+class Assign:
+    """
+    An assignment of a new value to an existing variable.
+    """
+    name: str
+    value: Expr
+    line: int = _line()
+
+
+@dataclass
+class MemberAssign:
+    """
+    An assignment of a new value to a struct field selected from a base expression.
+    """
+    base: Expr
+    field: str
+    value: Expr
+    line: int = _line()
+
+
+@dataclass
+class ExprStmt:
+    """
+    An expression evaluated as a statement, its result discarded.
+    """
+    expr: Expr
+    line: int = _line()
+
+
+@dataclass
+class Param:
+    """
+    A function parameter with its name and type annotation.
+    """
+    name: str
+    type: str
+
+
+@dataclass
+class Function:
+    """
+    A function declaration or definition.
+    """
+    name: str
+    params: list[Param]
+    return_type: str | None
+    body: list | None  # None for declarations without a body
+    is_extern: bool = False
+    var_arg: bool = False
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
+class Field:
+    """
+    A struct field with its name and type annotation.
+    """
+    name: str
+    type: str
+
+
+@dataclass
+class Struct:
+    """
+    A struct declaration with its name and ordered fields.
+    """
+    name: str
+    fields: list[Field]
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
+class Include:
+    """
+    An '@include' of another source file by its include path (e.g. 'libc/stdio').
+    """
+    path: str
+
+
+@dataclass
+class Program:
+    """
+    The root of the AST: the includes, structs, and functions of a source file.
+    """
+    includes: list[Include]
+    functions: list[Function]
+    structs: list[Struct] = field(default_factory=list)

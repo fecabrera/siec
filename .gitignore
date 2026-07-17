@@ -1,8 +1,40 @@
+# Python
 __pycache__/
 .pytest_cache/
 
+# Coverage
 htmlcov/
 .coverage*
 !.coveragerc
 
+# OS
 .DS_Store
+
+# Build
+*.o
+*.so
+*.dylib
+*.dll
+*.lib
+*.exp
+*.obj
+*.res
+
+# IDEs
+.vscode/
+.idea/
+.cursor/
+
+# AI assistants
+.chatgpt/
+.claude/
+.grok/
+.perplexity/
+.sage/
+.gemini/
+.deepseek/
+.grok/
+.perplexity/
+.sage/
+.gemini/
+.deepseek/

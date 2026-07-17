@@ -1,0 +1,120 @@
+"""Tests for siec.lexer."""
+
+import pytest
+
+from siec.lexer import lex
+
+
+def kinds(source):
+    """
+    Lex source and return (kind, value) pairs, dropping the trailing eof.
+    """
+    return [(t.kind, t.value) for t in lex(source)[:-1]]
+
+
+def test_empty_source_yields_only_eof():
+    """
+    Lexing an empty string produces just the eof token.
+    """
+    tokens = lex("")
+    assert len(tokens) == 1
+    assert tokens[0].kind == "eof"
+
+
+def test_keywords_and_identifiers():
+    """
+    Words are split into keywords and identifiers, including underscores and digits.
+    """
+    assert kinds("fn foo let x if else return _under score9") == [
+        ("kw", "fn"), ("ident", "foo"), ("kw", "let"), ("ident", "x"),
+        ("kw", "if"), ("kw", "else"), ("kw", "return"),
+        ("ident", "_under"), ("ident", "score9"),
+    ]
+
+
+def test_integer_literals():
+    """
+    Runs of digits lex as int tokens.
+    """
+    assert kinds("0 42 1234") == [("int", "0"), ("int", "42"), ("int", "1234")]
+
+
+def test_single_character_symbols():
+    """
+    Each supported single-character symbol lexes as its own sym token.
+    """
+    assert kinds("(){}[];,:+-*/%@=<>") == [("sym", s) for s in "(){}[];,:+-*/%@=<>"]
+
+
+def test_multi_character_symbols():
+    """
+    Multi-character symbols lex as one token, not their constituent characters.
+    """
+    assert kinds("-> ... == != <= >=") == [
+        ("sym", "->"), ("sym", "..."), ("sym", "=="),
+        ("sym", "!="), ("sym", "<="), ("sym", ">="),
+    ]
+
+
+def test_string_literal_with_escapes():
+    """
+    String literals decode every supported escape sequence.
+    """
+    tokens = lex(r'"a\n\t\r\0\\\" b"')
+    assert tokens[0].kind == "str"
+    assert tokens[0].value == 'a\n\t\r\0\\" b'
+
+
+def test_unknown_escape_is_an_error():
+    """
+    An unsupported escape sequence raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match="unknown escape"):
+        lex(r'"\q"')
+
+
+def test_unterminated_string_is_an_error():
+    """
+    A string missing its closing quote raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match="unterminated string"):
+        lex('"never closed')
+
+
+def test_line_comments_are_skipped():
+    """
+    '//' comments produce no tokens up to the end of the line.
+    """
+    assert kinds("1 // comment 2\n3") == [("int", "1"), ("int", "3")]
+
+
+def test_multiline_comments_are_skipped():
+    """
+    '/* */' comments produce no tokens, even across lines and comment markers.
+    """
+    assert kinds("1 /* 2\n // * \n */ 3") == [("int", "1"), ("int", "3")]
+
+
+def test_unterminated_multiline_comment_is_an_error():
+    """
+    A multiline comment missing its '*/' raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match="unterminated multiline comment"):
+        lex("/* never closed")
+
+
+def test_line_numbers_advance_through_newlines_and_comments():
+    """
+    Tokens carry line numbers that count newlines inside comments too.
+    """
+    tokens = lex("a\nb /* x\ny */ c\nd")
+    lines = {t.value: t.line for t in tokens[:-1]}
+    assert lines == {"a": 1, "b": 2, "c": 3, "d": 4}
+
+
+def test_unexpected_character_is_an_error():
+    """
+    A character outside the language raises a SyntaxError with its line.
+    """
+    with pytest.raises(SyntaxError, match=r"line 2: unexpected character '\$'"):
+        lex("ok\n$")
