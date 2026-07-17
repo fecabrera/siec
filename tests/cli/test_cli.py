@@ -31,6 +31,24 @@ def test_emit_llvm_prints_the_module(tmp_path, capsys, monkeypatch):
     assert 'define i32 @"main"' in out
 
 
+def test_emit_asm_prints_native_assembly(tmp_path, capsys, monkeypatch):
+    """
+    --emit-asm prints the host target's assembly instead of building.
+    """
+    source = """\
+    fn main() -> i32 { return 0; }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    assert run_cli(monkeypatch, src, "--emit-asm") == 0
+
+    out = capsys.readouterr().out
+    assert "main" in out          # the entry symbol's label
+    assert "define" not in out    # assembly, not LLVM IR
+
+
 def test_compiles_and_links_an_executable(tmp_path, monkeypatch):
     """
     The default pipeline produces a runnable executable at -o.

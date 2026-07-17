@@ -35,6 +35,14 @@ def compile_to_object(module: ir.Module, obj_path: str) -> None:
         f.write(target_machine.emit_object(llvm_module))
 
 
+def emit_assembly(module: ir.Module) -> str:
+    """
+    Verify an LLVM module and render native assembly for the host target.
+    """
+    target_machine, llvm_module = prepare_module(module)
+    return target_machine.emit_assembly(llvm_module)
+
+
 def run_jit(module: ir.Module, argv: list[str]) -> int:
     """
     JIT-compile a module in-process and run its main, returning its exit code.

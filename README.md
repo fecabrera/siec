@@ -13,6 +13,24 @@ fn main() -> i32 {
 }
 ```
 
+## The compiler
+
+Programs are compiled through `siec`, which takes one or more source files and links them into an executable:
+
+```
+siec main.sie -o main
+```
+
+- `-o <path>` names the output executable, `a.out` by default.
+- `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
+- `--emit-llvm` prints the LLVM IR and exits, without building.
+- `--emit-asm` prints the host target's native assembly and exits, without building.
+- `--run` JIT-compiles and runs the program in place of building it, exiting with the program's own exit code. Anything after the flag is passed along as its arguments:
+
+```
+siec main.sie --run arg1 arg2
+```
+
 ## The language
 
 ### Imports

@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from .backend import compile_to_object, link, run_jit
+from .backend import compile_to_object, emit_assembly, link, run_jit
 from .codegen import codegen
 from .loader import load_program
 
@@ -59,6 +59,8 @@ def main() -> int:
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("--emit-llvm", action="store_true", help="print LLVM IR and exit")
+    args.add_argument("--emit-asm", action="store_true",
+                      help="print native assembly and exit")
     args.add_argument("--run", nargs=argparse.REMAINDER,
                       help="jit-run the program instead of building, "
                            "passing along any following arguments")
@@ -84,6 +86,10 @@ def main() -> int:
 
     if opts.emit_llvm:
         print(module)
+        return 0
+
+    if opts.emit_asm:
+        print(emit_assembly(module), end="")
         return 0
 
     # jit-run in place of building, exiting with the program's own code;
