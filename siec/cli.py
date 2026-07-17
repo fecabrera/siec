@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from .backend import compile_to_object, link
+from .backend import compile_to_object, link, run_jit
 from .codegen import codegen
 from .loader import load_program
 
@@ -59,6 +59,9 @@ def main() -> int:
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("--emit-llvm", action="store_true", help="print LLVM IR and exit")
+    args.add_argument("--run", nargs=argparse.REMAINDER,
+                      help="jit-run the program instead of building, "
+                           "passing along any following arguments")
     opts = args.parse_args()
 
     # 'lib/' next to each source file is always on the include path
@@ -82,6 +85,15 @@ def main() -> int:
     if opts.emit_llvm:
         print(module)
         return 0
+
+    # jit-run in place of building, exiting with the program's own code;
+    # the program's argv is the source path plus the arguments after --run
+    if opts.run is not None:
+        try:
+            return run_jit(module, [opts.sources[0], *opts.run])
+        except NameError as error:
+            print(format_error(opts.sources[0], error), file=sys.stderr)
+            return 1
 
     # back end: LLVM module -> object file -> executable
     obj_path = opts.output + ".o"
