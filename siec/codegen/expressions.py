@@ -255,6 +255,11 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
             if decayed is not None:
                 return decayed
 
+        # an 'opaque*' casts to any pointer, the reverse of the decay
+        if (isinstance(target_type, ir.PointerType)
+                and expr_sie_type(gen, expr.operand, scope) == "opaque*"):
+            return builder.bitcast(value, target_type)
+
         raise TypeError(f"cannot cast to non-numeric type {expr.type!r}")
 
     value = emit_expression(gen, builder, expr.operand, None, scope)

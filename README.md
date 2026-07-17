@@ -334,6 +334,14 @@ memcpy(dst, src.data, 12); // both decay to opaque*
 let p: opaque* = dst as opaque*;
 ```
 
+The reverse direction never happens implicitly: an `opaque*` only becomes a typed pointer through an explicit cast.
+
+```
+@extern fn malloc(size: u64) -> opaque*;
+
+let values: i32* = malloc(12) as i32*;
+```
+
 Signed and unsigned values cannot be mixed in the same operation: comparing or combining an `i32` with a `u32` is a compile-time error. Integer literals adapt to either side.
 
 ```

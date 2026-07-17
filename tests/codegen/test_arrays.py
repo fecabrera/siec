@@ -330,3 +330,33 @@ def test_pointer_casts_to_opaque(env):
 
     value = emit_cast(gen, builder, Cast(Var("a"), "opaque*"), scope)
     assert value.type == ir.PointerType(ir.IntType(8))
+
+
+def test_opaque_casts_to_a_typed_pointer(env):
+    """
+    An 'opaque* as X*' cast bitcasts to the typed pointer.
+    """
+    from siec.ast import Cast
+    from siec.codegen.expressions import emit_cast
+
+    gen, builder = env
+    slot = builder.alloca(ir.PointerType(ir.IntType(8)), name="p")
+    scope = {"p": Variable(slot, "opaque*")}
+
+    value = emit_cast(gen, builder, Cast(Var("p"), "i32*"), scope)
+    assert value.type == ir.PointerType(ir.IntType(32))
+
+
+def test_typed_pointer_does_not_cast_to_another_typed_pointer(env):
+    """
+    Casting between two typed pointers is still rejected; only 'opaque*' converts.
+    """
+    from siec.ast import Cast
+    from siec.codegen.expressions import emit_cast
+
+    gen, builder = env
+    slot = builder.alloca(ir.PointerType(ir.IntType(32)), name="p")
+    scope = {"p": Variable(slot, "i32*")}
+
+    with pytest.raises(TypeError, match="cannot cast"):
+        emit_cast(gen, builder, Cast(Var("p"), "i64*"), scope)

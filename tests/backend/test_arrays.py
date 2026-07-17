@@ -174,6 +174,25 @@ def test_pointers_and_arrays_decay_to_opaque(run):
     assert run(source).returncode == 9
 
 
+def test_opaque_casts_back_to_a_typed_pointer(run):
+    """
+    An 'opaque*' becomes a typed pointer through an explicit cast: the
+    malloc/free round trip.
+    """
+    source = """
+    @extern fn calloc(count: u64, size: u64) -> opaque*;
+    @extern fn free(ptr: opaque*);
+
+    fn main() -> i32 {
+        let values: i32* = calloc(3, 4) as i32*;
+        let zero: i32 = values[0] + values[1] + values[2];
+        free(values);
+        return zero + 42;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_nested_array_literal_of_strings(run):
     """
     A 'char[][]' literal holds each string as its own fat array, each
