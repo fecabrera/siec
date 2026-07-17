@@ -70,6 +70,34 @@ def test_compiles_multiple_sources_together(tmp_path, monkeypatch):
     assert subprocess.run([str(exe)]).returncode == 3
 
 
+def test_struct_may_be_declared_in_a_later_source(tmp_path, monkeypatch):
+    """
+    A source may use a struct that only a later source file declares.
+    """
+    use_source = """\
+    fn main() -> i32 {
+        let p: Pair;
+        p.a = 10;
+        p.b = 20;
+        return p.a + p.b;
+    }
+    """
+    decl_source = """\
+    struct Pair {
+        a: i32;
+        b: i32;
+    }
+    """
+
+    use_src = tmp_path / "use.sie"
+    use_src.write_text(use_source)
+
+    decl_src = tmp_path / "decl.sie"
+    decl_src.write_text(decl_source)
+
+    assert run_cli(monkeypatch, use_src, decl_src, "--run") == 30
+
+
 def test_run_jits_the_program(tmp_path, monkeypatch):
     """
     --run executes the program in-process and returns its exit code.

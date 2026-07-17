@@ -21,6 +21,30 @@ def test_field_write_and_read(run):
     assert run(source).returncode == 42
 
 
+def test_structs_resolve_regardless_of_declaration_order(run):
+    """
+    Sources are parsed first and types resolved later: a field may name a
+    struct declared further down, and two structs may point at each other.
+    """
+    source = """
+    struct T {
+        s: S*;
+        value: i32;
+    }
+
+    struct S {
+        t: T*;
+    }
+
+    fn main() -> i32 {
+        let t: T;
+        t.value = 9;
+        return t.value;
+    }
+    """
+    assert run(source).returncode == 9
+
+
 def test_nested_structs(run):
     """
     A struct field may itself be a struct, accessed by chained members.
