@@ -29,6 +29,22 @@ def test_struct_fields_keep_pointer_and_struct_types(ts):
         "S", [Field("p", "i32*"), Field("inner", "T")])
 
 
+def test_forward_declaration_has_no_fields(ts):
+    """
+    'struct Name;' parses to a Struct with None fields, marking a forward declaration.
+    """
+    assert parse_struct(ts("struct Handle;")) == Struct("Handle", None)
+
+
+def test_forward_declaration_consumes_its_semicolon(ts):
+    """
+    A forward declaration consumes its ';', leaving following tokens untouched.
+    """
+    stream = ts("struct Handle; next")
+    assert parse_struct(stream) == Struct("Handle", None)
+    assert stream.peek().value == "next"
+
+
 def test_struct_field_requires_a_semicolon(ts):
     """
     A field missing its ';' raises a SyntaxError.

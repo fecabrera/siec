@@ -226,7 +226,7 @@ class Struct:
     A struct declaration with its name and ordered fields.
     """
     name: str
-    fields: list[Field]
+    fields: list[Field] | None  # None for forward declarations without a body
     line: int = _line()
     file: str = _file()
 

@@ -115,6 +115,15 @@ def test_aggregate_without_an_aggregate_type(compile_source):
         compile_source("fn main() -> i32 { let x: i32 = {1}; return x; }")
 
 
+def test_opaque_struct_by_value(compile_source):
+    """
+    Using a bodiless struct by value is an error; only pointers to it work.
+    """
+    source = "struct Handle; fn main() -> i32 { let h: Handle; return 0; }"
+    with pytest.raises(TypeError, match="has no body and can only be used through a pointer"):
+        compile_source(source)
+
+
 def test_duplicate_struct(compile_source):
     """
     Declaring two structs with the same name is an error.

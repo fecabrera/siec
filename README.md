@@ -592,6 +592,15 @@ fn f() -> S; // a function that returns a value of type S
 let s: S; // a variable that holds a value of type S
 ```
 
+Structs can be forward-declared: declared with no body at all. This is mainly useful for opaque structs, whose fields are never given and which are only ever handled through a pointer.
+
+```
+struct Handle; // forward declaration, never given a body
+
+fn open() -> Handle*;
+fn close(h: Handle*);
+```
+
 #### Generic structs
 
 Structs can be generic when their name is followed by `<X, Y, ...>`, where `X` and `Y` are arbitrary types.

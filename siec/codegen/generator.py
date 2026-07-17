@@ -28,7 +28,8 @@ class StructInfo:
         """
         Look up a field by name, returning its index and Sie type.
         """
-        for index, field in enumerate(self.fields):
+        # an opaque struct, never given a body, has no fields to find
+        for index, field in enumerate(self.fields or ()):
             if field.name == name:
                 return index, field.type
 

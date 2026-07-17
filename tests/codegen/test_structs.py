@@ -40,6 +40,52 @@ def test_register_rejects_duplicate_structs(env):
         register_structs(gen, program)
 
 
+def test_forward_declaration_takes_fields_from_the_definition(env):
+    """
+    A bodiless declaration registers the type; a later definition fills its fields.
+    """
+    gen, _ = env
+    register_structs(gen, Program([], [], [
+        Struct("S", None), Struct("S", [Field("x", "i32")])]))
+
+    info = gen.structs["S"]
+    assert info.field("x") == (0, "i32")
+    assert info.type.elements == (ir.IntType(32),)
+
+
+def test_forward_declaration_after_the_definition_is_allowed(env):
+    """
+    A forward declaration may also follow the definition, changing nothing.
+    """
+    gen, _ = env
+    register_structs(gen, Program([], [], [
+        Struct("S", [Field("x", "i32")]), Struct("S", None)]))
+    assert gen.structs["S"].field("x") == (0, "i32")
+
+
+def test_opaque_struct_resolves_only_behind_a_pointer(env):
+    """
+    A struct never given a body resolves as a pointer, but not by value.
+    """
+    gen, _ = env
+    register_structs(gen, Program([], [], [Struct("Handle", None)]))
+
+    assert resolve_type("Handle*", gen.structs) == ir.PointerType(
+        gen.structs["Handle"].type)
+    with pytest.raises(TypeError, match="has no body"):
+        resolve_type("Handle", gen.structs)
+
+
+def test_opaque_struct_has_no_fields_to_access(env):
+    """
+    Member access on an opaque struct reports the missing field.
+    """
+    gen, _ = env
+    register_structs(gen, Program([], [], [Struct("Handle", None)]))
+    with pytest.raises(TypeError, match="has no field 'x'"):
+        gen.structs["Handle"].field("x")
+
+
 def test_struct_fields_may_reference_other_structs(env):
     """
     A field typed by another struct resolves to that struct's type.

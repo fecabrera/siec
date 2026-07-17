@@ -7,11 +7,19 @@ from .types import parse_type
 
 def parse_struct(ts: TokenStream) -> Struct:
     """
-    Parse a struct declaration: 'struct Name { a: A; b: B; }', with an optional trailing ';'.
+    Parse a struct declaration: 'struct Name { a: A; b: B; }', with an optional
+    trailing ';', or a bodiless forward declaration 'struct Name;'.
     """
     line = ts.peek().line
     ts.expect("kw", "struct")
     name = ts.expect("ident").value
+
+    # a ';' in place of a body is a forward declaration, leaving the fields
+    # to a later definition — or to none, for an opaque struct
+    if ts.peek().value == ";":
+        ts.next()
+        return Struct(name, None, line=line)
+
     ts.expect("sym", "{")
 
     # 'name: type;' fields until the closing brace

@@ -21,6 +21,45 @@ def test_field_write_and_read(run):
     assert run(source).returncode == 42
 
 
+def test_forward_declared_struct_defined_later(run):
+    """
+    A struct may be forward-declared with no body and defined further down.
+    """
+    source = """
+    struct Node;
+
+    struct Node {
+        value: i32;
+    }
+
+    fn main() -> i32 {
+        let n: Node;
+        n.value = 11;
+        return n.value;
+    }
+    """
+    assert run(source).returncode == 11
+
+
+def test_opaque_struct_passes_through_pointers(run):
+    """
+    A struct never given a body is opaque: usable through pointers alone.
+    """
+    source = """
+    struct Handle;
+
+    fn probe(h: Handle*) -> i32 {
+        return 21;
+    }
+
+    fn main() -> i32 {
+        let h: Handle*;
+        return probe(h) * 2;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_structs_resolve_regardless_of_declaration_order(run):
     """
     Sources are parsed first and types resolved later: a field may name a

@@ -86,11 +86,15 @@ def is_array_struct(type_: ir.Type | None) -> bool:
             and type_.elements[1] == ir.IntType(64))
 
 
-def resolve_type(name: str | None, structs: dict | None = None) -> ir.Type:
+def resolve_type(name: str | None, structs: dict | None = None,
+                 allow_opaque: bool = False) -> ir.Type:
     """
     Resolve a Sie type name to an LLVM type; None resolves to void.
 
-    Struct names resolve through the given registry, when provided.
+    Struct names resolve through the given registry, when provided. A struct
+    never given a body is opaque and only resolves behind a pointer;
+    allow_opaque lifts that for an array's element, held through its
+    data pointer.
     """
     if name is None:
         return ir.VoidType()
@@ -122,7 +126,7 @@ def resolve_type(name: str | None, structs: dict | None = None) -> ir.Type:
 
     if base.endswith("[]"):
         # an 'X[]' array is a struct of a pointer to X and a u64 length
-        element = resolve_type(base[:-2], structs)
+        element = resolve_type(base[:-2], structs, allow_opaque=True)
         resolved = ir.LiteralStructType([ir.PointerType(element), ir.IntType(64)])
     elif base == "opaque":
         if pointer_depth == 0:
@@ -132,6 +136,10 @@ def resolve_type(name: str | None, structs: dict | None = None) -> ir.Type:
     elif base in SCALAR_TYPES:
         resolved = SCALAR_TYPES[base]
     elif structs and base in structs:
+        if (structs[base].fields is None and pointer_depth == 0 and not allow_opaque):
+            raise TypeError(f"struct {base!r} has no body and can only be "
+                            f"used through a pointer ({base}*)")
+
         resolved = structs[base].type
     else:
         raise TypeError(f"unknown type {base!r}")
