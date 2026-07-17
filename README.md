@@ -401,6 +401,13 @@ let ptr: i32* = arr.data;   // the backing pointer
 let n: u64 = arr.length;    // the element count
 ```
 
+An array can be indexed directly, reading or writing the `i`th element through its backing data:
+
+```
+let first: i32 = arr[0]; // equivalent to arr.data[0]
+arr[1] = 5;
+```
+
 Arrays can be initialiazed with elements `a`, `b`, etc. enclosed by `[]` and separated by commas.
 
 ```

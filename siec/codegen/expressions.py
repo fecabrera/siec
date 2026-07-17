@@ -79,8 +79,19 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_call(gen, builder, expr, scope)
 
     if isinstance(expr, Index):
-        # pointer indexing, C-style: offset the base pointer and load the element
-        base = emit_expression(gen, builder, expr.base, None, scope)
+        # the element context implies the base's array shape, which is what
+        # gives a literal base ('{ptr, n}[1]', say) its type
+        base_context = None
+        if expected_type is not None and not isinstance(expected_type, ir.VoidType):
+            base_context = ir.LiteralStructType([ir.PointerType(expected_type),
+                                                 ir.IntType(64)])
+
+        # pointer indexing, C-style: offset the base pointer and load the
+        # element; an array indexes through its data pointer
+        base = emit_expression(gen, builder, expr.base, base_context, scope)
+        if is_array_struct(base.type):
+            base = builder.extract_value(base, 0, name="index.data")
+
         if not isinstance(base.type, ir.PointerType):
             raise TypeError(f"cannot index a value of type {base.type}")
 
@@ -88,7 +99,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return builder.load(builder.gep(base, [index]))
 
     if isinstance(expr, Slice):
-        return emit_slice(gen, builder, expr, scope)
+        return emit_slice(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, Member):
         # read a struct or array field: extract it from the base value by index
@@ -444,8 +455,12 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
                                   ir.Constant(ir.IntType(32), index)], name=expr.field)
 
     if isinstance(expr, Index):
-        # offset the base pointer's value to the element's address, C-style
+        # offset the base pointer's value to the element's address, C-style;
+        # an array's elements are addressed through its data pointer
         base = emit_expression(gen, builder, expr.base, None, scope)
+        if is_array_struct(base.type):
+            base = builder.extract_value(base, 0, name="index.data")
+
         if not isinstance(base.type, ir.PointerType):
             raise TypeError(f"cannot index a value of type {base.type}")
 
@@ -624,12 +639,16 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
     return value
 
 
-def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice, scope: dict):
+def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,
+               expected_type: ir.Type | None, scope: dict):
     """
     Emit an 'arr[from:to]' slice: a view over the base array's backing data,
     from 'from' (default 0) to 'to' (default the array's length).
+
+    A slice keeps its base's type, so the context's expected type passes
+    through — it's what gives a literal base its shape.
     """
-    base = emit_expression(gen, builder, expr.base, None, scope)
+    base = emit_expression(gen, builder, expr.base, expected_type, scope)
     if not is_array_struct(base.type):
         raise TypeError(f"cannot slice a value of type {base.type}")
 

@@ -182,6 +182,42 @@ def test_slices_view_the_backing_data(run):
     assert run(source).returncode == 9
 
 
+def test_arrays_index_directly(run):
+    """
+    'arr[i]' reads and writes the backing data, equivalent to 'arr.data[i]';
+    a literal indexes in place given an element context.
+    """
+    source = """
+    fn main(argc: i32, argv: char**) -> i32 {
+        let arr: i32[] = [10, 20, 30];
+        arr[1] = 22;
+
+        let prog: char* = {argv, argc as u64}[0];
+        let inline: i32 = [7, 8, 9][2];
+
+        if (arr[1] == 22 and arr.data[1] == 22 and prog[0] != 0 and inline == 9) {
+            return 6;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 6
+
+
+def test_aggregate_literal_slices_in_place(run):
+    """
+    A '{ptr, n}' literal can be sliced directly, taking its shape from the
+    declaration it initializes: the argv-skipping idiom.
+    """
+    source = """
+    fn main(argc: i32, argv: char**) -> i32 {
+        let args: char*[] = {argv, argc as u64}[1:];
+        return args.length as i32;
+    }
+    """
+    assert run(source, "a", "b").returncode == 2
+
+
 def test_pointers_and_arrays_decay_to_opaque(run):
     """
     Typed pointers and arrays pass to 'opaque*' parameters with no cast.

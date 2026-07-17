@@ -94,7 +94,7 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.value == "(":
         expr = parse_expression(ts)
         ts.expect("sym", ")")
-        return expr
+        return parse_postfix(ts, expr)
 
     # '{a, b, ...}' is an aggregate literal filling a struct or array's fields
     if tok.value == "{":
@@ -106,7 +106,7 @@ def parse_primary(ts: TokenStream) -> Expr:
             elements.append(parse_expression(ts))
         ts.expect("sym", "}")
 
-        return AggregateLiteral(elements)
+        return parse_postfix(ts, AggregateLiteral(elements))
 
     # '[a, b, ...]' is an array literal, building a fat array from its elements
     if tok.value == "[":
@@ -118,7 +118,7 @@ def parse_primary(ts: TokenStream) -> Expr:
             elements.append(parse_expression(ts))
         ts.expect("sym", "]")
 
-        return ArrayLiteral(elements)
+        return parse_postfix(ts, ArrayLiteral(elements))
 
     if tok.kind == "int":
         return IntLiteral(int(tok.value))
@@ -144,24 +144,30 @@ def parse_primary(ts: TokenStream) -> Expr:
         else:
             expr = Var(tok.value)
 
-        # postfix '[index]', '[from:to]', and '.field' chains apply to
-        # variables and call results alike
-        while ts.peek().value in ("[", "."):
-            if ts.next().value == "[":
-                # a ':' anywhere in the brackets makes it a slice, either bound optional
-                start = None if ts.peek().value == ":" else parse_expression(ts)
-
-                if ts.peek().value == ":":
-                    ts.next()
-                    stop = None if ts.peek().value == "]" else parse_expression(ts)
-                    ts.expect("sym", "]")
-                    expr = Slice(expr, start, stop)
-                else:
-                    ts.expect("sym", "]")
-                    expr = Index(expr, start)
-            else:
-                expr = Member(expr, ts.expect("ident").value)
-
-        return expr
+        return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
+    """
+    Apply postfix '[index]', '[from:to]', and '.field' chains to an expression:
+    variables, call results, groupings, and literals alike.
+    """
+    while ts.peek().value in ("[", "."):
+        if ts.next().value == "[":
+            # a ':' anywhere in the brackets makes it a slice, either bound optional
+            start = None if ts.peek().value == ":" else parse_expression(ts)
+
+            if ts.peek().value == ":":
+                ts.next()
+                stop = None if ts.peek().value == "]" else parse_expression(ts)
+                ts.expect("sym", "]")
+                expr = Slice(expr, start, stop)
+            else:
+                ts.expect("sym", "]")
+                expr = Index(expr, start)
+        else:
+            expr = Member(expr, ts.expect("ident").value)
+
+    return expr

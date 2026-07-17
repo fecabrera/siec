@@ -285,6 +285,54 @@ def test_array_cast_to_a_mismatched_pointer_is_an_error(env):
         emit_cast(gen, builder, Cast(Var("a"), "i64*"), scope)
 
 
+def test_array_indexes_through_its_data_pointer(env):
+    """
+    Indexing an array value extracts the data pointer, geps, and loads the element.
+    """
+    from siec.ast import Index
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    value = emit_expression(gen, builder, Index(Var("a"), IntLiteral(1)), None, scope)
+    assert value.type == ir.IntType(32)
+    assert "index.data" in str(builder.function)
+
+
+def test_array_index_assignment_writes_the_backing_data(env):
+    """
+    'a[0] = v' stores through the array's data pointer.
+    """
+    from siec.ast import IndexAssign
+    from siec.codegen.statements import emit_statement
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    emit_statement(gen, builder, IndexAssign(Var("a"), IntLiteral(0), IntLiteral(5)), scope)
+    body = str(builder.function)
+    assert "index.data" in body
+    assert "store i32 5" in body
+
+
+def test_indexed_literal_takes_its_shape_from_the_element_context(env):
+    """
+    '{ptr, n}[i]' shapes the literal from the expected element type.
+    """
+    from siec.ast import Index
+
+    gen, builder = env
+    scope = {
+        "ptr": Variable(builder.alloca(ir.PointerType(ir.IntType(32)), name="ptr"), "i32*"),
+        "n": Variable(builder.alloca(ir.IntType(64), name="n"), "u64"),
+    }
+
+    literal = AggregateLiteral([Var("ptr"), Var("n")])
+    value = emit_expression(gen, builder, Index(literal, IntLiteral(0)),
+                            ir.IntType(32), scope)
+    assert value.type == ir.IntType(32)
+
+
 def test_slice_keeps_the_arrays_type(env):
     """
     A slice yields a value of the base's own fat array type.

@@ -44,4 +44,38 @@ def test_slice_chains_with_members(ts):
     A slice takes its place in a postfix chain like indexing does.
     """
     assert parse_primary(ts("arr[1:].length")) == Member(
-        Slice(Var("arr"), IntLiteral(1), None), "length")
+        Slice(Var("arr"), IntLiteral(1), None),
+        "length"
+    )
+
+
+def test_aggregate_literal_can_be_sliced(ts):
+    """
+    Postfix chains apply to aggregate literals: '{ptr, n}[1:]' slices the built array.
+    """
+    from siec.ast import AggregateLiteral
+
+    assert parse_primary(ts("{ptr, n}[1:]")) == Slice(
+        AggregateLiteral([Var("ptr"), Var("n")]),
+        IntLiteral(1),
+        None,
+    )
+
+
+def test_aggregate_literal_can_be_indexed(ts):
+    """
+    Postfix chains apply to aggregate literals: '{ptr, n}[1]' indexes the built array.
+    """
+    from siec.ast import AggregateLiteral
+
+    assert parse_primary(ts("{ptr, n}[1]")) == Index(
+        AggregateLiteral([Var("ptr"), Var("n")]),
+        IntLiteral(1),
+    )
+
+
+def test_grouped_expression_takes_postfix_chains(ts):
+    """
+    Postfix chains apply to parenthesized expressions too.
+    """
+    assert parse_primary(ts("(arr)[1:]")) == Slice(Var("arr"), IntLiteral(1), None)
