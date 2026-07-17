@@ -102,10 +102,11 @@ v = <expr>;
 
 ### Constants
 
-Constants are compile-time constant expressions declared through the `const` keyword. Unlike a `let` variable, a constant has no storage of its own: it's substituted with its value at compile time, similar to a type-safe version of C's `#define`. They must be initialized and cannot be reassigned:
+Constants are compile-time constant expressions declared through `@const`. Unlike a `let` variable, a constant has no storage of its own: it's substituted with its value at compile time, similar to a type-safe version of C's `#define`. They must be initialized and cannot be reassigned. The type annotation is optional, inferred from the value when omitted:
 
 ```
-const c: T = <expr>;
+@const name: T = <value>;
+@const name = <value>; // type inferred
 ```
 
 ### Arithmetic
@@ -303,7 +304,7 @@ Any of these forms may also return `i32` explicitly, in which case the returned 
 
 #### Const parameters
 
-A parameter can be marked `const` by prefixing its type, through `const T` instead of `T`. Despite the shared keyword, this is unrelated to the `const` used for constant expressions: here it's a contract between caller and callee rather than a compile-time substitution. `a: T` and `a: const T` are represented identically; the latter is simply the callee's promise not to mutate `a`. A `const` parameter cannot be reassigned, and no mutating method can be called on it.
+A parameter can be marked `const` by prefixing its type, through `const T` instead of `T`. This is unrelated to `@const` constant expressions: here it's a contract between caller and callee rather than a compile-time substitution. `a: T` and `a: const T` are represented identically; the latter is simply the callee's promise not to mutate `a`. A `const` parameter cannot be reassigned, and no mutating method can be called on it.
 
 ```
 fn f(a: const A) {
