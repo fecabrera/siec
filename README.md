@@ -322,6 +322,18 @@ fn f() {
 
 Unlike other languages, there's no `void`. For opaque pointers you can use `opaque*`.
 
+Any pointer can be used where an `opaque*` is expected, decaying to it contextually; arrays reach it through their data pointer. The explicit cast is also allowed.
+
+```
+@extern fn memcpy(dest: opaque*, src: opaque*, count: u32) -> opaque*;
+
+let src: i32[] = [7, 8, 9];
+let dst: i32[] = [0, 0, 0];
+
+memcpy(dst, src.data, 12); // both decay to opaque*
+let p: opaque* = dst as opaque*;
+```
+
 Signed and unsigned values cannot be mixed in the same operation: comparing or combining an `i32` with a `u32` is a compile-time error. Integer literals adapt to either side.
 
 ```

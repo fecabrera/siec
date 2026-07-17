@@ -219,6 +219,22 @@ def value_class(gen: CodeGenerator, value: ir.Value, expr: Expr,
     return None
 
 
+def emit_opaque_pointer(builder: ir.IRBuilder, value: ir.Value, target_type: ir.Type):
+    """
+    Lower a pointer or array value to 'opaque*': an array goes through its
+    data pointer, and any pointer bitcasts to the untyped target.
+
+    Returns None for values that are neither, for the caller to reject.
+    """
+    if is_array_struct(value.type):
+        value = builder.extract_value(value, 0, name="decay")
+
+    if isinstance(value.type, ir.PointerType):
+        return builder.bitcast(value, target_type)
+
+    return None
+
+
 def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict):
     """
     Emit an explicit numeric cast, choosing the LLVM conversion the prefixes and widths call for.
@@ -232,6 +248,12 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         if (isinstance(target_type, ir.PointerType) and is_array_struct(value.type)
                 and value.type.elements[0] == target_type):
             return builder.extract_value(value, 0, name="decay")
+
+        # any pointer casts to 'opaque*', the same way it decays to it
+        if expr.type == "opaque*":
+            decayed = emit_opaque_pointer(builder, value, target_type)
+            if decayed is not None:
+                return decayed
 
         raise TypeError(f"cannot cast to non-numeric type {expr.type!r}")
 
@@ -308,6 +330,12 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if (isinstance(target_type, ir.PointerType) and is_array_struct(value.type)
             and value.type.elements[0] == target_type):
         return builder.extract_value(value, 0, name="decay")
+
+    # any pointer decays to 'opaque*', the void*-style catch-all
+    if target_name == "opaque*":
+        decayed = emit_opaque_pointer(builder, value, target_type)
+        if decayed is not None:
+            return decayed
 
     # only scalar numeric targets widen; everything else demands an exact match
     target = numeric_class(target_name)

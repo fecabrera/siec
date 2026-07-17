@@ -157,6 +157,23 @@ def test_array_casts_to_its_element_pointer(run):
     assert run(source).returncode == 3
 
 
+def test_pointers_and_arrays_decay_to_opaque(run):
+    """
+    Typed pointers and arrays pass to 'opaque*' parameters with no cast.
+    """
+    source = """
+    @extern fn memcpy(dest: opaque*, src: opaque*, count: u32) -> opaque*;
+
+    fn main() -> i32 {
+        let src: i32[] = [7, 8, 9];
+        let dst: i32[] = [0, 0, 0];
+        memcpy(dst, src.data, 12);
+        return dst.data[2];
+    }
+    """
+    assert run(source).returncode == 9
+
+
 def test_nested_array_literal_of_strings(run):
     """
     A 'char[][]' literal holds each string as its own fat array, each

@@ -274,3 +274,59 @@ def test_array_cast_to_a_mismatched_pointer_is_an_error(env):
 
     with pytest.raises(TypeError, match="cannot cast"):
         emit_cast(gen, builder, Cast(Var("a"), "i64*"), scope)
+
+
+def test_any_pointer_decays_to_opaque(env):
+    """
+    A typed pointer coerced to 'opaque*' bitcasts to the untyped pointer.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    slot = builder.alloca(ir.PointerType(ir.IntType(32)), name="p")
+    scope = {"p": Variable(slot, "i32*")}
+
+    value = emit_coerced(gen, builder, Var("p"), "opaque*", scope)
+    assert value.type == ir.PointerType(ir.IntType(8))
+
+
+def test_array_decays_to_opaque_through_its_data(env):
+    """
+    An array coerced to 'opaque*' goes through its data pointer.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    value = emit_coerced(gen, builder, Var("a"), "opaque*", scope)
+    assert value.type == ir.PointerType(ir.IntType(8))
+    assert "extractvalue" in str(builder.function)
+
+
+def test_non_pointer_does_not_decay_to_opaque(env):
+    """
+    A scalar coerced to 'opaque*' is still rejected.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    slot = builder.alloca(ir.IntType(32), name="n")
+    scope = {"n": Variable(slot, "i32")}
+
+    with pytest.raises(TypeError, match="cannot implicitly convert"):
+        emit_coerced(gen, builder, Var("n"), "opaque*", scope)
+
+
+def test_pointer_casts_to_opaque(env):
+    """
+    An explicit 'as opaque*' cast works on any pointer.
+    """
+    from siec.ast import Cast
+    from siec.codegen.expressions import emit_cast
+
+    gen, builder = env
+    scope = array_scope(builder)
+
+    value = emit_cast(gen, builder, Cast(Var("a"), "opaque*"), scope)
+    assert value.type == ir.PointerType(ir.IntType(8))
