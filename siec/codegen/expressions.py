@@ -14,6 +14,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    Slice,
     StrLiteral,
     UnaryOp,
     Var,
@@ -85,6 +86,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
         return builder.load(builder.gep(base, [index]))
+
+    if isinstance(expr, Slice):
+        return emit_slice(gen, builder, expr, scope)
 
     if isinstance(expr, Member):
         # read a struct or array field: extract it from the base value by index
@@ -177,6 +181,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Index):
         base = expr_sie_type(gen, expr.base, scope)
         return base.removesuffix("[]").removesuffix("*") if base is not None else None
+
+    # a slice is a view with its base's array type
+    if isinstance(expr, Slice):
+        return expr_sie_type(gen, expr.base, scope)
 
     return None
 
@@ -614,6 +622,36 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
     value = builder.insert_value(value, data, 0)
     value = builder.insert_value(value, ir.Constant(ir.IntType(64), len(expr.elements)), 1)
     return value
+
+
+def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice, scope: dict):
+    """
+    Emit an 'arr[from:to]' slice: a view over the base array's backing data,
+    from 'from' (default 0) to 'to' (default the array's length).
+    """
+    base = emit_expression(gen, builder, expr.base, None, scope)
+    if not is_array_struct(base.type):
+        raise TypeError(f"cannot slice a value of type {base.type}")
+
+    # the bounds are u64 element counts, like the array's own length
+    start = (
+        emit_coerced(gen, builder, expr.start, "u64", scope)
+        if expr.start is not None
+        else ir.Constant(ir.IntType(64), 0)
+    )
+    
+    stop = (
+        emit_coerced(gen, builder, expr.stop, "u64", scope)
+        if expr.stop is not None
+        else builder.extract_value(base, 1, name="slice.len")
+    )
+
+    # the view shares the backing data, offset to 'from', spanning 'to' - 'from'
+    data = builder.gep(builder.extract_value(base, 0, name="slice.data"), [start])
+
+    value = ir.Constant(base.type, ir.Undefined)
+    value = builder.insert_value(value, data, 0)
+    return builder.insert_value(value, builder.sub(stop, start), 1)
 
 
 def emit_string(gen: CodeGenerator, builder: ir.IRBuilder, value: str):

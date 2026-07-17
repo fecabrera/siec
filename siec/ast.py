@@ -54,6 +54,17 @@ class Index:
 
 
 @dataclass
+class Slice:
+    """
+    A slicing expression 'base[start:stop]', with either bound optional:
+    'start' defaults to 0 and 'stop' to the base's length.
+    """
+    base: "Expr"
+    start: "Expr | None"
+    stop: "Expr | None"
+
+
+@dataclass
 class Member:
     """
     A member access: a field selected from a struct-valued base expression.
@@ -107,7 +118,7 @@ class BinaryOp:
 
 
 Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | ArrayLiteral | Var | Call
-        | Index | Member | Cast | UnaryOp | BinaryOp)
+        | Index | Slice | Member | Cast | UnaryOp | BinaryOp)
 
 
 def _line():

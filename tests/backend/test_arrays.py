@@ -157,6 +157,31 @@ def test_array_casts_to_its_element_pointer(run):
     assert run(source).returncode == 3
 
 
+def test_slices_view_the_backing_data(run):
+    """
+    'arr[from:to]' yields a view with the defaulted bounds applied; writing
+    through the view changes the base array.
+    """
+    source = """
+    fn main() -> i32 {
+        let arr: i32[] = [1, 2, 3, 4, 5];
+
+        let tail: i32[] = arr[1:];  // [2, 3, 4, 5]
+        let head: i32[] = arr[:3];  // [1, 2, 3]
+        let mid: i32[] = arr[1:3];  // [2, 3]
+
+        tail.data[0] = 20; // writes through to arr.data[1]
+
+        if (tail.length == 4 and head.length == 3 and mid.length == 2
+                and mid.data[1] == 3 and arr.data[1] == 20) {
+            return 9;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 9
+
+
 def test_pointers_and_arrays_decay_to_opaque(run):
     """
     Typed pointers and arrays pass to 'opaque*' parameters with no cast.

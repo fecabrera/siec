@@ -1,7 +1,7 @@
 """Parsing of expressions: literals, variables, and calls."""
 
 from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr,
-                   Index, IntLiteral, Member, StrLiteral, UnaryOp, Var)
+                   Index, IntLiteral, Member, Slice, StrLiteral, UnaryOp, Var)
 from .stream import TokenStream
 from .types import parse_type
 
@@ -144,12 +144,21 @@ def parse_primary(ts: TokenStream) -> Expr:
         else:
             expr = Var(tok.value)
 
-        # postfix '[index]' and '.field' chains apply to variables and call results alike
+        # postfix '[index]', '[from:to]', and '.field' chains apply to
+        # variables and call results alike
         while ts.peek().value in ("[", "."):
             if ts.next().value == "[":
-                index = parse_expression(ts)
-                ts.expect("sym", "]")
-                expr = Index(expr, index)
+                # a ':' anywhere in the brackets makes it a slice, either bound optional
+                start = None if ts.peek().value == ":" else parse_expression(ts)
+
+                if ts.peek().value == ":":
+                    ts.next()
+                    stop = None if ts.peek().value == "]" else parse_expression(ts)
+                    ts.expect("sym", "]")
+                    expr = Slice(expr, start, stop)
+                else:
+                    ts.expect("sym", "]")
+                    expr = Index(expr, start)
             else:
                 expr = Member(expr, ts.expect("ident").value)
 

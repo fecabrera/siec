@@ -431,6 +431,16 @@ let arr: i32[] = [1, 2, 3];
 f(arr); // equivalent to f(arr as i32*);
 ```
 
+An array can be sliced with `arr[from:to]`, where either bound can be omitted: `from` defaults to `0` and `to` defaults to `arr.length`. Slicing yields an `X[]` view over the same backing data, not a copy.
+
+```
+let arr: i32[] = [1, 2, 3, 4, 5];
+
+arr[1:];  // [2, 3, 4, 5]
+arr[:3];  // [1, 2, 3]
+arr[1:3]; // [2, 3]
+```
+
 #### String literals
 
 String literals are arrays of type `char[]`. They can be initialized with characters enclosed by `""`.

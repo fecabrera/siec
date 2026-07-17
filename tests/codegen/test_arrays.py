@@ -3,7 +3,16 @@
 import pytest
 from llvmlite import ir
 
-from siec.ast import AggregateLiteral, ArrayLiteral, IntLiteral, Member, MemberAssign, StrLiteral, Var
+from siec.ast import (
+    AggregateLiteral,
+    ArrayLiteral,
+    IntLiteral,
+    Member,
+    MemberAssign,
+    Slice,
+    StrLiteral,
+    Var,
+)
 from siec.codegen.expressions import emit_expression, emit_lvalue, member_field, signedness
 from siec.codegen.generator import Variable
 from siec.codegen.types import resolve_type
@@ -274,6 +283,64 @@ def test_array_cast_to_a_mismatched_pointer_is_an_error(env):
 
     with pytest.raises(TypeError, match="cannot cast"):
         emit_cast(gen, builder, Cast(Var("a"), "i64*"), scope)
+
+
+def test_slice_keeps_the_arrays_type(env):
+    """
+    A slice yields a value of the base's own fat array type.
+    """
+    gen, builder = env
+    scope = array_scope(builder)
+
+    value = emit_expression(gen, builder, Slice(Var("a"), IntLiteral(1), IntLiteral(3)), None, scope)
+    assert value.opname == "insertvalue"
+    assert value.type == resolve_type("i32[]")
+
+
+def test_slice_offsets_the_data_and_shortens_the_length(env):
+    """
+    The view's data geps past 'from' and its length is 'to' - 'from'.
+    """
+    gen, builder = env
+    scope = array_scope(builder)
+
+    emit_expression(gen, builder, Slice(Var("a"), IntLiteral(1), IntLiteral(3)), None, scope)
+    body = str(builder.function)
+    assert "getelementptr" in body
+    assert "sub" in body
+
+
+def test_slice_bounds_default_to_zero_and_the_length(env):
+    """
+    'arr[:]' reads the length for its stop bound and spans the whole array.
+    """
+    gen, builder = env
+    scope = array_scope(builder)
+
+    emit_expression(gen, builder, Slice(Var("a"), None, None), None, scope)
+    assert "slice.len" in str(builder.function)
+
+
+def test_slice_of_a_non_array_is_an_error(env):
+    """
+    Slicing a scalar raises a TypeError.
+    """
+    gen, builder = env
+    scope = {"n": Variable(builder.alloca(ir.IntType(32), name="n"), "i32")}
+
+    with pytest.raises(TypeError, match="cannot slice"):
+        emit_expression(gen, builder, Slice(Var("n"), None, None), None, scope)
+
+
+def test_slice_sie_type_is_the_bases(env):
+    """
+    Type inference sees a slice as its base's array type.
+    """
+    from siec.codegen.expressions import expr_sie_type
+
+    gen, builder = env
+    scope = array_scope(builder)
+    assert expr_sie_type(gen, Slice(Var("a"), None, None), scope) == "i32[]"
 
 
 def test_any_pointer_decays_to_opaque(env):
