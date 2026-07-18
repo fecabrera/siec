@@ -260,6 +260,16 @@ class Emit:
 
 
 @dataclass
+class Defer:
+    """
+    A 'defer' statement: pushes a statement onto the enclosing scope's exit
+    stack, run when the scope ends, last deferred first.
+    """
+    stmt: "Stmt"
+    line: int = _line()
+
+
+@dataclass
 class ExprStmt:
     """
     An expression evaluated as a statement, its result discarded.

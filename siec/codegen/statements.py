@@ -5,6 +5,7 @@ from llvmlite import ir
 from siec.ast import (
     Assign,
     Block,
+    Defer,
     Emit,
     ExprStmt,
     For,
@@ -34,11 +35,39 @@ from siec.codegen.types import resolve_type, sized_array
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
     """
     Emit statements in order, stopping once the current block is terminated.
+
+    Each block is a defer scope: statements deferred inside it run when it
+    falls off its end; a 'return' or 'emit' leaving it early flushes them
+    itself, along the exiting path.
     """
+    gen.defer_frames.append([])
+
     for stmt in stmts:
         emit_statement(gen, builder, stmt, scope)
         if builder.block.is_terminated:
             break
+
+    if not builder.block.is_terminated:
+        flush_defers(gen, builder, [gen.defer_frames[-1]])
+
+    gen.defer_frames.pop()
+
+
+def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> None:
+    """
+    Run deferred statements along the current path: innermost frame first,
+    each frame in reverse, last deferred first.
+
+    The frames stay in place — other paths out of the same scopes flush
+    their own copies.
+    """
+    gen.flushing_defers += 1
+    try:
+        for frame in reversed(frames):
+            for stmt, snapshot in reversed(frame):
+                emit_statement(gen, builder, stmt, snapshot)
+    finally:
+        gen.flushing_defers -= 1
 
 
 def emit_statement(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: dict) -> None:
@@ -113,22 +142,39 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_while(gen, builder, stmt, scope)
     elif isinstance(stmt, For):
         emit_for(gen, builder, stmt, scope)
+    elif isinstance(stmt, Defer):
+        # capture the statement with the scope as it stands: the shared
+        # slots make later writes visible when it finally runs, while
+        # later shadowing declarations stay out of sight
+        gen.defer_frames[-1].append((stmt.stmt, dict(scope)))
     elif isinstance(stmt, Emit):
         # store the value into the enclosing block expression's slot and
         # jump past the block, ending it early like a return ends a function
+        if gen.flushing_defers:
+            raise TypeError("a deferred statement cannot emit")
+
         if not gen.emit_targets:
             raise TypeError("'emit' outside a block expression")
 
-        slot, end_block, target_name = gen.emit_targets[-1]
+        slot, end_block, target_name, depth = gen.emit_targets[-1]
         if target_name is not None:
             value = emit_coerced(gen, builder, stmt.value, target_name, scope)
         else:
             value = emit_expression(gen, builder, stmt.value, slot.type.pointee, scope)
 
+        # the value is computed before the scopes being left run their defers
         builder.store(value, slot)
+        flush_defers(gen, builder, gen.defer_frames[depth:])
         builder.branch(end_block)
     elif isinstance(stmt, Return):
+        # a deferred statement runs on the way out of a scope; returning
+        # there would flush the very frame holding it
+        if gen.flushing_defers:
+            raise TypeError("a deferred statement cannot return")
+
         if stmt.value is None:
+            flush_defers(gen, builder, gen.defer_frames)
+
             # a bare 'return' in main yields its implicit exit code 0: only
             # main is declared without a return type yet lowered to i32
             ret_type = builder.function.function_type.return_type
@@ -138,8 +184,11 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             else:
                 builder.ret_void()
         else:
+            # the return value is computed before any deferred statement runs
             ret_type = gen.return_types[builder.function.name]
-            builder.ret(emit_coerced(gen, builder, stmt.value, ret_type, scope))
+            value = emit_coerced(gen, builder, stmt.value, ret_type, scope)
+            flush_defers(gen, builder, gen.defer_frames)
+            builder.ret(value)
     elif isinstance(stmt, ExprStmt):
         emit_expression(gen, builder, stmt.expr, None, scope)
     else:

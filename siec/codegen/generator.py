@@ -77,9 +77,17 @@ class CodeGenerator:
         # the registered structs by name, for type resolution and member access
         self.structs: dict[str, StructInfo] = {}
 
-        # the enclosing block expressions' (slot, end block, Sie type) targets,
-        # innermost last: what an 'emit' stores into and jumps to
+        # the enclosing block expressions' (slot, end block, Sie type, defer
+        # depth) targets, innermost last: what an 'emit' stores into and jumps to
         self.emit_targets: list[tuple] = []
+
+        # one frame of deferred (statement, scope) pairs per open scope,
+        # innermost last: what runs when each scope ends
+        self.defer_frames: list[list] = []
+
+        # nonzero while deferred statements are being flushed, where a
+        # 'return' or 'emit' would flush the very frame holding it
+        self.flushing_defers = 0
 
         # the registered '@const' declarations by name, substituted at their uses
         self.constants: dict = {}

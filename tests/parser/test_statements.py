@@ -5,7 +5,9 @@ import pytest
 from siec.ast import (
     Assign,
     BinaryOp,
+    Block,
     Call,
+    Defer,
     ExprStmt,
     If,
     Index,
@@ -93,6 +95,29 @@ def test_let_needs_a_type_or_an_initializer(ts):
     """
     with pytest.raises(SyntaxError, match="needs a type or an initializer"):
         parse_statement(ts("let num;"))
+
+
+def test_defer_expression(ts):
+    """
+    'defer expr;' parses to a Defer over the expression statement.
+    """
+    assert parse_statement(ts("defer free(a);")) == Defer(
+        ExprStmt(Call("free", [Var("a")])))
+
+
+def test_defer_assignment(ts):
+    """
+    A deferred statement may be an assignment.
+    """
+    assert parse_statement(ts("defer x = 1;")) == Defer(Assign("x", IntLiteral(1)))
+
+
+def test_defer_block(ts):
+    """
+    'defer { ... }' parses the braced statements into a deferred Block.
+    """
+    assert parse_statement(ts("defer { free(a); }")) == Defer(
+        Block([ExprStmt(Call("free", [Var("a")]))]))
 
 
 def test_return_with_value(ts):

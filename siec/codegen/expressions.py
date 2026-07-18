@@ -804,8 +804,9 @@ def emit_block_expr(gen: CodeGenerator, builder: ir.IRBuilder, expr: BlockExpr,
     slot = entry_alloca(builder, expected_type, "block.value")
     end_block = builder.function.append_basic_block("block.end")
 
-    # the innermost target is what an 'emit' inside the body resolves to
-    gen.emit_targets.append((slot, end_block, target_name))
+    # the innermost target is what an 'emit' inside the body resolves to;
+    # the defer depth marks which scopes an 'emit' leaves and must flush
+    gen.emit_targets.append((slot, end_block, target_name, len(gen.defer_frames)))
     emit_block(gen, builder, expr.body, dict(scope))
     gen.emit_targets.pop()
 

@@ -4,6 +4,7 @@ from siec.ast import (
     Assign,
     BinaryOp,
     Block,
+    Defer,
     Emit,
     ExprStmt,
     For,
@@ -126,6 +127,18 @@ def parse_statement(ts: TokenStream):
 
         ts.expect("sym", ";")
         return Let(name, var_type, value, line=line)
+
+    # 'defer <expr>;' or 'defer { ... }' pushes the statement onto the
+    # enclosing scope's exit stack
+    if tok.kind == "kw" and tok.value == "defer":
+        ts.next()
+
+        if ts.peek().syntax == "{":
+            return Defer(Block(parse_block(ts), line=line), line=line)
+
+        stmt = parse_step(ts)
+        ts.expect("sym", ";")
+        return Defer(stmt, line=line)
 
     # 'emit expr;' produces the enclosing block expression's value
     if tok.kind == "kw" and tok.value == "emit":
