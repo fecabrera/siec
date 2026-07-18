@@ -4,6 +4,7 @@ from siec.ast import (
     Assign,
     BinaryOp,
     Block,
+    Case,
     Defer,
     Emit,
     ExprStmt,
@@ -16,6 +17,7 @@ from siec.ast import (
     MemberAssign,
     Return,
     Var,
+    When,
     While,
 )
 from siec.parser.expressions import parse_expression
@@ -50,6 +52,18 @@ def parse_body(ts: TokenStream) -> list:
     return [parse_statement(ts)]
 
 
+def parse_arm(ts: TokenStream) -> list:
+    """
+    Parse one case arm's body: statements up to the next 'when', 'else',
+    or the closing brace.
+    """
+    body = []
+    while ts.peek().syntax not in ("when", "else", "}"):
+        body.append(parse_statement(ts))
+
+    return body
+
+
 def parse_statement(ts: TokenStream):
     """
     Parse a statement: a let, an if, a return, an assignment, or an expression.
@@ -67,12 +81,46 @@ def parse_statement(ts: TokenStream):
 
         body = parse_body(ts)
 
+        # an 'else' followed by ':' belongs to an enclosing case, not this if
         orelse = None
-        if ts.peek().syntax == "else":
+        if ts.peek().syntax == "else" and ts.peek(1).syntax != ":":
             ts.next()
             orelse = parse_body(ts)
 
         return If(condition, body, orelse, line=line)
+
+    # 'case (subject) { when v: ... else: ... }' runs exactly one arm
+    if tok.kind == "kw" and tok.value == "case":
+        ts.next()
+
+        ts.expect("sym", "(")
+        subject = parse_expression(ts)
+        ts.expect("sym", ")")
+        ts.expect("sym", "{")
+
+        arms = []
+        orelse = None
+        while ts.peek().syntax != "}":
+            if ts.peek().syntax == "when":
+                ts.next()
+                value = parse_expression(ts)
+                ts.expect("sym", ":")
+                arms.append(When(value, parse_arm(ts)))
+            elif ts.peek().syntax == "else":
+                ts.next()
+                ts.expect("sym", ":")
+                orelse = parse_arm(ts)
+
+                # nothing may follow the else arm
+                if ts.peek().syntax != "}":
+                    raise SyntaxError(f"line {ts.peek().line}: 'else' must be "
+                                      "the last arm of a case")
+            else:
+                raise SyntaxError(f"line {ts.peek().line}: expected 'when' or "
+                                  f"'else', got {ts.peek().value!r}")
+
+        ts.expect("sym", "}")
+        return Case(subject, arms, orelse, line=line)
 
     # 'while (cond) body' loops its body while the condition is truthy
     if tok.kind == "kw" and tok.value == "while":

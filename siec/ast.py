@@ -210,6 +210,27 @@ class If:
 
 
 @dataclass
+class When:
+    """
+    One arm of a 'case': a value to match and the statements it runs.
+    """
+    value: Expr
+    body: list
+
+
+@dataclass
+class Case:
+    """
+    A 'case (subject) { when v: ... else: ... }' statement: the subject is
+    evaluated once and exactly one arm runs, with no fall-through.
+    """
+    subject: Expr
+    arms: list[When]
+    orelse: list | None = None
+    line: int = _line()
+
+
+@dataclass
 class While:
     """
     A while loop with a condition and a body.

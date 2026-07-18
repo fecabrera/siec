@@ -5,6 +5,7 @@ from llvmlite import ir
 from siec.ast import (
     Assign,
     Block,
+    Case,
     Defer,
     Emit,
     ExprStmt,
@@ -215,6 +216,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_block(gen, builder, stmt.body, dict(scope))
     elif isinstance(stmt, If):
         emit_if(gen, builder, stmt, scope)
+    elif isinstance(stmt, Case):
+        emit_case(gen, builder, stmt, scope)
     elif isinstance(stmt, While):
         emit_while(gen, builder, stmt, scope)
     elif isinstance(stmt, For):
@@ -355,6 +358,56 @@ def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) 
         builder.branch(cond_block)
 
     builder.position_at_end(end_block)
+
+
+def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict) -> None:
+    """
+    Emit a case as a chain of equality tests: the subject is evaluated
+    once, the first matching arm runs in a scope of its own, and control
+    jumps past the case, with no fall-through.
+    """
+    subject = emit_expression(gen, builder, stmt.subject, None, scope)
+    if not isinstance(subject.type, (ir.IntType, ir.PointerType,
+                                     ir.FloatType, ir.DoubleType)):
+        raise TypeError(f"cannot match on a value of type {subject.type}")
+
+    func = builder.function
+    end_block = func.append_basic_block("case.end")
+    falls = False
+
+    for arm in stmt.arms:
+        # each value adopts the subject's type, like a comparison's right side
+        value = emit_expression(gen, builder, arm.value, subject.type, scope)
+        if isinstance(subject.type, (ir.FloatType, ir.DoubleType)):
+            cond = builder.fcmp_ordered("==", subject, value)
+        else:
+            cond = builder.icmp_unsigned("==", subject, value)
+
+        body_block = func.append_basic_block("when.body")
+        next_block = func.append_basic_block("when.next")
+        builder.cbranch(cond, body_block, next_block)
+
+        builder.position_at_end(body_block)
+        emit_block(gen, builder, arm.body, dict(scope))
+
+        if not builder.block.is_terminated:
+            falls = True
+            builder.branch(end_block)
+
+        builder.position_at_end(next_block)
+
+    # no arm matched: the else body when given, nothing otherwise
+    if stmt.orelse is not None:
+        emit_block(gen, builder, stmt.orelse, dict(scope))
+
+    if not builder.block.is_terminated:
+        falls = True
+        builder.branch(end_block)
+
+    # when every path returns, the end block exists only to hold 'unreachable'
+    builder.position_at_end(end_block)
+    if not falls:
+        builder.unreachable()
 
 
 def emit_if(gen: CodeGenerator, builder: ir.IRBuilder, stmt: If, scope: dict) -> None:

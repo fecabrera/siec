@@ -263,6 +263,23 @@ if (a == 1) a += 1;
 else a = 0;
 ```
 
+#### Case
+
+`case` matches a subject against a series of `when` arms, running exactly the first one whose value equals it. There is no fall-through: after an arm runs, control moves past the case. An optional `else` arm, last, runs when nothing matched; without one, an unmatched subject just moves on.
+
+```
+case (op) {
+    when Op::ADD:
+        result = a + b;
+    when Op::SUB:
+        result = a - b;
+    else:
+        result = 0;
+}
+```
+
+The subject is evaluated once. `when` values are ordinary expressions, compared with the subject by equality in order, and each arm's statements run in a scope of their own, up to the next `when`, `else`, or the closing brace.
+
 #### Ternary
 
 `cond ? then : else` is the expression form of a conditional: it evaluates only the chosen arm and produces its value. It binds looser than any other operator and chains right, C-style:
