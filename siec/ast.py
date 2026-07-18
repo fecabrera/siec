@@ -145,9 +145,20 @@ class BinaryOp:
     right: "Expr"
 
 
+@dataclass
+class Ternary:
+    """
+    A conditional expression 'cond ? then : orelse': only the chosen arm
+    is evaluated.
+    """
+    condition: "Expr"
+    then: "Expr"
+    orelse: "Expr"
+
+
 Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | AggregateLiteral | BlockExpr
         | ArrayLiteral | Var | EnumMember | Call | Index | Slice | Member | Cast
-        | UnaryOp | BinaryOp)
+        | UnaryOp | BinaryOp | Ternary)
 
 
 def _line():

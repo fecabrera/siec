@@ -86,7 +86,7 @@ def test_single_character_symbols():
     """
     Each supported single-character symbol lexes as its own sym token.
     """
-    assert kinds("(){}[];,:+-*/%@=<>") == [("sym", s) for s in "(){}[];,:+-*/%@=<>"]
+    assert kinds("(){}[];,:+-*/%@=<>?") == [("sym", s) for s in "(){}[];,:+-*/%@=<>?"]
 
 
 def test_multi_character_symbols():

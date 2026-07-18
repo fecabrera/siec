@@ -263,6 +263,17 @@ if (a == 1) a += 1;
 else a = 0;
 ```
 
+#### Ternary
+
+`cond ? then : else` is the expression form of a conditional: it evaluates only the chosen arm and produces its value. It binds looser than any other operator and chains right, C-style:
+
+```
+let max: i32 = a > b ? a : b;
+let grade: i32 = n > 9 ? 1 : n > 3 ? 2 : 3;
+```
+
+Both arms must produce the same type; literal arms adapt to the context like any literal.
+
 ### Loops
 
 Repetition is expressed through the `while` keyword, followed by a parenthesized expression and a block. The body runs while the expression is truthy, checked before each iteration:

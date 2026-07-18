@@ -20,6 +20,7 @@ from siec.ast import (
     Member,
     Slice,
     StrLiteral,
+    Ternary,
     UnaryOp,
     Var,
 )
@@ -135,6 +136,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, EnumMember):
         return expr.enum
 
+    # a ternary carries its arms' type; either arm may pin it down
+    if isinstance(expr, Ternary):
+        return (expr_sie_type(gen, expr.then, scope)
+                or expr_sie_type(gen, expr.orelse, scope))
+
     return None
 
 
@@ -180,6 +186,11 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 or infer_type(gen, expr.left, scope)
                 or infer_type(gen, expr.right, scope))
 
+    # a ternary takes its arms' type, a declared arm winning over a literal
+    if isinstance(expr, Ternary):
+        return (infer_type(gen, expr.then, scope)
+                or infer_type(gen, expr.orelse, scope))
+
     return None
 
 
@@ -210,6 +221,10 @@ def signedness(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     if isinstance(expr, BinaryOp) and (expr.op in ARITHMETIC or expr.op == "**"):
         return signedness(gen, expr.left, scope) or signedness(gen, expr.right, scope)
+
+    # a ternary keeps its arms' signedness; literals adapt to either
+    if isinstance(expr, Ternary):
+        return signedness(gen, expr.then, scope) or signedness(gen, expr.orelse, scope)
 
     return None
 

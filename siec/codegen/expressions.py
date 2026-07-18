@@ -22,6 +22,7 @@ from siec.ast import (
     Member,
     Slice,
     StrLiteral,
+    Ternary,
     UnaryOp,
     Var,
 )
@@ -205,6 +206,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
         raise TypeError(f"unknown unary operator {expr.op!r}")
 
+    if isinstance(expr, Ternary):
+        return emit_ternary(gen, builder, expr, expected_type, scope)
+
     if isinstance(expr, BinaryOp):
         # logical operators coerce each side to a bool on its own terms
         if expr.op in ("and", "or"):
@@ -344,6 +348,45 @@ def emit_power(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
 
     builder.position_at_end(end_block)
     return builder.load(result)
+
+
+def emit_ternary(gen: CodeGenerator, builder: ir.IRBuilder, expr: Ternary,
+                 expected_type: ir.Type | None, scope: dict):
+    """
+    Emit 'cond ? then : orelse' as a branch joined by a phi: only the
+    chosen arm is evaluated, and both must agree on their type.
+    """
+    cond = emit_bool(gen, builder, expr.condition, scope)
+
+    func = builder.function
+    then_block = func.append_basic_block("ternary.then")
+    else_block = func.append_basic_block("ternary.else")
+    end_block = func.append_basic_block("ternary.end")
+
+    builder.cbranch(cond, then_block, else_block)
+
+    # each arm may open blocks of its own; the phi needs its exit block
+    builder.position_at_end(then_block)
+    then_value = emit_expression(gen, builder, expr.then, expected_type, scope)
+    then_exit = builder.block
+    builder.branch(end_block)
+
+    # without a context, the else arm adopts the then arm's type, so
+    # literals on either side adapt to the declared one
+    builder.position_at_end(else_block)
+    else_value = emit_expression(gen, builder, expr.orelse,
+                                 expected_type or then_value.type, scope)
+    else_exit = builder.block
+    builder.branch(end_block)
+
+    if then_value.type != else_value.type:
+        raise TypeError(f"ternary arms disagree: {then_value.type} vs {else_value.type}")
+
+    builder.position_at_end(end_block)
+    result = builder.phi(then_value.type, name="ternary")
+    result.add_incoming(then_value, then_exit)
+    result.add_incoming(else_value, else_exit)
+    return result
 
 
 def emit_logical(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp, scope: dict):

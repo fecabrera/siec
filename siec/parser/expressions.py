@@ -16,6 +16,7 @@ from siec.ast import (
     Member,
     Slice,
     StrLiteral,
+    Ternary,
     UnaryOp,
     Var,
 )
@@ -39,9 +40,26 @@ LEVELS = [
 
 def parse_expression(ts: TokenStream) -> Expr:
     """
-    Parse an expression: the binary precedence ladder over primaries.
+    Parse an expression: a possible ternary over the binary precedence
+    ladder over primaries.
     """
-    return parse_binary(ts, 0)
+    return parse_ternary(ts)
+
+
+def parse_ternary(ts: TokenStream) -> Expr:
+    """
+    Parse 'cond ? then : orelse', the loosest operator, folding
+    right-associatively: 'a ? b : c ? d : e' nests in the else arm.
+    """
+    condition = parse_binary(ts, 0)
+
+    if ts.peek().syntax != "?":
+        return condition
+
+    ts.next()
+    then = parse_expression(ts)
+    ts.expect("sym", ":")
+    return Ternary(condition, then, parse_expression(ts))
 
 
 def parse_binary(ts: TokenStream, level: int) -> Expr:
