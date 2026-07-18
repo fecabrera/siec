@@ -30,6 +30,7 @@ siec main.sie file1.o file2.o -o main
 - `-o <path>` names the output executable, `a.out` by default.
 - `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise.
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
+- `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form — executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
 - `--emit-llvm` prints the LLVM IR and exits, without building.

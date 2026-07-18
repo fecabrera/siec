@@ -49,6 +49,64 @@ def test_emit_asm_prints_native_assembly(tmp_path, capsys, monkeypatch):
     assert "define" not in out    # assembly, not LLVM IR
 
 
+def test_optimization_level_runs_the_pipeline(tmp_path, capsys, monkeypatch):
+    """
+    '-O2' runs LLVM's pass pipeline: the emitted IR is folded to a constant.
+    """
+    source = """\
+    fn main() -> i32 {
+        let x: i32 = 6;
+        return x * 7;
+    }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    assert run_cli(monkeypatch, src, "-O2", "--emit-llvm") == 0
+    assert "ret i32 42" in capsys.readouterr().out
+
+
+def test_default_is_unoptimized(tmp_path, capsys, monkeypatch):
+    """
+    Without '-O', --emit-llvm prints the IR as generated, slots and all.
+    """
+    source = """\
+    fn main() -> i32 {
+        let x: i32 = 6;
+        return x * 7;
+    }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+    assert "alloca" in capsys.readouterr().out
+
+
+def test_optimized_executable_still_runs(tmp_path, monkeypatch):
+    """
+    '-O3' carries through object emission and linking.
+    """
+    source = """\
+    fn main() -> i32 {
+        let total: i32 = 0;
+        for (let i = 1; i <= 9; i += 1) {
+            total += i;
+        }
+        return total; // 45
+    }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+    exe = tmp_path / "p"
+
+    assert run_cli(monkeypatch, src, "-O3", "-o", exe) == 0
+    assert subprocess.run([str(exe)]).returncode == 45
+
+
 def test_compiles_and_links_an_executable(tmp_path, monkeypatch):
     """
     The default pipeline produces a runnable executable at -o.

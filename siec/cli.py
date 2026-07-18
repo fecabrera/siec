@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from siec.backend import compile_to_object, emit_assembly, link, run_jit
+from siec.backend import compile_to_object, emit_assembly, emit_llvm, link, run_jit
 from siec.codegen import codegen
 from siec.loader import load_program
 
@@ -58,6 +58,8 @@ def main() -> int:
     args.add_argument("-o", "--output", default=None)
     args.add_argument("-c", action="store_true", dest="compile_only",
                       help="compile to an object file, without linking")
+    args.add_argument("-O", default=0, type=int, choices=[0, 1, 2, 3], dest="opt",
+                      metavar="N", help="optimization level, cc-style (default 0)")
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("-l", action="append", default=[], dest="libs", metavar="LIB",
@@ -103,17 +105,18 @@ def main() -> int:
         return 1
 
     if opts.emit_llvm:
-        print(module)
+        print(emit_llvm(module, opts.opt))
         return 0
 
     if opts.emit_asm:
-        print(emit_assembly(module), end="")
+        print(emit_assembly(module, opts.opt), end="")
         return 0
 
     # '-c' stops after native code generation, leaving only the object file,
     # named after the first source, cc-style, unless '-o' says otherwise
     if opts.compile_only:
-        compile_to_object(module, opts.output or str(Path(sources[0].name).with_suffix(".o")))
+        compile_to_object(module, opts.output or str(Path(sources[0].name).with_suffix(".o")),
+                          opts.opt)
         return 0
 
     # jit-run in place of building, exiting with the program's own code;
@@ -121,7 +124,7 @@ def main() -> int:
     if opts.run is not None:
         try:
             return run_jit(module, [str(sources[0]), *opts.run], objects,
-                           opts.libs, opts.lib_dirs)
+                           opts.libs, opts.lib_dirs, opts.opt)
         except NameError as error:
             print(format_error(str(sources[0]), error), file=sys.stderr)
             return 1
@@ -130,6 +133,6 @@ def main() -> int:
     # object files given on the command line
     output = opts.output or "a.out"
     obj_path = output + ".o"
-    compile_to_object(module, obj_path)
+    compile_to_object(module, obj_path, opts.opt)
     link([obj_path, *objects], output, opts.libs, opts.lib_dirs)
     return 0

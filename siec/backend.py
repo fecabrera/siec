@@ -8,41 +8,60 @@ from pathlib import Path
 from llvmlite import binding, ir
 
 
-def prepare_module(module: ir.Module) -> tuple:
+def prepare_module(module: ir.Module, opt: int = 0) -> tuple:
     """
     Verify an LLVM module against the host target, returning the target
     machine and the module round-tripped through the LLVM binding.
+
+    An optimization level above 0 runs LLVM's standard pass pipeline over
+    the module, cc-style: -O1 through -O3.
     """
     # register the host as the compilation target
     binding.initialize_native_target()
     binding.initialize_native_asmprinter()
 
-    target_machine = binding.Target.from_default_triple().create_target_machine()
+    target_machine = binding.Target.from_default_triple().create_target_machine(opt=opt)
     module.triple = target_machine.triple
 
     # round-trip the IR through the LLVM binding and verify it
     llvm_module = binding.parse_assembly(str(module))
     llvm_module.verify()
 
+    if opt > 0:
+        options = binding.create_pipeline_tuning_options(speed_level=opt)
+        pass_builder = binding.create_pass_builder(target_machine, options)
+        pass_builder.getModulePassManager().run(llvm_module, pass_builder)
+
     return target_machine, llvm_module
 
 
-def compile_to_object(module: ir.Module, obj_path: str) -> None:
+def compile_to_object(module: ir.Module, obj_path: str, opt: int = 0) -> None:
     """
     Verify an LLVM module and write native object code for the host target.
     """
-    target_machine, llvm_module = prepare_module(module)
+    target_machine, llvm_module = prepare_module(module, opt)
 
     with open(obj_path, "wb") as f:
         f.write(target_machine.emit_object(llvm_module))
 
 
-def emit_assembly(module: ir.Module) -> str:
+def emit_assembly(module: ir.Module, opt: int = 0) -> str:
     """
     Verify an LLVM module and render native assembly for the host target.
     """
-    target_machine, llvm_module = prepare_module(module)
+    target_machine, llvm_module = prepare_module(module, opt)
     return target_machine.emit_assembly(llvm_module)
+
+
+def emit_llvm(module: ir.Module, opt: int = 0) -> str:
+    """
+    Render a module's LLVM IR: as generated at -O0, after the optimization
+    pipeline otherwise.
+    """
+    if opt == 0:
+        return str(module)
+
+    return str(prepare_module(module, opt)[1])
 
 
 def load_library(name: str, lib_dirs: list[str]) -> None:
@@ -68,14 +87,14 @@ def load_library(name: str, lib_dirs: list[str]) -> None:
 
 
 def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
-            libs: list[str] = (), lib_dirs: list[str] = ()) -> int:
+            libs: list[str] = (), lib_dirs: list[str] = (), opt: int = 0) -> int:
     """
     JIT-compile a module in-process and run its main, returning its exit code.
 
     Extra object files are loaded into the engine, and '-l' libraries into
     the process, their symbols resolvable from the program like any linked code.
     """
-    target_machine, llvm_module = prepare_module(module)
+    target_machine, llvm_module = prepare_module(module, opt)
 
     for name in libs:
         load_library(name, lib_dirs)
