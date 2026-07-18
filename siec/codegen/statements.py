@@ -29,7 +29,7 @@ from siec.codegen.expressions import (
     member_field,
 )
 from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
-from siec.codegen.types import resolve_type, sized_array
+from siec.codegen.types import is_const, resolve_type, sized_array
 
 
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
@@ -68,6 +68,22 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
                 emit_statement(gen, builder, stmt, snapshot)
     finally:
         gen.flushing_defers -= 1
+
+
+def reject_const_base(gen: CodeGenerator, scope: dict, base) -> None:
+    """
+    Reject assignment through anything 'const': every link of the target's
+    base chain must be mutable, since the contract follows the value.
+    """
+    while True:
+        base_type = expr_sie_type(gen, base, scope)
+        if is_const(base_type):
+            raise TypeError(f"cannot mutate a {base_type!r} value")
+
+        if isinstance(base, (Member, Index)):
+            base = base.base
+        else:
+            return
 
 
 def emit_statement(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: dict) -> None:
@@ -113,15 +129,23 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             raise NameError(f"undefined variable {stmt.name!r}")
 
         var = scope[stmt.name]
+        if is_const(var.type):
+            raise TypeError(f"cannot assign to const variable {stmt.name!r}")
+
         builder.store(emit_coerced(gen, builder, stmt.value, var.type, scope), var.slot)
     elif isinstance(stmt, MemberAssign):
         # store the value into the field's slot, typed by the field
         member = Member(stmt.base, stmt.field)
         field_type = member_field(gen, member, scope)[1]
+        if is_const(field_type):
+            raise TypeError(f"cannot assign to const field {stmt.field!r}")
+
+        reject_const_base(gen, scope, stmt.base)
         slot = emit_lvalue(gen, builder, member, scope)
         builder.store(emit_coerced(gen, builder, stmt.value, field_type, scope), slot)
     elif isinstance(stmt, IndexAssign):
         # store the value into the element's slot, typed by the element
+        reject_const_base(gen, scope, stmt.base)
         target = Index(stmt.base, stmt.index)
         slot = emit_lvalue(gen, builder, target, scope)
 

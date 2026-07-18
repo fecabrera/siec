@@ -6,7 +6,7 @@ from siec.ast import Function
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable
 from siec.codegen.statements import emit_block
-from siec.codegen.types import resolve_type
+from siec.codegen.types import resolve_type, strip_const
 
 
 def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:
@@ -20,9 +20,11 @@ def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:
 def main_takes_args(fn: Function) -> bool:
     """
     Whether this is the 'fn main(args: char*[])' entry form, whose single
-    parameter lowers to the C-level argc/argv pair.
+    parameter lowers to the C-level argc/argv pair; a 'const' marking
+    keeps the form.
     """
-    return fn.name == "main" and len(fn.params) == 1 and fn.params[0].type == "char*[]"
+    return (fn.name == "main" and len(fn.params) == 1
+            and strip_const(fn.params[0].type) == "char*[]")
 
 
 def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:

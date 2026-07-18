@@ -22,6 +22,28 @@ SIGNED_TYPES = {"i8", "i16", "i32", "i64"}
 UNSIGNED_TYPES = {"u8", "u16", "u32", "u64"}
 
 
+def is_const(name: str | None) -> bool:
+    """
+    Whether a type name carries the 'const' contract prefix.
+    """
+    return name is not None and name.startswith("const ")
+
+
+def strip_const(name: str | None) -> str | None:
+    """
+    A type name without its 'const' contract prefix: the represented type.
+    """
+    return name.removeprefix("const ") if name is not None else None
+
+
+def is_aliasing(name: str | None) -> bool:
+    """
+    Whether a type's values alias memory beyond their own copy: pointers
+    and arrays, the types a 'const' contract must follow.
+    """
+    return name is not None and (name.endswith("*") or name.endswith("[]"))
+
+
 def sized_array(name: str | None) -> tuple[str, int] | None:
     """
     Split a sized array name 'X[N]' into its unsized form 'X[]' and N,
@@ -41,6 +63,8 @@ def type_signedness(name: str | None) -> str | None:
     """
     Classify a Sie type name as 'signed' or 'unsigned'; None for the rest.
     """
+    name = strip_const(name)
+
     if name in SIGNED_TYPES:
         return "signed"
 
@@ -113,6 +137,9 @@ def resolve_type(name: str | None, structs: dict | None = None,
     """
     if name is None:
         return ir.VoidType()
+
+    # 'const T' is a contract, not a type: it resolves as its base type
+    name = strip_const(name)
 
     # a sized array 'X[N]' is the same fat value as 'X[]'; the size only
     # directs the automatic backing a declaration allocates

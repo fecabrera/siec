@@ -9,6 +9,12 @@ def parse_type(ts: TokenStream) -> str:
     Parse a type annotation, including pointer and array suffixes
     (e.g. 'u8**', 'char*[]', 'char[][]').
     """
+    # a leading 'const' marks the mutation contract, kept as a prefix on
+    # the canonical name; the represented type is unchanged
+    if ts.peek().kind == "ident" and ts.peek().value == "const":
+        ts.next()
+        return f"const {parse_type(ts)}"
+
     # 'fn(A, B) -> T' is a function reference type; anything else is a base
     # type name; either may be followed by any mix of '*'s (which the lexer
     # may have glued into '**' tokens) and '[]' or '[N]' suffixes

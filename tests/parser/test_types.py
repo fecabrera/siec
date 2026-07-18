@@ -49,6 +49,21 @@ def test_sized_array_type_accepts_hex(ts):
     assert parse_type(ts("u8[0x10]")) == "u8[16]"
 
 
+def test_const_type(ts):
+    """
+    A leading 'const' is kept as a prefix on the canonical name.
+    """
+    assert parse_type(ts("const i32")) == "const i32"
+
+
+def test_const_pointer_type(ts):
+    """
+    'const' covers the whole suffixed type that follows it.
+    """
+    assert parse_type(ts("const char*")) == "const char*"
+    assert parse_type(ts("const i32[]")) == "const i32[]"
+
+
 def test_array_of_pointers_type(ts):
     """
     An array's element type may itself be a pointer.

@@ -24,9 +24,12 @@ from siec.ast import (
 from siec.codegen.generator import CodeGenerator, StructInfo, entry_alloca
 from siec.codegen.types import (
     fn_type_parts,
+    is_aliasing,
     is_array_struct,
+    is_const,
     resolve_type,
     sized_array,
+    strip_const,
     type_signedness,
 )
 
@@ -238,8 +241,8 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     if isinstance(expr, Call):
         # a call through a function reference yields the reference's return type
-        if expr.name in scope and scope[expr.name].type.startswith("fn("):
-            return fn_type_parts(scope[expr.name].type)[1]
+        if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
+            return fn_type_parts(strip_const(scope[expr.name].type))[1]
 
         return gen.return_types.get(expr.name)
 
@@ -247,15 +250,33 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Cast):
         return expr.type
 
-    # a member access yields the field's type
+    # a member access yields the field's type; an aliasing field (a pointer
+    # or array) keeps a const base's contract
     if isinstance(expr, Member):
-        info = type_info(gen, expr_sie_type(gen, expr.base, scope))
-        return info.field(expr.field)[1] if info is not None else None
+        base_name = expr_sie_type(gen, expr.base, scope)
+        info = type_info(gen, base_name)
+        if info is None:
+            return None
 
-    # indexing yields the element type, one '*' or '[]' shorter
+        field_type = info.field(expr.field)[1]
+        if is_const(base_name) and is_aliasing(field_type) and not is_const(field_type):
+            return f"const {field_type}"
+
+        return field_type
+
+    # indexing yields the element type, one '[]' or '*' shorter; an aliasing
+    # element keeps a const base's contract
     if isinstance(expr, Index):
         base = expr_sie_type(gen, expr.base, scope)
-        return base.removesuffix("[]").removesuffix("*") if base is not None else None
+        if base is None:
+            return None
+
+        stripped = strip_const(base)
+        element = stripped[:-2] if stripped.endswith("[]") else stripped.removesuffix("*")
+        if is_const(base) and is_aliasing(element):
+            return f"const {element}"
+
+        return element
 
     # a slice is a view with its base's array type
     if isinstance(expr, Slice):
@@ -277,9 +298,13 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     Infer the Sie type an unannotated 'let' adopts from its initializer;
     None when the expression doesn't pin one down.
     """
-    # named values, calls, casts, members, and the rest carry declared types
+    # named values, calls, casts, members, and the rest carry declared types;
+    # a copy of a non-aliasing const value is an independent, mutable value
     declared = expr_sie_type(gen, expr, scope)
     if declared is not None:
+        if is_const(declared) and not is_aliasing(strip_const(declared)):
+            return strip_const(declared)
+
         return declared
 
     # literals default like they do in any untyped context
@@ -335,6 +360,7 @@ def numeric_class(type_name: str | None) -> tuple[str, int] | None:
     """
     Classify a scalar numeric type name as its ('i'|'u'|'f', width), else None.
     """
+    type_name = strip_const(type_name)
     if type_name and type_name[0] in "iuf" and type_name[1:].isdigit():
         return type_name[0], int(type_name[1:])
 
@@ -391,29 +417,39 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         target_type = resolve_type(expr.type, gen.structs)
         value = emit_expression(gen, builder, expr.operand, None, scope)
 
+        # casting a value to its own represented type is a no-op: this is
+        # also how an explicit cast sheds a 'const' contract
+        source = strip_const(expr_sie_type(gen, expr.operand, scope))
+        if source is not None and source == strip_const(expr.type):
+            return value
+
         if (isinstance(target_type, ir.PointerType) and is_array_struct(value.type)
                 and value.type.elements[0] == target_type):
             return builder.extract_value(value, 0, name="decay")
 
+        # the modifier plays no part in what the cast does; only the
+        # represented type directs the conversion
+        target_name = strip_const(expr.type)
+
         # any pointer casts to 'opaque*', the same way it decays to it
-        if expr.type == "opaque*":
+        if target_name == "opaque*":
             decayed = emit_opaque_pointer(builder, value, target_type)
             if decayed is not None:
                 return decayed
 
         # an 'opaque*' casts to any pointer, the reverse of the decay
         if (isinstance(target_type, ir.PointerType)
-                and expr_sie_type(gen, expr.operand, scope) == "opaque*"):
+                and strip_const(expr_sie_type(gen, expr.operand, scope)) == "opaque*"):
             return builder.bitcast(value, target_type)
 
         # 'i8[]'/'u8[]' and 'char[]' cast into each other, the length
         # adjusting for the null terminator a char[] excludes; the
         # underlying pointer is assumed null-terminated
-        source_name = expr_sie_type(gen, expr.operand, scope)
+        source_name = strip_const(expr_sie_type(gen, expr.operand, scope))
         delta = None
-        if expr.type == "char[]" and source_name in ("i8[]", "u8[]"):
+        if target_name == "char[]" and source_name in ("i8[]", "u8[]"):
             delta = -1
-        elif expr.type in ("i8[]", "u8[]") and source_name == "char[]":
+        elif target_name in ("i8[]", "u8[]") and source_name == "char[]":
             delta = 1
 
         if delta is not None:
@@ -476,7 +512,18 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     A numeric value widens to a larger type of the same prefix (i/u/f); crossing
     prefixes or narrowing needs an explicit cast and is rejected here.
+
+    'const T' is a contract, not a type: a mutable T passes as const T freely,
+    but an aliasing const value (a pointer or array) never passes where a
+    mutable one is expected — only an explicit cast sheds the contract.
     """
+    source_name = expr_sie_type(gen, expr, scope)
+    if (target_name is not None and is_const(source_name) and not is_const(target_name)
+            and is_aliasing(strip_const(source_name))):
+        raise TypeError(f"cannot use a {source_name!r} value where a mutable "
+                        f"{target_name!r} is expected")
+
+    target_name = strip_const(target_name)
     target_type = resolve_type(target_name, gen.structs)
 
     # an aggregate literal coerces each element to its field's type instead
@@ -555,6 +602,9 @@ def type_info(gen: CodeGenerator, type_name: str | None) -> StructInfo | None:
     """
     Return the fields of a struct or array type name, or None for other types.
     """
+    # a 'const' base has the same fields as its represented type
+    type_name = strip_const(type_name)
+
     # a sized 'X[N]' carries the same fields as the 'X[]' it declares
     if (sized := sized_array(type_name)) is not None:
         type_name = sized[0]
@@ -916,10 +966,11 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, sc
     Emit a call through a function reference held in a variable.
     """
     var = scope[call.name]
-    if not var.type.startswith("fn(") or fn_type_parts(var.type)[2]:
+    var_type = strip_const(var.type)
+    if not var_type.startswith("fn(") or fn_type_parts(var_type)[2]:
         raise TypeError(f"cannot call non-function variable {call.name!r}")
 
-    sie_params = fn_type_parts(var.type)[0]
+    sie_params = fn_type_parts(var_type)[0]
     if len(call.args) != len(sie_params):
         raise TypeError(f"function reference {call.name!r} takes "
                         f"{len(sie_params)} arguments, got {len(call.args)}")

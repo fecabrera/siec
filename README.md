@@ -462,6 +462,18 @@ fn f(a: const A) {
 }
 ```
 
+Since `const` is not part of the type, a `T` passes directly where a `const T` is expected. The reverse never happens implicitly: a `const` pointer or array is never used where a mutable one is expected, and the contract follows the value — through pointer fields read from a `const` struct, through indexing, and through inferred `let`s. Only an explicit cast sheds it:
+
+```
+fn f(s: const char*) {
+    let t = s;         // t is const char* too
+    take(s);           // error: take wants a mutable char*
+    take(s as char*);  // the explicit escape hatch
+}
+```
+
+Copies of non-aliasing values discard the contract naturally — a `const i32` argument is just a value, and copies of it are the caller's own. `const` also works anywhere a type is written: on `let` declarations, struct fields, and return types.
+
 This is also how a method's receiver declares whether it mutates the struct: a mutating method takes `self: &S`, while one that only reads from it takes `self: const &S`.
 
 #### Generic functions
