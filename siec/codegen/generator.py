@@ -153,6 +153,10 @@ class CodeGenerator:
         # module symbols: each file's statics are invisible to every other
         self.statics: dict[tuple[str, str], str] = {}
 
+        # '@symbol' functions by Sie name, mapped to their chosen module
+        # symbols, visible everywhere
+        self.symbol_names: dict[str, str] = {}
+
         # the source file whose function body is being emitted, deciding
         # which statics are in view
         self.current_file = ""
@@ -160,9 +164,12 @@ class CodeGenerator:
     def resolve_symbol(self, name: str) -> str:
         """
         Resolve a Sie name to its module symbol: the current file's static
-        when it has one, the public name otherwise.
+        when it has one, an '@symbol' mapping next, the public name otherwise.
         """
-        return self.statics.get((self.current_file, name), name)
+        if (key := (self.current_file, name)) in self.statics:
+            return self.statics[key]
+
+        return self.symbol_names.get(name, name)
 
     def struct_align(self, type_name: str | None) -> int | None:
         """

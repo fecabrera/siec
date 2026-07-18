@@ -388,6 +388,7 @@ class Function:
     var_arg: bool = False
     is_inline: bool = False
     is_static: bool = False
+    symbol: str | None = None  # '@symbol("...")' module-symbol override
     line: int = _line()
     file: str = _file()
 

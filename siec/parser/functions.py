@@ -150,12 +150,20 @@ def parse_function(ts: TokenStream) -> Function:
     line = ts.peek().line
 
     # decorators may stack ('@static @inline'), except '@extern', whose
-    # function has no body for the others to act on
+    # function has no body for the others to act on; '@symbol("name")'
+    # names the module symbol and rides along with any of them
     decorators = set()
+    symbol = None
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
         decorator = ts.expect("ident").value
+
+        if decorator == "symbol":
+            ts.expect("sym", "(")
+            symbol = ts.expect("str").value
+            ts.expect("sym", ")")
+            continue
 
         if decorator not in DECORATORS:
             raise SyntaxError(f"line {at_line}: unknown decorator '@{decorator}'")
@@ -168,6 +176,10 @@ def parse_function(ts: TokenStream) -> Function:
 
     if is_extern and len(decorators) > 1:
         raise SyntaxError(f"line {line}: '@extern' cannot combine with other decorators")
+
+    # a static function's symbol is the compiler's to mangle
+    if is_static and symbol is not None:
+        raise SyntaxError(f"line {line}: '@symbol' cannot combine with '@static'")
 
     ts.expect("kw", "fn")
     name = ts.expect("ident").value
@@ -201,7 +213,7 @@ def parse_function(ts: TokenStream) -> Function:
     if ts.peek().value == ";":
         ts.next()
         return Function(name, params, return_type, None, is_extern, var_arg,
-                        is_inline, is_static, line=line)
+                        is_inline, is_static, symbol, line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -210,4 +222,4 @@ def parse_function(ts: TokenStream) -> Function:
     body = parse_block(ts)
 
     return Function(name, params, return_type, body, is_extern, var_arg,
-                    is_inline, is_static, line=line)
+                    is_inline, is_static, symbol, line=line)

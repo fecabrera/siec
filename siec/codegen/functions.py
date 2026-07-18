@@ -56,10 +56,21 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
 
     func_type = ir.FunctionType(ret_type, param_types, var_arg=fn.var_arg)
 
+    # an '@symbol' function lives under its chosen module symbol, its Sie
+    # name resolving there from everywhere
+    symbol = fn.name
+    if fn.symbol is not None:
+        if fn.name == "main":
+            raise TypeError("'main' cannot be renamed: the C runtime must find it")
+
+        if gen.symbol_names.get(fn.name, fn.symbol) != fn.symbol:
+            raise TypeError(f"conflicting '@symbol' names for function {fn.name!r}")
+
+        gen.symbol_names[fn.name] = symbol = fn.symbol
+
     # a '@static' function is local to its file: it lives under a mangled
     # module symbol its own file resolves to, so other files neither see it
     # nor collide with its name
-    symbol = fn.name
     if fn.is_static:
         if fn.name == "main":
             raise TypeError("'main' cannot be static: the C runtime must find it")

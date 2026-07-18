@@ -676,6 +676,20 @@ Functions can be decorated with `@extern` to indicate that they're going to be r
 @extern let mpd_traphandler: fn(mpd_context*);
 ```
 
+#### Symbol
+
+`@symbol("name")` decouples a function's Sie name from its module symbol: the function links and emits under the given symbol, while the program calls it by its Sie name. Combined with `@extern`, it binds a foreign symbol behind a name of your choosing; combined with [conditional compilation](#conditional-compilation), one name covers a symbol that differs by platform:
+
+```
+@if (TARGET_OS == OS_DARWIN) {
+    @extern @symbol("__error") fn errno_location() -> i32*;
+} @else {
+    @extern @symbol("__errno_location") fn errno_location() -> i32*;
+}
+```
+
+It also works on defined functions, exporting them under the chosen symbol. `main` cannot be renamed (the C runtime looks it up by name), and `@symbol` cannot combine with `@static`, whose symbol is the compiler's to mangle.
+
 #### Inline
 
 Functions can be decorated with `@inline` to inline them into every caller. Unlike C's `inline`, this is not a hint: the function is always inlined, even at `-O0`.
