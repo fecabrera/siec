@@ -7,6 +7,26 @@ from llvmlite import ir
 from ..ast import Field, Program
 
 
+def entry_alloca(builder: ir.IRBuilder, type_: ir.Type, name: str) -> ir.Instruction:
+    """
+    Reserve a stack slot in the function's entry block, wherever the builder
+    currently is: a slot inside a loop must not re-allocate every iteration.
+    """
+    entry = builder.function.entry_basic_block
+
+    # in the entry block itself, alloca in place; a second builder would
+    # fight the active one over its insertion point
+    if builder.block is entry:
+        return builder.alloca(type_, name=name)
+
+    # otherwise the entry block is sealed; slot in just before its terminator
+    head = ir.IRBuilder(entry)
+    if entry.is_terminated:
+        head.position_before(entry.terminator)
+
+    return head.alloca(type_, name=name)
+
+
 @dataclass
 class Variable:
     """

@@ -2,8 +2,22 @@
 
 import pytest
 
-from siec.ast import (Assign, BinaryOp, Call, ExprStmt, If, Index, IndexAssign, IntLiteral,
-                      Let, Member, MemberAssign, Return, Var)
+from siec.ast import (
+    Assign,
+    BinaryOp,
+    Call,
+    ExprStmt,
+    If,
+    Index,
+    IndexAssign,
+    IntLiteral,
+    Let,
+    Member,
+    MemberAssign,
+    Return,
+    StrLiteral,
+    Var,
+)
 from siec.parser.statements import parse_block, parse_statement
 
 
@@ -117,6 +131,34 @@ def test_compound_member_assignment_desugars(ts):
     """
     assert parse_statement(ts("p.x += 2;")) == MemberAssign(
         Var("p"), "x", BinaryOp("+", Member(Var("p"), "x"), IntLiteral(2)))
+
+
+def test_string_statements_do_not_read_as_syntax(ts):
+    """
+    Strings holding '}' or ';' parse as expression statements, not as
+    block ends or empty returns.
+    """
+    assert parse_statement(ts('"}";')) == ExprStmt(StrLiteral("}"))
+    assert parse_statement(ts('return ";";')) == Return(StrLiteral(";"))
+
+
+def test_while_statement(ts):
+    """
+    'while (cond) { ... }' parses to a While with its condition and body.
+    """
+    from siec.ast import While
+
+    assert parse_statement(ts("while (x < 3) { x += 1; }")) == While(
+        BinaryOp("<", Var("x"), IntLiteral(3)),
+        [Assign("x", BinaryOp("+", Var("x"), IntLiteral(1)))])
+
+
+def test_while_condition_requires_parentheses(ts):
+    """
+    'while' without a parenthesized condition raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match=r"expected '\('"):
+        parse_statement(ts("while x { }"))
 
 
 def test_block_statement(ts):

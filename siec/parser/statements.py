@@ -1,7 +1,7 @@
 """Parsing of statements."""
 
 from ..ast import (Assign, BinaryOp, Block, ExprStmt, If, Index, IndexAssign, Let, Member,
-                   MemberAssign, Return, Var)
+                   MemberAssign, Return, Var, While)
 from .expressions import parse_expression
 from .stream import TokenStream
 from .types import parse_type
@@ -14,11 +14,11 @@ def parse_block(ts: TokenStream) -> list:
     Parse a brace-enclosed list of statements.
     """
     ts.expect("sym", "{")
-    
+
     body = []
-    while ts.peek().value != "}":
+    while ts.peek().syntax != "}":
         body.append(parse_statement(ts))
-    
+
     ts.expect("sym", "}")
     return body
 
@@ -41,14 +41,24 @@ def parse_statement(ts: TokenStream):
         body = parse_block(ts)
 
         orelse = None
-        if ts.peek().value == "else":
+        if ts.peek().syntax == "else":
             ts.next()
-            orelse = [parse_statement(ts)] if ts.peek().value == "if" else parse_block(ts)
+            orelse = [parse_statement(ts)] if ts.peek().syntax == "if" else parse_block(ts)
 
         return If(condition, body, orelse, line=line)
 
+    # 'while (cond) { ... }' loops its block while the condition is truthy
+    if tok.kind == "kw" and tok.value == "while":
+        ts.next()
+
+        ts.expect("sym", "(")
+        condition = parse_expression(ts)
+        ts.expect("sym", ")")
+
+        return While(condition, parse_block(ts), line=line)
+
     # a bare '{' opens a block statement, a statement list in its own scope
-    if tok.value == "{":
+    if tok.syntax == "{":
         return Block(parse_block(ts), line=line)
 
     # 'let name: type' with an optional '= <expr>' initializer
@@ -61,7 +71,7 @@ def parse_statement(ts: TokenStream):
         var_type = parse_type(ts)
 
         value = None
-        if ts.peek().value == "=":
+        if ts.peek().syntax == "=":
             ts.next()
             value = parse_expression(ts)
 
@@ -73,7 +83,7 @@ def parse_statement(ts: TokenStream):
         ts.next()
 
         value = None
-        if ts.peek().value != ";":
+        if ts.peek().syntax != ";":
             value = parse_expression(ts)
 
         ts.expect("sym", ";")
@@ -83,7 +93,7 @@ def parse_statement(ts: TokenStream):
     # expression an assignment target, else it's evaluated for its effects
     expr = parse_expression(ts)
 
-    if ts.peek().value == "=" or ts.peek().value in COMPOUND:
+    if ts.peek().syntax == "=" or ts.peek().syntax in COMPOUND:
         op = ts.next().value
 
         value = parse_expression(ts)

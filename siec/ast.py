@@ -169,6 +169,16 @@ class If:
 
 
 @dataclass
+class While:
+    """
+    A while loop with a condition and a body.
+    """
+    condition: Expr
+    body: list
+    line: int = _line()
+
+
+@dataclass
 class Block:
     """
     A brace-enclosed statement list run in its own scope.

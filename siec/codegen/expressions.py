@@ -19,7 +19,7 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
-from .generator import CodeGenerator, StructInfo
+from .generator import CodeGenerator, StructInfo, entry_alloca
 from .types import fn_type_parts, is_array_struct, resolve_type, type_signedness
 
 # arithmetic and bitwise operators and the IRBuilder method emitting each;
@@ -509,8 +509,8 @@ def emit_power(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
     exp = emit_expression(gen, builder, expr.right, base.type, scope)
 
     # the result and the remaining exponent live in slots driven by the loop
-    result = builder.alloca(base.type, name="pow.result")
-    remaining = builder.alloca(exp.type, name="pow.exp")
+    result = entry_alloca(builder, base.type, "pow.result")
+    remaining = entry_alloca(builder, exp.type, "pow.exp")
     builder.store(ir.Constant(base.type, 1), result)
     builder.store(exp, remaining)
 
@@ -617,7 +617,7 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
     element_type = expected_type.elements[0].pointee
 
     # store each element into a stack-allocated backing array
-    backing = builder.alloca(ir.ArrayType(element_type, len(expr.elements)), name="arr.lit")
+    backing = entry_alloca(builder, ir.ArrayType(element_type, len(expr.elements)), "arr.lit")
     for index, element in enumerate(expr.elements):
         if element_name is not None:
             value = emit_coerced(gen, builder, element, element_name, scope)

@@ -3,11 +3,11 @@
 from llvmlite import ir
 
 from ..ast import (Assign, Block, ExprStmt, If, Index, IndexAssign, Let, Member,
-                   MemberAssign, Return)
+                   MemberAssign, Return, While)
 from .errors import source_location
 from .expressions import (emit_bool, emit_coerced, emit_expression, emit_lvalue,
                           expr_sie_type, member_field)
-from .generator import CodeGenerator, Variable
+from .generator import CodeGenerator, Variable, entry_alloca
 from .types import resolve_type
 
 
@@ -37,7 +37,7 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         # reserve a stack slot for the variable and initialize it if a value was given,
         # widening the initializer to the declared type when allowed
         var_type = resolve_type(stmt.type, gen.structs)
-        scope[stmt.name] = Variable(builder.alloca(var_type, name=stmt.name), stmt.type)
+        scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), stmt.type)
 
         if stmt.value is not None:
             builder.store(emit_coerced(gen, builder, stmt.value, stmt.type, scope),
@@ -73,6 +73,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_block(gen, builder, stmt.body, dict(scope))
     elif isinstance(stmt, If):
         emit_if(gen, builder, stmt, scope)
+    elif isinstance(stmt, While):
+        emit_while(gen, builder, stmt, scope)
     elif isinstance(stmt, Return):
         if stmt.value is None:
             # a bare 'return' in main yields its implicit exit code 0: only
@@ -90,6 +92,33 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_expression(gen, builder, stmt.expr, None, scope)
     else:
         raise TypeError(f"cannot generate code for statement {stmt!r}")
+
+
+def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: dict) -> None:
+    """
+    Emit a while loop: the condition checked before each pass, C-style.
+    """
+    func = builder.function
+    cond_block = func.append_basic_block("while.cond")
+    body_block = func.append_basic_block("while.body")
+    end_block = func.append_basic_block("while.end")
+
+    builder.branch(cond_block)
+
+    # compare non-boolean conditions against zero, like an if's
+    builder.position_at_end(cond_block)
+    builder.cbranch(emit_bool(gen, builder, stmt.condition, scope),
+                    body_block, end_block)
+
+    # the body runs in a child scope of its own, fresh each iteration,
+    # and loops back to the condition unless it returned
+    builder.position_at_end(body_block)
+    emit_block(gen, builder, stmt.body, dict(scope))
+
+    if not builder.block.is_terminated:
+        builder.branch(cond_block)
+
+    builder.position_at_end(end_block)
 
 
 def emit_if(gen: CodeGenerator, builder: ir.IRBuilder, stmt: If, scope: dict) -> None:

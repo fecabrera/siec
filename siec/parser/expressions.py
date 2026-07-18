@@ -35,7 +35,7 @@ def parse_binary(ts: TokenStream, level: int) -> Expr:
 
     left = parse_binary(ts, level + 1)
 
-    while ts.peek().value in LEVELS[level]:
+    while ts.peek().syntax in LEVELS[level]:
         op = ts.next().value
         left = BinaryOp(op, left, parse_binary(ts, level + 1))
 
@@ -49,7 +49,7 @@ def parse_cast(ts: TokenStream) -> Expr:
     """
     left = parse_power(ts)
 
-    while ts.peek().value == "as":
+    while ts.peek().syntax == "as":
         ts.next()
         left = Cast(left, parse_type(ts))
 
@@ -62,7 +62,7 @@ def parse_power(ts: TokenStream) -> Expr:
     """
     left = parse_primary(ts)
 
-    if ts.peek().value == "**":
+    if ts.peek().syntax == "**":
         ts.next()
         return BinaryOp("**", left, parse_power(ts))
 
@@ -76,14 +76,14 @@ def parse_primary(ts: TokenStream) -> Expr:
     tok = ts.next()
 
     # prefix '-', '~', and 'not' bind tighter than any binary operator
-    if tok.value == "-":
+    if tok.syntax == "-":
         # fold '-' over an int literal into a negative constant, keeping it instruction-free
         if ts.peek().kind == "int":
             return IntLiteral(-int(ts.next().value))
 
         return UnaryOp("-", parse_primary(ts))
 
-    if tok.value in ("~", "not"):
+    if tok.syntax in ("~", "not"):
         return UnaryOp(tok.value, parse_primary(ts))
 
     # 'true' and 'false' are boolean literals
@@ -91,15 +91,15 @@ def parse_primary(ts: TokenStream) -> Expr:
         return BoolLiteral(tok.value == "true")
 
     # '(' groups a full subexpression
-    if tok.value == "(":
+    if tok.syntax == "(":
         expr = parse_expression(ts)
         ts.expect("sym", ")")
         return parse_postfix(ts, expr)
 
     # '{a, b, ...}' is an aggregate literal filling a struct or array's fields
-    if tok.value == "{":
+    if tok.syntax == "{":
         elements = []
-        while ts.peek().value != "}":
+        while ts.peek().syntax != "}":
             if elements:
                 ts.expect("sym", ",")
 
@@ -109,9 +109,9 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, AggregateLiteral(elements))
 
     # '[a, b, ...]' is an array literal, building a fat array from its elements
-    if tok.value == "[":
+    if tok.syntax == "[":
         elements = []
-        while ts.peek().value != "]":
+        while ts.peek().syntax != "]":
             if elements:
                 ts.expect("sym", ",")
 
@@ -124,16 +124,16 @@ def parse_primary(ts: TokenStream) -> Expr:
         return IntLiteral(int(tok.value))
 
     if tok.kind == "str":
-        return StrLiteral(tok.value)
+        return parse_postfix(ts, StrLiteral(tok.value))
 
     # an identifier is a call if followed by '(', otherwise a variable
     if tok.kind == "ident":
-        if ts.peek().value == "(":
+        if ts.peek().syntax == "(":
             ts.next()
 
             # comma-separated argument expressions up to the closing ')'
             args = []
-            while ts.peek().value != ")":
+            while ts.peek().syntax != ")":
                 if args:
                     ts.expect("sym", ",")
 
@@ -154,14 +154,14 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
     Apply postfix '[index]', '[from:to]', and '.field' chains to an expression:
     variables, call results, groupings, and literals alike.
     """
-    while ts.peek().value in ("[", "."):
+    while ts.peek().syntax in ("[", "."):
         if ts.next().value == "[":
             # a ':' anywhere in the brackets makes it a slice, either bound optional
-            start = None if ts.peek().value == ":" else parse_expression(ts)
+            start = None if ts.peek().syntax == ":" else parse_expression(ts)
 
-            if ts.peek().value == ":":
+            if ts.peek().syntax == ":":
                 ts.next()
-                stop = None if ts.peek().value == "]" else parse_expression(ts)
+                stop = None if ts.peek().syntax == "]" else parse_expression(ts)
                 ts.expect("sym", "]")
                 expr = Slice(expr, start, stop)
             else:

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-KEYWORDS = {"fn", "return", "let", "if", "else", "and", "or", "not", "struct",
+KEYWORDS = {"fn", "return", "let", "if", "else", "while", "and", "or", "not", "struct",
             "true", "false", "as"}
 
 # simple one-character escapes; octal, hex, and universal forms are decoded by StringRule
@@ -20,3 +20,11 @@ class Token:
     kind: str  # 'kw', 'ident', 'int', 'str', 'sym', 'eof'
     value: str
     line: int
+
+    @property
+    def syntax(self) -> str | None:
+        """
+        The value as syntax: a string literal's content is data, never
+        syntax, so it compares as None ('["]' must not read as '[').
+        """
+        return None if self.kind == "str" else self.value

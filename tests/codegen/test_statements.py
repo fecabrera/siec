@@ -40,6 +40,54 @@ def test_assign_stores_into_the_slot(env):
     assert "store i64 9" in str(builder.function)
 
 
+def test_while_branches_over_loop_blocks(env):
+    """
+    A while emits cond, body, and end blocks, looping back to the condition.
+    """
+    from siec.ast import BinaryOp, While
+
+    gen, builder = env
+    scope = {}
+    emit_statement(gen, builder, Let("i", "i32", IntLiteral(0)), scope)
+
+    loop = While(BinaryOp("<", Var("i"), IntLiteral(3)),
+                 [Assign("i", BinaryOp("+", Var("i"), IntLiteral(1)))])
+    emit_statement(gen, builder, loop, scope)
+
+    body = str(builder.function)
+    assert "while.cond" in body
+    assert "while.body" in body
+    assert "while.end" in body
+
+
+def test_while_body_declarations_stay_inside(env):
+    """
+    A variable declared in the loop body is gone from the outer scope.
+    """
+    from siec.ast import BoolLiteral, While
+
+    gen, builder = env
+    scope = {}
+
+    emit_statement(gen, builder, While(BoolLiteral(False),
+                                       [Let("inner", "i32", IntLiteral(1))]), scope)
+    assert "inner" not in scope
+
+
+def test_loop_body_slots_allocate_in_the_entry_block(env):
+    """
+    A let inside a loop body allocas in the entry block, not per iteration.
+    """
+    from siec.ast import BoolLiteral, While
+
+    gen, builder = env
+    emit_statement(gen, builder, While(BoolLiteral(True),
+                                       [Let("x", "i32", IntLiteral(1))]), {})
+
+    entry = str(builder.function.entry_basic_block)
+    assert "alloca" in entry
+
+
 def test_block_declarations_stay_inside(env):
     """
     A variable declared in a block statement is gone from the outer scope.

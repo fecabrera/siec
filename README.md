@@ -241,9 +241,30 @@ if (a == 1) {
 // a is 42; b no longer exists
 ```
 
+### Loops
+
+Repetition is expressed through the `while` keyword, followed by a parenthesized expression and a block. The body runs while the expression is truthy, checked before each iteration:
+
+```
+while (<expr>) {
+    // ...
+}
+```
+
+Like an if arm, the body is its own scope — a fresh one on each iteration, so a variable declared inside the body doesn't carry over to the next pass:
+
+```
+let i: i32 = 0;
+
+while (i < 10) {
+    let doubled: i32 = i * 2; // born and gone each iteration
+    i += 1;
+}
+```
+
 ### Blocks
 
-Code enclosed by `{}` is a block, its own scope:
+Code enclosed by `{}` is a block, with its own scope:
 
 ```
 {
