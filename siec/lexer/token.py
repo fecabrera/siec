@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "emit", "defer",
-            "and", "or", "not", "struct", "true", "false", "as"}
+            "and", "or", "not", "struct", "enum", "true", "false", "as"}
 
 
 def int_value(text: str) -> int:

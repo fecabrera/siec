@@ -4,6 +4,7 @@ from siec.ast import (
     BinaryOp,
     BoolLiteral,
     Cast,
+    EnumMember,
     Expr,
     FloatLiteral,
     IntLiteral,
@@ -42,6 +43,11 @@ def check_constant(gen: CodeGenerator, expr: Expr, chain: list[str]) -> None:
     constant's value, following references to catch cycles.
     """
     if isinstance(expr, LITERALS):
+        return
+
+    # an enum member is a named integer constant; its existence is
+    # checked where the constant is used
+    if isinstance(expr, EnumMember):
         return
 
     if isinstance(expr, Var):

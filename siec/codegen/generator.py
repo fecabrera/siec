@@ -56,6 +56,15 @@ class StructInfo:
         raise TypeError(f"struct has no field {name!r}")
 
 
+@dataclass
+class EnumInfo:
+    """
+    A registered enum: its backing Sie type name plus its evaluated members.
+    """
+    backing: str
+    members: dict[str, int]
+
+
 class CodeGenerator:
     """
     State shared across the codegen subsystems for one module.
@@ -92,21 +101,27 @@ class CodeGenerator:
         # the registered '@const' declarations by name, substituted at their uses
         self.constants: dict = {}
 
+        # the registered enums by name, their members evaluated to integers
+        self.enums: dict[str, EnumInfo] = {}
+
 
 def codegen(program: Program, module_name: str) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
     """
     from siec.codegen.constants import register_constants
+    from siec.codegen.enums import register_enums
     from siec.codegen.functions import declare_function, emit_function
     from siec.codegen.structs import register_structs
 
     gen = CodeGenerator(module_name)
 
-    # first pass: register structs so function signatures and bodies can name
-    # them, then constants so bodies can substitute their values
-    register_structs(gen, program)
+    # first pass: register the named declarations — constants first so enum
+    # values can reference them, enums next so struct fields can be
+    # enum-typed, then structs for signatures and bodies to name
     register_constants(gen, program)
+    register_enums(gen, program)
+    register_structs(gen, program)
 
     # second pass: declare every function so calls can target ones defined later
     for fn in program.functions:

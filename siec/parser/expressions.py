@@ -8,6 +8,7 @@ from siec.ast import (
     BoolLiteral,
     Call,
     Cast,
+    EnumMember,
     Expr,
     FloatLiteral,
     Index,
@@ -163,8 +164,14 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.kind == "str":
         return parse_postfix(ts, StrLiteral(tok.value))
 
-    # an identifier is a call if followed by '(', otherwise a variable
+    # an identifier is an enum member if followed by '::', a call if
+    # followed by '(', and a variable otherwise
     if tok.kind == "ident":
+        if ts.peek().syntax == "::":
+            ts.next()
+            member = ts.expect("ident").value
+            return parse_postfix(ts, EnumMember(tok.value, member))
+
         if ts.peek().syntax == "(":
             ts.next()
 

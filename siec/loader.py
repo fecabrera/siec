@@ -28,6 +28,7 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
     functions = []
     structs = []
     consts = []
+    enums = []
     visited = set()
 
     def load(file: Path) -> None:
@@ -60,11 +61,15 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         for const in program.consts:
             const.file = str(file)
 
+        for enum in program.enums:
+            enum.file = str(file)
+
         structs.extend(program.structs)
         functions.extend(program.functions)
         consts.extend(program.consts)
+        enums.extend(program.enums)
 
     for source in sources:
         load(source)
-    
-    return Program([], functions, structs, consts)
+
+    return Program([], functions, structs, consts, enums)

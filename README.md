@@ -844,12 +844,19 @@ enum name {
 }
 ```
 
-Optionally, you can define a specific value for any of their members through `= <value>` after their name.
+Members are accessed through the enum's name and `::`:
+
+```
+let color: name = name::ABC;
+```
+
+Optionally, you can define a specific value for any of their members through `= <value>` after their name. The value is a constant integer expression, and may combine literals, `@const` constants, and members already declared:
 
 ```
 enum name {
     ABC,
     DEF = 5,
+    GHI = name::DEF | 0x10,
 }
 ```
 

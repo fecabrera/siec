@@ -10,6 +10,7 @@ from siec.ast import (
     BoolLiteral,
     Call,
     Cast,
+    EnumMember,
     Expr,
     Field,
     FloatLiteral,
@@ -21,6 +22,7 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
+from siec.codegen.enums import member_value
 from siec.codegen.generator import CodeGenerator, StructInfo, entry_alloca
 from siec.codegen.types import (
     fn_type_parts,
@@ -87,6 +89,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, BoolLiteral):
         # boolean literals are i1 constants, independent of the context type
         return ir.Constant(ir.IntType(1), 1 if expr.value else 0)
+
+    if isinstance(expr, EnumMember):
+        # an enum member adopts an integer context like a literal would,
+        # defaulting to its enum's backing type
+        value = member_value(gen, expr)
+        if isinstance(expected_type, ir.IntType):
+            return ir.Constant(expected_type, value)
+
+        return ir.Constant(resolve_type(gen.enums[expr.enum].backing), value)
 
     if isinstance(expr, AggregateLiteral):
         return emit_aggregate(gen, builder, expr, expected_type, scope)
@@ -303,6 +314,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         operand = expr_sie_type(gen, expr.operand, scope)
         return f"{operand}*" if operand is not None else None
 
+    # 'A::member' carries its enum's type name
+    if isinstance(expr, EnumMember):
+        return expr.enum
+
     return None
 
 
@@ -354,13 +369,26 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     return None
 
 
+def enum_backing(gen: CodeGenerator, name: str | None) -> str | None:
+    """
+    Map an enum type name to its backing numeric type name, keeping any
+    'const' marking; other names pass through unchanged.
+    """
+    info = gen.enums.get(strip_const(name)) if name is not None else None
+    if info is None:
+        return name
+
+    return f"const {info.backing}" if is_const(name) else info.backing
+
+
 def signedness(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     Infer the signedness of an expression; None when it has no fixed one.
     """
-    # named values take the signedness of their declared Sie type
-    if isinstance(expr, (Var, Call, Member, Index)):
-        return type_signedness(expr_sie_type(gen, expr, scope))
+    # named values take the signedness of their declared Sie type; an
+    # enum-typed value takes its backing type's
+    if isinstance(expr, (Var, Call, Member, Index, EnumMember)):
+        return type_signedness(enum_backing(gen, expr_sie_type(gen, expr, scope)))
 
     # arithmetic keeps the signedness of its operands; literals adapt to either
     if isinstance(expr, UnaryOp) and expr.op in ("-", "~"):
@@ -388,8 +416,9 @@ def value_class(gen: CodeGenerator, value: ir.Value, expr: Expr,
     """
     Classify an emitted value's numeric prefix and width, from its type and signedness.
     """
-    # prefer the declared type name when the expression has one
-    declared = numeric_class(expr_sie_type(gen, expr, scope))
+    # prefer the declared type name when the expression has one; an
+    # enum-typed value classifies as its backing type
+    declared = numeric_class(enum_backing(gen, expr_sie_type(gen, expr, scope)))
     if declared is not None:
         return declared
 
@@ -435,7 +464,8 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
             and is_aliasing(strip_const(operand_name))):
         raise TypeError(f"cannot cast away 'const': {operand_name!r} to {expr.type!r}")
 
-    target = numeric_class(expr.type)
+    # a cast to an enum type converts to its backing type
+    target = numeric_class(enum_backing(gen, expr.type))
     if target is None:
         # an array casts to its element pointer: 'arr as X*' extracts the data field
         target_type = resolve_type(expr.type, gen.structs)

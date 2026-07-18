@@ -44,6 +44,15 @@ class Var:
 
 
 @dataclass
+class EnumMember:
+    """
+    An enum member picked through 'A::member': a named compile-time constant.
+    """
+    enum: str
+    member: str
+
+
+@dataclass
 class Call:
     """
     A call to a function by name with a list of argument expressions.
@@ -134,7 +143,8 @@ class BinaryOp:
 
 
 Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | AggregateLiteral | BlockExpr
-        | ArrayLiteral | Var | Call | Index | Slice | Member | Cast | UnaryOp | BinaryOp)
+        | ArrayLiteral | Var | EnumMember | Call | Index | Slice | Member | Cast
+        | UnaryOp | BinaryOp)
 
 
 def _line():
@@ -323,6 +333,28 @@ class Struct:
 
 
 @dataclass
+class Variant:
+    """
+    One enum member declaration: its name and an optional explicit value.
+    """
+    name: str
+    value: Expr | None = None
+
+
+@dataclass
+class Enum:
+    """
+    An enum declaration: named integer constants over a backing type,
+    accessed through 'Name::member'.
+    """
+    name: str
+    type: str
+    members: list[Variant]
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
 class Const:
     """
     An '@const' declaration: a named compile-time constant expression,
@@ -346,9 +378,11 @@ class Include:
 @dataclass
 class Program:
     """
-    The root of the AST: the includes, structs, functions, and constants of a source file.
+    The root of the AST: the includes, structs, functions, constants, and
+    enums of a source file.
     """
     includes: list[Include]
     functions: list[Function]
     structs: list[Struct] = field(default_factory=list)
     consts: list[Const] = field(default_factory=list)
+    enums: list[Enum] = field(default_factory=list)

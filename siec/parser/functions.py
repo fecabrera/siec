@@ -2,6 +2,7 @@
 
 from siec.ast import Function, Param, Program
 from siec.parser.constants import parse_const
+from siec.parser.enums import parse_enum
 from siec.parser.includes import parse_include
 from siec.parser.statements import parse_block
 from siec.parser.stream import TokenStream
@@ -11,16 +12,18 @@ from siec.parser.types import parse_type
 
 def parse_program(ts: TokenStream) -> Program:
     """
-    Parse a whole program: a sequence of includes, structs, functions, and constants.
+    Parse a whole program: a sequence of includes, structs, functions,
+    constants, and enums.
     """
     includes = []
     functions = []
     structs = []
     consts = []
+    enums = []
 
     # '@' starts an '@include' directive, an '@const' declaration, or a
-    # decorated function (e.g. '@extern'); 'struct' starts a struct
-    # declaration; anything else is a function
+    # decorated function (e.g. '@extern'); 'struct' and 'enum' start type
+    # declarations; anything else is a function
     while ts.peek().kind != "eof":
         if ts.peek().value == "@" and ts.peek(1).value == "include":
             includes.append(parse_include(ts))
@@ -28,10 +31,12 @@ def parse_program(ts: TokenStream) -> Program:
             consts.append(parse_const(ts))
         elif ts.peek().value == "struct":
             structs.append(parse_struct(ts))
+        elif ts.peek().value == "enum":
+            enums.append(parse_enum(ts))
         else:
             functions.append(parse_function(ts))
 
-    return Program(includes, functions, structs, consts)
+    return Program(includes, functions, structs, consts, enums)
 
 
 def parse_function(ts: TokenStream) -> Function:
