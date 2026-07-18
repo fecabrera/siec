@@ -159,3 +159,23 @@ def test_if_else_nests_inside_an_arm(run):
     }
     """
     assert run(source).returncode == 42
+
+
+def test_when_matches_any_of_its_values(run):
+    """
+    'when a, b:' selects the arm for either value, still without fall-through.
+    """
+    source = """
+    fn kind(n: i32) -> i32 {
+        case (n) {
+            when 1, 3, 5: return 1;
+            when 2, 4:    return 2;
+            else:         return 0;
+        }
+    }
+
+    fn main() -> i32 {
+        return kind(1) * 100 + kind(4) * 10 + kind(6); // 100 + 20 + 0
+    }
+    """
+    assert run(source).returncode == 120

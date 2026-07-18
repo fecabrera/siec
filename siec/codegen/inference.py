@@ -11,6 +11,7 @@ from siec.ast import (
     BoolLiteral,
     Call,
     Cast,
+    CharLiteral,
     EnumMember,
     Expr,
     Field,
@@ -135,6 +136,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # 'A::member' carries its enum's type name
     if isinstance(expr, EnumMember):
         return expr.enum
+
+    # a char literal is exactly a 'char'
+    if isinstance(expr, CharLiteral):
+        return "char"
 
     # a ternary carries its arms' type; either arm may pin it down
     if isinstance(expr, Ternary):

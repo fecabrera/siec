@@ -161,3 +161,37 @@ def test_unexpected_character_is_an_error():
     """
     with pytest.raises(SyntaxError, match=r"line 2: unexpected character '\$'"):
         lex("ok\n$")
+
+
+def test_char_literals():
+    """
+    One character between single quotes lexes as a char token.
+    """
+    assert kinds("'a' '\\n' '\\x41' '{'") == [
+        ("char", "a"),
+        ("char", "\n"),
+        ("char", "A"),
+        ("char", "{"),
+    ]
+
+
+def test_char_literal_must_hold_one_character():
+    """
+    Empty and multi-character char literals are errors.
+    """
+    with pytest.raises(SyntaxError, match="empty char literal"):
+        lex("''")
+
+    with pytest.raises(SyntaxError, match="exactly one character"):
+        lex("'ab'")
+
+    with pytest.raises(SyntaxError, match="single byte"):
+        lex("'é'")
+
+
+def test_unterminated_char_literal_is_an_error():
+    """
+    A char literal missing its closing quote raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match="unterminated char literal"):
+        lex("'a")

@@ -14,6 +14,7 @@ from siec.ast import (
     BoolLiteral,
     Call,
     Cast,
+    CharLiteral,
     EnumMember,
     Expr,
     FloatLiteral,
@@ -77,6 +78,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, BoolLiteral):
         # boolean literals are i1 constants, independent of the context type
         return ir.Constant(ir.IntType(1), 1 if expr.value else 0)
+
+    if isinstance(expr, CharLiteral):
+        # a char literal is exactly a 'char': one byte, its own type
+        return ir.Constant(ir.IntType(8), expr.value.encode()[0])
 
     if isinstance(expr, EnumMember):
         # an enum member adopts an integer context like a literal would,

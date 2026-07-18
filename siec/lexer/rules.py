@@ -214,6 +214,51 @@ class StringRule(Rule):
         raise SyntaxError(f"line {line}: unknown escape sequence \\{esc}")
 
 
+class CharRule(Rule):
+    """
+    Char literals: exactly one character between single quotes, escape
+    sequences decoded like a string's.
+    """
+
+    def validate(self, cursor: Cursor) -> bool:
+        """
+        Applies at a single quote.
+        """
+        return cursor.current() == "'"
+
+    def parse(self, cursor: Cursor) -> Token:
+        """
+        Decode the one character and check the closing quote.
+        """
+        source, line = cursor.source, cursor.line
+        j = cursor.pos + 1
+
+        if j >= len(source) or source[j] == "\n":
+            raise SyntaxError(f"line {line}: unterminated char literal")
+
+        if source[j] == "'":
+            raise SyntaxError(f"line {line}: empty char literal")
+
+        if source[j] == "\\":
+            char, j = StringRule().read_escape(source, j + 1, line)
+        else:
+            char = source[j]
+            j += 1
+
+        if j >= len(source) or source[j] == "\n":
+            raise SyntaxError(f"line {line}: unterminated char literal")
+
+        if source[j] != "'":
+            raise SyntaxError(f"line {line}: char literal must hold "
+                              "exactly one character")
+
+        if len(char.encode()) != 1:
+            raise SyntaxError(f"line {line}: char literal must be a single byte")
+
+        cursor.pos = j + 1
+        return Token("char", char, line)
+
+
 class IntRule(Rule):
     """
     Numeric literals: a run of digits, continuing into a float at a '.'
@@ -281,6 +326,7 @@ RULES = [
     MultilineCommentRule(),
     SymbolRule(),
     StringRule(),
+    CharRule(),
     IntRule(),
     WordRule(),
 ]

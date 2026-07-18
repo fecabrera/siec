@@ -17,9 +17,17 @@ def test_case_with_arms(ts):
     }
     """))
     assert stmt == Case(Var("x"), [
-        When(IntLiteral(1), [Return(IntLiteral(1))]),
-        When(IntLiteral(2), [Return(IntLiteral(2))]),
+        When([IntLiteral(1)], [Return(IntLiteral(1))]),
+        When([IntLiteral(2)], [Return(IntLiteral(2))]),
     ])
+
+
+def test_when_takes_several_values(ts):
+    """
+    'when a, b, c:' lists the values that all select one arm.
+    """
+    stmt = parse_statement(ts("case (x) { when 1, 2, 3: return 1; }"))
+    assert stmt.arms[0].values == [IntLiteral(1), IntLiteral(2), IntLiteral(3)]
 
 
 def test_case_else_is_optional(ts):

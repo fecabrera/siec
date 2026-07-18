@@ -376,12 +376,17 @@ def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict
     falls = False
 
     for arm in stmt.arms:
-        # each value adopts the subject's type, like a comparison's right side
-        value = emit_expression(gen, builder, arm.value, subject.type, scope)
-        if isinstance(subject.type, (ir.FloatType, ir.DoubleType)):
-            cond = builder.fcmp_ordered("==", subject, value)
-        else:
-            cond = builder.icmp_unsigned("==", subject, value)
+        # any of the arm's values selects it; each adopts the subject's
+        # type, like a comparison's right side
+        cond = None
+        for value_expr in arm.values:
+            value = emit_expression(gen, builder, value_expr, subject.type, scope)
+            if isinstance(subject.type, (ir.FloatType, ir.DoubleType)):
+                test = builder.fcmp_ordered("==", subject, value)
+            else:
+                test = builder.icmp_unsigned("==", subject, value)
+
+            cond = test if cond is None else builder.or_(cond, test)
 
         body_block = func.append_basic_block("when.body")
         next_block = func.append_basic_block("when.next")

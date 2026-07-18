@@ -103,9 +103,15 @@ def parse_statement(ts: TokenStream):
         while ts.peek().syntax != "}":
             if ts.peek().syntax == "when":
                 ts.next()
-                value = parse_expression(ts)
+
+                # one or more comma-separated values, any of which matches
+                values = [parse_expression(ts)]
+                while ts.peek().syntax == ",":
+                    ts.next()
+                    values.append(parse_expression(ts))
+
                 ts.expect("sym", ":")
-                arms.append(When(value, parse_arm(ts)))
+                arms.append(When(values, parse_arm(ts)))
             elif ts.peek().syntax == "else":
                 ts.next()
                 ts.expect("sym", ":")

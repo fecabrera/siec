@@ -31,7 +31,7 @@ class Token:
     @property
     def syntax(self) -> str | None:
         """
-        The value as syntax: a string literal's content is data, never
-        syntax, so it compares as None ('["]' must not read as '[').
+        The value as syntax: a string or char literal's content is data,
+        never syntax, so it compares as None ('["]' must not read as '[').
         """
-        return None if self.kind == "str" else self.value
+        return None if self.kind in ("str", "char") else self.value

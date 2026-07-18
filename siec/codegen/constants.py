@@ -4,6 +4,7 @@ from siec.ast import (
     BinaryOp,
     BoolLiteral,
     Cast,
+    CharLiteral,
     EnumMember,
     Expr,
     FloatLiteral,
@@ -16,7 +17,7 @@ from siec.ast import (
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 
-LITERALS = (IntLiteral, FloatLiteral, StrLiteral, BoolLiteral)
+LITERALS = (IntLiteral, FloatLiteral, StrLiteral, BoolLiteral, CharLiteral)
 
 
 def register_constants(gen: CodeGenerator, program: Program) -> None:

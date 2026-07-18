@@ -1,6 +1,6 @@
 """Registration and evaluation of enum declarations."""
 
-from siec.ast import BinaryOp, EnumMember, IntLiteral, Program, UnaryOp, Var
+from siec.ast import BinaryOp, CharLiteral, EnumMember, IntLiteral, Program, UnaryOp, Var
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, EnumInfo, StructInfo
 from siec.codegen.types import resolve_type
@@ -96,6 +96,10 @@ def evaluate(gen: CodeGenerator, expr) -> int:
     """
     if isinstance(expr, IntLiteral):
         return expr.value
+
+    # a char literal evaluates to its byte value
+    if isinstance(expr, CharLiteral):
+        return expr.value.encode()[0]
 
     if isinstance(expr, EnumMember):
         return member_value(gen, expr)

@@ -3,8 +3,9 @@
 import pytest
 
 from siec.lexer.cursor import Cursor
-from siec.lexer.rules import (RULES, IntRule, LineCommentRule, MultilineCommentRule,
-                              Rule, StringRule, SymbolRule, WhitespaceRule, WordRule)
+from siec.lexer.rules import (RULES, CharRule, IntRule, LineCommentRule,
+                              MultilineCommentRule, Rule, StringRule, SymbolRule,
+                              WhitespaceRule, WordRule)
 
 
 def test_base_rule_validator_is_abstract():
@@ -29,5 +30,5 @@ def test_registry_covers_every_rule():
     """
     assert [type(rule) for rule in RULES] == [
         WhitespaceRule, LineCommentRule, MultilineCommentRule,
-        SymbolRule, StringRule, IntRule, WordRule,
+        SymbolRule, StringRule, CharRule, IntRule, WordRule,
     ]

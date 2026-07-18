@@ -280,6 +280,17 @@ case (op) {
 
 The subject is evaluated once. `when` values are ordinary expressions, compared with the subject by equality in order, and each arm's statements run in a scope of their own, up to the next `when`, `else`, or the closing brace.
 
+A `when` may list several comma-separated values; any of them selects the arm:
+
+```
+case (c) {
+    when 'a', 'e', 'i', 'o', 'u':
+        vowels += 1;
+    else:
+        others += 1;
+}
+```
+
 #### Ternary
 
 `cond ? then : else` is the expression form of a conditional: it evaluates only the chosen arm and produces its value. It binds looser than any other operator and chains right, C-style:
@@ -621,6 +632,14 @@ Float literals are written with a `.` between their digits, adopting the float t
 ```
 let pi: f64 = 3.14159;
 let half: f32 = 0.5;
+```
+
+Char literals hold exactly one byte between single quotes, decoding the same escape sequences as strings. Their type is `char`, never `i8` or `u8`:
+
+```
+let c: char = 'a';
+let end: char = '\0';
+let hex: char = '\x41'; // 'A'
 ```
 
 Unlike other languages, there's no `void`. For opaque pointers you can use `opaque*`.

@@ -36,6 +36,14 @@ class BoolLiteral:
 
 
 @dataclass
+class CharLiteral:
+    """
+    A char literal expression: one byte between single quotes.
+    """
+    value: str
+
+
+@dataclass
 class Var:
     """
     A reference to a variable by name.
@@ -156,9 +164,9 @@ class Ternary:
     orelse: "Expr"
 
 
-Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | AggregateLiteral | BlockExpr
-        | ArrayLiteral | Var | EnumMember | Call | Index | Slice | Member | Cast
-        | UnaryOp | BinaryOp | Ternary)
+Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | CharLiteral
+        | AggregateLiteral | BlockExpr | ArrayLiteral | Var | EnumMember | Call
+        | Index | Slice | Member | Cast | UnaryOp | BinaryOp | Ternary)
 
 
 def _line():
@@ -212,9 +220,10 @@ class If:
 @dataclass
 class When:
     """
-    One arm of a 'case': a value to match and the statements it runs.
+    One arm of a 'case': the values it matches, any of which selects it,
+    and the statements it runs.
     """
-    value: Expr
+    values: list
     body: list
 
 
