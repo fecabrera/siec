@@ -110,3 +110,92 @@ def test_disallowed_conversions_are_errors(compile_source, decl, message):
     """
     with pytest.raises(TypeError, match=message):
         compile_source(f"fn main() -> i32 {{ {decl} return 0; }}")
+
+
+def test_mixed_width_arithmetic_widens_the_narrower_operand(run):
+    """
+    Same-prefix operands of different widths meet at the wider one,
+    whichever side it sits on.
+    """
+    result = run("""
+        fn main() -> i32 {
+            let a: u64 = 40;
+            let b: u32 = 2;
+            let c: u64 = a - b + b + b;
+            return c as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
+def test_mixed_width_signed_arithmetic_sign_extends(run):
+    """
+    A narrower signed operand sign-extends, keeping its negative value.
+    """
+    result = run("""
+        fn main() -> i32 {
+            let a: i64 = 50;
+            let b: i16 = -8 as i16;
+            return (a + b) as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
+def test_mixed_width_comparisons(run):
+    """
+    Comparisons widen too, whichever side is narrower.
+    """
+    result = run("""
+        fn main() -> i32 {
+            let a: u64 = 40;
+            let b: u32 = 2;
+            if (b < a and a > b) {
+                return 42;
+            }
+            return 1;
+        }
+    """)
+    assert result.returncode == 42
+
+
+def test_mixed_float_widths_extend(run):
+    """
+    An f32 operand extends to meet an f64.
+    """
+    result = run("""
+        fn main() -> i32 {
+            let a: f64 = 40.5;
+            let b: f32 = 1.5;
+            return (a + b) as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
+def test_mixed_signedness_arithmetic_stays_an_error(compile_source):
+    """
+    Width matching never bridges signedness: u64 + i32 still errors.
+    """
+    with pytest.raises(TypeError, match="unsigned and signed"):
+        compile_source("""
+            fn main() -> i32 {
+                let a: u64 = 4;
+                let b: i32 = 2;
+                return (a + b) as i32;
+            }
+        """)
+
+
+def test_char_never_widens_into_integers(compile_source):
+    """
+    A char mixed with a wider integer is an error, not a widening.
+    """
+    with pytest.raises(TypeError, match="'char' operand"):
+        compile_source("""
+            fn main() -> i32 {
+                let c: char = 'a';
+                let x: i32 = 5;
+                return (c + x) as i32;
+            }
+        """)

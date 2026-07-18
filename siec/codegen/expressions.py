@@ -39,8 +39,11 @@ from siec.codegen.inference import (
     FLOAT_ARITHMETIC,
     UNSIGNED_ARITHMETIC,
     check_signedness,
+    enum_backing,
+    expr_sie_type,
     is_float,
     member_field,
+    numeric_class,
 )
 from siec.codegen.types import is_array_struct, is_reference, resolve_type
 
@@ -247,6 +250,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             # arithmetic and bitwise: both sides share the context type; the result keeps it
             left = emit_expression(gen, builder, expr.left, expected_type, scope)
             right = emit_expression(gen, builder, expr.right, left.type, scope)
+            left, right = match_widths(gen, builder, expr, left, right, unsigned, scope)
 
             # float operands take the float instructions; bitwise has none
             if is_float(left.type):
@@ -266,6 +270,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # comparisons: type the right side by the left, yield an i1
         left = emit_expression(gen, builder, expr.left, None, scope)
         right = emit_expression(gen, builder, expr.right, left.type, scope)
+        left, right = match_widths(gen, builder, expr, left, right, unsigned, scope)
 
         if is_float(left.type):
             return builder.fcmp_ordered(expr.op, left, right)
@@ -332,6 +337,38 @@ def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict
         value = builder.icmp_signed("!=", value, ir.Constant(value.type, 0))
 
     return value
+
+
+def match_widths(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
+                 left: ir.Value, right: ir.Value, unsigned: bool, scope: dict):
+    """
+    Widen the narrower of two mismatched numeric operands to the other's
+    type: the same-prefix widening an assignment would apply. Signedness
+    mismatches were already rejected; a declared non-numeric type (a char,
+    a bool) has no widening to lean on and is an error instead.
+    """
+    # mixed float widths extend the narrower side
+    if is_float(left.type) and is_float(right.type) and left.type != right.type:
+        if isinstance(left.type, ir.FloatType):
+            return builder.fpext(left, right.type), right
+
+        return left, builder.fpext(right, left.type)
+
+    if (not isinstance(left.type, ir.IntType) or not isinstance(right.type, ir.IntType)
+            or left.type.width == right.type.width):
+        return left, right
+
+    for operand in (expr.left, expr.right):
+        name = enum_backing(gen, expr_sie_type(gen, operand, scope))
+        if name is not None and numeric_class(name) is None:
+            raise TypeError(f"cannot apply {expr.op!r} to a {name!r} operand "
+                            "of a different width")
+
+    extend = builder.zext if unsigned else builder.sext
+    if left.type.width < right.type.width:
+        return extend(left, right.type), right
+
+    return left, extend(right, left.type)
 
 
 def emit_power(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,

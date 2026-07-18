@@ -684,6 +684,16 @@ let a: u8 = 0;
 let b: u64 = a; // implicit widening, equivalent to let b: u64 = a as u64;
 ```
 
+Operands widen the same way: when the two sides of an arithmetic operation or comparison share a prefix but differ in width, the narrower one meets the wider.
+
+```
+let total: u64 = 100;
+let step: u32 = 7;
+
+let rest: u64 = total - step; // step widens to u64
+if (step < total) { }         // and in comparisons
+```
+
 Crossing prefixes (between signed, unsigned, and floats) or narrowing to a smaller width is never implicit and requires an explicit cast:
 
 ```
