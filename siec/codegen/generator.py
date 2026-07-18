@@ -119,6 +119,15 @@ class CodeGenerator:
         # 'return' or 'emit' would flush the very frame holding it
         self.flushing_defers = 0
 
+        # the enclosing loops' (break block, continue block, defer depth)
+        # targets, innermost last: where a 'break' or 'continue' jumps
+        self.loop_targets: list[tuple] = []
+
+        # one loop-stack floor per active defer flush, innermost last: a
+        # deferred statement may only steer loops of its own, entered above
+        # the floor, never the ones it flushes inside of
+        self.flush_loop_floors: list[int] = []
+
         # the registered 'type' aliases by name, mapped to their canonical
         # expanded targets; every type name is expanded through them
         self.aliases: dict[str, str] = {}

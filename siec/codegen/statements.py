@@ -5,7 +5,9 @@ from llvmlite import ir
 from siec.ast import (
     Assign,
     Block,
+    Break,
     Case,
+    Continue,
     Defer,
     Emit,
     ExprStmt,
@@ -66,11 +68,13 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
     their own copies.
     """
     gen.flushing_defers += 1
+    gen.flush_loop_floors.append(len(gen.loop_targets))
     try:
         for frame in reversed(frames):
             for stmt, snapshot in reversed(frame):
                 emit_statement(gen, builder, stmt, snapshot)
     finally:
+        gen.flush_loop_floors.pop()
         gen.flushing_defers -= 1
 
 
@@ -224,6 +228,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     elif isinstance(stmt, For):
         emit_for(gen, builder, stmt, scope)
     elif isinstance(stmt, Defer):
+        # a defer's own block cannot re-defer: the frame it would join is
+        # the one being flushed; a scope of its own inside it can
+        inner = stmt.stmt.body if isinstance(stmt.stmt, Block) else []
+        if any(isinstance(s, Defer) for s in inner):
+            raise TypeError("a defer cannot hold another defer directly; "
+                            "give it a scope of its own")
+
         # capture the statement with the scope as it stands: the shared
         # slots make later writes visible when it finally runs, while
         # later shadowing declarations stay out of sight
@@ -247,6 +258,23 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         builder.store(value, slot)
         flush_defers(gen, builder, gen.defer_frames[depth:])
         builder.branch(end_block)
+    elif isinstance(stmt, (Break, Continue)):
+        word = "break" if isinstance(stmt, Break) else "continue"
+
+        if not gen.loop_targets:
+            raise TypeError(f"'{word}' outside a loop")
+
+        # a deferred statement may only steer a loop of its own, entered
+        # above the flush's floor, never the one it flushes inside of
+        if (gen.flushing_defers
+                and len(gen.loop_targets) <= gen.flush_loop_floors[-1]):
+            raise TypeError(f"a deferred statement cannot {word}")
+
+        break_block, continue_block, depth = gen.loop_targets[-1]
+
+        # the scopes being left run their defers along the exiting path
+        flush_defers(gen, builder, gen.defer_frames[depth:])
+        builder.branch(break_block if isinstance(stmt, Break) else continue_block)
     elif isinstance(stmt, Return):
         # a deferred statement runs on the way out of a scope; returning
         # there would flush the very frame holding it
@@ -321,7 +349,9 @@ def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: di
     # the body runs in a child scope of its own, fresh each iteration,
     # and loops back to the condition unless it returned
     builder.position_at_end(body_block)
+    gen.loop_targets.append((end_block, cond_block, len(gen.defer_frames)))
     emit_block(gen, builder, stmt.body, dict(scope))
+    gen.loop_targets.pop()
 
     if not builder.block.is_terminated:
         builder.branch(cond_block)
@@ -341,6 +371,7 @@ def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) 
     func = builder.function
     cond_block = func.append_basic_block("for.cond")
     body_block = func.append_basic_block("for.body")
+    step_block = func.append_basic_block("for.step")
     end_block = func.append_basic_block("for.end")
 
     builder.branch(cond_block)
@@ -350,13 +381,19 @@ def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) 
                     body_block, end_block)
 
     # the body runs in a child scope, fresh each iteration; the step follows
-    # it in the loop's own scope, then control returns to the condition
+    # in a block of its own, where a 'continue' lands, then control returns
+    # to the condition
     builder.position_at_end(body_block)
+    gen.loop_targets.append((end_block, step_block, len(gen.defer_frames)))
     emit_block(gen, builder, stmt.body, dict(loop_scope))
+    gen.loop_targets.pop()
 
     if not builder.block.is_terminated:
-        emit_statement(gen, builder, stmt.step, loop_scope)
-        builder.branch(cond_block)
+        builder.branch(step_block)
+
+    builder.position_at_end(step_block)
+    emit_statement(gen, builder, stmt.step, loop_scope)
+    builder.branch(cond_block)
 
     builder.position_at_end(end_block)
 

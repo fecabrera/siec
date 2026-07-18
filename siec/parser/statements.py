@@ -4,7 +4,9 @@ from siec.ast import (
     Assign,
     BinaryOp,
     Block,
+    Break,
     Case,
+    Continue,
     Defer,
     Emit,
     ExprStmt,
@@ -201,6 +203,12 @@ def parse_statement(ts: TokenStream):
         value = parse_expression(ts)
         ts.expect("sym", ";")
         return Emit(value, line=line)
+
+    # 'break' and 'continue' steer the innermost enclosing loop
+    if tok.kind == "kw" and tok.value in ("break", "continue"):
+        ts.next()
+        ts.expect("sym", ";")
+        return Break(line=line) if tok.value == "break" else Continue(line=line)
 
     # 'return' with an optional value expression before the ';'
     if tok.kind == "kw" and tok.value == "return":

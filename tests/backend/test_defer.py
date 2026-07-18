@@ -171,3 +171,62 @@ def test_a_deferred_emit_is_an_error(compile_source):
             return v;
         }
         """)
+
+
+def test_a_defer_directly_inside_a_defer_is_an_error(compile_source):
+    """
+    The deferred block's own frame is the one being flushed; it cannot
+    re-defer into it.
+    """
+    with pytest.raises(TypeError, match="cannot hold another defer directly"):
+        compile_source("""
+        @extern fn printf(fmt: char*, ...) -> i32;
+
+        fn main() -> i32 {
+            defer {
+                defer printf("no");
+            }
+            return 0;
+        }
+        """)
+
+
+def test_a_scope_inside_a_defer_may_defer(run):
+    """
+    A nested scope in the deferred block flushes its own defers as it ends.
+    """
+    result = run("""
+        @extern fn printf(fmt: char*, ...) -> i32;
+
+        fn main() -> i32 {
+            defer {
+                {
+                    defer printf("freed\\n");
+                    printf("scope\\n");
+                }
+            }
+            return 0;
+        }
+    """)
+    assert result.stdout == "scope\nfreed\n"
+
+
+def test_a_loop_inside_a_defer_may_defer(run):
+    """
+    A loop body inside the deferred block is a scope of its own, flushing
+    each iteration.
+    """
+    result = run("""
+        @extern fn printf(fmt: char*, ...) -> i32;
+
+        fn main() -> i32 {
+            let n: i32 = 2;
+            defer {
+                for (let i: i32 = 0; i < n; i += 1) {
+                    defer printf("cleanup %d\\n", i);
+                }
+            }
+            return 0;
+        }
+    """)
+    assert result.stdout == "cleanup 0\ncleanup 1\n"

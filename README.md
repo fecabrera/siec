@@ -347,6 +347,39 @@ for (let i: i32 = 0; i < n; i += 1) total += i;
 
 Unlike other languages, there are no increment or decrement operators (`i++`, `i--`); this is intentional, and a step is written `i += 1`.
 
+#### Break and continue
+
+`break` leaves the innermost enclosing loop; `continue` jumps to its next pass. In a `for`, `continue` lands on the step, so the loop always advances:
+
+```
+while (true) {
+    let n: u64 = fread(buffer, 1, CHUNK, src);
+    if (n == 0) break;
+    // ...
+}
+
+for (let i: i32 = 0; i < n; i += 1) {
+    if (i % 2 == 0) continue; // steps to i + 1
+    // ...
+}
+```
+
+Both flush the deferred statements of the scopes they leave, innermost first, like an early `return` does on its way out of a function.
+
+A deferred statement cannot `break` or `continue` the loop it flushes inside of, but a loop of its own is free to:
+
+```
+while (running) {
+    defer { break; }    // error: a deferred statement cannot break
+
+    defer {
+        while (drain()) {
+            if (done()) break; // fine: it steers its own loop
+        }
+    }
+}
+```
+
 ### Blocks
 
 Code enclosed by `{}` is a block, with its own scope:
@@ -408,6 +441,29 @@ f:
 ```
 
 With more than one `defer` in the same scope, they run in reverse order, last deferred first.
+
+A deferred block cannot `defer` directly: the stack it would push onto is the very one being flushed. A scope of its own inside the block can, running as that scope ends:
+
+```
+defer {
+    defer free(a);     // error: a defer cannot hold another defer directly
+}
+
+defer {
+    {
+        defer free(a); // fine: runs when the inner scope ends
+        // ...
+    }
+}
+
+defer {
+    for (let i: u64 = 0; i < n; i += 1) {
+        defer release(i); // fine: the loop body is a scope, flushed each pass
+    }
+}
+```
+
+For the same reason, a deferred statement cannot `return`, `emit`, `break`, or `continue` its surroundings; each would cut through the flush that's already underway.
 
 ### Functions
 

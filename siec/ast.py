@@ -268,6 +268,22 @@ class While:
 
 
 @dataclass
+class Break:
+    """
+    A 'break': leaves the innermost enclosing loop.
+    """
+    line: int = _line()
+
+
+@dataclass
+class Continue:
+    """
+    A 'continue': jumps to the innermost enclosing loop's next pass.
+    """
+    line: int = _line()
+
+
+@dataclass
 class For:
     """
     A for loop: an init statement, a condition, and a step statement
