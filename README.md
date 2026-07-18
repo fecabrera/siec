@@ -228,6 +228,19 @@ if (<expr>) {
 }
 ```
 
+Each arm is its own scope, like any block: variables declared inside an arm end with it, while assignments to outer variables persist.
+
+```
+let a: i32 = 1;
+
+if (a == 1) {
+    let b: i32 = 41; // ends with the arm
+    a = a + b;       // the outer a keeps the write
+}
+
+// a is 42; b no longer exists
+```
+
 ### Blocks
 
 Code enclosed by `{}` is a block, its own scope:

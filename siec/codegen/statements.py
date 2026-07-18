@@ -2,7 +2,8 @@
 
 from llvmlite import ir
 
-from ..ast import Assign, ExprStmt, If, Index, IndexAssign, Let, Member, MemberAssign, Return
+from ..ast import (Assign, Block, ExprStmt, If, Index, IndexAssign, Let, Member,
+                   MemberAssign, Return)
 from .errors import source_location
 from .expressions import (emit_bool, emit_coerced, emit_expression, emit_lvalue,
                           expr_sie_type, member_field)
@@ -66,6 +67,10 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             value = emit_expression(gen, builder, stmt.value, slot.type.pointee, scope)
 
         builder.store(value, slot)
+    elif isinstance(stmt, Block):
+        # a block runs in a child scope: writes to outer variables persist
+        # through their shared slots, while inner declarations end with it
+        emit_block(gen, builder, stmt.body, dict(scope))
     elif isinstance(stmt, If):
         emit_if(gen, builder, stmt, scope)
     elif isinstance(stmt, Return):
@@ -101,9 +106,10 @@ def emit_if(gen: CodeGenerator, builder: ir.IRBuilder, stmt: If, scope: dict) ->
 
     builder.cbranch(cond, then_block, else_block or end_block)
 
-    # each branch falls through to the end block unless it already returned
+    # each arm falls through to the end block unless it already returned,
+    # and runs in a child scope of its own, like any block
     builder.position_at_end(then_block)
-    emit_block(gen, builder, stmt.body, scope)
+    emit_block(gen, builder, stmt.body, dict(scope))
 
     then_falls = not builder.block.is_terminated
     if then_falls:
@@ -112,7 +118,7 @@ def emit_if(gen: CodeGenerator, builder: ir.IRBuilder, stmt: If, scope: dict) ->
     else_falls = else_block is None
     if else_block is not None:
         builder.position_at_end(else_block)
-        emit_block(gen, builder, stmt.orelse, scope)
+        emit_block(gen, builder, stmt.orelse, dict(scope))
     
         else_falls = not builder.block.is_terminated
         if else_falls:

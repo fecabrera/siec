@@ -169,6 +169,15 @@ class If:
 
 
 @dataclass
+class Block:
+    """
+    A brace-enclosed statement list run in its own scope.
+    """
+    body: list
+    line: int = _line()
+
+
+@dataclass
 class Assign:
     """
     An assignment of a new value to an existing variable.

@@ -40,6 +40,34 @@ def test_assign_stores_into_the_slot(env):
     assert "store i64 9" in str(builder.function)
 
 
+def test_block_declarations_stay_inside(env):
+    """
+    A variable declared in a block statement is gone from the outer scope.
+    """
+    from siec.ast import Block
+
+    gen, builder = env
+    scope = {}
+
+    emit_statement(gen, builder, Block([Let("inner", "i32", IntLiteral(1))]), scope)
+    assert "inner" not in scope
+    assert "store i32 1" in str(builder.function)
+
+
+def test_block_writes_reach_outer_variables(env):
+    """
+    Assigning an outer variable inside a block stores through its shared slot.
+    """
+    from siec.ast import Block
+
+    gen, builder = env
+    scope = {}
+    emit_statement(gen, builder, Let("num", "i32", None), scope)
+
+    emit_statement(gen, builder, Block([Assign("num", IntLiteral(7))]), scope)
+    assert "store i32 7" in str(builder.function)
+
+
 def test_index_assign_stores_through_the_pointer(env):
     """
     An index assignment geps the base pointer and stores the element's type.

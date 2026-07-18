@@ -119,6 +119,35 @@ def test_compound_member_assignment_desugars(ts):
         Var("p"), "x", BinaryOp("+", Member(Var("p"), "x"), IntLiteral(2)))
 
 
+def test_block_statement(ts):
+    """
+    A bare '{ ... }' parses to a Block of its statements.
+    """
+    from siec.ast import Block
+
+    assert parse_statement(ts("{ let x: i32 = 1; }")) == Block(
+        [Let("x", "i32", IntLiteral(1))])
+
+
+def test_empty_block_statement(ts):
+    """
+    '{ }' parses to a Block with no statements.
+    """
+    from siec.ast import Block
+
+    assert parse_statement(ts("{ }")) == Block([])
+
+
+def test_blocks_nest(ts):
+    """
+    A block statement may contain another block.
+    """
+    from siec.ast import Block
+
+    assert parse_statement(ts("{ { f(); } }")) == Block(
+        [Block([ExprStmt(Call("f", []))])])
+
+
 def test_index_assignment(ts):
     """
     'base[i] = expr;' parses to an IndexAssign over the base.

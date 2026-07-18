@@ -1,6 +1,6 @@
 """Parsing of statements."""
 
-from ..ast import (Assign, BinaryOp, ExprStmt, If, Index, IndexAssign, Let, Member,
+from ..ast import (Assign, BinaryOp, Block, ExprStmt, If, Index, IndexAssign, Let, Member,
                    MemberAssign, Return, Var)
 from .expressions import parse_expression
 from .stream import TokenStream
@@ -46,6 +46,10 @@ def parse_statement(ts: TokenStream):
             orelse = [parse_statement(ts)] if ts.peek().value == "if" else parse_block(ts)
 
         return If(condition, body, orelse, line=line)
+
+    # a bare '{' opens a block statement, a statement list in its own scope
+    if tok.value == "{":
+        return Block(parse_block(ts), line=line)
 
     # 'let name: type' with an optional '= <expr>' initializer
     if tok.kind == "kw" and tok.value == "let":
