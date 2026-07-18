@@ -691,3 +691,63 @@ def test_error_in_an_included_file_names_that_file(tmp_path, monkeypatch, capsys
     assert "dep.sie at line 2: undefined variable 'missing'" in err
     assert "app.sie" not in err
     assert "Traceback" not in err
+
+
+def test_target_aims_the_module_at_the_triple(tmp_path, capsys, monkeypatch):
+    """
+    --target sets the module's triple and the target constants; -O 1
+    folds them into the IR where the test can read them.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("""
+    fn main() -> i32 {
+        return TARGET_OS * 10 + TARGET_ARCH + (sizeof(opaque*) as i32) * 100;
+    }
+    """)
+
+    assert run_cli(monkeypatch, src, "--target", "x86_64-unknown-linux-gnu",
+                   "-O", "1", "--emit-llvm") == 0
+
+    out = capsys.readouterr().out
+    assert 'target triple = "x86_64-unknown-linux-gnu"' in out
+    assert "ret i32 821" in out  # OS_LINUX*10 + ARCH_X86_64 + 8 * 100
+
+
+def test_target_layout_decides_sizeof(tmp_path, capsys, monkeypatch):
+    """
+    A 32-bit target's pointers measure 4 bytes at compile time.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return sizeof(opaque*) as i32; }")
+
+    assert run_cli(monkeypatch, src, "--target", "i686-unknown-linux-gnu",
+                   "-O", "1", "--emit-llvm") == 0
+    assert "ret i32 4" in capsys.readouterr().out
+
+
+def test_target_writes_a_cross_object(tmp_path, monkeypatch):
+    """
+    -c with --target writes an object file for the foreign target.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+    obj = tmp_path / "cross.o"
+
+    assert run_cli(monkeypatch, src, "--target", "x86_64-unknown-linux-gnu",
+                   "-c", "-o", obj) == 0
+
+    # an ELF object starts with the \x7fELF magic, unlike host Mach-O
+    assert obj.read_bytes()[:4] == b"\x7fELF"
+
+
+def test_run_refuses_a_foreign_target(tmp_path, capsys, monkeypatch):
+    """
+    The JIT runs in-process, so --run only accepts the host's triple.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+
+    # riscv64 is nobody's CI host, so the triple never matches
+    assert run_cli(monkeypatch, src, "--target", "riscv64-unknown-linux-gnu",
+                   "--run") == 1
+    assert "cannot jit-run" in capsys.readouterr().err

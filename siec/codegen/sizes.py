@@ -6,24 +6,24 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.types import resolve_type, strip_reference
 
-# the host target's data layout, created once on first use
-_target_data = None
+# each target's data layout, created once on first use
+_target_data: dict = {}
 
 
-def host_target_data():
+def target_data(triple: str):
     """
-    The ABI layout rules of the host target, deciding every type's size.
+    The ABI layout rules of a target, deciding every type's size.
     """
-    global _target_data
-    if _target_data is None:
+    if triple not in _target_data:
         from llvmlite import binding
 
-        binding.initialize_native_target()
-        binding.initialize_native_asmprinter()
-        _target_data = (binding.Target.from_default_triple()
-                        .create_target_machine().target_data)
+        # any triple may be asked for, so register every backend
+        binding.initialize_all_targets()
+        binding.initialize_all_asmprinters()
+        _target_data[triple] = (binding.Target.from_triple(triple)
+                                .create_target_machine().target_data)
 
-    return _target_data
+    return _target_data[triple]
 
 
 def size_of(gen: CodeGenerator, name: str, scope: dict | None = None) -> int:
@@ -42,7 +42,7 @@ def size_of(gen: CodeGenerator, name: str, scope: dict | None = None) -> int:
     if isinstance(resolved, ir.VoidType):
         raise TypeError("'sizeof' needs a sized type, not void")
 
-    size = resolved.get_abi_size(host_target_data(), context=gen.module.context)
+    size = resolved.get_abi_size(target_data(gen.target), context=gen.module.context)
 
     # an '@align(N)' struct pads to its alignment, so arrays of it stay aligned
     if (align := gen.struct_align(name)) is not None:

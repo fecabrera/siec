@@ -11,6 +11,15 @@ from siec.codegen import codegen
 from siec.loader import load_program
 
 
+def host_triple() -> str:
+    """
+    The triple of the machine running the compiler.
+    """
+    from llvmlite import binding
+
+    return binding.get_default_triple()
+
+
 def display_path(path: str) -> str:
     """
     Show a source path relative to the current directory when that is shorter.
@@ -66,6 +75,9 @@ def main() -> int:
                       help="link against a library (passed to the linker as -l<lib>)")
     args.add_argument("-L", action="append", default=[], dest="lib_dirs", metavar="DIR",
                       help="add a directory to the library search path")
+    args.add_argument("--target", default=None, metavar="TRIPLE",
+                      help="compile for a target triple instead of the host "
+                           "(e.g. x86_64-unknown-linux-gnu)")
     args.add_argument("--emit-llvm", action="store_true", help="print LLVM IR and exit")
     args.add_argument("--emit-asm", action="store_true",
                       help="print native assembly and exit")
@@ -99,29 +111,35 @@ def main() -> int:
     # first compile error in human-readable form instead of a traceback
     try:
         program = load_program(sources, include_paths)
-        module = codegen(program, str(sources[0]))
+        module = codegen(program, str(sources[0]), opts.target)
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:
         print(format_error(str(sources[0]), error), file=sys.stderr)
         return 1
 
     if opts.emit_llvm:
-        print(emit_llvm(module, opts.opt))
+        print(emit_llvm(module, opts.opt, opts.target))
         return 0
 
     if opts.emit_asm:
-        print(emit_assembly(module, opts.opt), end="")
+        print(emit_assembly(module, opts.opt, opts.target), end="")
         return 0
 
     # '-c' stops after native code generation, leaving only the object file,
     # named after the first source, cc-style, unless '-o' says otherwise
     if opts.compile_only:
         compile_to_object(module, opts.output or str(Path(sources[0].name).with_suffix(".o")),
-                          opts.opt)
+                          opts.opt, opts.target)
         return 0
 
     # jit-run in place of building, exiting with the program's own code;
     # the program's argv is the source path plus the arguments after --run
     if opts.run is not None:
+        # the JIT runs in this process: only the host's own code can
+        if opts.target is not None and opts.target != host_triple():
+            print(f"siec: cannot jit-run a {opts.target!r} target on this "
+                  "machine", file=sys.stderr)
+            return 1
+
         try:
             return run_jit(module, [str(sources[0]), *opts.run], objects,
                            opts.libs, opts.lib_dirs, opts.opt)
@@ -133,6 +151,6 @@ def main() -> int:
     # object files given on the command line
     output = opts.output or "a.out"
     obj_path = output + ".o"
-    compile_to_object(module, obj_path, opts.opt)
+    compile_to_object(module, obj_path, opts.opt, opts.target)
     link([obj_path, *objects], output, opts.libs, opts.lib_dirs)
     return 0

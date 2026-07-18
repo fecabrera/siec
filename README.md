@@ -33,8 +33,9 @@ siec main.sie file1.o file2.o -o main
 - `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form, including executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
+- `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as the JIT runs in-process.
 - `--emit-llvm` prints the LLVM IR and exits, without building.
-- `--emit-asm` prints the host target's native assembly and exits, without building.
+- `--emit-asm` prints the target's assembly and exits, without building.
 - `--run` JIT-compiles and runs the program in place of building it, exiting with the program's own exit code. Anything after the flag is passed along as its arguments:
 
 ```
@@ -135,7 +136,7 @@ Constants are compile-time constant expressions declared through `@const`. Unlik
 
 #### Target constants
 
-The compiler defines a set of constants describing the compilation target, taken from the target triple. `TARGET_OS` and `TARGET_ARCH` hold the current target's families, and one constant names each family they can match:
+The compiler defines a set of constants describing the compilation target, taken from the target triple: the host's, or the one `--target` names. `TARGET_OS` and `TARGET_ARCH` hold the current target's families, and one constant names each family they can match:
 
 | OS | Architecture |
 |---|---|

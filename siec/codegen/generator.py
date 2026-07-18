@@ -91,12 +91,19 @@ class CodeGenerator:
     State shared across the codegen subsystems for one module.
     """
 
-    def __init__(self, module_name: str):
+    def __init__(self, module_name: str, target: str | None = None):
         """
-        Create an empty LLVM module to generate code into.
+        Create an empty LLVM module to generate code into, aimed at the
+        given target triple; the host's when none is given.
         """
+        from llvmlite import binding
+
+        # the triple decides the target constants and every 'sizeof'
+        self.target = target or binding.get_default_triple()
+
         # a fresh context keeps identified struct types from colliding across modules
         self.module = ir.Module(name=module_name, context=ir.Context())
+        self.module.triple = self.target
         self.str_count = 0
 
         # the Sie return and parameter types of each declared function, for
@@ -180,7 +187,7 @@ class CodeGenerator:
         return info is not None and info.volatile
 
 
-def codegen(program: Program, module_name: str) -> ir.Module:
+def codegen(program: Program, module_name: str, target: str | None = None) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
     """
@@ -191,7 +198,7 @@ def codegen(program: Program, module_name: str) -> ir.Module:
     from siec.codegen.globals import register_globals
     from siec.codegen.structs import register_structs
 
-    gen = CodeGenerator(module_name)
+    gen = CodeGenerator(module_name, target)
 
     # first pass: register the named declarations — aliases first so every
     # later type annotation expands through them, constants next so enum

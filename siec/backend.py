@@ -8,19 +8,28 @@ from pathlib import Path
 from llvmlite import binding, ir
 
 
-def prepare_module(module: ir.Module, opt: int = 0) -> tuple:
+def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None) -> tuple:
     """
-    Verify an LLVM module against the host target, returning the target
-    machine and the module round-tripped through the LLVM binding.
+    Verify an LLVM module against its target — the host, or the triple
+    given — returning the target machine and the module round-tripped
+    through the LLVM binding.
 
     An optimization level above 0 runs LLVM's standard pass pipeline over
     the module, cc-style: -O1 through -O3.
     """
-    # register the host as the compilation target
+    # register the host as the compilation target; a cross target needs
+    # every backend registered, not just the host's
     binding.initialize_native_target()
     binding.initialize_native_asmprinter()
 
-    target_machine = binding.Target.from_default_triple().create_target_machine(opt=opt)
+    if target is not None:
+        binding.initialize_all_targets()
+        binding.initialize_all_asmprinters()
+        machine = binding.Target.from_triple(target)
+    else:
+        machine = binding.Target.from_default_triple()
+
+    target_machine = machine.create_target_machine(opt=opt)
     module.triple = target_machine.triple
 
     # round-trip the IR through the LLVM binding and verify it
@@ -43,25 +52,26 @@ def prepare_module(module: ir.Module, opt: int = 0) -> tuple:
     return target_machine, llvm_module
 
 
-def compile_to_object(module: ir.Module, obj_path: str, opt: int = 0) -> None:
+def compile_to_object(module: ir.Module, obj_path: str, opt: int = 0,
+                      target: str | None = None) -> None:
     """
-    Verify an LLVM module and write native object code for the host target.
+    Verify an LLVM module and write object code for its target.
     """
-    target_machine, llvm_module = prepare_module(module, opt)
+    target_machine, llvm_module = prepare_module(module, opt, target)
 
     with open(obj_path, "wb") as f:
         f.write(target_machine.emit_object(llvm_module))
 
 
-def emit_assembly(module: ir.Module, opt: int = 0) -> str:
+def emit_assembly(module: ir.Module, opt: int = 0, target: str | None = None) -> str:
     """
-    Verify an LLVM module and render native assembly for the host target.
+    Verify an LLVM module and render assembly for its target.
     """
-    target_machine, llvm_module = prepare_module(module, opt)
+    target_machine, llvm_module = prepare_module(module, opt, target)
     return target_machine.emit_assembly(llvm_module)
 
 
-def emit_llvm(module: ir.Module, opt: int = 0) -> str:
+def emit_llvm(module: ir.Module, opt: int = 0, target: str | None = None) -> str:
     """
     Render a module's LLVM IR: as generated at -O0, after the optimization
     pipeline otherwise.
@@ -69,7 +79,7 @@ def emit_llvm(module: ir.Module, opt: int = 0) -> str:
     if opt == 0:
         return str(module)
 
-    return str(prepare_module(module, opt)[1])
+    return str(prepare_module(module, opt, target)[1])
 
 
 def load_library(name: str, lib_dirs: list[str]) -> None:

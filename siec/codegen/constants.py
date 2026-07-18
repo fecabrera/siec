@@ -84,13 +84,9 @@ def register_builtin_constants(gen: CodeGenerator) -> None:
     Define the target constants: every OS and architecture family, plus
     'TARGET_OS' and 'TARGET_ARCH' matching the compilation target.
     """
-    from llvmlite import binding
-
-    triple = binding.get_default_triple()
-
     values = dict(TARGET_CONSTANTS)
-    values["TARGET_OS"] = values[target_os(triple)]
-    values["TARGET_ARCH"] = values[target_arch(triple)]
+    values["TARGET_OS"] = values[target_os(gen.target)]
+    values["TARGET_ARCH"] = values[target_arch(gen.target)]
 
     for name, value in values.items():
         gen.constants[name] = Const(name, None, IntLiteral(value))
