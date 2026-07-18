@@ -1,5 +1,6 @@
 """Parsing of type annotations."""
 
+from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
 
 
@@ -23,7 +24,8 @@ def parse_type(ts: TokenStream) -> str:
             ts.next()
 
             if ts.peek().value != "]":
-                size = ts.expect("int").value
+                # normalize the size to decimal, so '[0x10]' and '[16]' agree
+                size = int_value(ts.expect("int").value)
                 ts.expect("sym", "]")
                 name += f"[{size}]"
             else:

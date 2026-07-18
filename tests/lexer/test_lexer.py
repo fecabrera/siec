@@ -39,12 +39,34 @@ def test_integer_literals():
     assert kinds("0 42 1234") == [("int", "0"), ("int", "42"), ("int", "1234")]
 
 
+def test_hex_literals():
+    """
+    '0x' followed by hex digits lexes as one int token, prefix kept.
+    """
+    assert kinds("0xFF 0x1f 0X10") == [
+        ("int", "0xFF"),
+        ("int", "0x1f"),
+        ("int", "0x10"),  # '0X' normalizes to '0x'
+    ]
+
+
+def test_hex_prefix_requires_digits():
+    """
+    '0x' with no hex digits raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match="no hex digits"):
+        lex("0x;")
+
+
 def test_float_literals():
     """
     Digits with a '.digits' fraction lex as one float token.
     """
     assert kinds("1.5 0.25 3.14159") == [
-        ("float", "1.5"), ("float", "0.25"), ("float", "3.14159")]
+        ("float", "1.5"),
+        ("float", "0.25"),
+        ("float", "3.14159"),
+    ]
 
 
 def test_dot_without_digits_stays_a_member_access(ts=None):
@@ -52,7 +74,12 @@ def test_dot_without_digits_stays_a_member_access(ts=None):
     A '.' not followed by a digit leaves the int alone: 'a.b' member syntax.
     """
     assert kinds("1.x 5.") == [
-        ("int", "1"), ("sym", "."), ("ident", "x"), ("int", "5"), ("sym", ".")]
+        ("int", "1"),
+        ("sym", "."),
+        ("ident", "x"),
+        ("int", "5"),
+        ("sym", "."),
+    ]
 
 
 def test_single_character_symbols():

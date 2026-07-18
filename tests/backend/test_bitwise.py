@@ -35,3 +35,19 @@ def test_operators_combine(run):
     }
     """
     assert run(source).returncode == 61
+
+
+def test_hex_literals_mask(run):
+    """
+    Hex literals work anywhere ints do: masks, constants, and sizes.
+    """
+    source = """
+    @const MASK: u32 = 0xF0;
+
+    fn main() -> i32 {
+        let buf: u8[0x10];
+        let color: u32 = 0xAB;
+        return ((color & MASK) >> 4) as i32 + buf.length as i32; // 10 + 16
+    }
+    """
+    assert run(source).returncode == 26

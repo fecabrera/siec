@@ -217,8 +217,10 @@ class StringRule(Rule):
 class IntRule(Rule):
     """
     Numeric literals: a run of digits, continuing into a float at a '.'
-    followed by more digits.
+    followed by more digits, or a hexadecimal run after '0x'.
     """
+
+    HEX = "0123456789abcdefABCDEF"
 
     def validate(self, cursor: Cursor) -> bool:
         """
@@ -230,6 +232,16 @@ class IntRule(Rule):
         """
         Consume the digits, and a '.digits' fraction when one follows.
         """
+        # '0x' opens a hexadecimal literal, kept prefixed in the token
+        if cursor.starts_with("0x") or cursor.starts_with("0X"):
+            cursor.advance(2)
+            digits = cursor.take_while(lambda c: c in self.HEX)
+
+            if not digits:
+                raise SyntaxError(f"line {cursor.line}: '0x' with no hex digits")
+
+            return Token("int", f"0x{digits}", cursor.line)
+
         whole = cursor.take_while(str.isdigit)
 
         # a lone '.' stays a member access ('1.x' is invalid anyway);

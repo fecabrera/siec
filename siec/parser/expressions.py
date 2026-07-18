@@ -18,6 +18,7 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
+from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
@@ -95,7 +96,7 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.syntax == "-":
         # fold '-' over a numeric literal into a negative constant, keeping it instruction-free
         if ts.peek().kind == "int":
-            return IntLiteral(-int(ts.next().value))
+            return IntLiteral(-int_value(ts.next().value))
 
         if ts.peek().kind == "float":
             return FloatLiteral(-float(ts.next().value))
@@ -154,7 +155,7 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, ArrayLiteral(elements))
 
     if tok.kind == "int":
-        return IntLiteral(int(tok.value))
+        return IntLiteral(int_value(tok.value))
 
     if tok.kind == "float":
         return FloatLiteral(float(tok.value))

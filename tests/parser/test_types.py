@@ -42,6 +42,13 @@ def test_sized_array_type(ts):
     assert parse_type(ts("u8[4]")) == "u8[4]"
 
 
+def test_sized_array_type_accepts_hex(ts):
+    """
+    A hex size normalizes to decimal in the type name.
+    """
+    assert parse_type(ts("u8[0x10]")) == "u8[16]"
+
+
 def test_array_of_pointers_type(ts):
     """
     An array's element type may itself be a pointer.

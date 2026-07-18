@@ -514,6 +514,12 @@ fn f() {
 - Booleans: `bool`.
 - Characters: `char`.
 
+Integer literals may also be written in hexadecimal with the `0x` prefix:
+
+```
+let mask: u32 = 0xFF00;
+```
+
 Float literals are written with a `.` between their digits, adopting the float type of their context like integer literals do:
 
 ```

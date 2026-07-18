@@ -5,6 +5,13 @@ from dataclasses import dataclass
 KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "emit", "and", "or",
             "not", "struct", "true", "false", "as"}
 
+
+def int_value(text: str) -> int:
+    """
+    The value of an int token: hexadecimal with an '0x' prefix, decimal otherwise.
+    """
+    return int(text, 16) if text[:2].lower() == "0x" else int(text)
+
 # simple one-character escapes; octal, hex, and universal forms are decoded by StringRule
 ESCAPES = {
     "a": "\a", "b": "\b", "e": "\x1b", "f": "\f", "n": "\n", "r": "\r",
