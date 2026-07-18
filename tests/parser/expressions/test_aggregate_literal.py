@@ -50,3 +50,13 @@ def test_named_and_positional_do_not_mix(ts):
     """
     with pytest.raises(SyntaxError):
         parse_primary(ts("{1, y = 2}"))
+
+
+def test_aggregate_allows_a_trailing_comma(ts):
+    """
+    Both literal forms accept a comma after the last element.
+    """
+    assert parse_primary(ts("{1, 2,}")) == AggregateLiteral(
+        [IntLiteral(1), IntLiteral(2)])
+    assert parse_primary(ts("{x = 1, y = 2,}")) == AggregateLiteral(
+        [IntLiteral(1), IntLiteral(2)], ["x", "y"])

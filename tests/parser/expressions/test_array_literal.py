@@ -25,3 +25,11 @@ def test_array_elements_are_full_expressions(ts):
     """
     assert parse_primary(ts("[f(), n + 1]")) == ArrayLiteral(
         [Call("f", []), BinaryOp("+", Var("n"), IntLiteral(1))])
+
+
+def test_array_literal_allows_a_trailing_comma(ts):
+    """
+    A comma may follow the last element.
+    """
+    assert parse_primary(ts("[1, 2,]")) == ArrayLiteral(
+        [IntLiteral(1), IntLiteral(2)])

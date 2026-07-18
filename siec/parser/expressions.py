@@ -143,10 +143,12 @@ def parse_primary(ts: TokenStream) -> Expr:
         if is_aggregate(ts):
             elements = []
             while ts.peek().syntax != "}":
-                if elements:
-                    ts.expect("sym", ",")
-
                 elements.append(parse_expression(ts))
+
+                # a comma follows every element but, optionally, the last
+                if ts.peek().syntax != "}":
+                    ts.expect("sym", ",")
+            
             ts.expect("sym", "}")
 
             return parse_postfix(ts, AggregateLiteral(elements))
@@ -154,12 +156,13 @@ def parse_primary(ts: TokenStream) -> Expr:
         if is_named_aggregate(ts):
             elements, names = [], []
             while ts.peek().syntax != "}":
-                if elements:
-                    ts.expect("sym", ",")
-
                 names.append(ts.expect("ident").value)
                 ts.expect("sym", "=")
                 elements.append(parse_expression(ts))
+
+                if ts.peek().syntax != "}":
+                    ts.expect("sym", ",")
+            
             ts.expect("sym", "}")
 
             return parse_postfix(ts, AggregateLiteral(elements, names))
@@ -178,10 +181,12 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.syntax == "[":
         elements = []
         while ts.peek().syntax != "]":
-            if elements:
-                ts.expect("sym", ",")
-
             elements.append(parse_expression(ts))
+
+            # a comma follows every element but, optionally, the last
+            if ts.peek().syntax != "]":
+                ts.expect("sym", ",")
+        
         ts.expect("sym", "]")
 
         return parse_postfix(ts, ArrayLiteral(elements))

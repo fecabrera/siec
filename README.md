@@ -715,7 +715,7 @@ let first: i32 = arr[0]; // equivalent to arr.data[0]
 arr[1] = 5;
 ```
 
-Arrays can be initialiazed with elements `a`, `b`, etc. enclosed by `[]` and separated by commas.
+Arrays can be initialiazed with elements `a`, `b`, etc. enclosed by `[]` and separated by commas, a trailing one after the last element allowed.
 
 ```
 let arr: i32[] = [1, 2, 3];
@@ -962,7 +962,7 @@ fn f() -> S; // a function that returns a value of type S
 let s: S; // a variable that holds a value of type S
 ```
 
-A struct value is built with an aggregate literal: positionally, filling every field in order, or by name through `field = <expr>`, in any order. A named literal may fill any subset of the fields; the rest start at zero.
+A struct value is built with an aggregate literal: positionally, filling every field in order, or by name through `field = <expr>`, in any order. A named literal may fill any subset of the fields; the rest start at zero. A trailing comma after the last field is allowed in both forms.
 
 ```
 let a: S = {1, 2};          // positional: every field, in order
