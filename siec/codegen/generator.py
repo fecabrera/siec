@@ -36,15 +36,34 @@ class Variable:
     type: str
 
 
+def make_volatile(inst: ir.Instruction) -> ir.Instruction:
+    """
+    Mark a load or store volatile. llvmlite's printer doesn't know the
+    flag, so the instruction renders itself with 'volatile' injected
+    after its opcode.
+    """
+    original = type(inst).descr
+
+    def descr(buf):
+        chunk = []
+        original(inst, chunk)
+        buf.append(chunk[0].replace(f"{inst.opname} ",
+                                    f"{inst.opname} volatile ", 1))
+
+    inst.descr = descr
+    return inst
+
+
 @dataclass
 class StructInfo:
     """
     A registered struct: its LLVM type plus its ordered fields, for member
-    lookup, and the '@align(N)' its allocations must honor, if any.
+    lookup, and its layout and access decorations ('@align(N)', '@volatile').
     """
     type: ir.Type
     fields: list[Field]
     align: int | None = None
+    volatile: bool = False
 
     def field(self, name: str) -> tuple[int, str]:
         """
@@ -135,6 +154,17 @@ class CodeGenerator:
 
         info = self.structs.get(type_name.removeprefix("const "))
         return info.align if info is not None else None
+
+    def volatile_struct(self, type_: ir.Type) -> bool:
+        """
+        Whether an LLVM type is a '@volatile' struct's: loads and stores
+        of its values must not be elided or reordered.
+        """
+        if not isinstance(type_, ir.IdentifiedStructType):
+            return False
+
+        info = self.structs.get(type_.name)
+        return info is not None and info.volatile
 
 
 def codegen(program: Program, module_name: str) -> ir.Module:

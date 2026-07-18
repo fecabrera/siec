@@ -27,12 +27,15 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
 
                 info.fields = struct.fields
 
-            # layout decorators apply from whichever declaration carries them
+            # decorators apply from whichever declaration carries them
             if struct.packed:
                 info.type.packed = True
 
             if struct.align is not None:
                 info.align = struct.align
+
+            if struct.volatile:
+                info.volatile = True
 
     # then set each body from the now-resolvable field types; a struct
     # never given a body stays opaque, usable only through a pointer

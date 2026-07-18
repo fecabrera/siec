@@ -4,7 +4,7 @@ from llvmlite import ir
 
 from siec.ast import Function
 from siec.codegen.errors import source_location
-from siec.codegen.generator import CodeGenerator, Variable
+from siec.codegen.generator import CodeGenerator, Variable, make_volatile
 from siec.codegen.statements import emit_block
 from siec.codegen.types import is_reference, resolve_type, strip_const
 
@@ -131,7 +131,9 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                     slot.align = align
 
                 scope[param.name] = Variable(slot, param.type)
-                builder.store(arg, slot)
+                store = builder.store(arg, slot)
+                if gen.volatile_struct(arg.type):
+                    make_volatile(store)
 
         # emit the body statements starting from the entry block
         emit_block(gen, builder, fn.body, scope)

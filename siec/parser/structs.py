@@ -11,12 +11,14 @@ def parse_struct(ts: TokenStream) -> Struct:
     Parse a struct declaration: 'struct Name { a: A; b: B; }', with an optional
     trailing ';', or a bodiless forward declaration 'struct Name;'.
 
-    '@packed' and '@align(N)' decorators may precede the keyword, in any order.
+    '@packed', '@align(N)', and '@volatile' decorators may precede the
+    keyword, in any order.
     """
     line = ts.peek().line
 
     packed = False
     align = None
+    volatile = False
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
@@ -24,6 +26,8 @@ def parse_struct(ts: TokenStream) -> Struct:
 
         if decorator == "packed":
             packed = True
+        elif decorator == "volatile":
+            volatile = True
         elif decorator == "align":
             ts.expect("sym", "(")
             align = int_value(ts.expect("int").value)
@@ -43,7 +47,7 @@ def parse_struct(ts: TokenStream) -> Struct:
     # to a later definition — or to none, for an opaque struct
     if ts.peek().value == ";":
         ts.next()
-        return Struct(name, None, packed, align, line=line)
+        return Struct(name, None, packed, align, volatile, line=line)
 
     ts.expect("sym", "{")
 
@@ -61,4 +65,4 @@ def parse_struct(ts: TokenStream) -> Struct:
     if ts.peek().value == ";":
         ts.next()
 
-    return Struct(name, fields, packed, align, line=line)
+    return Struct(name, fields, packed, align, volatile, line=line)

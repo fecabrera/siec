@@ -109,3 +109,20 @@ def test_unknown_struct_decorator_is_an_error(ts):
     """
     with pytest.raises(SyntaxError, match="unknown struct decorator '@both'"):
         parse_struct(ts("@both struct S { x: i32; }"))
+
+
+def test_volatile_decorator(ts):
+    """
+    '@volatile struct' marks every access to its values volatile.
+    """
+    assert parse_struct(ts("@volatile struct S { x: i32; }")).volatile
+
+
+def test_volatile_stacks_with_layout_decorators(ts):
+    """
+    '@volatile @packed @align(N)' all apply to one struct.
+    """
+    struct = parse_struct(ts("@volatile @packed @align(4) struct S { x: i32; }"))
+    assert struct.volatile
+    assert struct.packed
+    assert struct.align == 4

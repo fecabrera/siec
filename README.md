@@ -956,7 +956,7 @@ let b: S = {b = 2, a = 1};  // named: any order
 let c: S = {a = 1};         // named: b starts at zero
 ```
 
-A struct's layout can be directed with decorators, stacking in any order. `@packed` drops the padding between fields, C's `__attribute__((packed))`; `@align(N)` aligns every allocation of the struct — locals, parameters, and globals — to N bytes, which must be a power of two.
+A struct's layout and access can be directed with decorators, stacking in any order. `@packed` drops the padding between fields, C's `__attribute__((packed))`; `@align(N)` aligns every allocation of the struct — locals, parameters, and globals — to N bytes, which must be a power of two; `@volatile` makes every access to the struct's values a volatile one, which the optimizer may neither elide nor reorder — the property lives on the type, so unlike C there is no way to hold a non-volatile value of it.
 
 ```
 @packed struct Header {
@@ -966,6 +966,10 @@ A struct's layout can be directed with decorators, stacking in any order. `@pack
 
 @align(64) struct CacheLine {
     hot: i64;    // allocations start on a cache line
+}
+
+@volatile struct Reg {
+    status: u32; // every read and write really happens
 }
 ```
 

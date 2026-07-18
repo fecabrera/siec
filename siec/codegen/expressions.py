@@ -28,7 +28,7 @@ from siec.ast import (
 from siec.codegen.calls import emit_call
 from siec.codegen.coercion import emit_cast, emit_coerced
 from siec.codegen.enums import member_value
-from siec.codegen.generator import CodeGenerator, entry_alloca
+from siec.codegen.generator import CodeGenerator, entry_alloca, make_volatile
 from siec.codegen.inference import (
     ARITHMETIC,
     FLOAT_ARITHMETIC,
@@ -96,9 +96,14 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_array(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, Var):
-        # variables load their current value from their stack slot
+        # variables load their current value from their stack slot; a
+        # '@volatile' struct's loads are never elided or reordered
         if expr.name in scope:
-            return builder.load(scope[expr.name].slot, name=expr.name)
+            load = builder.load(scope[expr.name].slot, name=expr.name)
+            if gen.volatile_struct(load.type):
+                make_volatile(load)
+
+            return load
 
         # a constant substitutes its value expression in place, coerced to
         # its annotated type when it has one, adapting like a literal otherwise
@@ -113,7 +118,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # file's statics resolve first, other files' never
         symbol = gen.resolve_symbol(expr.name)
         if symbol in gen.globals:
-            return builder.load(gen.module.globals[symbol], name=expr.name)
+            load = builder.load(gen.module.globals[symbol], name=expr.name)
+            if gen.volatile_struct(load.type):
+                make_volatile(load)
+
+            return load
 
         # a bare function name is a reference to that function
         func = gen.module.globals.get(symbol)
@@ -143,7 +152,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             raise TypeError(f"cannot index a value of type {base.type}")
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
-        return builder.load(builder.gep(base, [index]))
+        load = builder.load(builder.gep(base, [index]))
+        if gen.volatile_struct(load.type):
+            make_volatile(load)
+
+        return load
 
     if isinstance(expr, Slice):
         return emit_slice(gen, builder, expr, expected_type, scope)

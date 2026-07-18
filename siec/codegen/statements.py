@@ -22,8 +22,15 @@ from siec.codegen.coercion import emit_coerced
 from siec.codegen.errors import source_location
 from siec.codegen.expressions import emit_bool, emit_expression, emit_lvalue
 from siec.codegen.inference import expr_sie_type, infer_type, member_field
-from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
-from siec.codegen.types import is_const, is_reference, resolve_type, sized_array, strip_reference
+from siec.codegen.generator import CodeGenerator, Variable, entry_alloca, make_volatile
+from siec.codegen.types import (
+    is_const,
+    is_reference,
+    resolve_type,
+    sized_array,
+    strip_const,
+    strip_reference,
+)
 
 
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
@@ -62,6 +69,35 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
                 emit_statement(gen, builder, stmt, snapshot)
     finally:
         gen.flushing_defers -= 1
+
+
+def volatile_chain(gen: CodeGenerator, expr, scope: dict) -> bool:
+    """
+    Whether an lvalue chain passes through a '@volatile' struct: any link
+    whose type names one, directly or behind pointers and arrays.
+    """
+    node = expr
+    while True:
+        name = strip_const(expr_sie_type(gen, node, scope)) or ""
+        while name.endswith("*") or name.endswith("[]"):
+            name = name.removesuffix("[]").rstrip("*")
+
+        info = gen.structs.get(name)
+        if info is not None and info.volatile:
+            return True
+
+        if isinstance(node, (Member, Index)):
+            node = node.base
+        else:
+            return False
+
+
+def volatile_store(gen: CodeGenerator, store) -> None:
+    """
+    Mark a store volatile when it writes a '@volatile' struct value.
+    """
+    if gen.volatile_struct(store.operands[0].type):
+        make_volatile(store)
 
 
 def reject_const_base(gen: CodeGenerator, scope: dict, base) -> None:
@@ -122,8 +158,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         scope[stmt.name] = Variable(slot, type_name)
 
         if stmt.value is not None:
-            builder.store(emit_coerced(gen, builder, stmt.value, type_name, scope),
-                          scope[stmt.name].slot)
+            volatile_store(gen, builder.store(
+                emit_coerced(gen, builder, stmt.value, type_name, scope), slot))
     elif isinstance(stmt, Assign):
         # store the value into the variable's existing stack slot, typed by
         # the slot; a global's slot is its module-level storage
@@ -141,10 +177,11 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             raise TypeError(f"cannot assign to const variable {stmt.name!r}")
 
         # assigning to a '&T' reference writes the T it aliases
-        builder.store(emit_coerced(gen, builder, stmt.value,
-                                   strip_reference(var_type), scope), slot)
+        volatile_store(gen, builder.store(emit_coerced(
+            gen, builder, stmt.value, strip_reference(var_type), scope), slot))
     elif isinstance(stmt, MemberAssign):
-        # store the value into the field's slot, typed by the field
+        # store the value into the field's slot, typed by the field; a
+        # write into a '@volatile' struct is a volatile one
         member = Member(stmt.base, stmt.field)
         field_type = member_field(gen, member, scope)[1]
         if is_const(field_type):
@@ -152,9 +189,12 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
         reject_const_base(gen, scope, stmt.base)
         slot = emit_lvalue(gen, builder, member, scope)
-        builder.store(emit_coerced(gen, builder, stmt.value, field_type, scope), slot)
+        store = builder.store(emit_coerced(gen, builder, stmt.value, field_type, scope), slot)
+        if volatile_chain(gen, member, scope):
+            make_volatile(store)
     elif isinstance(stmt, IndexAssign):
-        # store the value into the element's slot, typed by the element
+        # store the value into the element's slot, typed by the element; a
+        # write into a '@volatile' struct is a volatile one
         reject_const_base(gen, scope, stmt.base)
         target = Index(stmt.base, stmt.index)
         slot = emit_lvalue(gen, builder, target, scope)
@@ -165,7 +205,9 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         else:
             value = emit_expression(gen, builder, stmt.value, slot.type.pointee, scope)
 
-        builder.store(value, slot)
+        store = builder.store(value, slot)
+        if volatile_chain(gen, target, scope):
+            make_volatile(store)
     elif isinstance(stmt, Block):
         # a block runs in a child scope: writes to outer variables persist
         # through their shared slots, while inner declarations end with it
