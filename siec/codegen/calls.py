@@ -22,11 +22,20 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
 
-    # a variable or global holding a function reference is called through
-    # its value; the current file's statics resolve first, other files' never
-    symbol = gen.resolve_symbol(call.name)
-    if call.name in scope or symbol in gen.globals:
-        return emit_indirect_call(gen, builder, call, scope)
+    # a dotted name resolves through the file's module bindings
+    if "." in call.name:
+        symbol = gen.resolve_qualified(call.name.split("."))
+        if symbol is None:
+            raise NameError(f"undefined function {call.name!r}")
+
+        if symbol in gen.globals:
+            return emit_indirect_call(gen, builder, call, scope, symbol)
+    else:
+        # a variable or global holding a function reference is called through
+        # its value; the current file's statics resolve first, other files' never
+        symbol = gen.resolve_symbol(call.name)
+        if call.name in scope or symbol in gen.globals:
+            return emit_indirect_call(gen, builder, call, scope)
 
     # look up the callee among the module's declared functions
     func = gen.module.globals.get(symbol)
@@ -94,11 +103,15 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
                         "assignable argument") from None
 
 
-def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict):
+def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
+                       scope: dict, symbol: str | None = None):
     """
-    Emit a call through a function reference held in a variable or a global.
+    Emit a call through a function reference held in a variable or a global,
+    the latter under an already-resolved symbol when one is given.
     """
-    if call.name in scope:
+    if symbol is not None:
+        var_type, slot = strip_const(gen.globals[symbol]), gen.module.globals[symbol]
+    elif call.name in scope:
         var = scope[call.name]
         var_type, slot = strip_const(var.type), var.slot
     else:

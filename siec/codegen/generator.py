@@ -157,6 +157,12 @@ class CodeGenerator:
         # symbols, visible everywhere
         self.symbol_names: dict[str, str] = {}
 
+        # what each file's 'import's bound: (file, prefix) naming a whole
+        # module, (file, name) naming one member; and each module's exports
+        self.module_bindings: dict[tuple[str, str], str] = {}
+        self.member_bindings: dict[tuple[str, str], str] = {}
+        self.module_exports: dict[str, set] = {}
+
         # the source file whose function body is being emitted, deciding
         # which statics are in view
         self.current_file = ""
@@ -164,12 +170,49 @@ class CodeGenerator:
     def resolve_symbol(self, name: str) -> str:
         """
         Resolve a Sie name to its module symbol: the current file's static
-        when it has one, an '@symbol' mapping next, the public name otherwise.
+        when it has one, its member imports next, an '@symbol' mapping
+        after, the public name otherwise.
         """
         if (key := (self.current_file, name)) in self.statics:
             return self.statics[key]
 
+        name = self.member_bindings.get((self.current_file, name), name)
         return self.symbol_names.get(name, name)
+
+    def resolve_qualified(self, names: list[str]) -> str | None:
+        """
+        Resolve a dotted 'a.b.name' chain through the current file's module
+        bindings: the longest bound prefix claims the chain, its last name
+        being the member; None when no prefix is bound.
+        """
+        for split in range(len(names) - 1, 0, -1):
+            prefix = ".".join(names[:split])
+            target = self.module_bindings.get((self.current_file, prefix))
+            if target is None:
+                continue
+
+            # past the prefix there is exactly one member name
+            if split != len(names) - 1:
+                return None
+
+            member = names[-1]
+            exports = self.module_exports.get(target)
+            if exports is not None and member not in exports:
+                raise TypeError(f"module {prefix!r} has no member {member!r}")
+
+            return self.symbol_names.get(member, member)
+
+        return None
+
+    def resolve_callee(self, name: str) -> str | None:
+        """
+        Resolve a call's name to its module symbol: dotted names through
+        the module bindings, plain ones like any other symbol.
+        """
+        if "." in name:
+            return self.resolve_qualified(name.split("."))
+
+        return self.resolve_symbol(name)
 
     def struct_align(self, type_name: str | None) -> int | None:
         """
@@ -208,6 +251,9 @@ def codegen(program: Program, module_name: str, target: str | None = None) -> ir
     from siec.codegen.structs import register_structs
 
     gen = CodeGenerator(module_name, target)
+    gen.module_bindings = program.module_bindings
+    gen.member_bindings = program.member_bindings
+    gen.module_exports = program.module_exports
 
     # first pass: register the named declarations — aliases first so every
     # later type annotation expands through them, constants next so enum

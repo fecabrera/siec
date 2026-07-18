@@ -70,6 +70,12 @@ import { f as g } from module.submodule;
 import module.submodule as sub;
 ```
 
+Every file is a module: `import a.b` names the file `a/b.sie`, searched for in the importing file's directory first, then the working directory, and finally the include path. Each file loads once however many times it's imported, so import cycles are fine.
+
+A module offers every one of its top-level declarations except its `@static` ones, which stay its own; importing a name it doesn't offer is an error. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
+
+Type declarations (structs, enums, aliases) share one namespace across the program, like C's: a module's types are usable by name wherever the module is loaded, no qualification needed.
+
 #### Include
 
 `@include("path")` pulls a specific `.sie` file directly into the current file, searching the include path:

@@ -347,12 +347,49 @@ def is_named_aggregate(ts: TokenStream) -> bool:
         ts.pos = start
 
 
+def ident_chain(expr: Expr) -> list[str] | None:
+    """
+    The names of a pure 'a.b.c' member chain over a variable root; None
+    for any other shape.
+    """
+    names = []
+    while isinstance(expr, Member):
+        names.append(expr.field)
+        expr = expr.base
+
+    if not isinstance(expr, Var):
+        return None
+
+    names.append(expr.name)
+    names.reverse()
+    return names
+
+
 def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
     """
     Apply postfix '[index]', '[from:to]', and '.field' chains to an expression:
-    variables, call results, groupings, and literals alike.
+    variables, call results, groupings, and literals alike. A '(' after a
+    pure name chain calls it by its dotted name ('libc.stdio.printf(...)').
     """
-    while ts.peek().syntax in ("[", "."):
+    while True:
+        if (ts.peek().syntax == "(" and (names := ident_chain(expr)) is not None
+                and len(names) > 1):
+            ts.next()
+
+            args = []
+            while ts.peek().syntax != ")":
+                if args:
+                    ts.expect("sym", ",")
+
+                args.append(parse_expression(ts))
+            ts.expect("sym", ")")
+
+            expr = Call(".".join(names), args)
+            continue
+
+        if ts.peek().syntax not in ("[", "."):
+            return expr
+
         if ts.next().value == "[":
             # a ':' anywhere in the brackets makes it a slice, either bound optional
             start = None if ts.peek().syntax == ":" else parse_expression(ts)

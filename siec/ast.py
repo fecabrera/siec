@@ -507,6 +507,19 @@ class Include:
 
 
 @dataclass
+class Import:
+    """
+    An 'import' of a module by its dotted path: 'import a.b;' binds the
+    module's members under 'a.b.<name>' (or an 'as' alias), while
+    'import { f [as g] } from a.b;' binds chosen members unqualified.
+    """
+    path: str
+    alias: str | None = None
+    members: list | None = None  # [(name, binding)] for the 'from' form
+    line: int = _line()
+
+
+@dataclass
 class Program:
     """
     The root of the AST: the includes, structs, functions, constants, and
@@ -520,6 +533,13 @@ class Program:
     globals: list[Global] = field(default_factory=list)
     aliases: list[TypeAlias] = field(default_factory=list)
     conds: list["CondBlock"] = field(default_factory=list)
+    imports: list[Import] = field(default_factory=list)
+
+    # filled by the loader on the merged program: what each file's
+    # 'import's bound, and what each module offers
+    module_bindings: dict = field(default_factory=dict)  # (file, prefix) -> module file
+    member_bindings: dict = field(default_factory=dict)  # (file, name) -> member name
+    module_exports: dict = field(default_factory=dict)   # module file -> set of names
 
 
 @dataclass

@@ -94,7 +94,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
             return fn_type_parts(strip_const(scope[expr.name].type))[1]
 
-        return gen.return_types.get(gen.resolve_symbol(expr.name))
+        symbol = gen.resolve_callee(expr.name)
+        if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
+            return fn_type_parts(strip_const(gen.globals[symbol]))[1]
+
+        return gen.return_types.get(symbol)
 
     # a cast produces its target type
     if isinstance(expr, Cast):
@@ -109,6 +113,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a member access yields the field's type; an aliasing field (a pointer
     # or array) keeps a const base's contract
     if isinstance(expr, Member):
+        # a pure name chain may be a module's member, spelled qualified
+        if (folded := fold_qualified(gen, expr, scope)) is not None:
+            return expr_sie_type(gen, folded, scope)
+
         base_name = expr_sie_type(gen, expr.base, scope)
         info = type_info(gen, base_name)
         if info is None:
@@ -215,6 +223,27 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 or infer_type(gen, expr.orelse, scope))
 
     return None
+
+
+def fold_qualified(gen: CodeGenerator, expr: Expr, scope: dict):
+    """
+    Fold a pure 'a.b.name' member chain into the Var its dotted name
+    resolves to through the file's module bindings; None for any other
+    shape, or when no prefix is bound. A scoped variable shadows a binding.
+    """
+    names, node = [], expr
+    while isinstance(node, Member):
+        names.append(node.field)
+        node = node.base
+
+    if not isinstance(node, Var) or node.name in scope:
+        return None
+
+    names.append(node.name)
+    names.reverse()
+
+    symbol = gen.resolve_qualified(names)
+    return Var(symbol) if symbol is not None else None
 
 
 def enum_backing(gen: CodeGenerator, name: str | None) -> str | None:

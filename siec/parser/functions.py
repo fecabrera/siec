@@ -1,6 +1,14 @@
 """Parsing of function declarations, definitions, and whole programs."""
 
-from siec.ast import CondBlock, Function, Global, Param, Program, TypeAlias
+from siec.ast import (
+    CondBlock,
+    Function,
+    Global,
+    Import,
+    Param,
+    Program,
+    TypeAlias,
+)
 from siec.parser.constants import parse_const
 from siec.parser.enums import parse_enum
 from siec.parser.expressions import parse_clobbers, parse_expression
@@ -42,6 +50,14 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
                                   "cannot be conditional")
 
             program.includes.append(parse_include(ts))
+        elif ts.peek().value == "import":
+            # like an include, an import joins the program before any
+            # condition can be evaluated
+            if not top_level:
+                raise SyntaxError(f"line {ts.peek().line}: an 'import' "
+                                  "cannot be conditional")
+
+            program.imports.append(parse_import(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "if":
             program.conds.append(parse_cond(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "const":
@@ -60,6 +76,51 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.functions.append(parse_function(ts))
 
     return program
+
+
+def parse_import(ts: TokenStream) -> Import:
+    """
+    Parse an import: 'import a.b[.c][ as m];' binding a whole module, or
+    'import { f [as g][, ...] } from a.b;' binding chosen members.
+    """
+    line = ts.peek().line
+    ts.expect("ident", "import")
+
+    # '{ f [as g], ... } from' picks members, bound unqualified
+    members = None
+    if ts.peek().syntax == "{":
+        ts.next()
+
+        members = []
+        while ts.peek().syntax != "}":
+            if members:
+                ts.expect("sym", ",")
+
+            name = ts.expect("ident").value
+            binding = name
+            if ts.peek().value == "as":
+                ts.next()
+                binding = ts.expect("ident").value
+
+            members.append((name, binding))
+        ts.next()
+
+        ts.expect("ident", "from")
+
+    # the module's dotted path
+    path = [ts.expect("ident").value]
+    while ts.peek().syntax == ".":
+        ts.next()
+        path.append(ts.expect("ident").value)
+
+    # 'as m' renames the whole module's binding
+    alias = None
+    if members is None and ts.peek().value == "as":
+        ts.next()
+        alias = ts.expect("ident").value
+
+    ts.expect("sym", ";")
+    return Import(".".join(path), alias, members, line=line)
 
 
 def parse_cond(ts: TokenStream) -> CondBlock:

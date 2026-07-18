@@ -43,6 +43,7 @@ from siec.codegen.inference import (
     check_signedness,
     enum_backing,
     expr_sie_type,
+    fold_qualified,
     is_float,
     member_field,
     numeric_class,
@@ -196,6 +197,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_slice(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, Member):
+        # a pure name chain may be a module's member, spelled qualified
+        if (folded := fold_qualified(gen, expr, scope)) is not None:
+            return emit_expression(gen, builder, folded, expected_type, scope)
+
         # read a struct or array field: extract it from the base value by index
         index = member_field(gen, expr, scope)[0]
         base = emit_expression(gen, builder, expr.base, None, scope)
@@ -303,6 +308,10 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         raise NameError(f"undefined variable {expr.name!r}")
 
     if isinstance(expr, Member):
+        # a pure name chain may be a module's member, spelled qualified
+        if (folded := fold_qualified(gen, expr, scope)) is not None:
+            return emit_lvalue(gen, builder, folded, scope)
+
         # index into the base's address: gep past the aggregate to the field slot
         index = member_field(gen, expr, scope)[0]
         base = emit_lvalue(gen, builder, expr.base, scope)

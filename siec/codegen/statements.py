@@ -25,9 +25,23 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.enums import evaluate_size
 from siec.codegen.errors import source_location
-from siec.codegen.expressions import emit_bool, emit_expression, emit_lvalue
-from siec.codegen.inference import expr_sie_type, infer_type, member_field
-from siec.codegen.generator import CodeGenerator, Variable, entry_alloca, make_volatile
+from siec.codegen.expressions import (
+    emit_bool,
+    emit_expression,
+    emit_lvalue,
+)
+from siec.codegen.inference import (
+    expr_sie_type,
+    fold_qualified,
+    infer_type,
+    member_field,
+)
+from siec.codegen.generator import (
+    CodeGenerator,
+    Variable,
+    entry_alloca,
+    make_volatile,
+)
 from siec.codegen.types import (
     is_const,
     is_reference,
@@ -190,6 +204,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         # store the value into the field's slot, typed by the field; a
         # write into a '@volatile' struct is a volatile one
         member = Member(stmt.base, stmt.field)
+
+        # a qualified 'a.b.G = v' assigns the module's global, not a field
+        if (folded := fold_qualified(gen, member, scope)) is not None:
+            emit_statement_body(gen, builder, Assign(folded.name, stmt.value,
+                                                     line=stmt.line), scope)
+            return
+
         field_type = member_field(gen, member, scope)[1]
         if is_const(field_type):
             raise TypeError(f"cannot assign to const field {stmt.field!r}")
