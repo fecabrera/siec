@@ -721,7 +721,7 @@ Casting between `i8[]`/`u8[]` and `char[]` automatically handles the length chan
 
 #### References
 
-References to a type `T` are represented by `&T`. References cannot be dereferenced, meaning that you can't obtain the address where the value is stored through the `&` operator.
+References to a type `T` are represented by `&T`. References cannot be dereferenced, meaning that you can't obtain the address where the value is stored through the `&` operator. This covers anything reached through the reference — for `s: &S`, both `&s` and `&s.member` are compile errors, since either would leak the caller's storage.
 
 References cannot type a variable.
 

@@ -27,9 +27,11 @@ from siec.codegen.types import (
     is_aliasing,
     is_array_struct,
     is_const,
+    is_reference,
     resolve_type,
     sized_array,
     strip_const,
+    strip_reference,
     type_signedness,
 )
 
@@ -167,8 +169,21 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if expr.op == "not":
             return builder.not_(emit_bool(gen, builder, expr.operand, scope))
 
-        # '&' takes the address of an assignable expression: its stack slot
+        # '&' takes the address of an assignable expression: its stack slot;
+        # a reference parameter is not dereferenceable — no address rooted
+        # at it may be taken ('&s' and '&s.member' would both leak the
+        # caller's storage)
         if expr.op == "&":
+            root = expr.operand
+            while isinstance(root, (Member, Index)):
+                root = root.base
+
+            if (isinstance(root, Var) and root.name in scope
+                    and is_reference(scope[root.name].type)):
+                through = "of" if root is expr.operand else "through"
+                raise TypeError(f"cannot take an address {through} reference "
+                                f"parameter {root.name!r}")
+
             return emit_lvalue(gen, builder, expr.operand, scope)
 
         raise TypeError(f"unknown unary operator {expr.op!r}")
@@ -220,10 +235,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     Infer the Sie type name of an expression; None when it has no fixed one.
     """
     # variables and calls carry their declared Sie type; a bare function
-    # name carries the canonical fn type of its signature
+    # name carries the canonical fn type of its signature; a '&T'
+    # reference parameter reads as the T it aliases
     if isinstance(expr, Var):
         if expr.name in scope:
-            return scope[expr.name].type
+            return strip_reference(scope[expr.name].type)
 
         # a constant carries its annotation; unannotated, it adapts like
         # its value expression written in place
@@ -957,7 +973,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     args = []
     for i, arg in enumerate(call.args):
         if i < len(sie_params):
-            args.append(emit_coerced(gen, builder, arg, sie_params[i], scope))
+            args.append(emit_argument(gen, builder, arg, sie_params[i], scope))
         else:
             value = emit_expression(gen, builder, arg, None, scope)
             if isinstance(value.type, ir.FloatType):
@@ -966,6 +982,37 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
             args.append(value)
 
     return builder.call(func, args)
+
+
+def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
+                  param_name: str, scope: dict):
+    """
+    Emit one call argument: coerced to the parameter's type, or, for a '&T'
+    reference parameter, the argument's own address, passed implicitly.
+    """
+    if not is_reference(param_name):
+        return emit_coerced(gen, builder, arg, param_name, scope)
+
+    referenced = strip_reference(param_name)
+    arg_name = expr_sie_type(gen, arg, scope)
+
+    if arg_name is not None:
+        # the callee aliases the storage itself, so the types must match
+        # exactly: no widening can happen in place
+        if strip_const(arg_name) != strip_const(referenced):
+            raise TypeError(f"cannot bind a {arg_name!r} value to a "
+                            f"{param_name!r} parameter")
+
+        # a const value only binds to a 'const &T'
+        if is_const(arg_name) and not is_const(referenced):
+            raise TypeError(f"cannot bind a {arg_name!r} value to a mutable "
+                            f"{param_name!r} parameter")
+
+    try:
+        return emit_lvalue(gen, builder, arg, scope)
+    except TypeError:
+        raise TypeError(f"a {param_name!r} parameter needs an "
+                        "assignable argument") from None
 
 
 def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict):
@@ -983,7 +1030,7 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, sc
                         f"{len(sie_params)} arguments, got {len(call.args)}")
 
     callee = builder.load(var.slot, name=call.name)
-    args = [emit_coerced(gen, builder, arg, sie_params[i], scope)
+    args = [emit_argument(gen, builder, arg, sie_params[i], scope)
             for i, arg in enumerate(call.args)]
 
     return builder.call(callee, args)

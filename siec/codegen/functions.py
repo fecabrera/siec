@@ -6,7 +6,7 @@ from siec.ast import Function
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable
 from siec.codegen.statements import emit_block
-from siec.codegen.types import resolve_type, strip_const
+from siec.codegen.types import is_reference, resolve_type, strip_const
 
 
 def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:
@@ -35,6 +35,10 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     declared with no return type, and its 'args: char*[]' form keeps the
     C-level (i32, char**) signature underneath.
     """
+    # references only pass parameters; a returned one would outlive its argument
+    if is_reference(fn.return_type):
+        raise TypeError("a reference cannot be a return type")
+
     if fn.name == "main" and fn.return_type is None:
         ret_type = ir.IntType(32)
     else:
@@ -84,6 +88,13 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         else:
             for arg, param in zip(func.args, fn.params):
                 arg.name = param.name
+
+                # a reference parameter's slot IS the caller's address:
+                # reads and writes go through it, aliasing the argument
+                if is_reference(param.type):
+                    scope[param.name] = Variable(arg, param.type)
+                    continue
+
                 scope[param.name] = Variable(
                     builder.alloca(arg.type, name=f"{param.name}.addr"), param.type)
                 builder.store(arg, scope[param.name].slot)

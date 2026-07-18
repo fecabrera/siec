@@ -64,6 +64,20 @@ def test_const_pointer_type(ts):
     assert parse_type(ts("const i32[]")) == "const i32[]"
 
 
+def test_reference_type(ts):
+    """
+    A leading '&' is kept as a prefix on the canonical name.
+    """
+    assert parse_type(ts("&i32")) == "&i32"
+
+
+def test_const_reference_type(ts):
+    """
+    'const &T' composes the contract with the reference.
+    """
+    assert parse_type(ts("const &Point")) == "const &Point"
+
+
 def test_array_of_pointers_type(ts):
     """
     An array's element type may itself be a pointer.

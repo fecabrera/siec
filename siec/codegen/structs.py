@@ -3,7 +3,7 @@
 from siec.ast import Program
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
-from siec.codegen.types import resolve_type
+from siec.codegen.types import is_reference, resolve_type
 
 
 def register_structs(gen: CodeGenerator, program: Program) -> None:
@@ -34,5 +34,10 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
             continue
 
         with source_location(line=struct.line, file=struct.file):
+            # references only pass parameters; a field is its own storage
+            for field in struct.fields:
+                if is_reference(field.type):
+                    raise TypeError(f"field {field.name!r} cannot be a reference")
+
             info = gen.structs[struct.name]
             info.type.set_body(*(resolve_type(f.type, gen.structs) for f in struct.fields))

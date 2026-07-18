@@ -29,7 +29,7 @@ from siec.codegen.expressions import (
     member_field,
 )
 from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
-from siec.codegen.types import is_const, resolve_type, sized_array
+from siec.codegen.types import is_const, is_reference, resolve_type, sized_array, strip_reference
 
 
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
@@ -107,6 +107,10 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                 raise TypeError(f"cannot infer a type for {stmt.name!r}: "
                                 "annotate it explicitly")
 
+        # references only pass parameters; a variable is its own storage
+        if is_reference(type_name):
+            raise TypeError("a reference cannot type a variable")
+
         # a sized array 'X[N]' declares an 'X[]' backed by N stack elements
         if (sized := sized_array(type_name)) is not None:
             emit_sized_array_let(gen, builder, stmt, sized, scope)
@@ -132,7 +136,9 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if is_const(var.type):
             raise TypeError(f"cannot assign to const variable {stmt.name!r}")
 
-        builder.store(emit_coerced(gen, builder, stmt.value, var.type, scope), var.slot)
+        # assigning to a '&T' reference writes the T it aliases
+        builder.store(emit_coerced(gen, builder, stmt.value,
+                                   strip_reference(var.type), scope), var.slot)
     elif isinstance(stmt, MemberAssign):
         # store the value into the field's slot, typed by the field
         member = Member(stmt.base, stmt.field)

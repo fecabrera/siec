@@ -15,6 +15,11 @@ def parse_type(ts: TokenStream) -> str:
         ts.next()
         return f"const {parse_type(ts)}"
 
+    # a leading '&' marks a reference: a parameter passed by a hidden pointer
+    if ts.peek().syntax == "&":
+        ts.next()
+        return f"&{parse_type(ts)}"
+
     # 'fn(A, B) -> T' is a function reference type; anything else is a base
     # type name; either may be followed by any mix of '*'s (which the lexer
     # may have glued into '**' tokens) and '[]' or '[N]' suffixes

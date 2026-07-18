@@ -36,6 +36,25 @@ def strip_const(name: str | None) -> str | None:
     return name.removeprefix("const ") if name is not None else None
 
 
+def is_reference(name: str | None) -> bool:
+    """
+    Whether a type name is a '&T' reference, behind any 'const' marking.
+    """
+    return name is not None and strip_const(name).startswith("&")
+
+
+def strip_reference(name: str | None) -> str | None:
+    """
+    The value type behind a reference: '&T' reads as T, keeping any 'const'
+    marking. Non-reference names pass through unchanged.
+    """
+    if not is_reference(name):
+        return name
+
+    base = strip_const(name)[1:]
+    return f"const {base}" if is_const(name) else base
+
+
 def is_aliasing(name: str | None) -> bool:
     """
     Whether a type's values alias memory beyond their own copy: pointers
@@ -140,6 +159,10 @@ def resolve_type(name: str | None, structs: dict | None = None,
 
     # 'const T' is a contract, not a type: it resolves as its base type
     name = strip_const(name)
+
+    # a '&T' reference is represented by a hidden pointer to T
+    if name.startswith("&"):
+        return ir.PointerType(resolve_type(name[1:], structs))
 
     # a sized array 'X[N]' is the same fat value as 'X[]'; the size only
     # directs the automatic backing a declaration allocates
