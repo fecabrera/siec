@@ -179,6 +179,19 @@ class While:
 
 
 @dataclass
+class For:
+    """
+    A for loop: an init statement, a condition, and a step statement
+    driving the body.
+    """
+    init: "Stmt"
+    condition: Expr
+    step: "Stmt"
+    body: list
+    line: int = _line()
+
+
+@dataclass
 class Block:
     """
     A brace-enclosed statement list run in its own scope.

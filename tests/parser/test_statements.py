@@ -161,6 +161,27 @@ def test_while_condition_requires_parentheses(ts):
         parse_statement(ts("while x { }"))
 
 
+def test_for_statement(ts):
+    """
+    'for (init; cond; step) { ... }' parses its three parts and body.
+    """
+    from siec.ast import For
+
+    assert parse_statement(ts("for (let i: i32 = 0; i < 3; i += 1) { f(); }")) == For(
+        Let("i", "i32", IntLiteral(0)),
+        BinaryOp("<", Var("i"), IntLiteral(3)),
+        Assign("i", BinaryOp("+", Var("i"), IntLiteral(1))),
+        [ExprStmt(Call("f", []))])
+
+
+def test_for_step_takes_no_semicolon(ts):
+    """
+    A ';' after the step raises a SyntaxError; the ')' closes it directly.
+    """
+    with pytest.raises(SyntaxError, match=r"expected '\)'"):
+        parse_statement(ts("for (let i: i32 = 0; i < 3; i += 1;) { }"))
+
+
 def test_block_statement(ts):
     """
     A bare '{ ... }' parses to a Block of its statements.

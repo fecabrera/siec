@@ -1,7 +1,21 @@
 """Parsing of statements."""
 
-from ..ast import (Assign, BinaryOp, Block, ExprStmt, If, Index, IndexAssign, Let, Member,
-                   MemberAssign, Return, Var, While)
+from ..ast import (
+    Assign,
+    BinaryOp,
+    Block,
+    ExprStmt,
+    For,
+    If,
+    Index,
+    IndexAssign,
+    Let,
+    Member,
+    MemberAssign,
+    Return,
+    Var,
+    While,
+)
 from .expressions import parse_expression
 from .stream import TokenStream
 from .types import parse_type
@@ -57,6 +71,22 @@ def parse_statement(ts: TokenStream):
 
         return While(condition, parse_block(ts), line=line)
 
+    # 'for (init; cond; step) { ... }': the init runs once, the condition
+    # is checked before each pass, and the step runs after each
+    if tok.kind == "kw" and tok.value == "for":
+        ts.next()
+
+        ts.expect("sym", "(")
+        init = parse_statement(ts)  # consumes its own ';'
+
+        condition = parse_expression(ts)
+        ts.expect("sym", ";")
+
+        step = parse_step(ts)
+        ts.expect("sym", ")")
+
+        return For(init, condition, step, parse_block(ts), line=line)
+
     # a bare '{' opens a block statement, a statement list in its own scope
     if tok.syntax == "{":
         return Block(parse_block(ts), line=line)
@@ -89,8 +119,21 @@ def parse_statement(ts: TokenStream):
         ts.expect("sym", ";")
         return Return(value, line=line)
 
-    # otherwise parse an expression; an assignment operator after it makes the
-    # expression an assignment target, else it's evaluated for its effects
+    # otherwise an assignment or expression statement, closed by its ';'
+    stmt = parse_step(ts)
+    ts.expect("sym", ";")
+    return stmt
+
+
+def parse_step(ts: TokenStream):
+    """
+    Parse an assignment or expression without its terminator: the tail of a
+    statement, or a for loop's step before the closing ')'.
+    """
+    line = ts.peek().line
+
+    # an assignment operator after an expression makes it an assignment
+    # target, else it's evaluated for its effects
     expr = parse_expression(ts)
 
     if ts.peek().syntax == "=" or ts.peek().syntax in COMPOUND:
@@ -101,10 +144,8 @@ def parse_statement(ts: TokenStream):
         if op != "=":
             value = BinaryOp(op[:-1], expr, value)
 
-        ts.expect("sym", ";")
         return make_assignment(expr, value, line)
 
-    ts.expect("sym", ";")
     return ExprStmt(expr, line=line)
 
 

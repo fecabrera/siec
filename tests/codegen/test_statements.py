@@ -88,6 +88,27 @@ def test_loop_body_slots_allocate_in_the_entry_block(env):
     assert "alloca" in entry
 
 
+def test_for_branches_over_loop_blocks(env):
+    """
+    A for emits cond, body, and end blocks, its init variable scoped to the loop.
+    """
+    from siec.ast import BinaryOp, For
+
+    gen, builder = env
+    scope = {}
+
+    loop = For(Let("i", "i32", IntLiteral(0)),
+               BinaryOp("<", Var("i"), IntLiteral(3)),
+               Assign("i", BinaryOp("+", Var("i"), IntLiteral(1))), [])
+    emit_statement(gen, builder, loop, scope)
+
+    body = str(builder.function)
+    assert "for.cond" in body
+    assert "for.body" in body
+    assert "for.end" in body
+    assert "i" not in scope
+
+
 def test_block_declarations_stay_inside(env):
     """
     A variable declared in a block statement is gone from the outer scope.

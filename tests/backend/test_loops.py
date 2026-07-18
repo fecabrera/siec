@@ -61,6 +61,61 @@ def test_return_inside_a_while_leaves_the_function(run):
     assert run(source).returncode == 7
 
 
+def test_for_drives_init_condition_and_step(run):
+    """
+    The init runs once, the condition gates each pass, and the step
+    advances after each body.
+    """
+    source = """
+    fn main() -> i32 {
+        let total: i32 = 0;
+
+        for (let i: i32 = 0; i < 10; i += 1) {
+            total += i;
+        }
+
+        return total; // 0+1+...+9 = 45
+    }
+    """
+    assert run(source).returncode == 45
+
+
+def test_for_variable_ends_with_the_loop(compile_source):
+    """
+    The init's variable is gone after the loop.
+    """
+    import pytest
+
+    source = """
+    fn main() -> i32 {
+        for (let i: i32 = 0; i < 3; i += 1) { }
+        return i;
+    }
+    """
+    with pytest.raises(NameError, match="undefined variable 'i'"):
+        compile_source(source)
+
+
+def test_for_loops_nest(run):
+    """
+    Nested for loops each drive their own variable.
+    """
+    source = """
+    fn main() -> i32 {
+        let total: i32 = 0;
+
+        for (let i: i32 = 0; i < 3; i += 1) {
+            for (let j: i32 = 0; j < 3; j += 1) {
+                total += i * 3 + j;
+            }
+        }
+
+        return total; // 0+1+...+8 = 36
+    }
+    """
+    assert run(source).returncode == 36
+
+
 def test_long_loop_does_not_grow_the_stack(run):
     """
     A body-local declaration through millions of iterations must not

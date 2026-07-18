@@ -2,11 +2,29 @@
 
 from llvmlite import ir
 
-from ..ast import (Assign, Block, ExprStmt, If, Index, IndexAssign, Let, Member,
-                   MemberAssign, Return, While)
+from ..ast import (
+    Assign,
+    Block,
+    ExprStmt,
+    For,
+    If,
+    Index,
+    IndexAssign,
+    Let,
+    Member,
+    MemberAssign,
+    Return,
+    While,
+)
 from .errors import source_location
-from .expressions import (emit_bool, emit_coerced, emit_expression, emit_lvalue,
-                          expr_sie_type, member_field)
+from .expressions import (
+    emit_bool,
+    emit_coerced,
+    emit_expression,
+    emit_lvalue,
+    expr_sie_type,
+    member_field,
+)
 from .generator import CodeGenerator, Variable, entry_alloca
 from .types import resolve_type
 
@@ -75,6 +93,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_if(gen, builder, stmt, scope)
     elif isinstance(stmt, While):
         emit_while(gen, builder, stmt, scope)
+    elif isinstance(stmt, For):
+        emit_for(gen, builder, stmt, scope)
     elif isinstance(stmt, Return):
         if stmt.value is None:
             # a bare 'return' in main yields its implicit exit code 0: only
@@ -116,6 +136,38 @@ def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: di
     emit_block(gen, builder, stmt.body, dict(scope))
 
     if not builder.block.is_terminated:
+        builder.branch(cond_block)
+
+    builder.position_at_end(end_block)
+
+
+def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) -> None:
+    """
+    Emit a for loop: the init once, the condition before each pass, and the
+    step after each.
+    """
+    # the loop is its own scope; the init's variable lives exactly as long as it
+    loop_scope = dict(scope)
+    emit_statement(gen, builder, stmt.init, loop_scope)
+
+    func = builder.function
+    cond_block = func.append_basic_block("for.cond")
+    body_block = func.append_basic_block("for.body")
+    end_block = func.append_basic_block("for.end")
+
+    builder.branch(cond_block)
+
+    builder.position_at_end(cond_block)
+    builder.cbranch(emit_bool(gen, builder, stmt.condition, loop_scope),
+                    body_block, end_block)
+
+    # the body runs in a child scope, fresh each iteration; the step follows
+    # it in the loop's own scope, then control returns to the condition
+    builder.position_at_end(body_block)
+    emit_block(gen, builder, stmt.body, dict(loop_scope))
+
+    if not builder.block.is_terminated:
+        emit_statement(gen, builder, stmt.step, loop_scope)
         builder.branch(cond_block)
 
     builder.position_at_end(end_block)

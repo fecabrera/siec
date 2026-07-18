@@ -262,6 +262,18 @@ while (i < 10) {
 }
 ```
 
+The `for` keyword drives a loop through three parts: an init statement run once, a condition checked before each pass, and a step statement run after each:
+
+```
+for (let i: i32 = 0; i < n; i += 1) {
+    // ...
+}
+```
+
+The whole loop is its own scope — the init's variable lives exactly as long as the loop — and the body behaves like a while's, fresh on each iteration.
+
+Unlike other languages, there are no increment or decrement operators (`i++`, `i--`); this is intentional, and a step is written `i += 1`.
+
 ### Blocks
 
 Code enclosed by `{}` is a block, with its own scope:
