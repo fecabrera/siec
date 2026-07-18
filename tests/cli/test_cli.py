@@ -307,6 +307,21 @@ def test_run_reaches_libc(tmp_path, monkeypatch, capfd):
     assert "jit says 42" in capfd.readouterr().out
 
 
+def test_run_loads_missing_libraries_with_a_clean_error(tmp_path, monkeypatch, capsys):
+    """
+    '-l' reaches the JIT: an unloadable library reports cleanly instead of
+    leaving its symbols null to segfault on.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+
+    assert run_cli(monkeypatch, src, "-l", "nope_no_such", "--run") == 1
+
+    err = capsys.readouterr().err
+    assert "cannot load library 'nope_no_such'" in err
+    assert "Traceback" not in err
+
+
 def test_run_without_a_main_is_an_error(tmp_path, monkeypatch, capsys):
     """
     --run on a program with no main exits non-zero with a readable error.

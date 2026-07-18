@@ -1,6 +1,6 @@
 """Parsing of function declarations, definitions, and whole programs."""
 
-from siec.ast import Function, Param, Program
+from siec.ast import Function, Global, Param, Program
 from siec.parser.constants import parse_const
 from siec.parser.enums import parse_enum
 from siec.parser.includes import parse_include
@@ -20,15 +20,19 @@ def parse_program(ts: TokenStream) -> Program:
     structs = []
     consts = []
     enums = []
+    globals_ = []
 
-    # '@' starts an '@include' directive, an '@const' declaration, or a
-    # decorated function (e.g. '@extern'); 'struct' and 'enum' start type
-    # declarations; anything else is a function
+    # '@' starts an '@include' directive, an '@const' declaration, an
+    # '@extern let' global, or a decorated function (e.g. '@extern fn');
+    # 'struct' and 'enum' start type declarations; anything else is a function
     while ts.peek().kind != "eof":
         if ts.peek().value == "@" and ts.peek(1).value == "include":
             includes.append(parse_include(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "const":
             consts.append(parse_const(ts))
+        elif (ts.peek().value == "@" and ts.peek(1).value == "extern"
+              and ts.peek(2).value == "let"):
+            globals_.append(parse_global(ts))
         elif ts.peek().value == "struct":
             structs.append(parse_struct(ts))
         elif ts.peek().value == "enum":
@@ -36,7 +40,29 @@ def parse_program(ts: TokenStream) -> Program:
         else:
             functions.append(parse_function(ts))
 
-    return Program(includes, functions, structs, consts, enums)
+    return Program(includes, functions, structs, consts, enums, globals_)
+
+
+def parse_global(ts: TokenStream) -> Global:
+    """
+    Parse '@extern let name: T;' — a global whose storage lives outside
+    this program, so no initializer is allowed.
+    """
+    line = ts.peek().line
+    ts.expect("sym", "@")
+    ts.expect("ident", "extern")
+    ts.expect("kw", "let")
+
+    name = ts.expect("ident").value
+    ts.expect("sym", ":")
+    var_type = parse_type(ts)
+
+    if ts.peek().syntax == "=":
+        raise SyntaxError(f"line {line}: extern global {name!r} cannot "
+                          "have an initializer")
+
+    ts.expect("sym", ";")
+    return Global(name, var_type, line=line)
 
 
 def parse_function(ts: TokenStream) -> Function:

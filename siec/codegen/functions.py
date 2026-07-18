@@ -57,9 +57,12 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     # redeclarations are allowed as long as the signature matches
     existing = gen.module.globals.get(fn.name)
     if existing is not None:
+        if not isinstance(existing, ir.Function):
+            raise TypeError(f"{fn.name!r} is declared as both a function and a global")
+
         if existing.function_type != func_type:
             raise TypeError(f"conflicting declarations for function {fn.name!r}")
-        
+
         return existing
 
     return ir.Function(gen.module, func_type, name=fn.name)

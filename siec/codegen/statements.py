@@ -125,20 +125,24 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             builder.store(emit_coerced(gen, builder, stmt.value, type_name, scope),
                           scope[stmt.name].slot)
     elif isinstance(stmt, Assign):
-        # store the value into the variable's existing stack slot, typed by the slot
-        if stmt.name not in scope:
-            if stmt.name in gen.constants:
-                raise TypeError(f"cannot reassign constant {stmt.name!r}")
-
+        # store the value into the variable's existing stack slot, typed by
+        # the slot; a global's slot is its module-level storage
+        if stmt.name in scope:
+            var = scope[stmt.name]
+            slot, var_type = var.slot, var.type
+        elif stmt.name in gen.globals:
+            slot, var_type = gen.module.globals[stmt.name], gen.globals[stmt.name]
+        elif stmt.name in gen.constants:
+            raise TypeError(f"cannot reassign constant {stmt.name!r}")
+        else:
             raise NameError(f"undefined variable {stmt.name!r}")
 
-        var = scope[stmt.name]
-        if is_const(var.type):
+        if is_const(var_type):
             raise TypeError(f"cannot assign to const variable {stmt.name!r}")
 
         # assigning to a '&T' reference writes the T it aliases
         builder.store(emit_coerced(gen, builder, stmt.value,
-                                   strip_reference(var.type), scope), var.slot)
+                                   strip_reference(var_type), scope), slot)
     elif isinstance(stmt, MemberAssign):
         # store the value into the field's slot, typed by the field
         member = Member(stmt.base, stmt.field)

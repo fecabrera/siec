@@ -104,6 +104,10 @@ class CodeGenerator:
         # the registered enums by name, their members evaluated to integers
         self.enums: dict[str, EnumInfo] = {}
 
+        # the '@extern let' globals by name, mapped to their Sie types;
+        # their storage lives in the module's globals
+        self.globals: dict[str, str] = {}
+
 
 def codegen(program: Program, module_name: str) -> ir.Module:
     """
@@ -112,16 +116,19 @@ def codegen(program: Program, module_name: str) -> ir.Module:
     from siec.codegen.constants import register_constants
     from siec.codegen.enums import register_enums
     from siec.codegen.functions import declare_function, emit_function
+    from siec.codegen.globals import register_globals
     from siec.codegen.structs import register_structs
 
     gen = CodeGenerator(module_name)
 
     # first pass: register the named declarations — constants first so enum
     # values can reference them, enums next so struct fields can be
-    # enum-typed, then structs for signatures and bodies to name
+    # enum-typed, then structs for signatures and bodies to name, and
+    # globals last so their types can name any of the above
     register_constants(gen, program)
     register_enums(gen, program)
     register_structs(gen, program)
+    register_globals(gen, program)
 
     # second pass: declare every function so calls can target ones defined later
     for fn in program.functions:

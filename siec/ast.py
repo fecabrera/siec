@@ -333,6 +333,18 @@ class Struct:
 
 
 @dataclass
+class Global:
+    """
+    An '@extern let' declaration: a global variable whose storage is
+    defined and initialized outside this program.
+    """
+    name: str
+    type: str
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
 class Variant:
     """
     One enum member declaration: its name and an optional explicit value.
@@ -386,3 +398,4 @@ class Program:
     structs: list[Struct] = field(default_factory=list)
     consts: list[Const] = field(default_factory=list)
     enums: list[Enum] = field(default_factory=list)
+    globals: list[Global] = field(default_factory=list)

@@ -122,6 +122,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return emit_expression(gen, builder, const.value, expected_type, scope)
 
+        # an '@extern let' global loads its current value from its storage
+        if expr.name in gen.globals:
+            return builder.load(gen.module.globals[expr.name], name=expr.name)
+
         # a bare function name is a reference to that function
         func = gen.module.globals.get(expr.name)
         if isinstance(func, ir.Function):
@@ -258,6 +262,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if const is not None:
             return const.type if const.type is not None else expr_sie_type(
                 gen, const.value, scope)
+
+        # a global carries its declared type
+        if expr.name in gen.globals:
+            return gen.globals[expr.name]
 
         if expr.name in gen.param_types:
             params = ",".join(gen.param_types[expr.name])
@@ -689,10 +697,14 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
     field, or a pointer-indexed element.
     """
     if isinstance(expr, Var):
-        if expr.name not in scope:
-            raise NameError(f"undefined variable {expr.name!r}")
+        if expr.name in scope:
+            return scope[expr.name].slot
 
-        return scope[expr.name].slot
+        # a global's slot is its module-level storage
+        if expr.name in gen.globals:
+            return gen.module.globals[expr.name]
+
+        raise NameError(f"undefined variable {expr.name!r}")
 
     if isinstance(expr, Member):
         # index into the base's address: gep past the aggregate to the field slot
@@ -978,8 +990,8 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     """
     Emit a call to a declared function, checking the argument count.
     """
-    # a variable holding a function reference is called through its value
-    if call.name in scope:
+    # a variable or global holding a function reference is called through its value
+    if call.name in scope or call.name in gen.globals:
         return emit_indirect_call(gen, builder, call, scope)
 
     # look up the callee among the module's declared functions
@@ -1047,10 +1059,14 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
 
 def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict):
     """
-    Emit a call through a function reference held in a variable.
+    Emit a call through a function reference held in a variable or a global.
     """
-    var = scope[call.name]
-    var_type = strip_const(var.type)
+    if call.name in scope:
+        var = scope[call.name]
+        var_type, slot = strip_const(var.type), var.slot
+    else:
+        var_type, slot = strip_const(gen.globals[call.name]), gen.module.globals[call.name]
+
     if not var_type.startswith("fn(") or fn_type_parts(var_type)[2]:
         raise TypeError(f"cannot call non-function variable {call.name!r}")
 
@@ -1059,7 +1075,7 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, sc
         raise TypeError(f"function reference {call.name!r} takes "
                         f"{len(sie_params)} arguments, got {len(call.args)}")
 
-    callee = builder.load(var.slot, name=call.name)
+    callee = builder.load(slot, name=call.name)
     args = [emit_argument(gen, builder, arg, sie_params[i], scope)
             for i, arg in enumerate(call.args)]
 

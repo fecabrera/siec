@@ -30,7 +30,7 @@ siec main.sie file1.o file2.o -o main
 - `-o <path>` names the output executable, `a.out` by default.
 - `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise.
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
-- `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library.
+- `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
 - `--emit-llvm` prints the LLVM IR and exits, without building.
 - `--emit-asm` prints the host target's native assembly and exits, without building.
@@ -506,6 +506,14 @@ Functions can be decorated with `@extern` to indicate that they're going to be r
 @extern fn printf(fmt: char*, ...);
 @extern fn malloc(size: u64) -> opaque*;
 @extern fn free(ptr: opaque*);
+```
+
+`@extern let` declares a global variable the same way: its storage is defined and initialized outside the program, so it takes no initializer. It reads and assigns like any variable, and may hold a function reference, called through like a local one:
+
+```
+@extern let environ: char**;
+@extern let MPD_MINALLOC: i64;
+@extern let mpd_traphandler: fn(mpd_context*);
 ```
 
 #### Asm

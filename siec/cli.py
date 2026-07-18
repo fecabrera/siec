@@ -120,7 +120,8 @@ def main() -> int:
     # the program's argv is the source path plus the arguments after --run
     if opts.run is not None:
         try:
-            return run_jit(module, [str(sources[0]), *opts.run], objects)
+            return run_jit(module, [str(sources[0]), *opts.run], objects,
+                           opts.libs, opts.lib_dirs)
         except NameError as error:
             print(format_error(str(sources[0]), error), file=sys.stderr)
             return 1

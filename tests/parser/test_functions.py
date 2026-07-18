@@ -2,10 +2,35 @@
 
 import pytest
 
-from siec.ast import Include, IntLiteral, Param, Program, Return
+from siec.ast import Global, Include, IntLiteral, Param, Program, Return
 from siec.lexer import lex
 from siec.parser import parse
-from siec.parser.functions import parse_function, parse_program
+from siec.parser.functions import parse_function, parse_global, parse_program
+
+
+def test_extern_let_parses_to_a_global(ts):
+    """
+    '@extern let name: T;' parses to a Global with its declared type.
+    """
+    assert parse_global(ts("@extern let environ: char**;")) == Global(
+        "environ", "char**")
+
+
+def test_extern_let_rejects_an_initializer(ts):
+    """
+    An extern global's storage lives elsewhere; '= v' is an error.
+    """
+    with pytest.raises(SyntaxError, match="cannot have an initializer"):
+        parse_global(ts("@extern let x: i64 = 5;"))
+
+
+def test_program_collects_globals(ts):
+    """
+    parse_program routes '@extern let' to globals, '@extern fn' to functions.
+    """
+    program = parse_program(ts("@extern let x: i64; @extern fn f();"))
+    assert program.globals == [Global("x", "i64")]
+    assert [fn.name for fn in program.functions] == ["f"]
 
 
 def test_function_without_params_or_return_type(ts):

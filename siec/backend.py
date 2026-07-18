@@ -2,6 +2,8 @@
 
 import ctypes
 import subprocess
+import sys
+from pathlib import Path
 
 from llvmlite import binding, ir
 
@@ -43,14 +45,40 @@ def emit_assembly(module: ir.Module) -> str:
     return target_machine.emit_assembly(llvm_module)
 
 
-def run_jit(module: ir.Module, argv: list[str], objects: list[str] = ()) -> int:
+def load_library(name: str, lib_dirs: list[str]) -> None:
+    """
+    Load a '-l' library into the process so the JIT can resolve its symbols,
+    searching the '-L' directories first and the system's paths after.
+    """
+    extension = "dylib" if sys.platform == "darwin" else "so"
+    filename = f"lib{name}.{extension}"
+
+    # a candidate from a '-L' directory must exist; the bare filename is
+    # left for the dynamic loader to search its default paths
+    candidates = [str(path) for d in lib_dirs if (path := Path(d) / filename).is_file()]
+
+    for candidate in [*candidates, filename]:
+        try:
+            binding.load_library_permanently(candidate)
+            return
+        except RuntimeError:
+            continue
+
+    raise NameError(f"cannot load library {name!r}")
+
+
+def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
+            libs: list[str] = (), lib_dirs: list[str] = ()) -> int:
     """
     JIT-compile a module in-process and run its main, returning its exit code.
 
-    Extra object files are loaded into the engine, their symbols resolvable
-    from the program like any linked code.
+    Extra object files are loaded into the engine, and '-l' libraries into
+    the process, their symbols resolvable from the program like any linked code.
     """
     target_machine, llvm_module = prepare_module(module)
+
+    for name in libs:
+        load_library(name, lib_dirs)
 
     with binding.create_mcjit_compiler(llvm_module, target_machine) as engine:
         for path in objects:
