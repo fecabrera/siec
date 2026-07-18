@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from .ast import Program
-from .lexer import lex
-from .parser import parse
+from siec.ast import Program
+from siec.lexer import lex
+from siec.parser import parse
 
 
 def resolve_include(path: str, includer_dir: Path, include_paths: list[Path]) -> Path:

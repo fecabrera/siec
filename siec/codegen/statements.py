@@ -2,7 +2,7 @@
 
 from llvmlite import ir
 
-from ..ast import (
+from siec.ast import (
     Assign,
     Block,
     Emit,
@@ -17,8 +17,8 @@ from ..ast import (
     Return,
     While,
 )
-from .errors import source_location
-from .expressions import (
+from siec.codegen.errors import source_location
+from siec.codegen.expressions import (
     emit_bool,
     emit_coerced,
     emit_expression,
@@ -26,8 +26,8 @@ from .expressions import (
     expr_sie_type,
     member_field,
 )
-from .generator import CodeGenerator, Variable, entry_alloca
-from .types import resolve_type, sized_array
+from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
+from siec.codegen.types import resolve_type, sized_array
 
 
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:

@@ -21,8 +21,8 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
-from .generator import CodeGenerator, StructInfo, entry_alloca
-from .types import (
+from siec.codegen.generator import CodeGenerator, StructInfo, entry_alloca
+from siec.codegen.types import (
     fn_type_parts,
     is_array_struct,
     resolve_type,
@@ -727,7 +727,7 @@ def emit_block_expr(gen: CodeGenerator, builder: ir.IRBuilder, expr: BlockExpr,
     an 'emit' inside stores the block's value and jumps past it.
     """
     # deferred import: statements and expressions are mutually recursive
-    from .statements import emit_block
+    from siec.codegen.statements import emit_block
 
     if expected_type is None or isinstance(expected_type, ir.VoidType):
         raise TypeError("block expression needs a typed context to take its value from")

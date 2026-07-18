@@ -6,9 +6,9 @@ import re
 import sys
 from pathlib import Path
 
-from .backend import compile_to_object, emit_assembly, link, run_jit
-from .codegen import codegen
-from .loader import load_program
+from siec.backend import compile_to_object, emit_assembly, link, run_jit
+from siec.codegen import codegen
+from siec.loader import load_program
 
 
 def display_path(path: str) -> str:

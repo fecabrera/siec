@@ -1,8 +1,8 @@
 """Parsing of struct declarations."""
 
-from ..ast import Field, Struct
-from .stream import TokenStream
-from .types import parse_type
+from siec.ast import Field, Struct
+from siec.parser.stream import TokenStream
+from siec.parser.types import parse_type
 
 
 def parse_struct(ts: TokenStream) -> Struct:

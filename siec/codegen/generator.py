@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from llvmlite import ir
 
-from ..ast import Field, Program
+from siec.ast import Field, Program
 
 
 def entry_alloca(builder: ir.IRBuilder, type_: ir.Type, name: str) -> ir.Instruction:
@@ -86,8 +86,8 @@ def codegen(program: Program, module_name: str) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
     """
-    from .functions import declare_function, emit_function
-    from .structs import register_structs
+    from siec.codegen.functions import declare_function, emit_function
+    from siec.codegen.structs import register_structs
 
     gen = CodeGenerator(module_name)
 

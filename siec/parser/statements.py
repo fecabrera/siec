@@ -1,6 +1,6 @@
 """Parsing of statements."""
 
-from ..ast import (
+from siec.ast import (
     Assign,
     BinaryOp,
     Block,
@@ -17,9 +17,9 @@ from ..ast import (
     Var,
     While,
 )
-from .expressions import parse_expression
-from .stream import TokenStream
-from .types import parse_type
+from siec.parser.expressions import parse_expression
+from siec.parser.stream import TokenStream
+from siec.parser.types import parse_type
 
 COMPOUND = {"+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "&=", "|=", "^="}
 

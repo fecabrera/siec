@@ -6,8 +6,8 @@ Usage:
     python3 -m siec main.sie [-o main]
 """
 
-from .codegen import codegen
-from .lexer import lex
-from .parser import parse
+from siec.codegen import codegen
+from siec.lexer import lex
+from siec.parser import parse
 
 __all__ = ["lex", "parse", "codegen"]

@@ -5,8 +5,8 @@ cursor, with a parser that consumes the form and returns its token
 (or None for forms that produce no token).
 """
 
-from .cursor import Cursor
-from .token import ESCAPES, KEYWORDS, Token
+from siec.lexer.cursor import Cursor
+from siec.lexer.token import ESCAPES, KEYWORDS, Token
 
 
 class Rule:

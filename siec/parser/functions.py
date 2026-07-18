@@ -1,11 +1,11 @@
 """Parsing of function declarations, definitions, and whole programs."""
 
-from ..ast import Function, Param, Program
-from .includes import parse_include
-from .statements import parse_block
-from .stream import TokenStream
-from .structs import parse_struct
-from .types import parse_type
+from siec.ast import Function, Param, Program
+from siec.parser.includes import parse_include
+from siec.parser.statements import parse_block
+from siec.parser.stream import TokenStream
+from siec.parser.structs import parse_struct
+from siec.parser.types import parse_type
 
 
 def parse_program(ts: TokenStream) -> Program:

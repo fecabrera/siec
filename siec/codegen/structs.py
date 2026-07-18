@@ -1,9 +1,9 @@
 """Registration of struct declarations as LLVM types."""
 
-from ..ast import Program
-from .errors import source_location
-from .generator import CodeGenerator, StructInfo
-from .types import resolve_type
+from siec.ast import Program
+from siec.codegen.errors import source_location
+from siec.codegen.generator import CodeGenerator, StructInfo
+from siec.codegen.types import resolve_type
 
 
 def register_structs(gen: CodeGenerator, program: Program) -> None:

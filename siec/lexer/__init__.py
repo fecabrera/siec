@@ -5,9 +5,9 @@ state), rules (one class per lexical form, each pairing a validator
 with a parser).
 """
 
-from .cursor import Cursor
-from .rules import RULES
-from .token import Token
+from siec.lexer.cursor import Cursor
+from siec.lexer.rules import RULES
+from siec.lexer.token import Token
 
 
 def lex(source: str) -> list[Token]:

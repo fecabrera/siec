@@ -1,7 +1,7 @@
 """Parsing of include directives."""
 
-from ..ast import Include
-from .stream import TokenStream
+from siec.ast import Include
+from siec.parser.stream import TokenStream
 
 
 def parse_include(ts: TokenStream) -> Include:

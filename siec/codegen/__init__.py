@@ -6,7 +6,7 @@ emission), statements (statements and control flow), expressions
 entry point).
 """
 
-from .generator import CodeGenerator, codegen
-from .types import SCALAR_TYPES, resolve_type
+from siec.codegen.generator import CodeGenerator, codegen
+from siec.codegen.types import SCALAR_TYPES, resolve_type
 
 __all__ = ["CodeGenerator", "codegen", "SCALAR_TYPES", "resolve_type"]

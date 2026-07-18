@@ -1,6 +1,6 @@
 """Token stream: the shared cursor state for the parser subsystems."""
 
-from ..lexer import Token
+from siec.lexer import Token
 
 
 class TokenStream:

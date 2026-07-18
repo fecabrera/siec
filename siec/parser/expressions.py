@@ -1,6 +1,6 @@
 """Parsing of expressions: literals, variables, and calls."""
 
-from ..ast import (
+from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
     BinaryOp,
@@ -18,8 +18,8 @@ from ..ast import (
     UnaryOp,
     Var,
 )
-from .stream import TokenStream
-from .types import parse_type
+from siec.parser.stream import TokenStream
+from siec.parser.types import parse_type
 
 # binary operators from loosest to tightest; each level folds left-associatively
 LEVELS = [
@@ -132,7 +132,7 @@ def parse_primary(ts: TokenStream) -> Expr:
             return parse_postfix(ts, AggregateLiteral(elements))
 
         # deferred import: statements and expressions are mutually recursive
-        from .statements import parse_statement
+        from siec.parser.statements import parse_statement
 
         body = []
         while ts.peek().syntax != "}":

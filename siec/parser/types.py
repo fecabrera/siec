@@ -1,6 +1,6 @@
 """Parsing of type annotations."""
 
-from .stream import TokenStream
+from siec.parser.stream import TokenStream
 
 
 def parse_type(ts: TokenStream) -> str:

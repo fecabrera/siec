@@ -2,11 +2,11 @@
 
 from llvmlite import ir
 
-from ..ast import Function
-from .errors import source_location
-from .generator import CodeGenerator, Variable
-from .statements import emit_block
-from .types import resolve_type
+from siec.ast import Function
+from siec.codegen.errors import source_location
+from siec.codegen.generator import CodeGenerator, Variable
+from siec.codegen.statements import emit_block
+from siec.codegen.types import resolve_type
 
 
 def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:

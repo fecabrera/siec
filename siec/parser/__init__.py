@@ -5,10 +5,10 @@ expressions, statements, functions (declarations, definitions,
 and whole programs).
 """
 
-from ..lexer import Token
-from ..ast import Program
-from .functions import parse_function, parse_program
-from .stream import TokenStream
+from siec.lexer import Token
+from siec.ast import Program
+from siec.parser.functions import parse_function, parse_program
+from siec.parser.stream import TokenStream
 
 
 def parse(tokens: list[Token]) -> Program:
