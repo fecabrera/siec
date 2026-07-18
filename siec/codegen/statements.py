@@ -24,6 +24,7 @@ from siec.codegen.expressions import (
     emit_expression,
     emit_lvalue,
     expr_sie_type,
+    infer_type,
     member_field,
 )
 from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
@@ -53,18 +54,26 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     Emit a single statement into the builder's current block.
     """
     if isinstance(stmt, Let):
+        # an unannotated 'let' takes its type from its initializer
+        type_name = stmt.type
+        if type_name is None:
+            type_name = infer_type(gen, stmt.value, scope)
+            if type_name is None:
+                raise TypeError(f"cannot infer a type for {stmt.name!r}: "
+                                "annotate it explicitly")
+
         # a sized array 'X[N]' declares an 'X[]' backed by N stack elements
-        if (sized := sized_array(stmt.type)) is not None:
+        if (sized := sized_array(type_name)) is not None:
             emit_sized_array_let(gen, builder, stmt, sized, scope)
             return
 
         # reserve a stack slot for the variable and initialize it if a value was given,
         # widening the initializer to the declared type when allowed
-        var_type = resolve_type(stmt.type, gen.structs)
-        scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), stmt.type)
+        var_type = resolve_type(type_name, gen.structs)
+        scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), type_name)
 
         if stmt.value is not None:
-            builder.store(emit_coerced(gen, builder, stmt.value, stmt.type, scope),
+            builder.store(emit_coerced(gen, builder, stmt.value, type_name, scope),
                           scope[stmt.name].slot)
     elif isinstance(stmt, Assign):
         # store the value into the variable's existing stack slot, typed by the slot

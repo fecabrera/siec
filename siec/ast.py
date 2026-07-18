@@ -166,9 +166,10 @@ class Return:
 class Let:
     """
     A variable declaration with its type and an optional initializer.
+    The type may be omitted (None) when an initializer infers it.
     """
     name: str
-    type: str
+    type: str | None
     value: Expr | None
     line: int = _line()
 

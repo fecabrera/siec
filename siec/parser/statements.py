@@ -103,19 +103,26 @@ def parse_statement(ts: TokenStream):
     if tok.syntax == "{":
         return Block(parse_block(ts), line=line)
 
-    # 'let name: type' with an optional '= <expr>' initializer
+    # 'let name: type' with an optional '= <expr>' initializer; the type
+    # may be omitted when an initializer follows to infer it from
     if tok.kind == "kw" and tok.value == "let":
         ts.next()
 
         name = ts.expect("ident").value
-        ts.expect("sym", ":")
 
-        var_type = parse_type(ts)
+        var_type = None
+        if ts.peek().syntax == ":":
+            ts.next()
+            var_type = parse_type(ts)
 
         value = None
         if ts.peek().syntax == "=":
             ts.next()
             value = parse_expression(ts)
+
+        if var_type is None and value is None:
+            raise SyntaxError(f"line {line}: 'let {name}' needs a type or an "
+                              "initializer to infer it from")
 
         ts.expect("sym", ";")
         return Let(name, var_type, value, line=line)

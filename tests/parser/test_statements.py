@@ -80,6 +80,21 @@ def test_let_with_pointer_type(ts):
     assert parse_statement(ts('let msg: char* = "hi";')) is not None
 
 
+def test_let_without_annotation(ts):
+    """
+    'let name = expr;' parses to a Let with no type, inferred later.
+    """
+    assert parse_statement(ts("let num = 4;")) == Let("num", None, IntLiteral(4))
+
+
+def test_let_needs_a_type_or_an_initializer(ts):
+    """
+    A bare 'let name;' has nothing to infer a type from and is rejected.
+    """
+    with pytest.raises(SyntaxError, match="needs a type or an initializer"):
+        parse_statement(ts("let num;"))
+
+
 def test_return_with_value(ts):
     """
     'return expr;' parses the value expression.

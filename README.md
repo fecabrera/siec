@@ -94,6 +94,18 @@ They can be initialized by adding `= <expr>` after their declaration.
 let v: T = <expr>; // v is a scalar that holds the value <expr>
 ```
 
+When an initializer is given, the type annotation can be omitted and the variable adopts the initializer's type:
+
+```
+fn f() -> T;
+
+let a = f(); // a has an implicit `: T`
+```
+
+Inference follows the value: variables, calls, casts, fields, and elements carry their declared types; comparisons yield a `bool`; and bare literals take their usual defaults (`i32`, `f64`, `char*`). An initializer with no fixed type of its own, like an array literal, still needs the annotation.
+
+A declaration with neither a type nor an initializer has nothing to size the variable by and is rejected.
+
 Their value can be assigned at runtime through the operator `=`:
 
 ```

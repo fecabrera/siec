@@ -269,6 +269,50 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     return None
 
 
+COMPARISONS = {"<", ">", "<=", ">=", "==", "!="}
+
+
+def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
+    """
+    Infer the Sie type an unannotated 'let' adopts from its initializer;
+    None when the expression doesn't pin one down.
+    """
+    # named values, calls, casts, members, and the rest carry declared types
+    declared = expr_sie_type(gen, expr, scope)
+    if declared is not None:
+        return declared
+
+    # literals default like they do in any untyped context
+    if isinstance(expr, IntLiteral):
+        return "i32"
+
+    if isinstance(expr, FloatLiteral):
+        return "f64"
+
+    if isinstance(expr, StrLiteral):
+        return "char*"
+
+    if isinstance(expr, BoolLiteral):
+        return "bool"
+
+    # 'not' yields a bool; '-' and '~' keep their operand's type
+    if isinstance(expr, UnaryOp):
+        return "bool" if expr.op == "not" else infer_type(gen, expr.operand, scope)
+
+    if isinstance(expr, BinaryOp):
+        if expr.op in ("and", "or") or expr.op in COMPARISONS:
+            return "bool"
+
+        # arithmetic keeps its operands' type; a declared operand wins, so a
+        # literal beside it adapts as in any typed context
+        return (expr_sie_type(gen, expr.left, scope)
+                or expr_sie_type(gen, expr.right, scope)
+                or infer_type(gen, expr.left, scope)
+                or infer_type(gen, expr.right, scope))
+
+    return None
+
+
 def signedness(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     Infer the signedness of an expression; None when it has no fixed one.
