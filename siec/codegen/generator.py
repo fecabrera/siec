@@ -39,10 +39,12 @@ class Variable:
 @dataclass
 class StructInfo:
     """
-    A registered struct: its LLVM type plus its ordered fields, for member lookup.
+    A registered struct: its LLVM type plus its ordered fields, for member
+    lookup, and the '@align(N)' its allocations must honor, if any.
     """
     type: ir.Type
     fields: list[Field]
+    align: int | None = None
 
     def field(self, name: str) -> tuple[int, str]:
         """
@@ -122,6 +124,17 @@ class CodeGenerator:
         when it has one, the public name otherwise.
         """
         return self.statics.get((self.current_file, name), name)
+
+    def struct_align(self, type_name: str | None) -> int | None:
+        """
+        The '@align(N)' a type's allocations must honor; None for types
+        without one.
+        """
+        if type_name is None:
+            return None
+
+        info = self.structs.get(type_name.removeprefix("const "))
+        return info.align if info is not None else None
 
 
 def codegen(program: Program, module_name: str) -> ir.Module:

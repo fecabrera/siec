@@ -329,10 +329,14 @@ class Field:
 @dataclass
 class Struct:
     """
-    A struct declaration with its name and ordered fields.
+    A struct declaration with its name, ordered fields, and layout
+    decorators: '@packed' drops the padding between fields, and
+    '@align(N)' aligns every allocation of the struct to N bytes.
     """
     name: str
     fields: list[Field] | None  # None for forward declarations without a body
+    packed: bool = False
+    align: int | None = None
     line: int = _line()
     file: str = _file()
 

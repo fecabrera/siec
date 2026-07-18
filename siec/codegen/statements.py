@@ -113,7 +113,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         # reserve a stack slot for the variable and initialize it if a value was given,
         # widening the initializer to the declared type when allowed
         var_type = resolve_type(type_name, gen.structs)
-        scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), type_name)
+        slot = entry_alloca(builder, var_type, stmt.name)
+
+        # an '@align(N)' struct's slot honors the declared alignment
+        if (align := gen.struct_align(type_name)) is not None:
+            slot.align = align
+
+        scope[stmt.name] = Variable(slot, type_name)
 
         if stmt.value is not None:
             builder.store(emit_coerced(gen, builder, stmt.value, type_name, scope),

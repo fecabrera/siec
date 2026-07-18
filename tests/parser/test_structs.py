@@ -69,3 +69,43 @@ def test_struct_trailing_semicolon_is_optional(ts):
     stream = ts("struct S { x: i32; } next")
     assert parse_struct(stream) == Struct("S", [Field("x", "i32")])
     assert stream.peek().value == "next"
+
+
+def test_packed_decorator(ts):
+    """
+    '@packed struct' marks the struct padding-free.
+    """
+    assert parse_struct(ts("@packed struct S { x: i32; }")).packed
+
+
+def test_align_decorator(ts):
+    """
+    '@align(N)' records the allocation alignment, hex included.
+    """
+    assert parse_struct(ts("@align(16) struct S { x: i32; }")).align == 16
+    assert parse_struct(ts("@align(0x40) struct S { x: i32; }")).align == 64
+
+
+def test_struct_decorators_stack(ts):
+    """
+    '@packed @align(N)' applies both, in either order.
+    """
+    struct = parse_struct(ts("@align(8) @packed struct S { x: i32; }"))
+    assert struct.packed
+    assert struct.align == 8
+
+
+def test_alignment_must_be_a_power_of_two(ts):
+    """
+    LLVM alignments are powers of two; anything else is rejected.
+    """
+    with pytest.raises(SyntaxError, match="power of two, not 6"):
+        parse_struct(ts("@align(6) struct S { x: i32; }"))
+
+
+def test_unknown_struct_decorator_is_an_error(ts):
+    """
+    A struct decorator other than '@packed' or '@align' is rejected.
+    """
+    with pytest.raises(SyntaxError, match="unknown struct decorator '@both'"):
+        parse_struct(ts("@both struct S { x: i32; }"))

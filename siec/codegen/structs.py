@@ -20,12 +20,19 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
 
             if info is None:
                 ident = gen.module.context.get_identified_type(struct.name)
-                gen.structs[struct.name] = StructInfo(ident, struct.fields)
+                gen.structs[struct.name] = info = StructInfo(ident, struct.fields)
             elif struct.fields is not None:
                 if info.fields is not None:
                     raise TypeError(f"struct {struct.name!r} is declared more than once")
 
                 info.fields = struct.fields
+
+            # layout decorators apply from whichever declaration carries them
+            if struct.packed:
+                info.type.packed = True
+
+            if struct.align is not None:
+                info.align = struct.align
 
     # then set each body from the now-resolvable field types; a struct
     # never given a body stays opaque, usable only through a pointer

@@ -956,6 +956,19 @@ let b: S = {b = 2, a = 1};  // named: any order
 let c: S = {a = 1};         // named: b starts at zero
 ```
 
+A struct's layout can be directed with decorators, stacking in any order. `@packed` drops the padding between fields, C's `__attribute__((packed))`; `@align(N)` aligns every allocation of the struct — locals, parameters, and globals — to N bytes, which must be a power of two.
+
+```
+@packed struct Header {
+    tag: u8;
+    size: u32;   // at offset 1, no padding
+}
+
+@align(64) struct CacheLine {
+    hot: i64;    // allocations start on a cache line
+}
+```
+
 Structs can be forward-declared: declared with no body at all. This is mainly useful for opaque structs, whose fields are never given and which are only ever handled through a pointer.
 
 ```

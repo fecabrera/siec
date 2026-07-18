@@ -34,7 +34,8 @@ def parse_program(ts: TokenStream) -> Program:
         elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static")
               and ts.peek(2).value == "let"):
             globals_.append(parse_global(ts))
-        elif ts.peek().value == "struct":
+        elif ts.peek().value == "struct" or (
+                ts.peek().value == "@" and ts.peek(1).value in ("packed", "align")):
             structs.append(parse_struct(ts))
         elif ts.peek().value == "enum":
             enums.append(parse_enum(ts))

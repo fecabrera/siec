@@ -1,6 +1,7 @@
 """Parsing of struct declarations."""
 
 from siec.ast import Field, Struct
+from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
@@ -9,8 +10,32 @@ def parse_struct(ts: TokenStream) -> Struct:
     """
     Parse a struct declaration: 'struct Name { a: A; b: B; }', with an optional
     trailing ';', or a bodiless forward declaration 'struct Name;'.
+
+    '@packed' and '@align(N)' decorators may precede the keyword, in any order.
     """
     line = ts.peek().line
+
+    packed = False
+    align = None
+    while ts.peek().value == "@":
+        at_line = ts.peek().line
+        ts.next()
+        decorator = ts.expect("ident").value
+
+        if decorator == "packed":
+            packed = True
+        elif decorator == "align":
+            ts.expect("sym", "(")
+            align = int_value(ts.expect("int").value)
+            ts.expect("sym", ")")
+
+            if align == 0 or align & (align - 1):
+                raise SyntaxError(f"line {at_line}: alignment must be a "
+                                  f"power of two, not {align}")
+        else:
+            raise SyntaxError(f"line {at_line}: unknown struct decorator "
+                              f"'@{decorator}'")
+
     ts.expect("kw", "struct")
     name = ts.expect("ident").value
 
@@ -18,7 +43,7 @@ def parse_struct(ts: TokenStream) -> Struct:
     # to a later definition — or to none, for an opaque struct
     if ts.peek().value == ";":
         ts.next()
-        return Struct(name, None, line=line)
+        return Struct(name, None, packed, align, line=line)
 
     ts.expect("sym", "{")
 
@@ -36,4 +61,4 @@ def parse_struct(ts: TokenStream) -> Struct:
     if ts.peek().value == ";":
         ts.next()
 
-    return Struct(name, fields, line=line)
+    return Struct(name, fields, packed, align, line=line)

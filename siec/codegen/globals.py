@@ -43,6 +43,10 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
             var = ir.GlobalVariable(gen.module, resolve_type(glob.type, gen.structs),
                                     name=symbol)
 
+            # an '@align(N)' struct's storage honors the declared alignment
+            if (align := gen.struct_align(glob.type)) is not None:
+                var.align = align
+
             if glob.is_static:
                 var.linkage = "internal"
                 var.initializer = global_initializer(gen, glob, symbol)

@@ -124,9 +124,14 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                     scope[param.name] = Variable(arg, param.type)
                     continue
 
-                scope[param.name] = Variable(
-                    builder.alloca(arg.type, name=f"{param.name}.addr"), param.type)
-                builder.store(arg, scope[param.name].slot)
+                slot = builder.alloca(arg.type, name=f"{param.name}.addr")
+
+                # an '@align(N)' struct's slot honors the declared alignment
+                if (align := gen.struct_align(param.type)) is not None:
+                    slot.align = align
+
+                scope[param.name] = Variable(slot, param.type)
+                builder.store(arg, slot)
 
         # emit the body statements starting from the entry block
         emit_block(gen, builder, fn.body, scope)
