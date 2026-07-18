@@ -39,6 +39,22 @@ def test_integer_literals():
     assert kinds("0 42 1234") == [("int", "0"), ("int", "42"), ("int", "1234")]
 
 
+def test_float_literals():
+    """
+    Digits with a '.digits' fraction lex as one float token.
+    """
+    assert kinds("1.5 0.25 3.14159") == [
+        ("float", "1.5"), ("float", "0.25"), ("float", "3.14159")]
+
+
+def test_dot_without_digits_stays_a_member_access(ts=None):
+    """
+    A '.' not followed by a digit leaves the int alone: 'a.b' member syntax.
+    """
+    assert kinds("1.x 5.") == [
+        ("int", "1"), ("sym", "."), ("ident", "x"), ("int", "5"), ("sym", ".")]
+
+
 def test_single_character_symbols():
     """
     Each supported single-character symbol lexes as its own sym token.

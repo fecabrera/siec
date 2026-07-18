@@ -12,6 +12,7 @@ from siec.ast import (
     Cast,
     Expr,
     Field,
+    FloatLiteral,
     Index,
     IntLiteral,
     Member,
@@ -21,13 +22,28 @@ from siec.ast import (
     Var,
 )
 from .generator import CodeGenerator, StructInfo, entry_alloca
-from .types import fn_type_parts, is_array_struct, resolve_type, type_signedness
+from .types import (
+    fn_type_parts,
+    is_array_struct,
+    resolve_type,
+    sized_array,
+    type_signedness,
+)
 
 # arithmetic and bitwise operators and the IRBuilder method emitting each;
-# division, remainder, and right shift change instruction on unsigned operands
+# division, remainder, and right shift change instruction on unsigned
+# operands, and arithmetic changes wholesale on floats
 ARITHMETIC = {"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem",
               "<<": "shl", ">>": "ashr", "&": "and_", "|": "or_", "^": "xor"}
 UNSIGNED_ARITHMETIC = {"/": "udiv", "%": "urem", ">>": "lshr"}
+FLOAT_ARITHMETIC = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv", "%": "frem"}
+
+
+def is_float(type_: ir.Type) -> bool:
+    """
+    Whether an LLVM type is a floating-point scalar.
+    """
+    return isinstance(type_, (ir.FloatType, ir.DoubleType))
 
 
 def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
@@ -37,9 +53,18 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     """
     # dispatch on the node type; each branch returns an LLVM value
     if isinstance(expr, IntLiteral):
-        # integer literals take the type of their context, defaulting to i32
+        # integer literals take the type of their context, defaulting to
+        # i32; a float context adopts them like C's promotions do
+        if is_float(expected_type):
+            return ir.Constant(expected_type, float(expr.value))
+
         int_type = expected_type if isinstance(expected_type, ir.IntType) else ir.IntType(32)
         return ir.Constant(int_type, expr.value)
+
+    if isinstance(expr, FloatLiteral):
+        # float literals take the float type of their context, defaulting to f64
+        float_type = expected_type if is_float(expected_type) else ir.DoubleType()
+        return ir.Constant(float_type, expr.value)
 
     if isinstance(expr, StrLiteral):
         ptr = emit_string(gen, builder, expr.value)
@@ -117,10 +142,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, UnaryOp):
         # unary minus negates in the context type; '~' flips bits; 'not' inverts a bool
         if expr.op == "-":
-            return builder.neg(emit_expression(gen, builder, expr.operand, expected_type, scope))
+            value = emit_expression(gen, builder, expr.operand, expected_type, scope)
+            return builder.fneg(value) if is_float(value.type) else builder.neg(value)
 
         if expr.op == "~":
-            return builder.not_(emit_expression(gen, builder, expr.operand, expected_type, scope))
+            value = emit_expression(gen, builder, expr.operand, expected_type, scope)
+            if is_float(value.type):
+                raise TypeError("cannot apply '~' to a float operand")
+
+            return builder.not_(value)
 
         if expr.op == "not":
             return builder.not_(emit_bool(gen, builder, expr.operand, scope))
@@ -141,9 +171,16 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             left = emit_expression(gen, builder, expr.left, expected_type, scope)
             right = emit_expression(gen, builder, expr.right, left.type, scope)
 
+            # float operands take the float instructions; bitwise has none
+            if is_float(left.type):
+                if expr.op not in FLOAT_ARITHMETIC:
+                    raise TypeError(f"cannot apply {expr.op!r} to float operands")
+
+                return getattr(builder, FLOAT_ARITHMETIC[expr.op])(left, right)
+
             method = UNSIGNED_ARITHMETIC[expr.op] if (
                 unsigned and expr.op in UNSIGNED_ARITHMETIC) else ARITHMETIC[expr.op]
-            
+
             return getattr(builder, method)(left, right)
 
         if expr.op == "**":
@@ -152,6 +189,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # comparisons: type the right side by the left, yield an i1
         left = emit_expression(gen, builder, expr.left, None, scope)
         right = emit_expression(gen, builder, expr.right, left.type, scope)
+
+        if is_float(left.type):
+            return builder.fcmp_ordered(expr.op, left, right)
 
         compare = builder.icmp_unsigned if unsigned else builder.icmp_signed
         return compare(expr.op, left, right)
@@ -297,6 +337,21 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
                 and expr_sie_type(gen, expr.operand, scope) == "opaque*"):
             return builder.bitcast(value, target_type)
 
+        # 'i8[]'/'u8[]' and 'char[]' cast into each other, the length
+        # adjusting for the null terminator a char[] excludes; the
+        # underlying pointer is assumed null-terminated
+        source_name = expr_sie_type(gen, expr.operand, scope)
+        delta = None
+        if expr.type == "char[]" and source_name in ("i8[]", "u8[]"):
+            delta = -1
+        elif expr.type in ("i8[]", "u8[]") and source_name == "char[]":
+            delta = 1
+
+        if delta is not None:
+            length = builder.extract_value(value, 1, name="cast.len")
+            adjusted = builder.add(length, ir.Constant(ir.IntType(64), delta))
+            return builder.insert_value(value, adjusted, 1)
+
         raise TypeError(f"cannot cast to non-numeric type {expr.type!r}")
 
     value = emit_expression(gen, builder, expr.operand, None, scope)
@@ -431,6 +486,10 @@ def type_info(gen: CodeGenerator, type_name: str | None) -> StructInfo | None:
     """
     Return the fields of a struct or array type name, or None for other types.
     """
+    # a sized 'X[N]' carries the same fields as the 'X[]' it declares
+    if (sized := sized_array(type_name)) is not None:
+        type_name = sized[0]
+
     # an 'X[]' array exposes two synthetic fields: 'data' (X*) and 'length' (u64)
     if type_name and type_name.endswith("[]"):
         element = type_name[:-2]
@@ -510,6 +569,9 @@ def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict
     if isinstance(value.type, ir.PointerType):
         return builder.icmp_unsigned("!=", value, ir.Constant(value.type, None))
 
+    if is_float(value.type):
+        return builder.fcmp_ordered("!=", value, ir.Constant(value.type, 0))
+
     if value.type != ir.IntType(1):
         value = builder.icmp_signed("!=", value, ir.Constant(value.type, 0))
 
@@ -522,6 +584,9 @@ def emit_power(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
     Emit '**' as a multiply loop, since LLVM has no integer power instruction.
     """
     base = emit_expression(gen, builder, expr.left, expected_type, scope)
+    if is_float(base.type):
+        raise TypeError("cannot apply '**' to float operands")
+
     exp = emit_expression(gen, builder, expr.right, base.type, scope)
 
     # the result and the remaining exponent live in slots driven by the loop
@@ -758,13 +823,20 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if len(call.args) > len(param_types) and not func.function_type.var_arg:
         raise TypeError(f"too many arguments to function {call.name!r}")
 
-    # coerce each argument to its parameter's Sie type; vararg extras pass as-is
+    # coerce each argument to its parameter's Sie type; vararg extras pass
+    # as-is, except an f32, which promotes to f64 like C's default promotions
     sie_params = gen.param_types.get(call.name, [])
-    args = [
-        emit_coerced(gen, builder, arg, sie_params[i], scope) if i < len(sie_params)
-        else emit_expression(gen, builder, arg, None, scope)
-        for i, arg in enumerate(call.args)
-    ]
+
+    args = []
+    for i, arg in enumerate(call.args):
+        if i < len(sie_params):
+            args.append(emit_coerced(gen, builder, arg, sie_params[i], scope))
+        else:
+            value = emit_expression(gen, builder, arg, None, scope)
+            if isinstance(value.type, ir.FloatType):
+                value = builder.fpext(value, ir.DoubleType())
+
+            args.append(value)
 
     return builder.call(func, args)
 

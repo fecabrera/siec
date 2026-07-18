@@ -514,6 +514,13 @@ fn f() {
 - Booleans: `bool`.
 - Characters: `char`.
 
+Float literals are written with a `.` between their digits, adopting the float type of their context like integer literals do:
+
+```
+let pi: f64 = 3.14159;
+let half: f32 = 0.5;
+```
+
 Unlike other languages, there's no `void`. For opaque pointers you can use `opaque*`.
 
 Any pointer can be used where an `opaque*` is expected, decaying to it contextually; arrays reach it through their data pointer. The explicit cast is also allowed.
@@ -593,6 +600,12 @@ let arr: i32[];
 
 let ptr: i32* = arr.data;   // the backing pointer
 let n: u64 = arr.length;    // the element count
+```
+
+Declaring an array with a size `X[N]` backs it with `N` automatically allocated stack elements: its data points at them and its length starts at `N`. Since the contents come from the size, a sized declaration takes no initializer.
+
+```
+let buf: u8[64]; // buf.data -> 64 stack bytes, buf.length == 64
 ```
 
 An array can be indexed directly, reading or writing the `i`th element through its backing data:

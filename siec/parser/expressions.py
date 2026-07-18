@@ -1,7 +1,23 @@
 """Parsing of expressions: literals, variables, and calls."""
 
-from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BlockExpr, BoolLiteral, Call,
-                   Cast, Expr, Index, IntLiteral, Member, Slice, StrLiteral, UnaryOp, Var)
+from ..ast import (
+    AggregateLiteral,
+    ArrayLiteral,
+    BinaryOp,
+    BlockExpr,
+    BoolLiteral,
+    Call,
+    Cast,
+    Expr,
+    FloatLiteral,
+    Index,
+    IntLiteral,
+    Member,
+    Slice,
+    StrLiteral,
+    UnaryOp,
+    Var,
+)
 from .stream import TokenStream
 from .types import parse_type
 
@@ -77,9 +93,12 @@ def parse_primary(ts: TokenStream) -> Expr:
 
     # prefix '-', '~', and 'not' bind tighter than any binary operator
     if tok.syntax == "-":
-        # fold '-' over an int literal into a negative constant, keeping it instruction-free
+        # fold '-' over a numeric literal into a negative constant, keeping it instruction-free
         if ts.peek().kind == "int":
             return IntLiteral(-int(ts.next().value))
+
+        if ts.peek().kind == "float":
+            return FloatLiteral(-float(ts.next().value))
 
         return UnaryOp("-", parse_primary(ts))
 
@@ -136,6 +155,9 @@ def parse_primary(ts: TokenStream) -> Expr:
 
     if tok.kind == "int":
         return IntLiteral(int(tok.value))
+
+    if tok.kind == "float":
+        return FloatLiteral(float(tok.value))
 
     if tok.kind == "str":
         return parse_postfix(ts, StrLiteral(tok.value))

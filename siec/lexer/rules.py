@@ -216,7 +216,8 @@ class StringRule(Rule):
 
 class IntRule(Rule):
     """
-    Integer literals: a run of digits.
+    Numeric literals: a run of digits, continuing into a float at a '.'
+    followed by more digits.
     """
 
     def validate(self, cursor: Cursor) -> bool:
@@ -227,9 +228,18 @@ class IntRule(Rule):
 
     def parse(self, cursor: Cursor) -> Token:
         """
-        Consume the run of digits.
+        Consume the digits, and a '.digits' fraction when one follows.
         """
-        return Token("int", cursor.take_while(str.isdigit), cursor.line)
+        whole = cursor.take_while(str.isdigit)
+
+        # a lone '.' stays a member access ('1.x' is invalid anyway);
+        # only '.<digit>' continues the number
+        src, pos = cursor.source, cursor.pos
+        if src.startswith(".", pos) and src[pos + 1:pos + 2].isdigit():
+            cursor.advance()
+            return Token("float", f"{whole}.{cursor.take_while(str.isdigit)}", cursor.line)
+
+        return Token("int", whole, cursor.line)
 
 
 class WordRule(Rule):

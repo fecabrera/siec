@@ -12,6 +12,14 @@ class IntLiteral:
 
 
 @dataclass
+class FloatLiteral:
+    """
+    A floating-point literal expression.
+    """
+    value: float
+
+
+@dataclass
 class StrLiteral:
     """
     A string literal expression.
@@ -125,8 +133,8 @@ class BinaryOp:
     right: "Expr"
 
 
-Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | BlockExpr | ArrayLiteral
-        | Var | Call | Index | Slice | Member | Cast | UnaryOp | BinaryOp)
+Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | AggregateLiteral | BlockExpr
+        | ArrayLiteral | Var | Call | Index | Slice | Member | Cast | UnaryOp | BinaryOp)
 
 
 def _line():

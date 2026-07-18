@@ -27,7 +27,7 @@ from .expressions import (
     member_field,
 )
 from .generator import CodeGenerator, Variable, entry_alloca
-from .types import resolve_type
+from .types import resolve_type, sized_array
 
 
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
@@ -53,6 +53,11 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     Emit a single statement into the builder's current block.
     """
     if isinstance(stmt, Let):
+        # a sized array 'X[N]' declares an 'X[]' backed by N stack elements
+        if (sized := sized_array(stmt.type)) is not None:
+            emit_sized_array_let(gen, builder, stmt, sized, scope)
+            return
+
         # reserve a stack slot for the variable and initialize it if a value was given,
         # widening the initializer to the declared type when allowed
         var_type = resolve_type(stmt.type, gen.structs)
@@ -127,6 +132,32 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_expression(gen, builder, stmt.expr, None, scope)
     else:
         raise TypeError(f"cannot generate code for statement {stmt!r}")
+
+
+def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
+                         sized: tuple[str, int], scope: dict) -> None:
+    """
+    Declare a sized array 'let a: X[N];': an 'X[]' whose data points at N
+    automatically allocated stack elements and whose length starts at N.
+    """
+    if stmt.value is not None:
+        raise TypeError(f"a sized array takes its contents from its size; "
+                        f"initialize an {sized[0]!r} instead")
+
+    sie_type, size = sized
+    var_type = resolve_type(sie_type, gen.structs)
+
+    backing = entry_alloca(builder, ir.ArrayType(var_type.elements[0].pointee, size),
+                           f"{stmt.name}.backing")
+    data = builder.gep(backing, [ir.Constant(ir.IntType(32), 0),
+                                 ir.Constant(ir.IntType(32), 0)], name=f"{stmt.name}.data")
+
+    value = ir.Constant(var_type, ir.Undefined)
+    value = builder.insert_value(value, data, 0)
+    value = builder.insert_value(value, ir.Constant(ir.IntType(64), size), 1)
+
+    scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), sie_type)
+    builder.store(value, scope[stmt.name].slot)
 
 
 def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: dict) -> None:

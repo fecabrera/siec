@@ -22,6 +22,21 @@ SIGNED_TYPES = {"i8", "i16", "i32", "i64"}
 UNSIGNED_TYPES = {"u8", "u16", "u32", "u64"}
 
 
+def sized_array(name: str | None) -> tuple[str, int] | None:
+    """
+    Split a sized array name 'X[N]' into its unsized form 'X[]' and N,
+    or None for any other type name.
+    """
+    if name is None or not name.endswith("]") or name.endswith("[]"):
+        return None
+
+    base, _, size = name.rpartition("[")
+    if not size[:-1].isdigit():
+        return None
+
+    return f"{base}[]", int(size[:-1])
+
+
 def type_signedness(name: str | None) -> str | None:
     """
     Classify a Sie type name as 'signed' or 'unsigned'; None for the rest.
@@ -98,6 +113,11 @@ def resolve_type(name: str | None, structs: dict | None = None,
     """
     if name is None:
         return ir.VoidType()
+
+    # a sized array 'X[N]' is the same fat value as 'X[]'; the size only
+    # directs the automatic backing a declaration allocates
+    if (sized := sized_array(name)) is not None:
+        return resolve_type(sized[0], structs, allow_opaque)
 
     # a function reference type resolves to a pointer to the function's signature
     if name.startswith("fn("):

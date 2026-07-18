@@ -1,5 +1,7 @@
 """Feature tests for arrays: the fat {data, length} representation."""
 
+import pytest
+
 
 def test_length_written_and_read(run):
     """
@@ -118,6 +120,59 @@ def test_array_literal_of_string_pointers(run):
         let cmds: char*[] = ["ls", "cd", "cp"];
         // 'c' is 99: the second command's first letter
         if (cmds.length == 3 and cmds.data[1][0] == 99) {
+            return 7;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 7
+
+
+def test_sized_array_allocates_its_backing(run):
+    """
+    'let a: X[N];' declares an X[] backed by N stack elements, length N.
+    """
+    source = """
+    fn main() -> i32 {
+        let buf: u8[4];
+
+        if (buf.length != 4) {
+            return 0;
+        }
+
+        buf[0] = 10;
+        buf[3] = 32;
+        return (buf[0] + buf[3]) as i32; // 42
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_sized_array_rejects_an_initializer(compile_source):
+    """
+    A sized array's contents come from its size; an initializer is an error.
+    """
+    source = """
+    fn main() -> i32 {
+        let buf: u8[4] = [1, 2, 3, 4];
+        return 0;
+    }
+    """
+    with pytest.raises(TypeError, match="takes its contents from its size"):
+        compile_source(source)
+
+
+def test_char_array_casts_adjust_the_length(run):
+    """
+    'char[] as u8[]' includes the null in the length; casting back excludes it.
+    """
+    source = """
+    fn main() -> i32 {
+        let msg: char[] = "hello";
+        let raw: u8[] = msg as u8[];
+        let back: char[] = raw as char[];
+
+        if (msg.length == 5 and raw.length == 6 and back.length == 5) {
             return 7;
         }
         return 0;
