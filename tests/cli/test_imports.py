@@ -201,3 +201,30 @@ def test_included_names_stay_in_view(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_a_modules_failing_import_names_the_module(tmp_path, monkeypatch, capsys):
+    """
+    When an imported module's own import or include fails, the error
+    blames the module file that wrote it, with its line.
+    """
+    (tmp_path / "mod.sie").write_text("fn helper() { }\nimport nope.missing;\n")
+    src = tmp_path / "main.sie"
+    src.write_text("import mod;\nfn main() -> i32 { return 0; }\n")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "mod.sie at line 2: cannot resolve import 'nope.missing'" in capsys.readouterr().err
+
+
+def test_a_modules_failing_include_names_the_module(tmp_path, monkeypatch, capsys):
+    """
+    A failing '@include' inside an imported module blames that module too.
+    """
+    (tmp_path / "mod.sie").write_text('\n@include("nowhere/gone")\n')
+    src = tmp_path / "main.sie"
+    src.write_text("import mod;\nfn main() -> i32 { return 0; }\n")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "mod.sie at line 2: cannot resolve include 'nowhere/gone'" in capsys.readouterr().err

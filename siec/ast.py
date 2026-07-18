@@ -508,6 +508,7 @@ class Include:
     An '@include' of another source file by its include path (e.g. 'libc/stdio').
     """
     path: str
+    line: int = _line()
 
 
 @dataclass

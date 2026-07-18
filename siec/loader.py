@@ -138,19 +138,30 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         exported[str(file)] = declared(program, with_statics=False)
         declared_names[str(file)] = declared(program, with_statics=True)
 
-        # load includes depth-first so included declarations precede their includers
+        # load includes depth-first so included declarations precede their
+        # includers; a failing one blames the file that wrote it
         for inc in program.includes:
-            target = resolve_include(inc.path, file.parent, include_paths)
+            try:
+                target = resolve_include(inc.path, file.parent, include_paths)
+            except FileNotFoundError:
+                error = FileNotFoundError(f"line {inc.line}: cannot resolve "
+                                          f"include {inc.path!r}")
+                error.sie_file = str(file)
+                raise error from None
+
             load(target)
             include_targets.setdefault(str(file), []).append(str(target.resolve()))
 
-        # load imports and record what each one binds in this file
+        # load imports and record what each one binds in this file; a
+        # failing one blames the file that wrote it
         for imp in program.imports:
             try:
                 target = resolve_module(imp.path, file.parent, include_paths)
-            except FileNotFoundError as error:
+            except FileNotFoundError:
+                error = FileNotFoundError(f"line {imp.line}: cannot resolve "
+                                          f"import {imp.path!r}")
                 error.sie_file = str(file)
-                raise
+                raise error from None
 
             load(target)
             target = str(target.resolve())
