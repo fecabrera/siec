@@ -115,24 +115,41 @@ def test_const_field_cannot_be_assigned(compile_source):
         """)
 
 
-def test_explicit_cast_sheds_the_contract(run):
+def test_const_cannot_be_cast_away(compile_source):
     """
-    's as char*' is the escape hatch back to a mutable pointer.
+    The contract survives casts: 's as char*' on a const pointer is rejected.
+    """
+    with pytest.raises(TypeError, match="cannot cast away 'const'"):
+        compile_source("""
+        fn f(s: const char*) -> char* {
+            return s as char*;
+        }
+        """)
+
+
+def test_const_cannot_launder_through_opaque(compile_source):
+    """
+    Casting a const pointer to 'opaque*' would shed the contract sideways.
+    """
+    with pytest.raises(TypeError, match="cannot cast away 'const'"):
+        compile_source("""
+        fn f(s: const char*) -> opaque* {
+            return s as opaque*;
+        }
+        """)
+
+
+def test_const_scalar_still_casts(run):
+    """
+    A non-aliasing const value casts freely: the result is a fresh copy.
     """
     source = """
-    fn head(s: char*) -> char {
-        return s[0];
-    }
-
-    fn f(s: const char*) -> char {
-        return head(s as char*);
+    fn f(n: const i32) -> u8 {
+        return n as u8;
     }
 
     fn main() -> i32 {
-        if (f("*") == "*"[0]) {
-            return 42;
-        }
-        return 0;
+        return f(42) as i32;
     }
     """
     assert run(source).returncode == 42

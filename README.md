@@ -462,13 +462,13 @@ fn f(a: const A) {
 }
 ```
 
-Since `const` is not part of the type, a `T` passes directly where a `const T` is expected. The reverse never happens implicitly: a `const` pointer or array is never used where a mutable one is expected, and the contract follows the value — through pointer fields read from a `const` struct, through indexing, and through inferred `let`s. Only an explicit cast sheds it:
+Since `const` is not part of the type, a `T` passes directly where a `const T` is expected. The reverse never happens: a `const` pointer or array is never used where a mutable one is expected — not implicitly, and not through a cast. The contract follows the value — through pointer fields read from a `const` struct, through indexing, and through inferred `let`s:
 
 ```
 fn f(s: const char*) {
     let t = s;         // t is const char* too
     take(s);           // error: take wants a mutable char*
-    take(s as char*);  // the explicit escape hatch
+    take(s as char*);  // error: const cannot be cast away
 }
 ```
 

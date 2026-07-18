@@ -410,16 +410,23 @@ def emit_opaque_pointer(builder: ir.IRBuilder, value: ir.Value, target_type: ir.
 def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict):
     """
     Emit an explicit numeric cast, choosing the LLVM conversion the prefixes and widths call for.
+
+    The 'const' contract survives casts: an aliasing const value (a pointer
+    or array) never becomes mutable, not even explicitly.
     """
+    operand_name = expr_sie_type(gen, expr.operand, scope)
+    if (is_const(operand_name) and not is_const(expr.type)
+            and is_aliasing(strip_const(operand_name))):
+        raise TypeError(f"cannot cast away 'const': {operand_name!r} to {expr.type!r}")
+
     target = numeric_class(expr.type)
     if target is None:
         # an array casts to its element pointer: 'arr as X*' extracts the data field
         target_type = resolve_type(expr.type, gen.structs)
         value = emit_expression(gen, builder, expr.operand, None, scope)
 
-        # casting a value to its own represented type is a no-op: this is
-        # also how an explicit cast sheds a 'const' contract
-        source = strip_const(expr_sie_type(gen, expr.operand, scope))
+        # casting a value to its own represented type is a no-op
+        source = strip_const(operand_name)
         if source is not None and source == strip_const(expr.type):
             return value
 
@@ -439,13 +446,13 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
 
         # an 'opaque*' casts to any pointer, the reverse of the decay
         if (isinstance(target_type, ir.PointerType)
-                and strip_const(expr_sie_type(gen, expr.operand, scope)) == "opaque*"):
+                and strip_const(operand_name) == "opaque*"):
             return builder.bitcast(value, target_type)
 
         # 'i8[]'/'u8[]' and 'char[]' cast into each other, the length
         # adjusting for the null terminator a char[] excludes; the
         # underlying pointer is assumed null-terminated
-        source_name = strip_const(expr_sie_type(gen, expr.operand, scope))
+        source_name = strip_const(operand_name)
         delta = None
         if target_name == "char[]" and source_name in ("i8[]", "u8[]"):
             delta = -1
