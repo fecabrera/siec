@@ -27,9 +27,9 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
     program = Program([], [])
 
     # '@' starts an '@include' directive, an '@if' block, an '@const'
-    # declaration, an '@extern let' global, or a decorated function (e.g.
-    # '@extern fn'); 'struct', 'enum', and 'type' start type declarations;
-    # anything else is a function
+    # declaration, an '@type' alias, an '@extern let' global, or a
+    # decorated function (e.g. '@extern fn'); 'struct' and 'enum' start
+    # type declarations; anything else is a function
     while ts.peek().kind != "eof":
         if not top_level and ts.peek().syntax == "}":
             break
@@ -54,7 +54,7 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.structs.append(parse_struct(ts))
         elif ts.peek().value == "enum":
             program.enums.append(parse_enum(ts))
-        elif ts.peek().value == "type":
+        elif ts.peek().value == "@" and ts.peek(1).value == "type":
             program.aliases.append(parse_alias(ts))
         else:
             program.functions.append(parse_function(ts))
@@ -98,10 +98,11 @@ def parse_cond(ts: TokenStream) -> CondBlock:
 
 def parse_alias(ts: TokenStream) -> TypeAlias:
     """
-    Parse a type alias: 'type name = T;'.
+    Parse a type alias: '@type name = T;'.
     """
     line = ts.peek().line
-    ts.expect("kw", "type")
+    ts.expect("sym", "@")
+    ts.expect("ident", "type")
 
     name = ts.expect("ident").value
     ts.expect("sym", "=")

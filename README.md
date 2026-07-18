@@ -1055,17 +1055,17 @@ fn main() -> i32 {
 
 #### Type aliases
 
-Type aliases give an existing type expression a new name. They're declared through the `type` keyword followed by their name, `=`, and the aliased type expression, ending in `;`:
+Type aliases give an existing type expression a new name. They're declared through `@type` followed by their name, `=`, and the aliased type expression, ending in `;`:
 
 ```
-type <name> = <type expr>;
+@type <name> = <type expr>;
 ```
 
 ```
-type string = char[];
-type fnc1 = fn();
-type fnc2 = fn() -> bool;
-type fnc3 = fn(char[]);
+@type string = char[];
+@type fnc1 = fn();
+@type fnc2 = fn() -> bool;
+@type fnc3 = fn(char[]);
 ```
 
 #### Generic type aliases
@@ -1073,9 +1073,9 @@ type fnc3 = fn(char[]);
 Type aliases are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.
 
 ```
-type cmp<T> = fn(T, T) -> bool;
-type fnc<T, U> = fn(T, U);
-type fnc<T, U> = fn(T) -> U;
+@type cmp<T> = fn(T, T) -> bool;
+@type fnc<T, U> = fn(T, U);
+@type fnc<T, U> = fn(T) -> U;
 ```
 
 #### Type casting

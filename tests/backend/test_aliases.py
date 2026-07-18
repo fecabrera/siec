@@ -8,7 +8,7 @@ def test_scalar_alias_in_signatures_and_lets(run):
     A scalar alias works anywhere its target does: params, returns, lets.
     """
     result = run("""
-        type id = u32;
+        @type id = u32;
 
         fn bump(x: id) -> id {
             return x + 1;
@@ -27,7 +27,7 @@ def test_array_alias(run):
     An alias for an array type carries the whole fat value, length and all.
     """
     result = run("""
-        type words = i32[];
+        @type words = i32[];
 
         fn sum(arr: const words) -> i32 {
             let total: i32 = 0;
@@ -52,7 +52,7 @@ def test_function_reference_alias(run):
     An alias for a 'fn' type binds functions and calls through them.
     """
     result = run("""
-        type mapper = fn(i32) -> i32;
+        @type mapper = fn(i32) -> i32;
 
         fn double(x: i32) -> i32 {
             return x * 2;
@@ -75,8 +75,8 @@ def test_alias_of_alias_in_any_order(run):
     An alias may target another alias declared later in the file.
     """
     result = run("""
-        type big = wide;
-        type wide = u64;
+        @type big = wide;
+        @type wide = u64;
 
         fn main() -> i32 {
             let n: big = 42;
@@ -91,8 +91,8 @@ def test_derived_pointer_and_sized_array(run):
     '*' and '[N]' derive from an alias like from any base type.
     """
     result = run("""
-        type id = u32;
-        type buf = id[4];
+        @type id = u32;
+        @type buf = id[4];
 
         fn main() -> i32 {
             let arr: buf;
@@ -110,7 +110,7 @@ def test_alias_in_struct_fields_and_enum_backing(run):
     Struct fields and enum backings accept aliases for their types.
     """
     result = run("""
-        type id = u32;
+        @type id = u32;
 
         enum state: id { OFF = 0, ON }
 
@@ -131,7 +131,7 @@ def test_cast_to_alias(run):
     'as' casts to an alias like to its target.
     """
     result = run("""
-        type small = u8;
+        @type small = u8;
 
         fn main() -> i32 {
             let x: i32 = 300;
@@ -146,7 +146,7 @@ def test_global_typed_by_alias(run):
     A '@static let' global may be typed by an alias.
     """
     result = run("""
-        type counter = u64;
+        @type counter = u64;
 
         @static let hits: counter = 42;
 
@@ -163,7 +163,7 @@ def test_const_flows_through_an_alias(compile_source):
     """
     with pytest.raises(TypeError, match="const"):
         compile_source("""
-            type words = i32[];
+            @type words = i32[];
 
             fn f(arr: const words) {
                 arr[0] = 1;
@@ -177,8 +177,8 @@ def test_alias_cycle_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="type alias cycle: a -> b -> a"):
         compile_source("""
-            type a = b;
-            type b = a;
+            @type a = b;
+            @type b = a;
         """)
 
 
@@ -188,8 +188,8 @@ def test_duplicate_alias_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="declared more than once"):
         compile_source("""
-            type a = i32;
-            type a = u8;
+            @type a = i32;
+            @type a = u8;
         """)
 
 
@@ -198,7 +198,7 @@ def test_alias_cannot_shadow_a_builtin(compile_source):
     Builtin type names cannot be redefined by an alias.
     """
     with pytest.raises(TypeError, match="shadows a builtin type"):
-        compile_source("type i32 = u8;")
+        compile_source("@type i32 = u8;")
 
 
 def test_alias_cannot_collide_with_a_struct(compile_source):
@@ -208,7 +208,7 @@ def test_alias_cannot_collide_with_a_struct(compile_source):
     with pytest.raises(TypeError, match="declared more than once"):
         compile_source("""
             struct s { x: i32; }
-            type s = i32;
+            @type s = i32;
         """)
 
 
@@ -219,7 +219,7 @@ def test_deriving_from_a_modified_target_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="carries a modifier"):
         compile_source("""
-            type view = const i32[];
+            @type view = const i32[];
 
             fn f(v: view*) {}
         """)

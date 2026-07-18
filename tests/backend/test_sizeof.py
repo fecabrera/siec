@@ -103,8 +103,8 @@ def test_sizeof_through_an_alias(run):
     An alias measures its target.
     """
     result = run("""
-        type id = u32;
-        type words = i64[];
+        @type id = u32;
+        @type words = i64[];
 
         fn main() -> i32 {
             return (sizeof(id) + sizeof(words)) as i32;

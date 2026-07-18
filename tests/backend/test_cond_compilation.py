@@ -69,7 +69,7 @@ def test_branches_hold_any_declaration(run):
     """
     result = run("""
         @if (TARGET_OS != 255) {
-            type word = u64;
+            @type word = u64;
             struct info { x: word; }
             @static let base: word = 30;
 
