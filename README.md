@@ -303,7 +303,7 @@ Code enclosed by `{}` is a block, with its own scope:
 }
 ```
 
-A block can also be used as a value, in which case it must produce one through the `emit` keyword:
+A block can also be used as a value, in which case it must produce one through the `emit` keyword. An `emit` ends the block where it runs, the way a `return` ends a function:
 
 ```
 a = {

@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "and", "or", "not",
-            "struct", "true", "false", "as"}
+KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "emit", "and", "or",
+            "not", "struct", "true", "false", "as"}
 
 # simple one-character escapes; octal, hex, and universal forms are decoded by StringRule
 ESCAPES = {

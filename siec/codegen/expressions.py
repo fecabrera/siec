@@ -6,6 +6,7 @@ from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
     BinaryOp,
+    BlockExpr,
     BoolLiteral,
     Call,
     Cast,
@@ -59,6 +60,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     if isinstance(expr, AggregateLiteral):
         return emit_aggregate(gen, builder, expr, expected_type, scope)
+
+    if isinstance(expr, BlockExpr):
+        return emit_block_expr(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, ArrayLiteral):
         return emit_array(gen, builder, expr, expected_type, scope)
@@ -357,6 +361,10 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         field_names = [f.type for f in info.fields] if info is not None else None
         return emit_aggregate(gen, builder, expr, target_type, scope, field_names)
 
+    # a block expression coerces each emitted value to the target instead
+    if isinstance(expr, BlockExpr):
+        return emit_block_expr(gen, builder, expr, target_type, scope, target_name)
+
     # an array literal coerces each element to the array's declared element type
     if isinstance(expr, ArrayLiteral):
         element_name = target_name[:-2] if target_name and target_name.endswith("[]") else None
@@ -637,6 +645,34 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
     value = builder.insert_value(value, data, 0)
     value = builder.insert_value(value, ir.Constant(ir.IntType(64), len(expr.elements)), 1)
     return value
+
+
+def emit_block_expr(gen: CodeGenerator, builder: ir.IRBuilder, expr: BlockExpr,
+                    expected_type: ir.Type | None, scope: dict, target_name: str | None = None):
+    """
+    Emit a block used as a value: its statements run in a child scope, and
+    an 'emit' inside stores the block's value and jumps past it.
+    """
+    # deferred import: statements and expressions are mutually recursive
+    from .statements import emit_block
+
+    if expected_type is None or isinstance(expected_type, ir.VoidType):
+        raise TypeError("block expression needs a typed context to take its value from")
+
+    slot = entry_alloca(builder, expected_type, "block.value")
+    end_block = builder.function.append_basic_block("block.end")
+
+    # the innermost target is what an 'emit' inside the body resolves to
+    gen.emit_targets.append((slot, end_block, target_name))
+    emit_block(gen, builder, expr.body, dict(scope))
+    gen.emit_targets.pop()
+
+    # every path must leave the block through an 'emit' (or a return)
+    if not builder.block.is_terminated:
+        raise TypeError("block expression must produce its value with 'emit'")
+
+    builder.position_at_end(end_block)
+    return builder.load(slot)
 
 
 def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,

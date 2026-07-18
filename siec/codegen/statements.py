@@ -5,6 +5,7 @@ from llvmlite import ir
 from ..ast import (
     Assign,
     Block,
+    Emit,
     ExprStmt,
     For,
     If,
@@ -95,6 +96,20 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_while(gen, builder, stmt, scope)
     elif isinstance(stmt, For):
         emit_for(gen, builder, stmt, scope)
+    elif isinstance(stmt, Emit):
+        # store the value into the enclosing block expression's slot and
+        # jump past the block, ending it early like a return ends a function
+        if not gen.emit_targets:
+            raise TypeError("'emit' outside a block expression")
+
+        slot, end_block, target_name = gen.emit_targets[-1]
+        if target_name is not None:
+            value = emit_coerced(gen, builder, stmt.value, target_name, scope)
+        else:
+            value = emit_expression(gen, builder, stmt.value, slot.type.pointee, scope)
+
+        builder.store(value, slot)
+        builder.branch(end_block)
     elif isinstance(stmt, Return):
         if stmt.value is None:
             # a bare 'return' in main yields its implicit exit code 0: only

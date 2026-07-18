@@ -82,6 +82,14 @@ class AggregateLiteral:
 
 
 @dataclass
+class BlockExpr:
+    """
+    A block used as a value, producing it through an 'emit' statement.
+    """
+    body: list
+
+
+@dataclass
 class ArrayLiteral:
     """
     An array literal '[a, b, ...]', building a fat array from its elements.
@@ -117,8 +125,8 @@ class BinaryOp:
     right: "Expr"
 
 
-Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | ArrayLiteral | Var | Call
-        | Index | Slice | Member | Cast | UnaryOp | BinaryOp)
+Expr = (IntLiteral | StrLiteral | BoolLiteral | AggregateLiteral | BlockExpr | ArrayLiteral
+        | Var | Call | Index | Slice | Member | Cast | UnaryOp | BinaryOp)
 
 
 def _line():
@@ -228,6 +236,16 @@ class IndexAssign:
     """
     base: Expr
     index: Expr
+    value: Expr
+    line: int = _line()
+
+
+@dataclass
+class Emit:
+    """
+    An 'emit' statement: produces the enclosing block expression's value
+    and ends the block.
+    """
     value: Expr
     line: int = _line()
 

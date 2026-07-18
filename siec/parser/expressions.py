@@ -1,7 +1,7 @@
 """Parsing of expressions: literals, variables, and calls."""
 
-from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BoolLiteral, Call, Cast, Expr,
-                   Index, IntLiteral, Member, Slice, StrLiteral, UnaryOp, Var)
+from ..ast import (AggregateLiteral, ArrayLiteral, BinaryOp, BlockExpr, BoolLiteral, Call,
+                   Cast, Expr, Index, IntLiteral, Member, Slice, StrLiteral, UnaryOp, Var)
 from .stream import TokenStream
 from .types import parse_type
 
@@ -96,17 +96,31 @@ def parse_primary(ts: TokenStream) -> Expr:
         ts.expect("sym", ")")
         return parse_postfix(ts, expr)
 
-    # '{a, b, ...}' is an aggregate literal filling a struct or array's fields
+    # '{a, b, ...}' is an aggregate literal filling a struct or array's
+    # fields; '{ ...; emit v; }' is a block expression producing a value.
+    # The shapes tell them apart: a literal holds comma-separated
+    # expressions, a block holds statements.
     if tok.syntax == "{":
-        elements = []
-        while ts.peek().syntax != "}":
-            if elements:
-                ts.expect("sym", ",")
+        if is_aggregate(ts):
+            elements = []
+            while ts.peek().syntax != "}":
+                if elements:
+                    ts.expect("sym", ",")
 
-            elements.append(parse_expression(ts))
+                elements.append(parse_expression(ts))
+            ts.expect("sym", "}")
+
+            return parse_postfix(ts, AggregateLiteral(elements))
+
+        # deferred import: statements and expressions are mutually recursive
+        from .statements import parse_statement
+
+        body = []
+        while ts.peek().syntax != "}":
+            body.append(parse_statement(ts))
         ts.expect("sym", "}")
 
-        return parse_postfix(ts, AggregateLiteral(elements))
+        return parse_postfix(ts, BlockExpr(body))
 
     # '[a, b, ...]' is an array literal, building a fat array from its elements
     if tok.syntax == "[":
@@ -147,6 +161,27 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def is_aggregate(ts: TokenStream) -> bool:
+    """
+    Decide whether an open '{' holds an aggregate literal, peeking past its
+    first expression for the ',' or '}' a literal would show; the cursor is
+    restored either way.
+    """
+    # '{}' is the empty aggregate
+    if ts.peek().syntax == "}":
+        return True
+
+    start = ts.pos
+    try:
+        parse_expression(ts)
+        return ts.peek().syntax in (",", "}")
+    except SyntaxError:
+        # not even an expression: only statements can follow
+        return False
+    finally:
+        ts.pos = start
 
 
 def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:

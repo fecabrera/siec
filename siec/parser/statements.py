@@ -4,6 +4,7 @@ from ..ast import (
     Assign,
     BinaryOp,
     Block,
+    Emit,
     ExprStmt,
     For,
     If,
@@ -118,6 +119,14 @@ def parse_statement(ts: TokenStream):
 
         ts.expect("sym", ";")
         return Let(name, var_type, value, line=line)
+
+    # 'emit expr;' produces the enclosing block expression's value
+    if tok.kind == "kw" and tok.value == "emit":
+        ts.next()
+
+        value = parse_expression(ts)
+        ts.expect("sym", ";")
+        return Emit(value, line=line)
 
     # 'return' with an optional value expression before the ';'
     if tok.kind == "kw" and tok.value == "return":

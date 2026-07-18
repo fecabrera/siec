@@ -77,6 +77,10 @@ class CodeGenerator:
         # the registered structs by name, for type resolution and member access
         self.structs: dict[str, StructInfo] = {}
 
+        # the enclosing block expressions' (slot, end block, Sie type) targets,
+        # innermost last: what an 'emit' stores into and jumps to
+        self.emit_targets: list[tuple] = []
+
 
 def codegen(program: Program, module_name: str) -> ir.Module:
     """
