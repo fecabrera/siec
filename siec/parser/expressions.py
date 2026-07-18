@@ -15,6 +15,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    NullLiteral,
     SizeOf,
     Slice,
     StrLiteral,
@@ -130,6 +131,10 @@ def parse_primary(ts: TokenStream) -> Expr:
     # 'true' and 'false' are boolean literals
     if tok.kind == "kw" and tok.value in ("true", "false"):
         return BoolLiteral(tok.value == "true")
+
+    # 'null' is the pointer literal
+    if tok.kind == "kw" and tok.value == "null":
+        return NullLiteral()
 
     # '(' groups a full subexpression
     if tok.syntax == "(":

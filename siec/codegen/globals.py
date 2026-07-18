@@ -8,6 +8,7 @@ from siec.ast import (
     Expr,
     FloatLiteral,
     Global,
+    NullLiteral,
     Program,
     StrLiteral,
 )
@@ -109,6 +110,12 @@ def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
 
     if isinstance(expr, BoolLiteral):
         return ir.Constant(type_, 1 if expr.value else 0)
+
+    if isinstance(expr, NullLiteral):
+        if not isinstance(type_, ir.PointerType):
+            raise TypeError(f"'null' cannot initialize a {sie_type!r} value")
+
+        return ir.Constant(type_, None)
 
     # a string initializer points at a private string constant
     if isinstance(expr, StrLiteral):

@@ -9,6 +9,7 @@ from siec.ast import (
     Expr,
     FloatLiteral,
     IntLiteral,
+    NullLiteral,
     Program,
     SizeOf,
     StrLiteral,
@@ -19,7 +20,8 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 
-LITERALS = (IntLiteral, FloatLiteral, StrLiteral, BoolLiteral, CharLiteral)
+LITERALS = (IntLiteral, FloatLiteral, StrLiteral, BoolLiteral, CharLiteral,
+            NullLiteral)
 
 
 def register_constants(gen: CodeGenerator, program: Program) -> None:

@@ -724,6 +724,30 @@ let field: i32* = &pt.y;   // address of a field
 let elem: i32* = &arr[1];  // address of an element
 ```
 
+##### Null
+
+`null` is the pointer literal. It works as an `opaque*`, adapting to whatever pointer type its context expects: initializing, comparing, passing, and returning any `T*`.
+
+```
+let p: i32* = null;
+
+if (p == null) {
+    // not pointing anywhere yet
+}
+
+if (p != null) {
+    // safe to index
+}
+```
+
+Without a context to adapt to, a bare `null` stays an `opaque*`:
+
+```
+let q = null; // q: opaque*
+```
+
+`null` only lands in pointer slots; giving it to a non-pointer is a compile-time error.
+
 #### Arrays
 
 Arrays are collections of same-type values. They are represented by `X[]` and their internal representation is always `{X*, u64}`, where `X*` is a pointer to `X` and `u64` is the number of elements. These are exposed as the members `data` and `length`, accessed like a struct's:

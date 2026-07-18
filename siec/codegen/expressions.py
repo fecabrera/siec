@@ -21,6 +21,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    NullLiteral,
     SizeOf,
     Slice,
     StrLiteral,
@@ -84,6 +85,14 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, CharLiteral):
         # a char literal is exactly a 'char': one byte, its own type
         return ir.Constant(ir.IntType(8), expr.value.encode()[0])
+
+    if isinstance(expr, NullLiteral):
+        # 'null' adopts whatever pointer context it lands in, an opaque*
+        # on its own
+        if expected_type is None or isinstance(expected_type, ir.PointerType):
+            return ir.Constant(expected_type or ir.PointerType(ir.IntType(8)), None)
+
+        raise TypeError("'null' needs a pointer context")
 
     if isinstance(expr, EnumMember):
         # an enum member adopts an integer context like a literal would,

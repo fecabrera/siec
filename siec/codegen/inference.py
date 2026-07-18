@@ -19,6 +19,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    NullLiteral,
     SizeOf,
     Slice,
     StrLiteral,
@@ -182,6 +183,10 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a size is a byte count, defaulting to u64 like it does in any context
     if isinstance(expr, SizeOf):
         return "u64"
+
+    # a bare 'null' is an opaque pointer until a context types it
+    if isinstance(expr, NullLiteral):
+        return "opaque*"
 
     # 'not' yields a bool; '-' and '~' keep their operand's type
     if isinstance(expr, UnaryOp):

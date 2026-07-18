@@ -135,6 +135,14 @@ class Cast:
 
 
 @dataclass
+class NullLiteral:
+    """
+    The 'null' pointer literal: an opaque* value adopting whatever pointer
+    type its context expects.
+    """
+
+
+@dataclass
 class SizeOf:
     """
     The compile-time size in bytes of a type or of a variable's type:
