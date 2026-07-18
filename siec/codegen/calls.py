@@ -31,6 +31,12 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         if symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope, symbol)
     else:
+        # a name in scope is always in view; anything else must be visible
+        # to this file: an imported module's names need their qualified
+        # spelling or a member import
+        if call.name not in scope and not gen.sees(call.name):
+            raise NameError(f"undefined function {call.name!r}")
+
         # a variable or global holding a function reference is called through
         # its value; the current file's statics resolve first, other files' never
         symbol = gen.resolve_symbol(call.name)

@@ -163,3 +163,41 @@ def test_conditional_import_is_an_error(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 1
     assert "an 'import' cannot be conditional" in capsys.readouterr().err
+
+
+def test_imported_names_are_scoped(tmp_path, monkeypatch, capsys):
+    """
+    'import a.b;' binds only the qualified names: the module's members do
+    not leak into the importer unqualified.
+    """
+    write_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import math.util;
+
+        fn main() -> i32 {
+            return add(40, 2);
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "undefined function 'add'" in capsys.readouterr().err
+
+
+def test_included_names_stay_in_view(tmp_path, monkeypatch):
+    """
+    '@include' is textual: the includer uses the included names directly.
+    """
+    write_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        @include("math/util")
+
+        fn main() -> i32 {
+            return add(BASE, 2);
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

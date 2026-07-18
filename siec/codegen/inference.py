@@ -70,6 +70,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope:
             return strip_reference(scope[expr.name].type)
 
+        # only names this file sees resolve unqualified
+        if not expr.qualified and not gen.sees(expr.name):
+            return None
+
         # a constant carries its annotation; unannotated, it adapts like
         # its value expression written in place
         const = gen.constants.get(expr.name)
@@ -93,6 +97,9 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         # a call through a function reference yields the reference's return type
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
             return fn_type_parts(strip_const(scope[expr.name].type))[1]
+
+        if "." not in expr.name and not gen.sees(expr.name):
+            return None
 
         symbol = gen.resolve_callee(expr.name)
         if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
@@ -225,6 +232,36 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     return None
 
 
+def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | None:
+    """
+    The precise error behind an initializer with no inferable type, when
+    there is one: an unknown function or variable names itself, and a
+    known function that returns nothing says so.
+    """
+    if isinstance(expr, Call) and expr.name not in scope:
+        if "." in expr.name:
+            if gen.resolve_qualified(expr.name.split(".")) is None:
+                return NameError(f"undefined function {expr.name!r}")
+
+            return TypeError(f"function {expr.name!r} returns no value")
+
+        symbol = gen.resolve_symbol(expr.name)
+        if not gen.sees(expr.name) or (symbol not in gen.return_types
+                                       and symbol not in gen.globals):
+            return NameError(f"undefined function {expr.name!r}")
+
+        return TypeError(f"function {expr.name!r} returns no value")
+
+    if isinstance(expr, Var) and expr.name not in scope:
+        symbol = gen.resolve_symbol(expr.name)
+        if not gen.sees(expr.name) or (expr.name not in gen.constants
+                                       and symbol not in gen.globals
+                                       and symbol not in gen.param_types):
+            return NameError(f"undefined variable {expr.name!r}")
+
+    return None
+
+
 def fold_qualified(gen: CodeGenerator, expr: Expr, scope: dict):
     """
     Fold a pure 'a.b.name' member chain into the Var its dotted name
@@ -243,7 +280,7 @@ def fold_qualified(gen: CodeGenerator, expr: Expr, scope: dict):
     names.reverse()
 
     symbol = gen.resolve_qualified(names)
-    return Var(symbol) if symbol is not None else None
+    return Var(symbol, qualified=True) if symbol is not None else None
 
 
 def enum_backing(gen: CodeGenerator, name: str | None) -> str | None:

@@ -140,6 +140,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return load
 
+        # an imported module's names need their qualified spelling or a
+        # member import; only what this file sees resolves unqualified
+        if not expr.qualified and not gen.sees(expr.name):
+            raise NameError(f"undefined variable {expr.name!r}")
+
         # a constant substitutes its value expression in place, coerced to
         # its annotated type when it has one, adapting like a literal otherwise
         const = gen.constants.get(expr.name)
@@ -300,9 +305,9 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         if expr.name in scope:
             return scope[expr.name].slot
 
-        # a global's slot is its module-level storage
+        # a global's slot is its module-level storage, if this file sees it
         symbol = gen.resolve_symbol(expr.name)
-        if symbol in gen.globals:
+        if (expr.qualified or gen.sees(expr.name)) and symbol in gen.globals:
             return gen.module.globals[symbol]
 
         raise NameError(f"undefined variable {expr.name!r}")

@@ -163,6 +163,12 @@ class CodeGenerator:
         self.member_bindings: dict[tuple[str, str], str] = {}
         self.module_exports: dict[str, set] = {}
 
+        # the unqualified names each file may use: its own, its includes',
+        # its member imports', and the compilation unit's; a file the
+        # loader never mapped (a lone parse) sees everything
+        self.visible: dict[str, set] = {}
+        self.builtin_names: set = set()
+
         # the source file whose function body is being emitted, deciding
         # which statics are in view
         self.current_file = ""
@@ -203,6 +209,14 @@ class CodeGenerator:
             return self.symbol_names.get(member, member)
 
         return None
+
+    def sees(self, name: str) -> bool:
+        """
+        Whether the current file may use a name unqualified: an imported
+        module's names need their qualified spelling or a member import.
+        """
+        names = self.visible.get(self.current_file)
+        return names is None or name in names or name in self.builtin_names
 
     def resolve_callee(self, name: str) -> str | None:
         """
@@ -250,10 +264,14 @@ def codegen(program: Program, module_name: str, target: str | None = None) -> ir
     from siec.codegen.globals import register_globals
     from siec.codegen.structs import register_structs
 
+    from siec.codegen.constants import BUILTIN_CONSTANTS
+
     gen = CodeGenerator(module_name, target)
     gen.module_bindings = program.module_bindings
     gen.member_bindings = program.member_bindings
     gen.module_exports = program.module_exports
+    gen.visible = program.visible
+    gen.builtin_names = set(BUILTIN_CONSTANTS)
 
     # first pass: register the named declarations — aliases first so every
     # later type annotation expands through them, constants next so enum

@@ -53,25 +53,55 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
 
     module_bindings = {}
     member_bindings = {}
-    module_exports = {}
+    exported = {}         # file -> its own exportable names
+    declared_names = {}   # file -> every name it declares, statics included
+    include_targets = {}  # file -> the files it includes
+    member_names = {}     # file -> the names its member imports bind
+    pending_members = []  # (file, import, target) checked once exports settle
 
-    def exports(program: Program) -> set[str]:
-        # the names a module offers: every top-level declaration except
-        # its statics, which stay its own; an '@if' branch's declarations
-        # count, whichever arm compilation later picks
-        names = ({fn.name for fn in program.functions if not fn.is_static}
-                 | {glob.name for glob in program.globals if not glob.is_static}
+    def declared(program: Program, with_statics: bool) -> set[str]:
+        # the names a file declares: every top-level declaration, an '@if'
+        # branch's counting whichever arm compilation later picks; statics
+        # stay its own unless asked for
+        names = ({fn.name for fn in program.functions
+                  if with_statics or not fn.is_static}
+                 | {glob.name for glob in program.globals
+                    if with_statics or not glob.is_static}
                  | {const.name for const in program.consts}
                  | {struct.name for struct in program.structs}
                  | {enum.name for enum in program.enums}
                  | {alias.name for alias in program.aliases})
 
         for cond in program.conds:
-            names |= exports(cond.then)
+            names |= declared(cond.then, with_statics)
             if cond.orelse is not None:
-                names |= exports(cond.orelse)
+                names |= declared(cond.orelse, with_statics)
 
         return names
+
+    def closure(base: dict) -> dict:
+        # each file's names plus, transitively, its includes': an include
+        # is textual, so the includer sees (and re-offers) what it pulled in
+        memo = {}
+
+        def visit(file: str, active: frozenset) -> set:
+            if file in memo:
+                return memo[file]
+
+            if file in active:
+                return base.get(file, set())
+
+            names = set(base.get(file, set()))
+            for target in include_targets.get(file, ()):
+                names |= visit(target, active | {file})
+
+            memo[file] = names
+            return names
+
+        for file in base:
+            visit(file, frozenset())
+
+        return memo
 
     def tag(program: Program, file: str) -> None:
         # tag each declaration with its file so codegen errors can name
@@ -105,11 +135,14 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
 
         # record what the module offers before resolving its own imports,
         # so import cycles find it in place
-        module_exports[str(file)] = exports(program)
+        exported[str(file)] = declared(program, with_statics=False)
+        declared_names[str(file)] = declared(program, with_statics=True)
 
         # load includes depth-first so included declarations precede their includers
         for inc in program.includes:
-            load(resolve_include(inc.path, file.parent, include_paths))
+            target = resolve_include(inc.path, file.parent, include_paths)
+            load(target)
+            include_targets.setdefault(str(file), []).append(str(target.resolve()))
 
         # load imports and record what each one binds in this file
         for imp in program.imports:
@@ -123,14 +156,11 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
             target = str(target.resolve())
 
             if imp.members is not None:
+                # membership is checked once every export set has settled
+                pending_members.append((str(file), imp, target))
                 for name, binding in imp.members:
-                    if name not in module_exports[target]:
-                        error = NameError(f"line {imp.line}: module "
-                                          f"{imp.path!r} has no member {name!r}")
-                        error.sie_file = str(file)
-                        raise error
-
                     member_bindings[(str(file), binding)] = name
+                    member_names.setdefault(str(file), set()).add(binding)
             else:
                 module_bindings[(str(file), imp.alias or imp.path)] = target
 
@@ -147,8 +177,31 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
     for source in sources:
         load(source)
 
+    # settle exports and visibility through the include chains
+    module_exports = closure(exported)
+    visible = closure(declared_names)
+
+    # a member import must name something its module offers
+    for file, imp, target in pending_members:
+        for name, _ in imp.members:
+            if name not in module_exports[target]:
+                error = NameError(f"line {imp.line}: module {imp.path!r} "
+                                  f"has no member {name!r}")
+                error.sie_file = file
+                raise error
+
+    # member imports come into unqualified view; the command-line sources
+    # form one compilation unit, their names in view everywhere, C-style
+    entry_names = set()
+    for source in sources:
+        entry_names |= visible.get(str(source.resolve()), set())
+
+    for file in visible:
+        visible[file] |= member_names.get(file, set()) | entry_names
+
     merged = Program([], functions, structs, consts, enums, globals_, aliases, conds)
     merged.module_bindings = module_bindings
     merged.member_bindings = member_bindings
     merged.module_exports = module_exports
+    merged.visible = visible
     return merged

@@ -35,6 +35,7 @@ from siec.codegen.inference import (
     fold_qualified,
     infer_type,
     member_field,
+    untyped_reason,
 )
 from siec.codegen.generator import (
     CodeGenerator,
@@ -155,6 +156,10 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if type_name is None:
             type_name = infer_type(gen, stmt.value, scope)
             if type_name is None:
+                # an unknown name or a valueless call is the real story
+                if (reason := untyped_reason(gen, stmt.value, scope)) is not None:
+                    raise reason
+
                 raise TypeError(f"cannot infer a type for {stmt.name!r}: "
                                 "annotate it explicitly")
 
@@ -183,10 +188,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                 emit_coerced(gen, builder, stmt.value, type_name, scope), slot))
     elif isinstance(stmt, Assign):
         # store the value into the variable's existing stack slot, typed by
-        # the slot; a global's slot is its module-level storage
+        # the slot; a global's slot is its module-level storage, if this
+        # file sees it
         if stmt.name in scope:
             var = scope[stmt.name]
             slot, var_type = var.slot, var.type
+        elif not stmt.qualified and not gen.sees(stmt.name):
+            raise NameError(f"undefined variable {stmt.name!r}")
         elif (symbol := gen.resolve_symbol(stmt.name)) in gen.globals:
             slot, var_type = gen.module.globals[symbol], gen.globals[symbol]
         elif stmt.name in gen.constants:
@@ -207,8 +215,9 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
         # a qualified 'a.b.G = v' assigns the module's global, not a field
         if (folded := fold_qualified(gen, member, scope)) is not None:
-            emit_statement_body(gen, builder, Assign(folded.name, stmt.value,
-                                                     line=stmt.line), scope)
+            emit_statement_body(gen, builder,
+                                Assign(folded.name, stmt.value, qualified=True,
+                                       line=stmt.line), scope)
             return
 
         field_type = member_field(gen, member, scope)[1]

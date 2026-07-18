@@ -46,9 +46,11 @@ class CharLiteral:
 @dataclass
 class Var:
     """
-    A reference to a variable by name.
+    A reference to a variable by name. A qualified one came through a
+    module binding ('a.b.name'), already validated against its exports.
     """
     name: str
+    qualified: bool = False
 
 
 @dataclass
@@ -322,10 +324,12 @@ class Block:
 @dataclass
 class Assign:
     """
-    An assignment of a new value to an existing variable.
+    An assignment of a new value to an existing variable. A qualified one
+    targets a module's global through its binding ('a.b.G = v').
     """
     name: str
     value: Expr
+    qualified: bool = False
     line: int = _line()
 
 
@@ -540,6 +544,7 @@ class Program:
     module_bindings: dict = field(default_factory=dict)  # (file, prefix) -> module file
     member_bindings: dict = field(default_factory=dict)  # (file, name) -> member name
     module_exports: dict = field(default_factory=dict)   # module file -> set of names
+    visible: dict = field(default_factory=dict)          # file -> unqualified names in view
 
 
 @dataclass

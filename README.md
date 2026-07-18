@@ -1,6 +1,6 @@
 # sielang
 
-Sie is a a modern C-flavored language with a strong typing system and minimal syntax. The main goal of this project is to simplify the coding experience for programmers while providing full low-level control.
+Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for programmers while providing full low-level control.
 
 ## Hello world
 
@@ -74,7 +74,9 @@ Every file is a module: `import a.b` names the file `a/b.sie`, searched for in t
 
 A module offers every one of its top-level declarations except its `@static` ones, which stay its own; importing a name it doesn't offer is an error. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
 
-Type declarations (structs, enums, aliases) share one namespace across the program, like C's: a module's types are usable by name wherever the module is loaded, no qualification needed.
+An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
+
+Type declarations (structs, enums, aliases) are the exception, sharing one namespace across the program like C's: a module's types are usable by name wherever the module is loaded, no qualification needed.
 
 #### Include
 

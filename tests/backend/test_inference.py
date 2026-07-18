@@ -165,3 +165,30 @@ def test_unfixed_initializer_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="cannot infer a type for 'a'"):
         compile_source("fn main() -> i32 { let a = [1, 2, 3]; return 0; }")
+
+
+def test_unknown_call_initializer_names_the_function(compile_source):
+    """
+    'let x = f();' with no such f reports the function, not the inference.
+    """
+    with pytest.raises(NameError, match="undefined function 'ghost'"):
+        compile_source("fn main() -> i32 { let x = ghost(); return 0; }")
+
+
+def test_valueless_call_initializer_says_so(compile_source):
+    """
+    'let x = f();' on a void function blames the missing value.
+    """
+    with pytest.raises(TypeError, match="function 'f' returns no value"):
+        compile_source("""
+        fn f() { }
+        fn main() -> i32 { let x = f(); return 0; }
+        """)
+
+
+def test_unknown_variable_initializer_names_the_variable(compile_source):
+    """
+    'let x = v;' with no such v reports the variable, not the inference.
+    """
+    with pytest.raises(NameError, match="undefined variable 'ghost'"):
+        compile_source("fn main() -> i32 { let x = ghost; return 0; }")
