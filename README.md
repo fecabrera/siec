@@ -241,6 +241,13 @@ if (a == 1) {
 // a is 42; b no longer exists
 ```
 
+When a body is a single statement, the braces may be omitted; the statement still forms an arm scope of its own. This goes for `else`, `while`, and `for` bodies alike:
+
+```
+if (a == 1) a += 1;
+else a = 0;
+```
+
 ### Loops
 
 Repetition is expressed through the `while` keyword, followed by a parenthesized expression and a block. The body runs while the expression is truthy, checked before each iteration:
@@ -262,6 +269,12 @@ while (i < 10) {
 }
 ```
 
+A single-statement body may drop the braces, keeping its own scope:
+
+```
+while (i > 0) i -= 1;
+```
+
 The `for` keyword drives a loop through three parts: an init statement run once, a condition checked before each pass, and a step statement run after each:
 
 ```
@@ -271,6 +284,12 @@ for (let i: i32 = 0; i < n; i += 1) {
 ```
 
 The whole loop is its own scope — the init's variable lives exactly as long as the loop — and the body behaves like a while's, fresh on each iteration.
+
+A single-statement body may drop the braces here too:
+
+```
+for (let i: i32 = 0; i < n; i += 1) total += i;
+```
 
 Unlike other languages, there are no increment or decrement operators (`i++`, `i--`); this is intentional, and a step is written `i += 1`.
 

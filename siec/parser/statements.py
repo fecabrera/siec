@@ -37,6 +37,17 @@ def parse_block(ts: TokenStream) -> list:
     return body
 
 
+def parse_body(ts: TokenStream) -> list:
+    """
+    Parse a control-flow body: a braced block, or a single braceless
+    statement standing in for one.
+    """
+    if ts.peek().syntax == "{":
+        return parse_block(ts)
+
+    return [parse_statement(ts)]
+
+
 def parse_statement(ts: TokenStream):
     """
     Parse a statement: a let, an if, a return, an assignment, or an expression.
@@ -44,7 +55,7 @@ def parse_statement(ts: TokenStream):
     tok = ts.peek()
     line = tok.line
 
-    # 'if (cond) { ... }' with an optional 'else' block or 'else if' chain
+    # 'if (cond) body' with an optional 'else' body or 'else if' chain
     if tok.kind == "kw" and tok.value == "if":
         ts.next()
 
@@ -52,16 +63,16 @@ def parse_statement(ts: TokenStream):
         condition = parse_expression(ts)
         ts.expect("sym", ")")
 
-        body = parse_block(ts)
+        body = parse_body(ts)
 
         orelse = None
         if ts.peek().syntax == "else":
             ts.next()
-            orelse = [parse_statement(ts)] if ts.peek().syntax == "if" else parse_block(ts)
+            orelse = parse_body(ts)
 
         return If(condition, body, orelse, line=line)
 
-    # 'while (cond) { ... }' loops its block while the condition is truthy
+    # 'while (cond) body' loops its body while the condition is truthy
     if tok.kind == "kw" and tok.value == "while":
         ts.next()
 
@@ -69,9 +80,9 @@ def parse_statement(ts: TokenStream):
         condition = parse_expression(ts)
         ts.expect("sym", ")")
 
-        return While(condition, parse_block(ts), line=line)
+        return While(condition, parse_body(ts), line=line)
 
-    # 'for (init; cond; step) { ... }': the init runs once, the condition
+    # 'for (init; cond; step) body': the init runs once, the condition
     # is checked before each pass, and the step runs after each
     if tok.kind == "kw" and tok.value == "for":
         ts.next()
@@ -85,7 +96,7 @@ def parse_statement(ts: TokenStream):
         step = parse_step(ts)
         ts.expect("sym", ")")
 
-        return For(init, condition, step, parse_block(ts), line=line)
+        return For(init, condition, step, parse_body(ts), line=line)
 
     # a bare '{' opens a block statement, a statement list in its own scope
     if tok.syntax == "{":

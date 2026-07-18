@@ -81,6 +81,33 @@ def test_if_arm_declaration_is_gone_after_the_if(compile_source):
         compile_source(source)
 
 
+def test_braceless_bodies_still_scope(run, compile_source):
+    """
+    A braceless arm or loop body is still its own scope.
+    """
+    source = """
+    fn main() -> i32 {
+        let total: i32 = 0;
+        for (let i: i32 = 0; i < 10; i += 1) total += i;
+
+        if (total == 45) total += 1;
+        else total = 0;
+
+        return total; // 46
+    }
+    """
+    assert run(source).returncode == 46
+
+    scoped = """
+    fn main() -> i32 {
+        if (true) let ghost: i32 = 9;
+        return ghost;
+    }
+    """
+    with pytest.raises(NameError, match="undefined variable 'ghost'"):
+        compile_source(scoped)
+
+
 def test_return_inside_a_block_leaves_the_function(run):
     """
     A return inside a block terminates the function, skipping what follows.

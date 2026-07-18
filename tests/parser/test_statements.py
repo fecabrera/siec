@@ -142,6 +142,54 @@ def test_string_statements_do_not_read_as_syntax(ts):
     assert parse_statement(ts('return ";";')) == Return(StrLiteral(";"))
 
 
+def test_braceless_if_wraps_a_single_statement(ts):
+    """
+    'if (cond) stmt;' parses the one statement as the arm's body.
+    """
+    assert parse_statement(ts("if (x) f();")) == If(
+        Var("x"), [ExprStmt(Call("f", []))], None)
+
+
+def test_braceless_else(ts):
+    """
+    'else stmt;' parses the one statement as the else body.
+    """
+    stmt = parse_statement(ts("if (x) f(); else g();"))
+    assert stmt.orelse == [ExprStmt(Call("g", []))]
+
+
+def test_dangling_else_binds_to_the_nearest_if(ts):
+    """
+    In nested braceless ifs, an else attaches to the innermost one.
+    """
+    stmt = parse_statement(ts("if (a) if (b) f(); else g();"))
+    assert stmt.orelse is None
+    assert stmt.body[0].orelse == [ExprStmt(Call("g", []))]
+
+
+def test_braceless_while(ts):
+    """
+    'while (cond) stmt;' parses the one statement as the loop body.
+    """
+    from siec.ast import While
+
+    assert parse_statement(ts("while (x) x -= 1;")) == While(
+        Var("x"),
+        [Assign("x", BinaryOp("-", Var("x"), IntLiteral(1)))]
+    )
+
+
+def test_braceless_for(ts):
+    """
+    'for (init; cond; step) stmt;' parses the one statement as the loop body.
+    """
+    from siec.ast import For
+
+    stmt = parse_statement(ts("for (let i: i32 = 0; i < 3; i += 1) f(i);"))
+    assert isinstance(stmt, For)
+    assert stmt.body == [ExprStmt(Call("f", [Var("i")]))]
+
+
 def test_while_statement(ts):
     """
     'while (cond) { ... }' parses to a While with its condition and body.
