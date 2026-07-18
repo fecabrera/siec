@@ -69,6 +69,9 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     elif isinstance(stmt, Assign):
         # store the value into the variable's existing stack slot, typed by the slot
         if stmt.name not in scope:
+            if stmt.name in gen.constants:
+                raise TypeError(f"cannot reassign constant {stmt.name!r}")
+
             raise NameError(f"undefined variable {stmt.name!r}")
 
         var = scope[stmt.name]

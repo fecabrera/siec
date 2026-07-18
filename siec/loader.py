@@ -27,6 +27,7 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
     """
     functions = []
     structs = []
+    consts = []
     visited = set()
 
     def load(file: Path) -> None:
@@ -34,6 +35,7 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         file = file.resolve()
         if file in visited:
             return
+        
         visited.add(file)
 
         # parse the file, tagging any lexer or parser error with its source
@@ -51,12 +53,18 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         # tag each declaration with its file so codegen errors can name it
         for struct in program.structs:
             struct.file = str(file)
+        
         for fn in program.functions:
             fn.file = str(file)
+        
+        for const in program.consts:
+            const.file = str(file)
 
         structs.extend(program.structs)
         functions.extend(program.functions)
+        consts.extend(program.consts)
 
     for source in sources:
         load(source)
-    return Program([], functions, structs)
+    
+    return Program([], functions, structs, consts)

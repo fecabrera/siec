@@ -312,6 +312,19 @@ class Struct:
 
 
 @dataclass
+class Const:
+    """
+    An '@const' declaration: a named compile-time constant expression,
+    substituted at its uses, with an optional type annotation.
+    """
+    name: str
+    type: str | None
+    value: Expr
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
 class Include:
     """
     An '@include' of another source file by its include path (e.g. 'libc/stdio').
@@ -322,8 +335,9 @@ class Include:
 @dataclass
 class Program:
     """
-    The root of the AST: the includes, structs, and functions of a source file.
+    The root of the AST: the includes, structs, functions, and constants of a source file.
     """
     includes: list[Include]
     functions: list[Function]
     structs: list[Struct] = field(default_factory=list)
+    consts: list[Const] = field(default_factory=list)

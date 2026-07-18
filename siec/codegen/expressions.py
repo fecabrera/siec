@@ -97,6 +97,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if expr.name in scope:
             return builder.load(scope[expr.name].slot, name=expr.name)
 
+        # a constant substitutes its value expression in place, coerced to
+        # its annotated type when it has one, adapting like a literal otherwise
+        const = gen.constants.get(expr.name)
+        if const is not None:
+            if const.type is not None:
+                return emit_coerced(gen, builder, const.value, const.type, scope)
+
+            return emit_expression(gen, builder, const.value, expected_type, scope)
+
         # a bare function name is a reference to that function
         func = gen.module.globals.get(expr.name)
         if isinstance(func, ir.Function):
@@ -208,6 +217,13 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Var):
         if expr.name in scope:
             return scope[expr.name].type
+
+        # a constant carries its annotation; unannotated, it adapts like
+        # its value expression written in place
+        const = gen.constants.get(expr.name)
+        if const is not None:
+            return const.type if const.type is not None else expr_sie_type(
+                gen, const.value, scope)
 
         if expr.name in gen.param_types:
             params = ",".join(gen.param_types[expr.name])

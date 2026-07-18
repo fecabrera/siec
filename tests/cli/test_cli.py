@@ -161,6 +161,27 @@ def test_compile_only_honors_the_output_path(tmp_path, monkeypatch):
     assert obj.exists()
 
 
+def test_constants_resolve_across_included_files(tmp_path, monkeypatch):
+    """
+    An '@const' declared in an included file substitutes in the includer.
+    """
+    dep_source = """\
+    @const ANSWER: i32 = 42;
+    """
+
+    main_source = """\
+    @include("dep")
+    fn main() -> i32 { return ANSWER; }
+    """
+
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "dep.sie").write_text(dep_source)
+
+    src = tmp_path / "p.sie"
+    src.write_text(main_source)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_object_files_join_the_link(tmp_path, monkeypatch):
     """
     '.o' files on the command line skip the front end and link into the build.

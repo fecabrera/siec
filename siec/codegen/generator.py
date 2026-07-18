@@ -81,18 +81,24 @@ class CodeGenerator:
         # innermost last: what an 'emit' stores into and jumps to
         self.emit_targets: list[tuple] = []
 
+        # the registered '@const' declarations by name, substituted at their uses
+        self.constants: dict = {}
+
 
 def codegen(program: Program, module_name: str) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
     """
+    from siec.codegen.constants import register_constants
     from siec.codegen.functions import declare_function, emit_function
     from siec.codegen.structs import register_structs
 
     gen = CodeGenerator(module_name)
 
-    # first pass: register structs so function signatures and bodies can name them
+    # first pass: register structs so function signatures and bodies can name
+    # them, then constants so bodies can substitute their values
     register_structs(gen, program)
+    register_constants(gen, program)
 
     # second pass: declare every function so calls can target ones defined later
     for fn in program.functions:
