@@ -19,6 +19,7 @@ from siec.ast import (
     Return,
     While,
 )
+from siec.codegen.aliases import expand_alias
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.enums import evaluate_size
 from siec.codegen.errors import source_location
@@ -132,7 +133,7 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     """
     if isinstance(stmt, Let):
         # an unannotated 'let' takes its type from its initializer
-        type_name = stmt.type
+        type_name = stmt.type = expand_alias(gen, stmt.type)
         if type_name is None:
             type_name = infer_type(gen, stmt.value, scope)
             if type_name is None:

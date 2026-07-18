@@ -11,6 +11,7 @@ from siec.ast import (
     Program,
     StrLiteral,
 )
+from siec.codegen.aliases import expand_alias
 from siec.codegen.enums import evaluate, evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
@@ -26,6 +27,8 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
     """
     for glob in program.globals:
         with source_location(line=glob.line, file=glob.file):
+            glob.type = expand_alias(gen, glob.type)
+
             symbol = glob.name
             if glob.is_static:
                 key = (glob.file, glob.name)

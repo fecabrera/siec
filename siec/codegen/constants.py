@@ -14,6 +14,7 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
+from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 
@@ -29,6 +30,7 @@ def register_constants(gen: CodeGenerator, program: Program) -> None:
             if const.name in gen.constants:
                 raise TypeError(f"constant {const.name!r} is declared more than once")
 
+            const.type = expand_alias(gen, const.type)
             gen.constants[const.name] = const
 
     # validate after registration so constants may reference one another

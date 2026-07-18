@@ -25,6 +25,7 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
+from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import (
     fn_type_parts,
@@ -94,6 +95,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     # a cast produces its target type
     if isinstance(expr, Cast):
+        expr.type = expand_alias(gen, expr.type)
         return expr.type
 
     # a member access yields the field's type; an aliasing field (a pointer

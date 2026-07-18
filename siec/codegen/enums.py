@@ -1,6 +1,7 @@
 """Registration and evaluation of enum declarations."""
 
 from siec.ast import BinaryOp, CharLiteral, EnumMember, IntLiteral, Program, UnaryOp, Var
+from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, EnumInfo, StructInfo
 from siec.codegen.types import resolve_type
@@ -34,6 +35,7 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
             if enum.name in gen.enums or enum.name in gen.structs:
                 raise TypeError(f"type {enum.name!r} is declared more than once")
 
+            enum.type = expand_alias(gen, enum.type)
             if enum.type not in INTEGER_TYPES:
                 raise TypeError(f"enum {enum.name!r} needs an integer backing "
                                 f"type, not {enum.type!r}")

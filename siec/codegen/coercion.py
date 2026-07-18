@@ -3,6 +3,7 @@
 from llvmlite import ir
 
 from siec.ast import AggregateLiteral, ArrayLiteral, BlockExpr, Cast, Expr
+from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import (
     enum_backing,
@@ -45,6 +46,8 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
     """
     # deferred import: coercion and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
+
+    expr.type = expand_alias(gen, expr.type)
 
     operand_name = expr_sie_type(gen, expr.operand, scope)
     if (is_const(operand_name) and not is_const(expr.type)

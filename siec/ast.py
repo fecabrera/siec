@@ -435,6 +435,18 @@ class Const:
 
 
 @dataclass
+class TypeAlias:
+    """
+    A type alias: 'type name = T;', naming an existing type. The alias is
+    interchangeable with its target everywhere a type is written.
+    """
+    name: str
+    type: str
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
 class Include:
     """
     An '@include' of another source file by its include path (e.g. 'libc/stdio').
@@ -454,3 +466,4 @@ class Program:
     consts: list[Const] = field(default_factory=list)
     enums: list[Enum] = field(default_factory=list)
     globals: list[Global] = field(default_factory=list)
+    aliases: list[TypeAlias] = field(default_factory=list)

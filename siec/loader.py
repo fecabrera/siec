@@ -30,6 +30,7 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
     consts = []
     enums = []
     globals_ = []
+    aliases = []
     visited = set()
 
     def load(file: Path) -> None:
@@ -68,13 +69,17 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         for glob in program.globals:
             glob.file = str(file)
 
+        for alias in program.aliases:
+            alias.file = str(file)
+
         structs.extend(program.structs)
         functions.extend(program.functions)
         consts.extend(program.consts)
         enums.extend(program.enums)
         globals_.extend(program.globals)
+        aliases.extend(program.aliases)
 
     for source in sources:
         load(source)
 
-    return Program([], functions, structs, consts, enums, globals_)
+    return Program([], functions, structs, consts, enums, globals_, aliases)

@@ -1,6 +1,7 @@
 """Registration of struct declarations as LLVM types."""
 
 from siec.ast import Program
+from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import is_reference, resolve_type
@@ -46,6 +47,7 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
         with source_location(line=struct.line, file=struct.file):
             # references only pass parameters; a field is its own storage
             for field in struct.fields:
+                field.type = expand_alias(gen, field.type)
                 if is_reference(field.type):
                     raise TypeError(f"field {field.name!r} cannot be a reference")
 

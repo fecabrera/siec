@@ -1,6 +1,6 @@
 """Parsing of function declarations, definitions, and whole programs."""
 
-from siec.ast import Function, Global, Param, Program
+from siec.ast import Function, Global, Param, Program, TypeAlias
 from siec.parser.constants import parse_const
 from siec.parser.enums import parse_enum
 from siec.parser.expressions import parse_expression
@@ -22,10 +22,12 @@ def parse_program(ts: TokenStream) -> Program:
     consts = []
     enums = []
     globals_ = []
+    aliases = []
 
     # '@' starts an '@include' directive, an '@const' declaration, an
     # '@extern let' global, or a decorated function (e.g. '@extern fn');
-    # 'struct' and 'enum' start type declarations; anything else is a function
+    # 'struct', 'enum', and 'type' start type declarations; anything else
+    # is a function
     while ts.peek().kind != "eof":
         if ts.peek().value == "@" and ts.peek(1).value == "include":
             includes.append(parse_include(ts))
@@ -39,10 +41,27 @@ def parse_program(ts: TokenStream) -> Program:
             structs.append(parse_struct(ts))
         elif ts.peek().value == "enum":
             enums.append(parse_enum(ts))
+        elif ts.peek().value == "type":
+            aliases.append(parse_alias(ts))
         else:
             functions.append(parse_function(ts))
 
-    return Program(includes, functions, structs, consts, enums, globals_)
+    return Program(includes, functions, structs, consts, enums, globals_, aliases)
+
+
+def parse_alias(ts: TokenStream) -> TypeAlias:
+    """
+    Parse a type alias: 'type name = T;'.
+    """
+    line = ts.peek().line
+    ts.expect("kw", "type")
+
+    name = ts.expect("ident").value
+    ts.expect("sym", "=")
+    target = parse_type(ts)
+    ts.expect("sym", ";")
+
+    return TypeAlias(name, target, line=line)
 
 
 def parse_global(ts: TokenStream) -> Global:

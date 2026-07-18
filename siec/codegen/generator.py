@@ -119,6 +119,10 @@ class CodeGenerator:
         # 'return' or 'emit' would flush the very frame holding it
         self.flushing_defers = 0
 
+        # the registered 'type' aliases by name, mapped to their canonical
+        # expanded targets; every type name is expanded through them
+        self.aliases: dict[str, str] = {}
+
         # the registered '@const' declarations by name, substituted at their uses
         self.constants: dict = {}
 
@@ -171,6 +175,7 @@ def codegen(program: Program, module_name: str) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
     """
+    from siec.codegen.aliases import register_aliases
     from siec.codegen.constants import register_constants
     from siec.codegen.enums import register_enums
     from siec.codegen.functions import declare_function, emit_function
@@ -179,10 +184,12 @@ def codegen(program: Program, module_name: str) -> ir.Module:
 
     gen = CodeGenerator(module_name)
 
-    # first pass: register the named declarations — constants first so enum
+    # first pass: register the named declarations — aliases first so every
+    # later type annotation expands through them, constants next so enum
     # values can reference them, enums next so struct fields can be
     # enum-typed, then structs for signatures and bodies to name, and
     # globals last so their types can name any of the above
+    register_aliases(gen, program)
     register_constants(gen, program)
     register_enums(gen, program)
     register_structs(gen, program)

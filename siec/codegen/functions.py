@@ -3,6 +3,7 @@
 from llvmlite import ir
 
 from siec.ast import Function
+from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
 from siec.codegen.statements import emit_block
@@ -35,6 +36,10 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     declared with no return type, and its 'args: char*[]' form keeps the
     C-level (i32, char**) signature underneath.
     """
+    fn.return_type = expand_alias(gen, fn.return_type)
+    for param in fn.params:
+        param.type = expand_alias(gen, param.type)
+
     # references only pass parameters; a returned one would outlive its argument
     if is_reference(fn.return_type):
         raise TypeError("a reference cannot be a return type")
