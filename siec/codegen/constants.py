@@ -10,6 +10,7 @@ from siec.ast import (
     FloatLiteral,
     IntLiteral,
     Program,
+    SizeOf,
     StrLiteral,
     UnaryOp,
     Var,
@@ -51,6 +52,11 @@ def check_constant(gen: CodeGenerator, expr: Expr, chain: list[str]) -> None:
     # an enum member is a named integer constant; its existence is
     # checked where the constant is used
     if isinstance(expr, EnumMember):
+        return
+
+    # a size is computed at compile time; its name resolves where the
+    # constant is used
+    if isinstance(expr, SizeOf):
         return
 
     if isinstance(expr, Var):

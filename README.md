@@ -925,6 +925,35 @@ let e: i32 = a as i32; // e holds the same value as a, unchanged
 let f: u32 = a as u32 + 1; // (a as u32) + 1
 ```
 
+#### Sizeof
+
+`sizeof` yields the size in bytes of a type, or of a variable's declared type, computed at compile time. It takes either between its parentheses:
+
+```
+sizeof(T)
+sizeof(v)
+```
+
+```
+let c: char = 'a';
+sizeof(char);   // 1
+sizeof(c);      // 1
+
+let msg: char[] = "hello";
+sizeof(char[]); // 16: an array is a {pointer, length} pair
+sizeof(msg);    // 16
+```
+
+The result adopts the integer type of its context like a literal does, defaulting to `u64`. Structs measure their full layout, padding included, so `@packed` and `@align(N)` change what `sizeof` reports.
+
+Being a compile-time constant, `sizeof` also works anywhere one is required: `@const` values, enum member values, and array sizes.
+
+```
+@const WORD = sizeof(u64);
+
+let buffer: u8[sizeof(i32) * 8];
+```
+
 ### Enums
 
 Enums are collections of constants. They are declared through the keyword `enum` followed by their name. Their members are declared by name, separated by commas.

@@ -21,6 +21,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    SizeOf,
     Slice,
     StrLiteral,
     Ternary,
@@ -31,6 +32,7 @@ from siec.codegen.calls import emit_call
 from siec.codegen.coercion import emit_cast, emit_coerced
 from siec.codegen.enums import member_value
 from siec.codegen.generator import CodeGenerator, entry_alloca, make_volatile
+from siec.codegen.sizes import size_of
 from siec.codegen.inference import (
     ARITHMETIC,
     FLOAT_ARITHMETIC,
@@ -91,6 +93,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             return ir.Constant(expected_type, value)
 
         return ir.Constant(resolve_type(gen.enums[expr.enum].backing), value)
+
+    if isinstance(expr, SizeOf):
+        # 'sizeof' is a compile-time constant adopting an integer context
+        # like a literal, defaulting to u64
+        size = size_of(gen, expr.name, scope)
+        if isinstance(expected_type, ir.IntType):
+            return ir.Constant(expected_type, size)
+
+        return ir.Constant(ir.IntType(64), size)
 
     if isinstance(expr, AggregateLiteral):
         return emit_aggregate(gen, builder, expr, expected_type, scope)

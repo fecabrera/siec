@@ -19,6 +19,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    SizeOf,
     Slice,
     StrLiteral,
     Ternary,
@@ -177,6 +178,10 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     if isinstance(expr, BoolLiteral):
         return "bool"
+
+    # a size is a byte count, defaulting to u64 like it does in any context
+    if isinstance(expr, SizeOf):
+        return "u64"
 
     # 'not' yields a bool; '-' and '~' keep their operand's type
     if isinstance(expr, UnaryOp):

@@ -15,6 +15,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    SizeOf,
     Slice,
     StrLiteral,
     Ternary,
@@ -207,6 +208,13 @@ def parse_primary(ts: TokenStream) -> Expr:
     # an identifier is an enum member if followed by '::', a call if
     # followed by '(', and a variable otherwise
     if tok.kind == "ident":
+        # 'sizeof(T)' takes a type or a variable's name, measured at codegen
+        if tok.value == "sizeof" and ts.peek().syntax == "(":
+            ts.next()
+            name = parse_type(ts)
+            ts.expect("sym", ")")
+            return parse_postfix(ts, SizeOf(name))
+
         if ts.peek().syntax == "::":
             ts.next()
             member = ts.expect("ident").value

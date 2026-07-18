@@ -135,6 +135,16 @@ class Cast:
 
 
 @dataclass
+class SizeOf:
+    """
+    The compile-time size in bytes of a type or of a variable's type:
+    'sizeof(T)' or 'sizeof(v)'. The name holds whatever was written between
+    the parentheses, resolved at codegen.
+    """
+    name: str
+
+
+@dataclass
 class UnaryOp:
     """
     A unary operation applying a prefix operator to one subexpression.
