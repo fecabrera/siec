@@ -126,6 +126,26 @@ def test_array_literal_of_string_pointers(run):
     assert run(source).returncode == 7
 
 
+def test_array_literal_initializes_a_pointer(run):
+    """
+    An array literal in a pointer context decays to its data pointer,
+    rebuildable into an array with '{ptr, n}': the README's example.
+    """
+    source = """
+    fn main() -> i32 {
+        let ptr: i32* = [1, 2, 3];
+        let n: u64 = 3;
+        let arr: i32[] = {ptr, n};
+
+        if (arr.length == 3 and arr[0] == 1 and arr[2] == 3) {
+            return 8;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 8
+
+
 def test_array_decays_at_a_pointer_parameter(run):
     """
     An array passed where a plain pointer is expected lowers to its data pointer.

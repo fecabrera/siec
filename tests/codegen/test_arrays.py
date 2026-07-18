@@ -168,6 +168,21 @@ def test_empty_array_literal_needs_an_array_type(env):
         emit_expression(gen, builder, ArrayLiteral([IntLiteral(3)]), ir.IntType(32), {})
 
 
+def test_array_literal_decays_into_a_pointer_context(env):
+    """
+    An array literal in a pointer context builds its array and yields the
+    data pointer, elements typed by the pointer's element type.
+    """
+    from siec.codegen.expressions import emit_coerced
+
+    gen, builder = env
+    literal = ArrayLiteral([IntLiteral(1), IntLiteral(2)])
+
+    value = emit_coerced(gen, builder, literal, "i64*", {})
+    assert value.type == ir.PointerType(ir.IntType(64))
+    assert "alloca [2 x i64]" in str(builder.function)
+
+
 def test_string_literal_fills_a_char_array(env):
     """
     A string literal in a 'char[]' context builds the fat {char*, u64} value,

@@ -367,6 +367,14 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     # an array literal coerces each element to the array's declared element type
     if isinstance(expr, ArrayLiteral):
+        # in a pointer context, the literal builds its array and decays to
+        # its data pointer: 'let ptr: i32* = [1, 2, 3];'
+        if isinstance(target_type, ir.PointerType):
+            array_type = ir.LiteralStructType([target_type, ir.IntType(64)])
+            element_name = target_name.removesuffix("*") if target_name else None
+            value = emit_array(gen, builder, expr, array_type, scope, element_name)
+            return builder.extract_value(value, 0, name="decay")
+
         element_name = target_name[:-2] if target_name and target_name.endswith("[]") else None
         return emit_array(gen, builder, expr, target_type, scope, element_name)
 
