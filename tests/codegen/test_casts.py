@@ -4,7 +4,7 @@ import pytest
 from llvmlite import ir
 
 from siec.ast import Cast, IntLiteral, Var
-from siec.codegen.expressions import emit_cast
+from siec.codegen.coercion import emit_cast
 from siec.codegen.generator import Variable
 
 

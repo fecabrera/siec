@@ -4,7 +4,8 @@ import pytest
 from llvmlite import ir
 
 from siec.ast import AggregateLiteral, Field, IntLiteral, Member, MemberAssign, Program, Struct, Var
-from siec.codegen.expressions import emit_expression, emit_lvalue, signedness
+from siec.codegen.expressions import emit_expression, emit_lvalue
+from siec.codegen.inference import signedness
 from siec.codegen.generator import Variable
 from siec.codegen.statements import emit_statement
 from siec.codegen.structs import register_structs

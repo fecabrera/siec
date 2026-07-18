@@ -18,16 +18,10 @@ from siec.ast import (
     Return,
     While,
 )
+from siec.codegen.coercion import emit_coerced
 from siec.codegen.errors import source_location
-from siec.codegen.expressions import (
-    emit_bool,
-    emit_coerced,
-    emit_expression,
-    emit_lvalue,
-    expr_sie_type,
-    infer_type,
-    member_field,
-)
+from siec.codegen.expressions import emit_bool, emit_expression, emit_lvalue
+from siec.codegen.inference import expr_sie_type, infer_type, member_field
 from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
 from siec.codegen.types import is_const, is_reference, resolve_type, sized_array, strip_reference
 

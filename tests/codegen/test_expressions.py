@@ -5,7 +5,8 @@ from llvmlite import ir
 
 from siec.ast import (BinaryOp, BoolLiteral, Call, Function, Index, IntLiteral, Param,
                       StrLiteral, UnaryOp, Var)
-from siec.codegen.expressions import emit_bool, emit_call, emit_expression, emit_string
+from siec.codegen.calls import emit_call
+from siec.codegen.expressions import emit_bool, emit_expression, emit_string
 from siec.codegen.functions import declare_function
 from siec.codegen.generator import Variable
 

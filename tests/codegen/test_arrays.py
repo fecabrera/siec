@@ -13,7 +13,8 @@ from siec.ast import (
     StrLiteral,
     Var,
 )
-from siec.codegen.expressions import emit_expression, emit_lvalue, member_field, signedness
+from siec.codegen.expressions import emit_expression, emit_lvalue
+from siec.codegen.inference import member_field, signedness
 from siec.codegen.generator import Variable
 from siec.codegen.types import resolve_type
 
@@ -31,7 +32,7 @@ def test_array_exposes_data_and_length_fields():
     An array's synthetic fields are 'data' (X*) at index 0 and 'length' (u64) at index 1.
     """
     # member_field goes through a scope, but the field table itself is fixed
-    from siec.codegen.expressions import type_info
+    from siec.codegen.inference import type_info
     from siec.codegen.generator import CodeGenerator
 
     info = type_info(CodeGenerator("t"), "i32[]")
@@ -173,7 +174,7 @@ def test_array_literal_decays_into_a_pointer_context(env):
     An array literal in a pointer context builds its array and yields the
     data pointer, elements typed by the pointer's element type.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     literal = ArrayLiteral([IntLiteral(1), IntLiteral(2)])
@@ -235,7 +236,7 @@ def test_array_literal_element_widens_to_the_declared_element_type(env):
     Coercing an array literal through a Let-style context widens each
     element to the array's declared element Sie type.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     literal = ArrayLiteral([IntLiteral(1), IntLiteral(2)])
@@ -248,7 +249,7 @@ def test_array_decays_to_its_element_pointer(env):
     """
     An array coerced to its element pointer type lowers to its data field.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     scope = array_scope(builder)
@@ -262,7 +263,7 @@ def test_array_does_not_decay_to_a_mismatched_pointer(env):
     """
     An array only decays to a pointer of its own element type.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     scope = array_scope(builder)
@@ -276,7 +277,7 @@ def test_array_casts_to_its_element_pointer(env):
     An 'arr as X*' cast extracts the array's data pointer.
     """
     from siec.ast import Cast
-    from siec.codegen.expressions import emit_cast
+    from siec.codegen.coercion import emit_cast
 
     gen, builder = env
     scope = array_scope(builder)
@@ -291,7 +292,7 @@ def test_array_cast_to_a_mismatched_pointer_is_an_error(env):
     Casting an array to a pointer of a different element type is rejected.
     """
     from siec.ast import Cast
-    from siec.codegen.expressions import emit_cast
+    from siec.codegen.coercion import emit_cast
 
     gen, builder = env
     scope = array_scope(builder)
@@ -399,7 +400,7 @@ def test_slice_sie_type_is_the_bases(env):
     """
     Type inference sees a slice as its base's array type.
     """
-    from siec.codegen.expressions import expr_sie_type
+    from siec.codegen.inference import expr_sie_type
 
     gen, builder = env
     scope = array_scope(builder)
@@ -410,7 +411,7 @@ def test_any_pointer_decays_to_opaque(env):
     """
     A typed pointer coerced to 'opaque*' bitcasts to the untyped pointer.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     slot = builder.alloca(ir.PointerType(ir.IntType(32)), name="p")
@@ -424,7 +425,7 @@ def test_array_decays_to_opaque_through_its_data(env):
     """
     An array coerced to 'opaque*' goes through its data pointer.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     scope = array_scope(builder)
@@ -438,7 +439,7 @@ def test_non_pointer_does_not_decay_to_opaque(env):
     """
     A scalar coerced to 'opaque*' is still rejected.
     """
-    from siec.codegen.expressions import emit_coerced
+    from siec.codegen.coercion import emit_coerced
 
     gen, builder = env
     slot = builder.alloca(ir.IntType(32), name="n")
@@ -453,7 +454,7 @@ def test_pointer_casts_to_opaque(env):
     An explicit 'as opaque*' cast works on any pointer.
     """
     from siec.ast import Cast
-    from siec.codegen.expressions import emit_cast
+    from siec.codegen.coercion import emit_cast
 
     gen, builder = env
     scope = array_scope(builder)
@@ -467,7 +468,7 @@ def test_opaque_casts_to_a_typed_pointer(env):
     An 'opaque* as X*' cast bitcasts to the typed pointer.
     """
     from siec.ast import Cast
-    from siec.codegen.expressions import emit_cast
+    from siec.codegen.coercion import emit_cast
 
     gen, builder = env
     slot = builder.alloca(ir.PointerType(ir.IntType(8)), name="p")
@@ -482,7 +483,7 @@ def test_typed_pointer_does_not_cast_to_another_typed_pointer(env):
     Casting between two typed pointers is still rejected; only 'opaque*' converts.
     """
     from siec.ast import Cast
-    from siec.codegen.expressions import emit_cast
+    from siec.codegen.coercion import emit_cast
 
     gen, builder = env
     slot = builder.alloca(ir.PointerType(ir.IntType(32)), name="p")

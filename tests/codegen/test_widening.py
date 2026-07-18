@@ -4,7 +4,8 @@ import pytest
 from llvmlite import ir
 
 from siec.ast import IntLiteral, Var
-from siec.codegen.expressions import emit_coerced, numeric_class
+from siec.codegen.coercion import emit_coerced
+from siec.codegen.inference import numeric_class
 from siec.codegen.generator import Variable
 
 
