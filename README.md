@@ -30,7 +30,7 @@ siec main.sie file1.o file2.o -o main
 - `-o <path>` names the output executable, `a.out` by default.
 - `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise.
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
-- `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form — executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
+- `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form, including executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
 - `--emit-llvm` prints the LLVM IR and exits, without building.
@@ -273,7 +273,7 @@ while (<expr>) {
 }
 ```
 
-Like an if arm, the body is its own scope — a fresh one on each iteration, so a variable declared inside the body doesn't carry over to the next pass:
+Like an if arm, the body is its own scope, a fresh one on each iteration, so a variable declared inside the body doesn't carry over to the next pass:
 
 ```
 let i: i32 = 0;
@@ -298,7 +298,7 @@ for (let i: i32 = 0; i < n; i += 1) {
 }
 ```
 
-The whole loop is its own scope — the init's variable lives exactly as long as the loop — and the body behaves like a while's, fresh on each iteration.
+The whole loop is its own scope (the init's variable lives exactly as long as the loop), and the body behaves like a while's, fresh on each iteration.
 
 A single-statement body may drop the braces here too:
 
@@ -463,7 +463,7 @@ fn f(a: const A) {
 }
 ```
 
-Since `const` is not part of the type, a `T` passes directly where a `const T` is expected. The reverse never happens: a `const` pointer or array is never used where a mutable one is expected — not implicitly, and not through a cast. The contract follows the value — through pointer fields read from a `const` struct, through indexing, and through inferred `let`s:
+Since `const` is not part of the type, a `T` passes directly where a `const T` is expected. The reverse never happens: a `const` pointer or array is never used where a mutable one is expected, not implicitly and not through a cast. The contract follows the value, through pointer fields read from a `const` struct, through indexing, and through inferred `let`s:
 
 ```
 fn f(s: const char*) {
@@ -473,7 +473,7 @@ fn f(s: const char*) {
 }
 ```
 
-Copies of non-aliasing values discard the contract naturally — a `const i32` argument is just a value, and copies of it are the caller's own. `const` also works anywhere a type is written: on `let` declarations, struct fields, and return types.
+Copies of non-aliasing values discard the contract naturally: a `const i32` argument is just a value, and copies of it are the caller's own. `const` also works anywhere a type is written: on `let` declarations, struct fields, and return types.
 
 This is also how a method's receiver declares whether it mutates the struct: a mutating method takes `self: &S`, while one that only reads from it takes `self: const &S`.
 
@@ -537,7 +537,7 @@ Functions can be decorated with `@static` to make them local to their file: no o
 }
 ```
 
-Decorators stack — `@static @inline fn` is both — except `@extern`, whose function has no body for the others to act on.
+Decorators stack, so `@static @inline fn` is both, except for `@extern`, whose function has no body for the others to act on.
 
 `@static let` declares a file-local global variable the same way: one storage location shared by every call, visible only to its own file. Its initializer, when given, must be a compile-time constant; without one it starts at zero, C-style.
 
@@ -637,7 +637,7 @@ let a: u8 = 0;
 let b: u64 = a; // implicit widening, equivalent to let b: u64 = a as u64;
 ```
 
-Crossing prefixes — between signed, unsigned, and floats — or narrowing to a smaller width is never implicit and requires an explicit cast:
+Crossing prefixes (between signed, unsigned, and floats) or narrowing to a smaller width is never implicit and requires an explicit cast:
 
 ```
 let a: i16 = 0;
@@ -763,7 +763,7 @@ Casting between `i8[]`/`u8[]` and `char[]` automatically handles the length chan
 
 #### References
 
-References to a type `T` are represented by `&T`. References cannot be dereferenced, meaning that you can't obtain the address where the value is stored through the `&` operator. This covers anything reached through the reference — for `s: &S`, both `&s` and `&s.member` are compile errors, since either would leak the caller's storage.
+References to a type `T` are represented by `&T`. References cannot be dereferenced, meaning that you can't obtain the address where the value is stored through the `&` operator. This covers anything reached through the reference: for `s: &S`, both `&s` and `&s.member` are compile errors, since either would leak the caller's storage.
 
 References cannot type a variable.
 
@@ -956,18 +956,26 @@ let b: S = {b = 2, a = 1};  // named: any order
 let c: S = {a = 1};         // named: b starts at zero
 ```
 
-A struct's layout and access can be directed with decorators, stacking in any order. `@packed` drops the padding between fields, C's `__attribute__((packed))`; `@align(N)` aligns every allocation of the struct — locals, parameters, and globals — to N bytes, which must be a power of two; `@volatile` makes every access to the struct's values a volatile one, which the optimizer may neither elide nor reorder — the property lives on the type, so unlike C there is no way to hold a non-volatile value of it.
+A struct's layout and access can be directed with decorators, stacking in any order. `@packed` drops the padding between fields, C's `__attribute__((packed))`.
 
 ```
 @packed struct Header {
     tag: u8;
     size: u32;   // at offset 1, no padding
 }
+```
 
+`@align(N)` aligns every allocation of the struct (locals, parameters, and globals) to N bytes, which must be a power of two.
+
+```
 @align(64) struct CacheLine {
     hot: i64;    // allocations start on a cache line
 }
+```
 
+`@volatile` makes every access to the struct's values a volatile one, which the optimizer may neither elide nor reorder. The property lives on the type, so unlike C there is no way to hold a non-volatile value of it.
+
+```
 @volatile struct Reg {
     status: u32; // every read and write really happens
 }
