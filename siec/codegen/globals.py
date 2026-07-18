@@ -11,7 +11,7 @@ from siec.ast import (
     Program,
     StrLiteral,
 )
-from siec.codegen.enums import evaluate
+from siec.codegen.enums import evaluate, evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.types import is_const, is_reference, resolve_type, sized_array, strip_const
@@ -70,21 +70,22 @@ def global_initializer(gen: CodeGenerator, glob: Global, symbol: str) -> ir.Cons
     type_ = resolve_type(glob.type, gen.structs)
 
     # a sized array 'X[N]' points at N zeroed elements of module storage,
-    # its length N — the module-level shape of a local sized declaration
+    # its length N, the module-level shape of a local sized declaration
     if (sized := sized_array(strip_const(glob.type))) is not None:
         if glob.value is not None:
             raise TypeError(f"a sized array takes its contents from its size; "
                             f"initialize an {sized[0]!r} instead")
 
+        size = evaluate_size(gen, sized[1])
         element = type_.elements[0].pointee
-        backing = ir.GlobalVariable(gen.module, ir.ArrayType(element, sized[1]),
+        backing = ir.GlobalVariable(gen.module, ir.ArrayType(element, size),
                                     name=f"{symbol}.backing")
         backing.linkage = "internal"
         backing.initializer = ir.Constant(backing.value_type, None)
 
         zero = ir.Constant(ir.IntType(32), 0)
         return ir.Constant(type_, [backing.gep([zero, zero]),
-                                   ir.Constant(ir.IntType(64), sized[1])])
+                                   ir.Constant(ir.IntType(64), size)])
 
     if glob.value is None:
         return ir.Constant(type_, None)  # zero-initialized, C-style

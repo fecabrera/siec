@@ -63,19 +63,19 @@ def is_aliasing(name: str | None) -> bool:
     return name is not None and (name.endswith("*") or name.endswith("[]"))
 
 
-def sized_array(name: str | None) -> tuple[str, int] | None:
+def sized_array(name: str | None) -> tuple[str, str] | None:
     """
-    Split a sized array name 'X[N]' into its unsized form 'X[]' and N,
-    or None for any other type name.
+    Split a sized array name 'X[N]' into its unsized form 'X[]' and the
+    size's text, or None for any other type name.
+
+    The size is a constant integer expression's tokens, evaluated where a
+    declaration allocates the backing; the type itself is just 'X[]'.
     """
     if name is None or not name.endswith("]") or name.endswith("[]"):
         return None
 
     base, _, size = name.rpartition("[")
-    if not size[:-1].isdigit():
-        return None
-
-    return f"{base}[]", int(size[:-1])
+    return f"{base}[]", size[:-1]
 
 
 def type_signedness(name: str | None) -> str | None:

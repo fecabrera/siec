@@ -396,3 +396,58 @@ def test_nested_array_literal_of_strings(run):
     }
     """
     assert run(source).returncode == 8
+
+
+def test_sized_array_size_may_be_a_constant_expression(run):
+    """
+    'T[N]' takes any constant integer expression: '@const's, enum
+    members, and arithmetic over them.
+    """
+    source = """
+    @const BUF_SIZE = 16;
+    @const HEADER = 4;
+
+    enum Slots { COUNT = 3 }
+
+    fn main() -> i32 {
+        let a: u8[BUF_SIZE];
+        let b: i32[BUF_SIZE - HEADER];
+        let c: char*[Slots::COUNT];
+        let d: i32[2 + 2];
+        return (a.length + b.length + c.length + d.length) as i32; // 16+12+3+4
+    }
+    """
+    assert run(source).returncode == 35
+
+
+def test_static_sized_array_size_may_be_a_constant_expression(compile_source):
+    """
+    Static backing sizes evaluate the same expressions.
+    """
+    module = str(compile_source("""
+    @const N = 8;
+    @static let buf: i64[N * 2];
+    """))
+    assert "internal global [16 x i64] zeroinitializer" in module
+
+
+def test_array_size_must_be_positive(compile_source):
+    """
+    A size that evaluates to zero or less is rejected.
+    """
+    with pytest.raises(TypeError, match="array size must be positive, not 0"):
+        compile_source("""
+        @const N = 0;
+        fn main() -> i32 { let a: u8[N]; return 0; }
+        """)
+
+
+def test_array_size_must_be_constant(compile_source):
+    """
+    A runtime value cannot size an array.
+    """
+    with pytest.raises(TypeError, match="constant integer expression"):
+        compile_source("""
+        fn f() -> i32 { return 4; }
+        fn main() -> i32 { let a: u8[f()]; return 0; }
+        """)

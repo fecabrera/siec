@@ -72,6 +72,23 @@ def member_value(gen: CodeGenerator, expr: EnumMember) -> int:
     return info.members[expr.member]
 
 
+def evaluate_size(gen: CodeGenerator, text: str) -> int:
+    """
+    Evaluate a sized array's '[N]' text: a constant integer expression
+    kept as tokens by the parser, required to be positive.
+    """
+    # deferred import: the parser package doesn't depend on codegen
+    from siec.lexer import lex
+    from siec.parser.expressions import parse_expression
+    from siec.parser.stream import TokenStream
+
+    size = evaluate(gen, parse_expression(TokenStream(lex(text))))
+    if size <= 0:
+        raise TypeError(f"array size must be positive, not {size}")
+
+    return size
+
+
 def evaluate(gen: CodeGenerator, expr) -> int:
     """
     Evaluate a constant integer expression at compile time: literals,

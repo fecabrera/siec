@@ -699,10 +699,13 @@ let ptr: i32* = arr.data;   // the backing pointer
 let n: u64 = arr.length;    // the element count
 ```
 
-Declaring an array with a size `X[N]` backs it with `N` automatically allocated stack elements: its data points at them and its length starts at `N`. Since the contents come from the size, a sized declaration takes no initializer.
+Declaring an array with a size `X[N]` backs it with `N` automatically allocated stack elements: its data points at them and its length starts at `N`. Since the contents come from the size, a sized declaration takes no initializer. The size is a constant integer expression: a literal, a `@const`, or any combination, evaluated at compile time and required to be positive.
 
 ```
-let buf: u8[64]; // buf.data -> 64 stack bytes, buf.length == 64
+@const HEADER = 16;
+
+let buf: u8[64];              // buf.data -> 64 stack bytes, buf.length == 64
+let body: u8[64 - HEADER];    // sized by a constant expression
 ```
 
 An array can be indexed directly, reading or writing the `i`th element through its backing data:

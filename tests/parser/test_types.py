@@ -49,6 +49,16 @@ def test_sized_array_type_accepts_hex(ts):
     assert parse_type(ts("u8[0x10]")) == "u8[16]"
 
 
+def test_sized_array_type_accepts_constant_expressions(ts):
+    """
+    A size may be any constant integer expression, kept as its tokens for
+    codegen to evaluate.
+    """
+    assert parse_type(ts("u8[BUF_SIZE]")) == "u8[BUF_SIZE]"
+    assert parse_type(ts("i32[BUF_SIZE - 4]")) == "i32[BUF_SIZE - 4]"
+    assert parse_type(ts("char*[Slots::COUNT]")) == "char*[Slots :: COUNT]"
+
+
 def test_const_type(ts):
     """
     A leading 'const' is kept as a prefix on the canonical name.

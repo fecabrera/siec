@@ -1,6 +1,5 @@
 """Parsing of type annotations."""
 
-from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
 
 
@@ -35,10 +34,22 @@ def parse_type(ts: TokenStream) -> str:
             ts.next()
 
             if ts.peek().value != "]":
-                # normalize the size to decimal, so '[0x10]' and '[16]' agree
-                size = int_value(ts.expect("int").value)
+                # a size is a constant integer expression: literals,
+                # '@const' names, or any mix; a plain literal normalizes to
+                # decimal, so '[0x10]' and '[16]' agree, and anything else
+                # keeps its tokens for codegen to evaluate
+                from siec.ast import IntLiteral
+                from siec.parser.expressions import parse_expression
+
+                start = ts.pos
+                size = parse_expression(ts)
+                if isinstance(size, IntLiteral):
+                    name += f"[{size.value}]"
+                else:
+                    text = " ".join(tok.value for tok in ts.tokens[start:ts.pos])
+                    name += f"[{text}]"
+
                 ts.expect("sym", "]")
-                name += f"[{size}]"
             else:
                 ts.expect("sym", "]")
                 name += "[]"

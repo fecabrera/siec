@@ -19,6 +19,7 @@ from siec.ast import (
     While,
 )
 from siec.codegen.coercion import emit_coerced
+from siec.codegen.enums import evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.expressions import emit_bool, emit_expression, emit_lvalue
 from siec.codegen.inference import expr_sie_type, infer_type, member_field
@@ -272,7 +273,7 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
 
 def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
-                         sized: tuple[str, int], scope: dict) -> None:
+                         sized: tuple[str, str], scope: dict) -> None:
     """
     Declare a sized array 'let a: X[N];': an 'X[]' whose data points at N
     automatically allocated stack elements and whose length starts at N.
@@ -281,7 +282,7 @@ def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
         raise TypeError(f"a sized array takes its contents from its size; "
                         f"initialize an {sized[0]!r} instead")
 
-    sie_type, size = sized
+    sie_type, size = sized[0], evaluate_size(gen, sized[1])
     var_type = resolve_type(sie_type, gen.structs)
 
     backing = entry_alloca(builder, ir.ArrayType(var_type.elements[0].pointee, size),
