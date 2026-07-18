@@ -1,6 +1,6 @@
-"""Tests for parsing unary operator expressions ('-', '~', 'not')."""
+"""Tests for parsing unary operator expressions ('-', '~', 'not', '&')."""
 
-from siec.ast import BinaryOp, IntLiteral, UnaryOp, Var
+from siec.ast import BinaryOp, Index, IntLiteral, Member, UnaryOp, Var
 from siec.parser.expressions import parse_expression
 
 
@@ -38,7 +38,10 @@ def test_unary_minus_binds_tighter_than_multiplication(ts):
     '-a * b' negates a before multiplying.
     """
     assert parse_expression(ts("-a * b")) == BinaryOp(
-        "*", UnaryOp("-", Var("a")), Var("b"))
+        "*",
+        UnaryOp("-", Var("a")),
+        Var("b"),
+    )
 
 
 def test_unary_minus_nests(ts):
@@ -83,4 +86,37 @@ def test_unary_not_binds_tighter_than_and(ts):
     'not a and b' negates a before conjoining.
     """
     assert parse_expression(ts("not a and b")) == BinaryOp(
-        "and", UnaryOp("not", Var("a")), Var("b"))
+        "and",
+        UnaryOp("not", Var("a")),
+        Var("b"),
+    )
+
+
+def test_address_of(ts):
+    """
+    A prefix '&' parses to a UnaryOp over its operand.
+    """
+    assert parse_expression(ts("&x")) == UnaryOp("&", Var("x"))
+
+
+def test_address_of_takes_postfix_chains(ts):
+    """
+    '&' applies to a whole member or index chain, not just the base name.
+    """
+    assert parse_expression(ts("&p.x")) == UnaryOp("&", Member(Var("p"), "x"))
+    assert parse_expression(ts("&arr[2]")) == UnaryOp(
+        "&",
+        Index(Var("arr"),
+        IntLiteral(2),
+    ))
+
+
+def test_prefix_address_of_is_distinct_from_bitwise_and(ts):
+    """
+    'a & &b' masks a with b's address: infix '&' stays binary.
+    """
+    assert parse_expression(ts("a & &b")) == BinaryOp(
+        "&",
+        Var("a"),
+        UnaryOp("&", Var("b")),
+    )

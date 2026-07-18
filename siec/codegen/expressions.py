@@ -164,6 +164,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if expr.op == "not":
             return builder.not_(emit_bool(gen, builder, expr.operand, scope))
 
+        # '&' takes the address of an assignable expression: its stack slot
+        if expr.op == "&":
+            return emit_lvalue(gen, builder, expr.operand, scope)
+
         raise TypeError(f"unknown unary operator {expr.op!r}")
 
     if isinstance(expr, BinaryOp):
@@ -256,6 +260,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a slice is a view with its base's array type
     if isinstance(expr, Slice):
         return expr_sie_type(gen, expr.base, scope)
+
+    # '&' yields a pointer to its operand's type
+    if isinstance(expr, UnaryOp) and expr.op == "&":
+        operand = expr_sie_type(gen, expr.operand, scope)
+        return f"{operand}*" if operand is not None else None
 
     return None
 

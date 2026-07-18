@@ -597,6 +597,18 @@ let points: Point*;
 points[0].x = 5;
 ```
 
+The `&` operator takes the address of a value, yielding a `T*`. It applies to anything assignable: a variable, a struct field, or an indexed element.
+
+```
+let x: i32 = 1;
+let p: i32* = &x;
+
+p[0] = 5; // writes through to x
+
+let field: i32* = &pt.y;   // address of a field
+let elem: i32* = &arr[1];  // address of an element
+```
+
 #### Arrays
 
 Arrays are collections of same-type values. They are represented by `X[]` and their internal representation is always `{X*, u64}`, where `X*` is a pointer to `X` and `u64` is the number of elements. These are exposed as the members `data` and `length`, accessed like a struct's:

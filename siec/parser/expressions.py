@@ -92,7 +92,7 @@ def parse_primary(ts: TokenStream) -> Expr:
     """
     tok = ts.next()
 
-    # prefix '-', '~', and 'not' bind tighter than any binary operator
+    # prefix '-', '~', 'not', and '&' bind tighter than any binary operator
     if tok.syntax == "-":
         # fold '-' over a numeric literal into a negative constant, keeping it instruction-free
         if ts.peek().kind == "int":
@@ -103,7 +103,7 @@ def parse_primary(ts: TokenStream) -> Expr:
 
         return UnaryOp("-", parse_primary(ts))
 
-    if tok.syntax in ("~", "not"):
+    if tok.syntax in ("~", "not", "&"):
         return UnaryOp(tok.value, parse_primary(ts))
 
     # 'true' and 'false' are boolean literals
