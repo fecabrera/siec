@@ -337,11 +337,14 @@ class Struct:
 @dataclass
 class Global:
     """
-    An '@extern let' declaration: a global variable whose storage is
-    defined and initialized outside this program.
+    A module-level variable: '@extern let' declares storage defined and
+    initialized outside this program; '@static let' defines file-local
+    storage here, with an optional constant initializer.
     """
     name: str
     type: str
+    is_static: bool = False
+    value: Expr | None = None
     line: int = _line()
     file: str = _file()
 

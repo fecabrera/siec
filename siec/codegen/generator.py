@@ -108,18 +108,18 @@ class CodeGenerator:
         # their storage lives in the module's globals
         self.globals: dict[str, str] = {}
 
-        # '@static' functions by (file, name), mapped to their module
-        # symbols: each file's statics are invisible to every other
+        # '@static' functions and globals by (file, name), mapped to their
+        # module symbols: each file's statics are invisible to every other
         self.statics: dict[tuple[str, str], str] = {}
 
         # the source file whose function body is being emitted, deciding
         # which statics are in view
         self.current_file = ""
 
-    def function_symbol(self, name: str) -> str:
+    def resolve_symbol(self, name: str) -> str:
         """
-        Resolve a function's Sie name to its module symbol: the current
-        file's static when it has one, the public name otherwise.
+        Resolve a Sie name to its module symbol: the current file's static
+        when it has one, the public name otherwise.
         """
         return self.statics.get((self.current_file, name), name)
 

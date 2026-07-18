@@ -3,6 +3,7 @@
 from siec.ast import Function, Global, Param, Program
 from siec.parser.constants import parse_const
 from siec.parser.enums import parse_enum
+from siec.parser.expressions import parse_expression
 from siec.parser.includes import parse_include
 from siec.parser.statements import parse_block
 from siec.parser.stream import TokenStream
@@ -30,7 +31,7 @@ def parse_program(ts: TokenStream) -> Program:
             includes.append(parse_include(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "const":
             consts.append(parse_const(ts))
-        elif (ts.peek().value == "@" and ts.peek(1).value == "extern"
+        elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static")
               and ts.peek(2).value == "let"):
             globals_.append(parse_global(ts))
         elif ts.peek().value == "struct":
@@ -45,24 +46,30 @@ def parse_program(ts: TokenStream) -> Program:
 
 def parse_global(ts: TokenStream) -> Global:
     """
-    Parse '@extern let name: T;' — a global whose storage lives outside
-    this program, so no initializer is allowed.
+    Parse a module-level variable: '@extern let name: T;', whose storage
+    lives outside this program and takes no initializer, or '@static let
+    name: T [= <value>];', file-local storage defined here.
     """
     line = ts.peek().line
     ts.expect("sym", "@")
-    ts.expect("ident", "extern")
+    kind = ts.expect("ident").value
     ts.expect("kw", "let")
 
     name = ts.expect("ident").value
     ts.expect("sym", ":")
     var_type = parse_type(ts)
 
+    value = None
     if ts.peek().syntax == "=":
-        raise SyntaxError(f"line {line}: extern global {name!r} cannot "
-                          "have an initializer")
+        if kind == "extern":
+            raise SyntaxError(f"line {line}: extern global {name!r} cannot "
+                              "have an initializer")
+
+        ts.next()
+        value = parse_expression(ts)
 
     ts.expect("sym", ";")
-    return Global(name, var_type, line=line)
+    return Global(name, var_type, kind == "static", value, line=line)
 
 
 DECORATORS = {"extern", "inline", "static"}

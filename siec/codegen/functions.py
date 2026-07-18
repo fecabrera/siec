@@ -103,7 +103,7 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         gen.current_file = fn.file
 
         # a declaration that already has blocks was defined elsewhere
-        func = gen.module.globals[gen.function_symbol(fn.name)]
+        func = gen.module.globals[gen.resolve_symbol(fn.name)]
         if func.blocks:
             raise TypeError(f"function {fn.name!r} is defined more than once")
 

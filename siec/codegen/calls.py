@@ -22,13 +22,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
 
-    # a variable or global holding a function reference is called through its value
-    if call.name in scope or call.name in gen.globals:
+    # a variable or global holding a function reference is called through
+    # its value; the current file's statics resolve first, other files' never
+    symbol = gen.resolve_symbol(call.name)
+    if call.name in scope or symbol in gen.globals:
         return emit_indirect_call(gen, builder, call, scope)
 
-    # look up the callee among the module's declared functions; the current
-    # file's statics resolve first, other files' never
-    func = gen.module.globals.get(gen.function_symbol(call.name))
+    # look up the callee among the module's declared functions
+    func = gen.module.globals.get(symbol)
     if not isinstance(func, ir.Function):
         raise NameError(f"undefined function {call.name!r}")
 
@@ -101,7 +102,8 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, sc
         var = scope[call.name]
         var_type, slot = strip_const(var.type), var.slot
     else:
-        var_type, slot = strip_const(gen.globals[call.name]), gen.module.globals[call.name]
+        symbol = gen.resolve_symbol(call.name)
+        var_type, slot = strip_const(gen.globals[symbol]), gen.module.globals[symbol]
 
     if not var_type.startswith("fn(") or fn_type_parts(var_type)[2]:
         raise TypeError(f"cannot call non-function variable {call.name!r}")

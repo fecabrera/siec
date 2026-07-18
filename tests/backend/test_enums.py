@@ -161,7 +161,7 @@ def test_non_constant_value_is_an_error(compile_source):
     """
     Member values must be compile-time constant integer expressions.
     """
-    with pytest.raises(TypeError, match="constant integer expressions"):
+    with pytest.raises(TypeError, match="constant integer expression"):
         compile_source("""
         fn f() -> i32 { return 1; }
         enum E { A = f() }

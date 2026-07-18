@@ -539,6 +539,17 @@ Functions can be decorated with `@static` to make them local to their file: no o
 
 Decorators stack — `@static @inline fn` is both — except `@extern`, whose function has no body for the others to act on.
 
+`@static let` declares a file-local global variable the same way: one storage location shared by every call, visible only to its own file. Its initializer, when given, must be a compile-time constant; without one it starts at zero, C-style.
+
+```
+@static let count: i32 = 0;
+
+fn bump() -> i32 {
+    count += 1;
+    return count;
+}
+```
+
 #### Asm
 
 Functions can be decorated with `@asm` to indicate that their body is written in assembly instead of Sie code.

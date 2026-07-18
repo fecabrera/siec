@@ -124,8 +124,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if stmt.name in scope:
             var = scope[stmt.name]
             slot, var_type = var.slot, var.type
-        elif stmt.name in gen.globals:
-            slot, var_type = gen.module.globals[stmt.name], gen.globals[stmt.name]
+        elif (symbol := gen.resolve_symbol(stmt.name)) in gen.globals:
+            slot, var_type = gen.module.globals[symbol], gen.globals[symbol]
         elif stmt.name in gen.constants:
             raise TypeError(f"cannot reassign constant {stmt.name!r}")
         else:

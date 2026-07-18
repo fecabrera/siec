@@ -90,6 +90,46 @@ def test_another_files_static_is_undefined(tmp_path, monkeypatch, capsys):
     assert "undefined function 'helper'" in capsys.readouterr().err
 
 
+def test_static_globals_are_local_to_their_file(tmp_path, monkeypatch):
+    """
+    Two files may each hold a '@static let' of the same name, and another
+    file's static never resolves.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "util.sie").write_text("""\
+    @static let count: i32 = 100;
+    fn util_count() -> i32 { count += 1; return count; }
+    """)
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    @include("util")
+    @static let count: i32 = 40;
+    fn main() -> i32 { count += 1; return count + util_count() - 101; } // 41+101-101
+    """)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, "-o", exe) == 0
+    assert subprocess.run([str(exe)]).returncode == 41
+
+
+def test_another_files_static_global_is_undefined(tmp_path, monkeypatch, capsys):
+    """
+    Reading a static global from outside its file is an undefined variable.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "util.sie").write_text("@static let count: i32 = 1;")
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    @include("util")
+    fn main() -> i32 { return count; }
+    """)
+
+    assert run_cli(monkeypatch, src, "-o", tmp_path / "p") == 1
+    assert "undefined variable 'count'" in capsys.readouterr().err
+
+
 def test_optimization_level_runs_the_pipeline(tmp_path, capsys, monkeypatch):
     """
     '-O2' runs LLVM's pass pipeline: the emitted IR is folded to a constant.

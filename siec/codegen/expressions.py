@@ -109,13 +109,14 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return emit_expression(gen, builder, const.value, expected_type, scope)
 
-        # an '@extern let' global loads its current value from its storage
-        if expr.name in gen.globals:
-            return builder.load(gen.module.globals[expr.name], name=expr.name)
-
-        # a bare function name is a reference to that function; the current
+        # a global loads its current value from its storage; the current
         # file's statics resolve first, other files' never
-        func = gen.module.globals.get(gen.function_symbol(expr.name))
+        symbol = gen.resolve_symbol(expr.name)
+        if symbol in gen.globals:
+            return builder.load(gen.module.globals[symbol], name=expr.name)
+
+        # a bare function name is a reference to that function
+        func = gen.module.globals.get(symbol)
         if isinstance(func, ir.Function):
             return func
 
@@ -243,8 +244,9 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
             return scope[expr.name].slot
 
         # a global's slot is its module-level storage
-        if expr.name in gen.globals:
-            return gen.module.globals[expr.name]
+        symbol = gen.resolve_symbol(expr.name)
+        if symbol in gen.globals:
+            return gen.module.globals[symbol]
 
         raise NameError(f"undefined variable {expr.name!r}")
 

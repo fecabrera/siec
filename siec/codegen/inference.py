@@ -72,10 +72,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 gen, const.value, scope)
 
         # a global carries its declared type
-        if expr.name in gen.globals:
-            return gen.globals[expr.name]
+        symbol = gen.resolve_symbol(expr.name)
+        if symbol in gen.globals:
+            return gen.globals[symbol]
 
-        symbol = gen.function_symbol(expr.name)
         if symbol in gen.param_types:
             params = ",".join(gen.param_types[symbol])
             ret = gen.return_types.get(symbol)
@@ -88,7 +88,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
             return fn_type_parts(strip_const(scope[expr.name].type))[1]
 
-        return gen.return_types.get(gen.function_symbol(expr.name))
+        return gen.return_types.get(gen.resolve_symbol(expr.name))
 
     # a cast produces its target type
     if isinstance(expr, Cast):

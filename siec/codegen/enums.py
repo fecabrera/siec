@@ -97,4 +97,4 @@ def evaluate(gen: CodeGenerator, expr) -> int:
     if isinstance(expr, BinaryOp) and expr.op in BINARY_OPS:
         return BINARY_OPS[expr.op](evaluate(gen, expr.left), evaluate(gen, expr.right))
 
-    raise TypeError("enum member values must be constant integer expressions")
+    raise TypeError("value must be a constant integer expression")

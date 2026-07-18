@@ -57,6 +57,22 @@ def test_extern_let_parses_to_a_global(ts):
         "environ", "char**")
 
 
+def test_static_let_parses_with_an_initializer(ts):
+    """
+    '@static let name: T = <value>;' parses to a static Global.
+    """
+    assert parse_global(ts("@static let count: i32 = 5;")) == Global(
+        "count", "i32", True, IntLiteral(5))
+
+
+def test_static_let_initializer_is_optional(ts):
+    """
+    A static without a value is zero-initialized later.
+    """
+    assert parse_global(ts("@static let count: i32;")) == Global(
+        "count", "i32", True, None)
+
+
 def test_extern_let_rejects_an_initializer(ts):
     """
     An extern global's storage lives elsewhere; '= v' is an error.
