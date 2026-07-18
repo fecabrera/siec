@@ -948,6 +948,14 @@ fn f() -> S; // a function that returns a value of type S
 let s: S; // a variable that holds a value of type S
 ```
 
+A struct value is built with an aggregate literal: positionally, filling every field in order, or by name through `field = <expr>`, in any order. A named literal may fill any subset of the fields; the rest start at zero.
+
+```
+let a: S = {1, 2};          // positional: every field, in order
+let b: S = {b = 2, a = 1};  // named: any order
+let c: S = {a = 1};         // named: b starts at zero
+```
+
 Structs can be forward-declared: declared with no body at all. This is mainly useful for opaque structs, whose fields are never given and which are only ever handled through a pointer.
 
 ```

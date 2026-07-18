@@ -93,9 +93,12 @@ class Member:
 @dataclass
 class AggregateLiteral:
     """
-    An aggregate literal '{a, b, ...}' filling a struct or array's fields in order.
+    An aggregate literal filling a struct or array's fields: positionally,
+    '{a, b, ...}', or by name, '{x = a, y = b, ...}', in which case 'names'
+    aligns with 'elements' and unnamed fields zero-initialize.
     """
     elements: list
+    names: list[str] | None = None
 
 
 @dataclass

@@ -98,6 +98,115 @@ def test_static_sized_array_rejects_an_initializer(compile_source):
         compile_source("@static let buf: i32[8] = [1, 2];")
 
 
+def test_static_struct_aggregate_initializer(run):
+    """
+    A positional aggregate builds a static struct's value at compile time.
+    """
+    source = """
+    struct Point {
+        x: i32;
+        y: i32;
+    }
+
+    @static let start: Point = {40, 2};
+
+    fn main() -> i32 {
+        return start.x + start.y;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_static_struct_named_initializer_zero_fills(run):
+    """
+    A named initializer fills its fields; the rest start at zero.
+    """
+    source = """
+    struct Point {
+        x: i32;
+        y: i32;
+    }
+
+    @static let p: Point = { y = 42 };
+
+    fn main() -> i32 {
+        return p.y - p.x;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_static_struct_initializer_mixes_constant_kinds(run):
+    """
+    Fields take strings, enum members, '@const' refs, and nested structs.
+    """
+    source = """
+    enum Mode { OFF = 0, ON }
+
+    @const BASE = 30;
+
+    struct Inner {
+        n: i32;
+    }
+
+    struct Config {
+        name: char*;
+        mode: Mode;
+        limit: i32;
+        inner: Inner;
+    }
+
+    @static let config: Config = {
+        name = "cfg",
+        mode = Mode::ON,
+        limit = BASE + 2,
+        inner = { 9 }
+    };
+
+    fn main() -> i32 {
+        if (config.name[0] != "c"[0]) {
+            return 0;
+        }
+        return config.limit + config.inner.n + config.mode as i32; // 32+9+1
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_static_struct_initializer_checks_the_element_count(compile_source):
+    """
+    A positional initializer must fill every field.
+    """
+    with pytest.raises(TypeError, match="has 1 elements, expected 2"):
+        compile_source("""
+        struct Point { x: i32; y: i32; }
+        @static let p: Point = {1};
+        """)
+
+
+def test_static_struct_initializer_rejects_unknown_fields(compile_source):
+    """
+    A named initializer only names declared fields.
+    """
+    with pytest.raises(TypeError, match="unknown field 'z'"):
+        compile_source("""
+        struct Point { x: i32; y: i32; }
+        @static let p: Point = { z = 1 };
+        """)
+
+
+def test_static_struct_initializer_fields_must_be_constant(compile_source):
+    """
+    Every field's value must be known at compile time.
+    """
+    with pytest.raises(TypeError, match="constant integer expression"):
+        compile_source("""
+        struct Point { x: i32; y: i32; }
+        fn f() -> i32 { return 1; }
+        @static let p: Point = { x = f() };
+        """)
+
+
 def test_static_struct_global(run):
     """
     A static struct is zero-initialized module storage, its fields read

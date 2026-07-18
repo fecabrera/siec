@@ -2,7 +2,15 @@
 
 from llvmlite import ir
 
-from siec.ast import BoolLiteral, FloatLiteral, Global, Program, StrLiteral
+from siec.ast import (
+    AggregateLiteral,
+    BoolLiteral,
+    Expr,
+    FloatLiteral,
+    Global,
+    Program,
+    StrLiteral,
+)
 from siec.codegen.enums import evaluate
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
@@ -77,21 +85,72 @@ def global_initializer(gen: CodeGenerator, glob: Global, symbol: str) -> ir.Cons
     if glob.value is None:
         return ir.Constant(type_, None)  # zero-initialized, C-style
 
-    if isinstance(glob.value, FloatLiteral):
-        return ir.Constant(type_, glob.value.value)
+    return constant_value(gen, glob.value, type_, glob.type)
 
-    if isinstance(glob.value, BoolLiteral):
-        return ir.Constant(type_, 1 if glob.value.value else 0)
 
-    # a string initializer points the global at a private string constant
-    if isinstance(glob.value, StrLiteral):
-        if strip_const(glob.type) != "char*":
-            raise TypeError(f"cannot initialize a {glob.type!r} global with a string")
+def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
+                   sie_type: str) -> ir.Constant:
+    """
+    Evaluate an initializer to a compile-time constant of the given type.
+    """
+    if isinstance(expr, AggregateLiteral):
+        return constant_aggregate(gen, expr, type_, sie_type)
 
-        return string_constant(gen, glob.value.value).bitcast(type_)
+    if isinstance(expr, FloatLiteral):
+        return ir.Constant(type_, expr.value)
+
+    if isinstance(expr, BoolLiteral):
+        return ir.Constant(type_, 1 if expr.value else 0)
+
+    # a string initializer points at a private string constant
+    if isinstance(expr, StrLiteral):
+        if strip_const(sie_type) != "char*":
+            raise TypeError(f"cannot initialize a {sie_type!r} value with a string")
+
+        return string_constant(gen, expr.value).bitcast(type_)
 
     # anything else must evaluate to an integer at compile time
-    return ir.Constant(type_, evaluate(gen, glob.value))
+    return ir.Constant(type_, evaluate(gen, expr))
+
+
+def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
+                       type_: ir.Type, sie_type: str) -> ir.Constant:
+    """
+    Build a struct's constant initial value from an aggregate literal:
+    positional fields fill in order, named fields wherever they sit, and
+    fields a named literal leaves out start at zero.
+    """
+    info = gen.structs.get(strip_const(sie_type))
+    if info is None or not info.fields:
+        raise TypeError(f"aggregate initializer needs a struct type, not {sie_type!r}")
+
+    fields = info.fields
+    values = [ir.Constant(field_type, None) for field_type in type_.elements]
+
+    if literal.names is None:
+        if len(literal.elements) != len(fields):
+            raise TypeError(f"aggregate literal has {len(literal.elements)} "
+                            f"elements, expected {len(fields)}")
+
+        pairs = list(enumerate(literal.elements))
+    else:
+        index_of = {field.name: index for index, field in enumerate(fields)}
+
+        pairs = []
+        for name, element in zip(literal.names, literal.elements):
+            if name not in index_of:
+                raise TypeError(f"aggregate literal names unknown field {name!r}")
+
+            if any(index == index_of[name] for index, _ in pairs):
+                raise TypeError(f"aggregate literal sets field {name!r} more than once")
+
+            pairs.append((index_of[name], element))
+
+    for index, element in pairs:
+        values[index] = constant_value(gen, element, type_.elements[index],
+                                       fields[index].type)
+
+    return ir.Constant(type_, values)
 
 
 def string_constant(gen: CodeGenerator, text: str) -> ir.GlobalVariable:

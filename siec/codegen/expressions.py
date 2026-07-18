@@ -370,14 +370,20 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
     """
     Emit an aggregate literal, filling the expected struct or array type field by field.
 
-    When the field Sie type names are known, each element is coerced to its field's
-    type with the same widening rules as any other typed context.
+    A positional literal fills every field in order; a named one fills any
+    subset in any order, leaving the rest zero-initialized. When the field
+    Sie type names are known, each element is coerced to its field's type
+    with the same widening rules as any other typed context.
     """
     # the literal takes its shape from context: an array's '{ptr, length}', say
     if not isinstance(expected_type, (ir.LiteralStructType, ir.IdentifiedStructType)):
         raise TypeError(f"aggregate literal needs a struct or array type, not {expected_type}")
 
     field_types = expected_type.elements
+
+    if expr.names is not None:
+        return emit_named_aggregate(gen, builder, expr, expected_type, scope, field_names)
+
     if len(expr.elements) != len(field_types):
         raise TypeError(f"aggregate literal has {len(expr.elements)} elements, "
                         f"expected {len(field_types)}")
@@ -389,6 +395,57 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
             field = emit_coerced(gen, builder, element, field_names[index], scope)
         else:
             field = emit_expression(gen, builder, element, field_type, scope)
+
+        value = builder.insert_value(value, field, index)
+
+    return value
+
+
+def aggregate_fields(gen: CodeGenerator, type_: ir.Type) -> list[str] | None:
+    """
+    The field names of an aggregate LLVM type, in order: a registered
+    struct's own, or an array's synthetic 'data' and 'length'.
+    """
+    if isinstance(type_, ir.IdentifiedStructType):
+        info = gen.structs.get(type_.name)
+        if info is not None and info.fields:
+            return [field.name for field in info.fields]
+
+    if is_array_struct(type_):
+        return ["data", "length"]
+
+    return None
+
+
+def emit_named_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLiteral,
+                         expected_type: ir.Type, scope: dict, field_names: list | None):
+    """
+    Emit a named aggregate literal over a zero-initialized base: each 'x =
+    v' fills its field wherever it sits, and untouched fields stay zero.
+    """
+    names = aggregate_fields(gen, expected_type)
+    if names is None:
+        raise TypeError(f"named aggregate literal needs a struct or array "
+                        f"type with known fields, not {expected_type}")
+
+    index_of = {name: index for index, name in enumerate(names)}
+
+    value = ir.Constant(expected_type, None)
+    seen = set()
+    for name, element in zip(expr.names, expr.elements):
+        if name not in index_of:
+            raise TypeError(f"aggregate literal names unknown field {name!r}")
+
+        if name in seen:
+            raise TypeError(f"aggregate literal sets field {name!r} more than once")
+
+        seen.add(name)
+        index = index_of[name]
+        if field_names is not None:
+            field = emit_coerced(gen, builder, element, field_names[index], scope)
+        else:
+            field = emit_expression(gen, builder, element,
+                                    expected_type.elements[index], scope)
 
         value = builder.insert_value(value, field, index)
 

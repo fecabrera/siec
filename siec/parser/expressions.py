@@ -118,9 +118,9 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, expr)
 
     # '{a, b, ...}' is an aggregate literal filling a struct or array's
-    # fields; '{ ...; emit v; }' is a block expression producing a value.
-    # The shapes tell them apart: a literal holds comma-separated
-    # expressions, a block holds statements.
+    # fields, '{x = a, y = b, ...}' one filling them by name; '{ ...; emit
+    # v; }' is a block expression producing a value. The shapes tell them
+    # apart: a literal holds comma-separated fields, a block holds statements.
     if tok.syntax == "{":
         if is_aggregate(ts):
             elements = []
@@ -132,6 +132,19 @@ def parse_primary(ts: TokenStream) -> Expr:
             ts.expect("sym", "}")
 
             return parse_postfix(ts, AggregateLiteral(elements))
+
+        if is_named_aggregate(ts):
+            elements, names = [], []
+            while ts.peek().syntax != "}":
+                if elements:
+                    ts.expect("sym", ",")
+
+                names.append(ts.expect("ident").value)
+                ts.expect("sym", "=")
+                elements.append(parse_expression(ts))
+            ts.expect("sym", "}")
+
+            return parse_postfix(ts, AggregateLiteral(elements, names))
 
         # deferred import: statements and expressions are mutually recursive
         from siec.parser.statements import parse_statement
@@ -209,6 +222,28 @@ def is_aggregate(ts: TokenStream) -> bool:
         return ts.peek().syntax in (",", "}")
     except SyntaxError:
         # not even an expression: only statements can follow
+        return False
+    finally:
+        ts.pos = start
+
+
+def is_named_aggregate(ts: TokenStream) -> bool:
+    """
+    Decide whether an open '{' holds a named aggregate: an ident and '='
+    open one, and its first value ends at the ',' or '}' a literal would
+    show, where a block's assignment statement needs ';'. The cursor is
+    restored either way.
+    """
+    if ts.peek().kind != "ident" or ts.peek(1).syntax != "=":
+        return False
+
+    start = ts.pos
+    try:
+        ts.next()
+        ts.next()
+        parse_expression(ts)
+        return ts.peek().syntax in (",", "}")
+    except SyntaxError:
         return False
     finally:
         ts.pos = start
