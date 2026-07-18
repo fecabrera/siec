@@ -365,6 +365,54 @@ def test_include_flag_adds_search_paths(tmp_path, monkeypatch, capsys):
     assert "dep" in capsys.readouterr().out
 
 
+def test_includes_resolve_from_the_working_directory(tmp_path, monkeypatch, capsys):
+    """
+    An include missing beside the source resolves relative to the cwd.
+    """
+    dep_source = """\
+    fn dep() -> i32 { return 1; }
+    """
+
+    main_source = """\
+    @include("vendor/dep") fn main() -> i32 { return dep(); }
+    """
+
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "vendor" / "dep.sie").write_text(dep_source)
+
+    src = tmp_path / "src" / "p.sie"
+    src.parent.mkdir()
+    src.write_text(main_source)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+    assert "dep" in capsys.readouterr().out
+
+
+def test_includes_resolve_from_lib_under_the_working_directory(tmp_path, monkeypatch, capsys):
+    """
+    The cwd's lib/ is searched too, so a project compiles from its root.
+    """
+    dep_source = """\
+    fn dep() -> i32 { return 1; }
+    """
+
+    main_source = """\
+    @include("libc/dep") fn main() -> i32 { return dep(); }
+    """
+
+    (tmp_path / "lib" / "libc").mkdir(parents=True)
+    (tmp_path / "lib" / "libc" / "dep.sie").write_text(dep_source)
+
+    src = tmp_path / "examples" / "p.sie"
+    src.parent.mkdir()
+    src.write_text(main_source)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+    assert "dep" in capsys.readouterr().out
+
+
 def test_format_error_uses_the_line_attribute():
     """
     A codegen error carrying 'sie_line' renders as '<source> at line <n>: <message>'.

@@ -76,6 +76,8 @@ import module.submodule as sub;
 @include("libc/stdio")
 ```
 
+The path resolves against, in order: the including file's own directory, any `-I` directories, the `lib/` directory beside each source, the working directory, and the `lib/` directory under it. The last two let a project compile from its root wherever its sources sit.
+
 Unlike `import`, an include copies the file's declarations as if they were written in place, without any namespacing.
 
 ### Variables

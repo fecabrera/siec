@@ -87,6 +87,12 @@ def main() -> int:
         if lib not in include_paths:
             include_paths.append(lib)
 
+    # the working directory and its 'lib/' close the search, so a project
+    # compiles from its root wherever the sources sit under it
+    for base in (Path.cwd(), Path.cwd() / "lib"):
+        if base not in include_paths:
+            include_paths.append(base)
+
     # front end: sources and includes -> AST -> LLVM module, reporting the
     # first compile error in human-readable form instead of a traceback
     try:
