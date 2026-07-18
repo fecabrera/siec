@@ -22,7 +22,7 @@ from siec.ast import (
     When,
     While,
 )
-from siec.parser.expressions import parse_expression
+from siec.parser.expressions import parse_asm_tail, parse_expression
 from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
@@ -72,6 +72,11 @@ def parse_statement(ts: TokenStream):
     """
     tok = ts.peek()
     line = tok.line
+
+    # '@asm' embeds an assembly block as a statement, no ';' after its braces
+    if tok.syntax == "@" and ts.peek(1).value == "asm":
+        ts.next()
+        return ExprStmt(parse_asm_tail(ts), line=line)
 
     # 'if (cond) body' with an optional 'else' body or 'else if' chain
     if tok.kind == "kw" and tok.value == "if":

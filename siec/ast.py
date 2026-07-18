@@ -204,6 +204,20 @@ def _file():
 
 
 @dataclass
+class AsmBlock:
+    """
+    An inline '@asm' block: raw assembly embedded in statement or
+    expression position, with named operands from the enclosing scope,
+    an optional return type, and the state it clobbers.
+    """
+    body: str
+    args: list[str] = field(default_factory=list)
+    return_type: str | None = None
+    clobbers: list[str] = field(default_factory=list)
+    line: int = _line()
+
+
+@dataclass
 class Return:
     """
     A return statement with an optional value expression.
@@ -389,6 +403,8 @@ class Function:
     is_inline: bool = False
     is_static: bool = False
     symbol: str | None = None  # '@symbol("...")' module-symbol override
+    asm: str | None = None  # '@asm': the raw assembly standing in for a body
+    clobbers: list[str] = field(default_factory=list)
     line: int = _line()
     file: str = _file()
 

@@ -8,6 +8,7 @@ from llvmlite import ir
 
 from siec.ast import (
     AggregateLiteral,
+    AsmBlock,
     ArrayLiteral,
     BinaryOp,
     BlockExpr,
@@ -29,6 +30,7 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
+from siec.codegen.asm import emit_asm_block
 from siec.codegen.calls import emit_call
 from siec.codegen.coercion import emit_cast, emit_coerced
 from siec.codegen.enums import member_value
@@ -114,6 +116,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             return ir.Constant(expected_type, size)
 
         return ir.Constant(ir.IntType(64), size)
+
+    if isinstance(expr, AsmBlock):
+        return emit_asm_block(gen, builder, expr, scope)
 
     if isinstance(expr, AggregateLiteral):
         return emit_aggregate(gen, builder, expr, expected_type, scope)

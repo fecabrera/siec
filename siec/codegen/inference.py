@@ -7,6 +7,7 @@ how does it classify — without emitting any IR.
 from llvmlite import ir
 
 from siec.ast import (
+    AsmBlock,
     BinaryOp,
     BoolLiteral,
     Call,
@@ -99,6 +100,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Cast):
         expr.type = expand_alias(gen, expr.type)
         return expr.type
+
+    # an inline assembly block produces its declared '-> T'
+    if isinstance(expr, AsmBlock):
+        expr.return_type = expand_alias(gen, expr.return_type)
+        return expr.return_type
 
     # a member access yields the field's type; an aliasing field (a pointer
     # or array) keeps a const base's contract

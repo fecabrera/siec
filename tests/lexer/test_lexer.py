@@ -195,3 +195,40 @@ def test_unterminated_char_literal_is_an_error():
     """
     with pytest.raises(SyntaxError, match="unterminated char literal"):
         lex("'a")
+
+
+def test_asm_body_is_captured_raw():
+    """
+    After '@' 'asm', the next braced block is one raw 'asm' token,
+    keeping newlines and characters Sie couldn't lex.
+    """
+    tokens = lex("@asm fn f() -> u32 {\n    mov ${out:w}, #42\n}")
+    bodies = [t for t in tokens if t.kind == "asm"]
+    assert len(bodies) == 1
+    assert bodies[0].value == "\n    mov ${out:w}, #42\n"
+
+
+def test_asm_body_nests_braces():
+    """
+    Balanced braces inside the body (a register list) stay inside it.
+    """
+    tokens = lex("@asm { ld1 {v0.16b}, [x0] }")
+    bodies = [t for t in tokens if t.kind == "asm"]
+    assert bodies[0].value == " ld1 {v0.16b}, [x0] "
+
+
+def test_unterminated_asm_body_is_an_error():
+    """
+    An asm body missing its closing brace raises a SyntaxError.
+    """
+    with pytest.raises(SyntaxError, match="unterminated '@asm' body"):
+        lex("@asm { nop")
+
+
+def test_semicolon_ends_the_asm_wait():
+    """
+    A ';' before any '{' (a bodiless form) stops the raw capture, so a
+    later brace lexes as ordinary syntax.
+    """
+    tokens = lex("@asm fn f() -> i32; fn g() { }")
+    assert not any(t.kind == "asm" for t in tokens)

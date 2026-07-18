@@ -4,6 +4,7 @@ from llvmlite import ir
 
 from siec.ast import Function
 from siec.codegen.aliases import expand_alias
+from siec.codegen.asm import emit_asm_function
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
 from siec.codegen.statements import emit_block
@@ -125,6 +126,11 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
 
         ret_type = func.function_type.return_type
         builder = ir.IRBuilder(func.append_basic_block("entry"))
+
+        # an '@asm' function's parameters feed its assembly directly
+        if fn.asm is not None:
+            emit_asm_function(gen, builder, fn, func)
+            return
 
         # the scope maps each name to a typed stack slot; spill the parameters into theirs
         scope = {}

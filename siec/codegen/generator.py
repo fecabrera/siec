@@ -227,9 +227,10 @@ def codegen(program: Program, module_name: str, target: str | None = None) -> ir
     for fn in program.functions:
         declare_function(gen, fn)
 
-    # third pass: emit the bodies of the defined functions
+    # third pass: emit the bodies of the defined functions, an '@asm'
+    # function's assembly standing in for one
     for fn in program.functions:
-        if fn.body is not None:
+        if fn.body is not None or fn.asm is not None:
             emit_function(gen, fn)
 
     return gen.module

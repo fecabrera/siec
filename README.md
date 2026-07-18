@@ -746,15 +746,41 @@ fn bswap32(value: u32) -> u32 {
 }
 ```
 
-Inside the body, `${name}` interpolates the register holding the param `name`, while `${out}` represents the return value. An optional modifier can follow the name through `:`, e.g. `${value:w}` to use the 32-bit view of the register.
+Inside the body, `${name}` interpolates the register holding the param `name`, while `${out}` represents the return value. A bare `$name` works too; the braces are only needed to attach a modifier through `:`, e.g. `${value:w}` to use the 32-bit view of the register. Any other `$` (an x86 immediate like `$42`, say) passes through as the assembly's own.
 
-The decorator optionally accepts the registers and state clobbered by the assembly:
+`@clobbers(...)` declares the registers and other state the assembly clobbers beyond its own operands:
 
 ```
-@asm("x0", "memory")
+@asm @clobbers("x0", "memory")
 fn f() {
     // ...
 }
+```
+
+`@asm` also works as an inline block, embedding assembly in an expression or statement position instead of taking over a whole function. Values from the enclosing scope pass in through a parenthesized argument list, each interpolated inside the block by its own name, exactly like a decorated function's params:
+
+```
+@asm { /* no operands */ }
+
+@asm (x, y) {
+    add ${out:w}, ${x:w}, ${y:w}
+}
+
+@asm @clobbers("x0", "memory") { /* ... */ }
+
+@asm @clobbers("x0", "memory") (x, y) { /* ... */ }
+```
+
+An inline block produces a value when its argument list is followed by `-> T`, `${out}` standing for the result the same way it does in a decorated function:
+
+```
+let sum: i32 = @asm (x, y) -> i32 {
+    add ${out:w}, ${x:w}, ${y:w}
+};
+
+let masked: i32 = @asm @clobbers("x0", "memory") (x, y) -> i32 {
+    // ...
+};
 ```
 
 ### Types

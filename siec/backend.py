@@ -18,9 +18,11 @@ def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None) -
     the module, cc-style: -O1 through -O3.
     """
     # register the host as the compilation target; a cross target needs
-    # every backend registered, not just the host's
+    # every backend registered, not just the host's; the asm parser
+    # reads '@asm' bodies back into machine code
     binding.initialize_native_target()
     binding.initialize_native_asmprinter()
+    binding.initialize_native_asmparser()
 
     if target is not None:
         binding.initialize_all_targets()

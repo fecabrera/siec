@@ -3,6 +3,7 @@
 from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
+    AsmBlock,
     BinaryOp,
     BlockExpr,
     BoolLiteral,
@@ -132,6 +133,10 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.kind == "kw" and tok.value in ("true", "false"):
         return BoolLiteral(tok.value == "true")
 
+    # '@asm' opens an inline assembly block
+    if tok.syntax == "@" and ts.peek().value == "asm":
+        return parse_asm_tail(ts)
+
     # 'null' is the pointer literal
     if tok.kind == "kw" and tok.value == "null":
         return NullLiteral()
@@ -244,6 +249,59 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def parse_clobbers(ts: TokenStream) -> list[str]:
+    """
+    Parse '@clobbers' arguments: one or more strings naming the registers
+    and other state an assembly body clobbers.
+    """
+    ts.expect("sym", "(")
+
+    clobbers = [ts.expect("str").value]
+    while ts.peek().syntax == ",":
+        ts.next()
+        clobbers.append(ts.expect("str").value)
+
+    ts.expect("sym", ")")
+    return clobbers
+
+
+def parse_asm_tail(ts: TokenStream) -> AsmBlock:
+    """
+    Parse an inline '@asm' block after its '@': an optional '@clobbers',
+    an optional '(name, ...)' operand list, an optional '-> T', and the
+    raw assembly body.
+    """
+    line = ts.expect("ident", "asm").line
+
+    clobbers = []
+    if ts.peek().syntax == "@":
+        ts.next()
+        ts.expect("ident", "clobbers")
+        clobbers = parse_clobbers(ts)
+
+    # operands are names from the enclosing scope, interpolated by name
+    args = []
+    if ts.peek().syntax == "(":
+        ts.next()
+        while ts.peek().syntax != ")":
+            if args:
+                ts.expect("sym", ",")
+
+            args.append(ts.expect("ident").value)
+        ts.next()
+
+    return_type = None
+    if ts.peek().value == "->":
+        ts.next()
+        return_type = parse_type(ts)
+
+    if ts.peek().kind != "asm":
+        raise SyntaxError(f"line {ts.peek().line}: an '@asm' block needs "
+                          "an assembly body")
+
+    return AsmBlock(ts.next().value, args, return_type, clobbers, line=line)
 
 
 def is_aggregate(ts: TokenStream) -> bool:
