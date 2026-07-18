@@ -527,6 +527,18 @@ Functions can be decorated with `@inline` to inline them into every caller. Unli
 }
 ```
 
+#### Static
+
+Functions can be decorated with `@static` to make them local to their file: no other file sees them, and every file may reuse the name for a static of its own. This is the home for a file's private helpers.
+
+```
+@static fn helper() -> i32 {
+    // only callable from this file
+}
+```
+
+Decorators stack — `@static @inline fn` is both — except `@extern`, whose function has no body for the others to act on.
+
 #### Asm
 
 Functions can be decorated with `@asm` to indicate that their body is written in assembly instead of Sie code.

@@ -113,8 +113,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if expr.name in gen.globals:
             return builder.load(gen.module.globals[expr.name], name=expr.name)
 
-        # a bare function name is a reference to that function
-        func = gen.module.globals.get(expr.name)
+        # a bare function name is a reference to that function; the current
+        # file's statics resolve first, other files' never
+        func = gen.module.globals.get(gen.function_symbol(expr.name))
         if isinstance(func, ir.Function):
             return func
 

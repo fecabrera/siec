@@ -49,6 +49,47 @@ def test_emit_asm_prints_native_assembly(tmp_path, capsys, monkeypatch):
     assert "define" not in out    # assembly, not LLVM IR
 
 
+def test_static_functions_are_local_to_their_file(tmp_path, monkeypatch):
+    """
+    Two files may each declare a '@static' of the same name; each file
+    resolves its own.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "util.sie").write_text("""\
+    @static fn helper() -> i32 { return 20; }
+    fn util_value() -> i32 { return helper() + 1; }
+    """)
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    @include("util")
+    @static fn helper() -> i32 { return 21; }
+    fn main() -> i32 { return helper() + util_value(); }
+    """)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, "-o", exe) == 0
+    assert subprocess.run([str(exe)]).returncode == 42
+
+
+def test_another_files_static_is_undefined(tmp_path, monkeypatch, capsys):
+    """
+    A static never resolves from outside its own file.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "util.sie").write_text(
+        "@static fn helper() -> i32 { return 1; }")
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    @include("util")
+    fn main() -> i32 { return helper(); }
+    """)
+
+    assert run_cli(monkeypatch, src, "-o", tmp_path / "p") == 1
+    assert "undefined function 'helper'" in capsys.readouterr().err
+
+
 def test_optimization_level_runs_the_pipeline(tmp_path, capsys, monkeypatch):
     """
     '-O2' runs LLVM's pass pipeline: the emitted IR is folded to a constant.

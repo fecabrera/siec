@@ -19,10 +19,34 @@ def test_inline_decorator(ts):
 
 def test_unknown_decorator_is_an_error(ts):
     """
-    A decorator other than '@extern' or '@inline' is rejected.
+    A decorator other than '@extern', '@inline', or '@static' is rejected.
     """
     with pytest.raises(SyntaxError, match="unknown decorator '@wrong'"):
         parse_function(ts("@wrong fn f() {}"))
+
+
+def test_static_decorator(ts):
+    """
+    '@static fn' marks the function file-local.
+    """
+    assert parse_function(ts("@static fn f() {}")).is_static
+
+
+def test_decorators_stack(ts):
+    """
+    '@static @inline' applies both markings.
+    """
+    fn = parse_function(ts("@static @inline fn f() {}"))
+    assert fn.is_static
+    assert fn.is_inline
+
+
+def test_extern_combines_with_nothing(ts):
+    """
+    '@extern' functions have no body for other decorators to act on.
+    """
+    with pytest.raises(SyntaxError, match="'@extern' cannot combine"):
+        parse_function(ts("@extern @static fn f();"))
 
 
 def test_extern_let_parses_to_a_global(ts):

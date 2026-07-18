@@ -51,11 +51,25 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
 
     func_type = ir.FunctionType(ret_type, param_types, var_arg=fn.var_arg)
 
-    gen.return_types[fn.name] = fn.return_type
-    gen.param_types[fn.name] = [p.type for p in fn.params]
+    # a '@static' function is local to its file: it lives under a mangled
+    # module symbol its own file resolves to, so other files neither see it
+    # nor collide with its name
+    symbol = fn.name
+    if fn.is_static:
+        if fn.name == "main":
+            raise TypeError("'main' cannot be static: the C runtime must find it")
+
+        key = (fn.file, fn.name)
+        if key not in gen.statics:
+            gen.statics[key] = f"{fn.name}.static.{len(gen.statics)}"
+
+        symbol = gen.statics[key]
+
+    gen.return_types[symbol] = fn.return_type
+    gen.param_types[symbol] = [p.type for p in fn.params]
 
     # redeclarations are allowed as long as the signature matches
-    existing = gen.module.globals.get(fn.name)
+    existing = gen.module.globals.get(symbol)
     if existing is not None:
         if not isinstance(existing, ir.Function):
             raise TypeError(f"{fn.name!r} is declared as both a function and a global")
@@ -65,7 +79,10 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
 
         func = existing
     else:
-        func = ir.Function(gen.module, func_type, name=fn.name)
+        func = ir.Function(gen.module, func_type, name=symbol)
+
+    if fn.is_static:
+        func.linkage = "internal"
 
     # an '@inline' function inlines into every caller, unconditionally
     if fn.is_inline:
@@ -82,8 +99,11 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
     in for errors raised outside any statement (a missing return, say).
     """
     with source_location(line=fn.line, file=fn.file):
+        # the emitting file decides which statics its body's names resolve to
+        gen.current_file = fn.file
+
         # a declaration that already has blocks was defined elsewhere
-        func = gen.module.globals[fn.name]
+        func = gen.module.globals[gen.function_symbol(fn.name)]
         if func.blocks:
             raise TypeError(f"function {fn.name!r} is defined more than once")
 

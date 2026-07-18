@@ -26,8 +26,9 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if call.name in scope or call.name in gen.globals:
         return emit_indirect_call(gen, builder, call, scope)
 
-    # look up the callee among the module's declared functions
-    func = gen.module.globals.get(call.name)
+    # look up the callee among the module's declared functions; the current
+    # file's statics resolve first, other files' never
+    func = gen.module.globals.get(gen.function_symbol(call.name))
     if not isinstance(func, ir.Function):
         raise NameError(f"undefined function {call.name!r}")
 
@@ -42,7 +43,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     # coerce each argument to its parameter's Sie type; vararg extras pass
     # as-is, except an f32, which promotes to f64 like C's default promotions
-    sie_params = gen.param_types.get(call.name, [])
+    sie_params = gen.param_types.get(func.name, [])
 
     args = []
     for i, arg in enumerate(call.args):

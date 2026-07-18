@@ -309,6 +309,7 @@ class Function:
     is_extern: bool = False
     var_arg: bool = False
     is_inline: bool = False
+    is_static: bool = False
     line: int = _line()
     file: str = _file()
 

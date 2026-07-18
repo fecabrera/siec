@@ -65,25 +65,35 @@ def parse_global(ts: TokenStream) -> Global:
     return Global(name, var_type, line=line)
 
 
+DECORATORS = {"extern", "inline", "static"}
+
+
 def parse_function(ts: TokenStream) -> Function:
     """
     Parse a function declaration or definition, including decorators
-    ('@extern', '@inline') and varargs.
+    ('@extern', '@inline', '@static') and varargs.
     """
-    is_extern = False
-    is_inline = False
     line = ts.peek().line
 
-    if ts.peek().value == "@":
+    # decorators may stack ('@static @inline'), except '@extern', whose
+    # function has no body for the others to act on
+    decorators = set()
+    while ts.peek().value == "@":
+        at_line = ts.peek().line
         ts.next()
         decorator = ts.expect("ident").value
 
-        if decorator == "extern":
-            is_extern = True
-        elif decorator == "inline":
-            is_inline = True
-        else:
-            raise SyntaxError(f"line {line}: unknown decorator '@{decorator}'")
+        if decorator not in DECORATORS:
+            raise SyntaxError(f"line {at_line}: unknown decorator '@{decorator}'")
+
+        decorators.add(decorator)
+
+    is_extern = "extern" in decorators
+    is_inline = "inline" in decorators
+    is_static = "static" in decorators
+
+    if is_extern and len(decorators) > 1:
+        raise SyntaxError(f"line {line}: '@extern' cannot combine with other decorators")
 
     ts.expect("kw", "fn")
     name = ts.expect("ident").value
@@ -117,7 +127,7 @@ def parse_function(ts: TokenStream) -> Function:
     if ts.peek().value == ";":
         ts.next()
         return Function(name, params, return_type, None, is_extern, var_arg,
-                        is_inline, line=line)
+                        is_inline, is_static, line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -126,4 +136,4 @@ def parse_function(ts: TokenStream) -> Function:
     body = parse_block(ts)
 
     return Function(name, params, return_type, body, is_extern, var_arg,
-                    is_inline, line=line)
+                    is_inline, is_static, line=line)
