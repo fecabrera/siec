@@ -308,6 +308,7 @@ class Function:
     body: list | None  # None for declarations without a body
     is_extern: bool = False
     var_arg: bool = False
+    is_inline: bool = False
     line: int = _line()
     file: str = _file()
 

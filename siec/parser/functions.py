@@ -67,16 +67,23 @@ def parse_global(ts: TokenStream) -> Global:
 
 def parse_function(ts: TokenStream) -> Function:
     """
-    Parse a function declaration or definition, including '@extern' and varargs.
+    Parse a function declaration or definition, including decorators
+    ('@extern', '@inline') and varargs.
     """
-    # optional '@extern' decorator before the signature
     is_extern = False
+    is_inline = False
     line = ts.peek().line
 
     if ts.peek().value == "@":
         ts.next()
-        ts.expect("ident", "extern")
-        is_extern = True
+        decorator = ts.expect("ident").value
+
+        if decorator == "extern":
+            is_extern = True
+        elif decorator == "inline":
+            is_inline = True
+        else:
+            raise SyntaxError(f"line {line}: unknown decorator '@{decorator}'")
 
     ts.expect("kw", "fn")
     name = ts.expect("ident").value
@@ -109,7 +116,8 @@ def parse_function(ts: TokenStream) -> Function:
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
         ts.next()
-        return Function(name, params, return_type, None, is_extern, var_arg, line=line)
+        return Function(name, params, return_type, None, is_extern, var_arg,
+                        is_inline, line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -117,4 +125,5 @@ def parse_function(ts: TokenStream) -> Function:
     # the body: statements between braces
     body = parse_block(ts)
 
-    return Function(name, params, return_type, body, is_extern, var_arg, line=line)
+    return Function(name, params, return_type, body, is_extern, var_arg,
+                    is_inline, line=line)

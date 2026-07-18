@@ -27,10 +27,18 @@ def prepare_module(module: ir.Module, opt: int = 0) -> tuple:
     llvm_module = binding.parse_assembly(str(module))
     llvm_module.verify()
 
+    options = binding.create_pipeline_tuning_options(speed_level=opt)
+    pass_builder = binding.create_pass_builder(target_machine, options)
+
     if opt > 0:
-        options = binding.create_pipeline_tuning_options(speed_level=opt)
-        pass_builder = binding.create_pass_builder(target_machine, options)
         pass_builder.getModulePassManager().run(llvm_module, pass_builder)
+    else:
+        # '@inline' functions inline even unoptimized: the standard pipeline
+        # honors 'alwaysinline' on its own, but -O0 runs no pipeline, so the
+        # always-inliner runs alone
+        manager = binding.ModulePassManager()
+        manager.add_always_inliner_pass()
+        manager.run(llvm_module, pass_builder)
 
     return target_machine, llvm_module
 

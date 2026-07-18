@@ -8,6 +8,23 @@ from siec.parser import parse
 from siec.parser.functions import parse_function, parse_global, parse_program
 
 
+def test_inline_decorator(ts):
+    """
+    '@inline fn' marks the function always-inline.
+    """
+    fn = parse_function(ts("@inline fn f() {}"))
+    assert fn.is_inline
+    assert not fn.is_extern
+
+
+def test_unknown_decorator_is_an_error(ts):
+    """
+    A decorator other than '@extern' or '@inline' is rejected.
+    """
+    with pytest.raises(SyntaxError, match="unknown decorator '@wrong'"):
+        parse_function(ts("@wrong fn f() {}"))
+
+
 def test_extern_let_parses_to_a_global(ts):
     """
     '@extern let name: T;' parses to a Global with its declared type.

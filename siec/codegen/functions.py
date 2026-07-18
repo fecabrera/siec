@@ -63,9 +63,15 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
         if existing.function_type != func_type:
             raise TypeError(f"conflicting declarations for function {fn.name!r}")
 
-        return existing
+        func = existing
+    else:
+        func = ir.Function(gen.module, func_type, name=fn.name)
 
-    return ir.Function(gen.module, func_type, name=fn.name)
+    # an '@inline' function inlines into every caller, unconditionally
+    if fn.is_inline:
+        func.attributes.add("alwaysinline")
+
+    return func
 
 
 def emit_function(gen: CodeGenerator, fn: Function) -> None:

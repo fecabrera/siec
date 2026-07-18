@@ -517,6 +517,16 @@ Functions can be decorated with `@extern` to indicate that they're going to be r
 @extern let mpd_traphandler: fn(mpd_context*);
 ```
 
+#### Inline
+
+Functions can be decorated with `@inline` to inline them into every caller. Unlike C's `inline`, this is not a hint: the function is always inlined, even at `-O0`.
+
+```
+@inline fn square(n: i32) -> i32 {
+    return n * n;
+}
+```
+
 #### Asm
 
 Functions can be decorated with `@asm` to indicate that their body is written in assembly instead of Sie code.
