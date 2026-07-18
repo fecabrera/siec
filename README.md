@@ -161,6 +161,42 @@ case (TARGET_OS) {
 
 They behave like any other `@const` (usable in constant expressions, case arms, and array sizes), except that redeclaring one is an error.
 
+### Conditional compilation
+
+`@if` compiles a group of top-level declarations only when a compile-time condition holds, with an optional `@else`:
+
+```
+@if (<const expr>) {
+    // ...
+} @else {
+    // ...
+}
+```
+
+The condition is a constant expression: literals, `@const` names, enum members, `sizeof`, arithmetic, comparisons, and `and`/`or`/`not`. The unchosen branch is skipped entirely, never parsed into the program, so its declarations may collide with the chosen one's:
+
+```
+@if (TARGET_OS == OS_DARWIN) {
+    @extern fn errno_location() -> i32*;
+} @else {
+    @extern fn errno_location() -> i32*;
+}
+```
+
+`@else @if` chains conditions, first match winning:
+
+```
+@if (TARGET_OS == OS_LINUX) {
+    // ...
+} @else @if (TARGET_OS == OS_DARWIN) {
+    // ...
+} @else {
+    // ...
+}
+```
+
+A branch may hold any top-level declaration (functions, structs, enums, globals, constants, type aliases) including further `@if` blocks, and a constant declared in a chosen branch is visible to the conditions after it. The one exception is `@include`, which joins the program before any condition can be evaluated and so cannot be conditional.
+
 ### Arithmetic
 
 Numeric values can be combined through the usual arithmetic operators:

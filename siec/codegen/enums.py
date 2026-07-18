@@ -1,7 +1,7 @@
 """Registration and evaluation of enum declarations."""
 
-from siec.ast import (BinaryOp, CharLiteral, EnumMember, IntLiteral, Program,
-                      SizeOf, UnaryOp, Var)
+from siec.ast import (BinaryOp, BoolLiteral, CharLiteral, EnumMember, IntLiteral,
+                      Program, SizeOf, UnaryOp, Var)
 from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.sizes import size_of
@@ -21,6 +21,14 @@ BINARY_OPS = {
     "&": lambda a, b: a & b,
     "|": lambda a, b: a | b,
     "^": lambda a, b: a ^ b,
+    "==": lambda a, b: int(a == b),
+    "!=": lambda a, b: int(a != b),
+    "<": lambda a, b: int(a < b),
+    "<=": lambda a, b: int(a <= b),
+    ">": lambda a, b: int(a > b),
+    ">=": lambda a, b: int(a >= b),
+    "and": lambda a, b: int(bool(a) and bool(b)),
+    "or": lambda a, b: int(bool(a) or bool(b)),
 }
 
 
@@ -101,6 +109,9 @@ def evaluate(gen: CodeGenerator, expr) -> int:
     if isinstance(expr, IntLiteral):
         return expr.value
 
+    if isinstance(expr, BoolLiteral):
+        return int(expr.value)
+
     # a char literal evaluates to its byte value
     if isinstance(expr, CharLiteral):
         return expr.value.encode()[0]
@@ -120,8 +131,11 @@ def evaluate(gen: CodeGenerator, expr) -> int:
 
         return evaluate(gen, const.value)
 
-    if isinstance(expr, UnaryOp) and expr.op in ("-", "~"):
+    if isinstance(expr, UnaryOp) and expr.op in ("-", "~", "not"):
         value = evaluate(gen, expr.operand)
+        if expr.op == "not":
+            return int(not value)
+
         return -value if expr.op == "-" else ~value
 
     if isinstance(expr, BinaryOp) and expr.op in BINARY_OPS:

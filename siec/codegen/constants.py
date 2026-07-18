@@ -96,8 +96,6 @@ def register_constants(gen: CodeGenerator, program: Program) -> None:
     """
     Register every '@const', then check each value is a constant expression.
     """
-    register_builtin_constants(gen)
-
     for const in program.consts:
         with source_location(line=const.line, file=const.file):
             if const.name in BUILTIN_CONSTANTS:

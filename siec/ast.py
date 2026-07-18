@@ -501,3 +501,18 @@ class Program:
     enums: list[Enum] = field(default_factory=list)
     globals: list[Global] = field(default_factory=list)
     aliases: list[TypeAlias] = field(default_factory=list)
+    conds: list["CondBlock"] = field(default_factory=list)
+
+
+@dataclass
+class CondBlock:
+    """
+    An '@if (cond) { ... } [@else { ... }]' conditional compilation block:
+    the condition is a constant expression evaluated at compile time, and
+    only the chosen branch's declarations join the program.
+    """
+    condition: Expr
+    then: Program
+    orelse: Program | None = None
+    line: int = _line()
+    file: str = _file()

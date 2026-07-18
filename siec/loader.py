@@ -31,7 +31,22 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
     enums = []
     globals_ = []
     aliases = []
+    conds = []
     visited = set()
+
+    def tag(program: Program, file: str) -> None:
+        # tag each declaration with its file so codegen errors can name
+        # it, into '@if' branches and all
+        for decl in (*program.structs, *program.functions, *program.consts,
+                     *program.enums, *program.globals, *program.aliases):
+            decl.file = file
+
+        for cond in program.conds:
+            cond.file = file
+            tag(cond.then, file)
+
+            if cond.orelse is not None:
+                tag(cond.orelse, file)
 
     def load(file: Path) -> None:
         # visit each file once, keyed by absolute path; this also breaks include cycles
@@ -53,24 +68,7 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         for inc in program.includes:
             load(resolve_include(inc.path, file.parent, include_paths))
 
-        # tag each declaration with its file so codegen errors can name it
-        for struct in program.structs:
-            struct.file = str(file)
-        
-        for fn in program.functions:
-            fn.file = str(file)
-        
-        for const in program.consts:
-            const.file = str(file)
-
-        for enum in program.enums:
-            enum.file = str(file)
-
-        for glob in program.globals:
-            glob.file = str(file)
-
-        for alias in program.aliases:
-            alias.file = str(file)
+        tag(program, str(file))
 
         structs.extend(program.structs)
         functions.extend(program.functions)
@@ -78,8 +76,9 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
         enums.extend(program.enums)
         globals_.extend(program.globals)
         aliases.extend(program.aliases)
+        conds.extend(program.conds)
 
     for source in sources:
         load(source)
 
-    return Program([], functions, structs, consts, enums, globals_, aliases)
+    return Program([], functions, structs, consts, enums, globals_, aliases, conds)

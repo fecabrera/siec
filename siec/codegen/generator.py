@@ -192,7 +192,9 @@ def codegen(program: Program, module_name: str, target: str | None = None) -> ir
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
     """
     from siec.codegen.aliases import register_aliases
-    from siec.codegen.constants import register_constants
+    from siec.codegen.conditionals import resolve_conditionals
+    from siec.codegen.constants import (register_builtin_constants,
+                                        register_constants)
     from siec.codegen.enums import register_enums
     from siec.codegen.functions import declare_function, emit_function
     from siec.codegen.globals import register_globals
@@ -202,11 +204,14 @@ def codegen(program: Program, module_name: str, target: str | None = None) -> ir
 
     # first pass: register the named declarations — aliases first so every
     # later type annotation expands through them, constants next so enum
-    # values can reference them, enums next so struct fields can be
-    # enum-typed, then structs for signatures and bodies to name, and
-    # globals last so their types can name any of the above
+    # values can reference them, then the '@if' conditions, which those
+    # constants decide, splicing in the chosen declarations; enums next so
+    # struct fields can be enum-typed, then structs for signatures and
+    # bodies to name, and globals last so their types can name any of the above
+    register_builtin_constants(gen)
     register_aliases(gen, program)
     register_constants(gen, program)
+    resolve_conditionals(gen, program)
     register_enums(gen, program)
     register_structs(gen, program)
     register_globals(gen, program)
