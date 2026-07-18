@@ -46,8 +46,8 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.conds.append(parse_cond(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "const":
             program.consts.append(parse_const(ts))
-        elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static")
-              and ts.peek(2).value == "let"):
+        elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static", "symbol")
+              and declares_global(ts)):
             program.globals.append(parse_global(ts))
         elif ts.peek().value == "struct" or (
                 ts.peek().value == "@" and ts.peek(1).value in ("packed", "align", "volatile")):
@@ -111,15 +111,56 @@ def parse_alias(ts: TokenStream) -> TypeAlias:
     return TypeAlias(name, target, line=line)
 
 
+def declares_global(ts: TokenStream) -> bool:
+    """
+    Whether the '@' decorator run at the cursor leads to a 'let': a global
+    declaration, whatever mix of decorators precedes it.
+    """
+    i = ts.pos
+    tokens = ts.tokens
+
+    while i < len(tokens) and tokens[i].value == "@":
+        i += 2  # the '@' and the decorator's name
+
+        # skip a parenthesized argument ('@symbol("...")')
+        if i < len(tokens) and tokens[i].value == "(":
+            while i < len(tokens) and tokens[i].value != ")":
+                i += 1
+
+            i += 1
+
+    return i < len(tokens) and tokens[i].value == "let"
+
+
 def parse_global(ts: TokenStream) -> Global:
     """
     Parse a module-level variable: '@extern let name: T;', whose storage
     lives outside this program and takes no initializer, or '@static let
-    name: T [= <value>];', file-local storage defined here.
+    name: T [= <value>];', file-local storage defined here. An '@extern'
+    global may carry '@symbol("...")' to name the outside symbol.
     """
     line = ts.peek().line
-    ts.expect("sym", "@")
-    kind = ts.expect("ident").value
+
+    kind = None
+    symbol = None
+    while ts.peek().value == "@":
+        at_line = ts.peek().line
+        ts.next()
+        decorator = ts.expect("ident").value
+
+        if decorator in ("extern", "static"):
+            kind = decorator
+        elif decorator == "symbol":
+            ts.expect("sym", "(")
+            symbol = ts.expect("str").value
+            ts.expect("sym", ")")
+        else:
+            raise SyntaxError(f"line {at_line}: unknown decorator '@{decorator}' "
+                              "for a global")
+
+    if symbol is not None and kind != "extern":
+        raise SyntaxError(f"line {line}: '@symbol' requires an '@extern' global")
+
     ts.expect("kw", "let")
 
     name = ts.expect("ident").value
@@ -136,7 +177,7 @@ def parse_global(ts: TokenStream) -> Global:
         value = parse_expression(ts)
 
     ts.expect("sym", ";")
-    return Global(name, var_type, kind == "static", value, line=line)
+    return Global(name, var_type, kind == "static", value, symbol, line=line)
 
 
 DECORATORS = {"extern", "inline", "static"}

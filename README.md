@@ -688,6 +688,18 @@ Functions can be decorated with `@extern` to indicate that they're going to be r
 }
 ```
 
+`@extern let` globals take it the same way, binding an outside data symbol behind a Sie name:
+
+```
+struct FILE;
+
+@if (TARGET_OS == OS_DARWIN) {
+    @extern @symbol("__stdoutp") let stdout: FILE*;
+} @else {
+    @extern @symbol("stdout") let stdout: FILE*;
+}
+```
+
 It also works on defined functions, exporting them under the chosen symbol. `main` cannot be renamed (the C runtime looks it up by name), and `@symbol` cannot combine with `@static`, whose symbol is the compiler's to mangle.
 
 #### Inline

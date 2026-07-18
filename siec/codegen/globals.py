@@ -37,6 +37,13 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
                     raise TypeError(f"global {glob.name!r} is declared more than once")
 
                 gen.statics[key] = symbol = f"{glob.name}.static.{len(gen.statics)}"
+            elif glob.symbol is not None:
+                # an '@symbol' global lives under its chosen outside symbol,
+                # its Sie name resolving there from everywhere
+                if gen.symbol_names.get(glob.name, glob.symbol) != glob.symbol:
+                    raise TypeError(f"conflicting '@symbol' names for global {glob.name!r}")
+
+                gen.symbol_names[glob.name] = symbol = glob.symbol
 
             if symbol in gen.globals or symbol in gen.module.globals:
                 raise TypeError(f"global {glob.name!r} is declared more than once")

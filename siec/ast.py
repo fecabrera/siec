@@ -430,6 +430,7 @@ class Global:
     type: str
     is_static: bool = False
     value: Expr | None = None
+    symbol: str | None = None  # '@symbol("...")' module-symbol override
     line: int = _line()
     file: str = _file()
 

@@ -80,3 +80,48 @@ def test_conflicting_symbols_for_one_name_are_an_error(compile_source):
             @extern @symbol("__error") fn errno_location() -> i32*;
             @extern @symbol("__errno_location") fn errno_location() -> i32*;
         """)
+
+
+def test_extern_global_under_a_symbol(run):
+    """
+    '@extern @symbol' binds an outside data symbol behind a Sie name;
+    '@if' picks the platform's spelling of libc's stdout.
+    """
+    result = run("""
+        struct FILE;
+
+        @if (TARGET_OS == OS_DARWIN) {
+            @extern @symbol("__stdoutp") let out: FILE*;
+        } @else {
+            @extern @symbol("stdout") let out: FILE*;
+        }
+
+        @extern fn fprintf(f: FILE*, fmt: char*, ...) -> i32;
+
+        fn main() -> i32 {
+            fprintf(out, "hi from %s\\n", "sie");
+            return 0;
+        }
+    """)
+    assert result.stdout == "hi from sie\n"
+
+
+def test_global_symbol_names_the_module_symbol(compile_source):
+    """
+    The module global lives under the chosen symbol, not the Sie name.
+    """
+    module = str(compile_source("""
+        @extern @symbol("__stdoutp") let out: opaque*;
+
+        fn peek() -> opaque* { return out; }
+    """))
+    assert '@"__stdoutp" = external global' in module
+    assert '@"out"' not in module
+
+
+def test_global_symbol_requires_extern(compile_source):
+    """
+    '@symbol' names outside storage; static and bare globals have none.
+    """
+    with pytest.raises(SyntaxError, match="'@symbol' requires an '@extern' global"):
+        compile_source('@static @symbol("x") let g: i32 = 1;')
