@@ -1153,6 +1153,8 @@ Type aliases are generic when their name is followed by an arbitrary number of p
 @type fnc<T, U> = fn(T) -> U;
 ```
 
+A concrete spelling supplies the arguments wherever a type is written: `cmp<i32>` is `fn(i32, i32) -> bool`. The target may be any type over the parameters, including a [generic struct](#generic-structs) or another generic alias (`@type boxes<T> = List<Box<T>>;`); the same modifier rule applies to arguments, and cycles are reported like any alias cycle.
+
 #### Type casting
 
 Numeric values can be explicitly converted to another numeric type through the `as` keyword, followed by the target type. This is the escape hatch for conversions that don't happen implicitly: narrowing, and crossing between signed, unsigned, and float.

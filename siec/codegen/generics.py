@@ -55,12 +55,13 @@ def substitute(type_name: str, mapping: dict) -> str:
 
 def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str | None:
     """
-    Instantiate a generic struct spelling into a registered concrete
-    struct, returning its canonical name; None when the name is not a
-    known template's.
+    Instantiate a generic spelling into a concrete canonical name: a
+    struct template registers a real struct, an alias template expands
+    its substituted target; None when the base is not a known template.
 
-    The identified type registers before its fields resolve, so a field
-    may point at the instantiation itself, or at a mutually generic one.
+    A struct's identified type registers before its fields resolve, so a
+    field may point at the instantiation itself, or at a mutually
+    generic one.
     """
     # deferred imports: instantiation is a stage of alias expansion
     from siec.codegen.aliases import expand_alias
@@ -70,14 +71,18 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str 
         return None
 
     base, args = parts
+    alias = gen.generic_aliases.get(base)
     template = gen.generic_structs.get(base)
-    if template is None:
+    if alias is None and template is None:
         return None
 
+    params = alias.params if alias is not None else template.params
+    kind = "type alias" if alias is not None else "struct"
+
     args = [expand_alias(gen, arg, seen) for arg in args]
-    if len(args) != len(template.params):
-        take = len(template.params)
-        raise TypeError(f"generic struct {base!r} takes {take} type "
+    if len(args) != len(params):
+        take = len(params)
+        raise TypeError(f"generic {kind} {base!r} takes {take} type "
                         f"argument{'s' if take != 1 else ''}, got {len(args)}")
 
     # a modifier marks a whole written type; substituted into a derived
@@ -86,6 +91,16 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str 
         if arg.startswith("const ") or arg.startswith("&"):
             raise TypeError(f"cannot instantiate {base!r} with {arg!r}: "
                             "the argument carries a modifier")
+
+    # a generic alias expands its target with the arguments substituted,
+    # like any alias one step further; 'seen' catches self-reference
+    if alias is not None:
+        if base in seen:
+            cycle = " -> ".join([*seen, base])
+            raise TypeError(f"type alias cycle: {cycle}")
+
+        target = substitute(alias.type, dict(zip(params, args)))
+        return expand_alias(gen, target, (*seen, base))
 
     canonical = f"{base}<{','.join(args)}>"
     if canonical in gen.structs:

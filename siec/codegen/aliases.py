@@ -55,16 +55,22 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
             if alias.name in types:
                 raise TypeError(f"type {alias.name!r} is declared more than once")
 
-            if alias.name in gen.aliases:
+            if alias.name in gen.aliases or alias.name in gen.generic_aliases:
                 raise TypeError(f"type alias {alias.name!r} is declared more than once")
 
-            gen.aliases[alias.name] = alias.type
+            # a generic alias is a template, expanded when a concrete
+            # 'a<args>' spelling supplies its arguments
+            if alias.params is not None:
+                gen.generic_aliases[alias.name] = alias
+            else:
+                gen.aliases[alias.name] = alias.type
 
     # expand after registration so aliases may reference one another
     # regardless of declaration order
     for alias in program.aliases:
         with source_location(line=alias.line, file=alias.file):
-            gen.aliases[alias.name] = expand_alias(gen, alias.type, (alias.name,))
+            if alias.params is None:
+                gen.aliases[alias.name] = expand_alias(gen, alias.type, (alias.name,))
 
 
 def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str | None:
@@ -138,12 +144,16 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
         else:
             break
 
-    # a 'Name<args>' base instantiates a generic struct, registering the
-    # concrete type under its canonical spelling
+    # a 'Name<args>' base instantiates a generic struct or expands a
+    # generic alias, landing on the concrete canonical spelling
     if "<" in base:
         from siec.codegen.generics import instantiate_generic
 
         if (generic := instantiate_generic(gen, base, seen)) is not None:
+            if suffix and (generic.startswith("const ") or generic.startswith("&")):
+                raise TypeError(f"cannot derive {name!r} from {base!r}: its "
+                                f"target {generic!r} carries a modifier")
+
             return generic + suffix
 
     if base not in gen.aliases:

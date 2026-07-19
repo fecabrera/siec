@@ -166,11 +166,23 @@ def parse_alias(ts: TokenStream) -> TypeAlias:
     ts.expect("ident", "type")
 
     name = ts.expect("ident").value
+
+    # '<T, U>' names the type parameters of a generic alias, instantiated
+    # by use: 'cmp<i32>' expands the target with each argument list
+    params = None
+    if ts.peek().syntax == "<":
+        ts.next()
+        params = [ts.expect("ident").value]
+        while ts.peek().syntax == ",":
+            ts.next()
+            params.append(ts.expect("ident").value)
+        ts.expect("sym", ">")
+
     ts.expect("sym", "=")
     target = parse_type(ts)
     ts.expect("sym", ";")
 
-    return TypeAlias(name, target, line=line)
+    return TypeAlias(name, target, params=params, line=line)
 
 
 def declares_global(ts: TokenStream) -> bool:

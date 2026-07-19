@@ -144,3 +144,76 @@ def test_uninstantiated_template_costs_nothing(run):
     fn main() -> i32 { return 42; }
     """
     assert run(source).returncode == 42
+
+
+def test_generic_aliases_expand_with_their_arguments(run):
+    """
+    '@type cmp<T> = fn(T, T) -> bool' expands per argument list, for
+    function types and struct targets alike.
+    """
+    source = """
+    struct Box<T> { value: T; }
+
+    @type cmp<T> = fn(T, T) -> bool;
+    @type boxed<T> = Box<T>;
+    @type boxptr<T> = Box<T>*;
+
+    fn less(a: i32, b: i32) -> bool { return a < b; }
+
+    fn pick(a: i32, b: i32, order: cmp<i32>) -> i32 {
+        if (order(a, b)) { return a; }
+        return b;
+    }
+
+    fn main() -> i32 {
+        let b: boxed<i64> = { 40 };
+        let p: boxptr<i64> = &b;
+        return pick(44, 2, less) + p[0].value as i32; // 2 + 40
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_generic_aliases_chain_and_nest(run):
+    """
+    A generic alias may target another, and feed a generic struct field.
+    """
+    source = """
+    struct Box<T> { value: T; }
+
+    @type inner<T> = Box<T>;
+    @type outer<T> = inner<inner<T>>;
+
+    struct Holder<T> {
+        held: outer<T>;
+    }
+
+    fn main() -> i32 {
+        let h: Holder<i32> = { { { 42 } } };
+        return h.held.value.value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_generic_alias_cycle_is_reported(compile_source):
+    """
+    A self-referential generic alias names its cycle instead of looping.
+    """
+    with pytest.raises(TypeError, match="type alias cycle: loop -> loop"):
+        compile_source("""
+        @type loop<T> = loop<T>;
+        fn main() -> i32 { let x: loop<i32>; return 0; }
+        """)
+
+
+def test_generic_alias_arity_is_checked(compile_source):
+    """
+    An argument list must match the alias template's parameters.
+    """
+    with pytest.raises(TypeError, match="type alias 'cmp' takes 2 type "
+                                        "arguments, got 1"):
+        compile_source("""
+        @type cmp<T, U> = fn(T, U) -> bool;
+        fn main() -> i32 { let x: cmp<i32>; return 0; }
+        """)

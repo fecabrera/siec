@@ -123,6 +123,10 @@ class CodeGenerator:
         # 'S<args>' spelling stamps a concrete struct into 'structs'
         self.generic_structs: dict = {}
 
+        # generic alias templates by name: each 'a<args>' spelling expands
+        # the target with its arguments substituted
+        self.generic_aliases: dict = {}
+
         # the enclosing block expressions' (slot, end block, Sie type, defer
         # depth) targets, innermost last: what an 'emit' stores into and jumps to
         self.emit_targets: list[tuple] = []

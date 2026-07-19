@@ -500,6 +500,7 @@ class TypeAlias:
     """
     name: str
     type: str
+    params: list[str] | None = None  # '@type a<T, U> = ...': generic parameters
     line: int = _line()
     file: str = _file()
 
