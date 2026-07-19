@@ -676,6 +676,19 @@ Functions can be decorated with `@extern` to indicate that they're going to be r
 @extern fn free(ptr: opaque*);
 ```
 
+Struct and union parameters pass by value the way C's do: the compiler lowers them to the target's C calling convention (registers for the small ones, memory for the large), so a C function taking a struct is declared and called naturally:
+
+```
+struct timespec {
+    tv_sec: i64;
+    tv_nsec: i64;
+}
+
+@extern fn takes_spec(ts: timespec) -> i64;
+
+takes_spec(ts); // passes exactly as C would
+```
+
 `@extern let` declares a global variable the same way: its storage is defined and initialized outside the program, so it takes no initializer. It reads and assigns like any variable, and may hold a function reference, called through like a local one:
 
 ```

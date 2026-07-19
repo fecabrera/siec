@@ -3,6 +3,7 @@
 from llvmlite import ir
 
 from siec.ast import Call, Expr
+from siec.codegen.abi import lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import expr_sie_type
@@ -71,6 +72,13 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
                 value = builder.fpext(value, ir.DoubleType())
 
             args.append(value)
+
+    # an '@extern' callee's struct arguments reshape for the C ABI
+    lowerings = gen.abi_args.get(func.name)
+    if lowerings is not None:
+        for i, lowering in enumerate(lowerings):
+            if lowering is not None and i < len(args):
+                args[i] = lower_argument(gen, builder, args[i], lowering)
 
     return builder.call(func, args)
 

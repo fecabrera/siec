@@ -159,6 +159,10 @@ class CodeGenerator:
         # symbols, visible everywhere
         self.symbol_names: dict[str, str] = {}
 
+        # per '@extern' symbol: how each struct parameter travels to C,
+        # aligned with the parameters (None marks a direct one)
+        self.abi_args: dict[str, list] = {}
+
         # what each file's 'import's bound: (file, prefix) naming a whole
         # module, (file, name) naming one member; and each module's exports
         self.module_bindings: dict[tuple[str, str], str] = {}

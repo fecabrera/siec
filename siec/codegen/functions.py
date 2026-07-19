@@ -3,6 +3,7 @@
 from llvmlite import ir
 
 from siec.ast import Function
+from siec.codegen.abi import DIRECT, classify
 from siec.codegen.aliases import expand_alias
 from siec.codegen.asm import emit_asm_function
 from siec.codegen.errors import source_location
@@ -55,6 +56,24 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     else:
         param_types = [resolve_type(p.type, gen.structs) for p in fn.params]
 
+    # an '@extern' function's struct parameters travel the C ABI: small
+    # ones reshaped into register values, large ones through memory
+    lowerings = None
+    if fn.is_extern:
+        lowerings = [
+            classify(gen, type_, info.is_union)
+            if (info := gen.structs.get(strip_const(param.type))) is not None
+            and info.fields is not None else DIRECT
+            for param, type_ in zip(fn.params, param_types)]
+
+        if all(lowering == DIRECT for lowering in lowerings):
+            lowerings = None
+        else:
+            param_types = [
+                type_ if kind == "direct"
+                else coerce if kind == "coerce" else ir.PointerType(type_)
+                for type_, (kind, coerce) in zip(param_types, lowerings)]
+
     func_type = ir.FunctionType(ret_type, param_types, var_arg=fn.var_arg)
 
     # an '@symbol' function lives under its chosen module symbol, its Sie
@@ -104,6 +123,16 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     # an '@inline' function inlines into every caller, unconditionally
     if fn.is_inline:
         func.attributes.add("alwaysinline")
+
+    # record the ABI lowerings for calls to mirror; x86-64's large
+    # aggregates carry 'byval', copying onto the stack at the call
+    if lowerings is not None:
+        gen.abi_args[symbol] = [None if low == DIRECT else low
+                                for low in lowerings]
+
+        for arg, lowering in zip(func.args, lowerings):
+            if lowering == ("indirect", True):
+                arg.add_attribute("byval")
 
     return func
 
