@@ -668,6 +668,15 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
                        // that can be replaced by any concrete types at compile time
 ```
 
+A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments — `identity(n)` on an `i32` compiles `identity<i32>` — by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context. When no argument pins a parameter down (`fn empty<T>() -> T*`), spell the arguments explicitly:
+
+```
+let p = empty<i32>();
+let x = identity<i64>(5);
+```
+
+Generic functions may recurse and call one another, and their return types may name generic structs (`fn make<T>(t: T) -> Box<T>`). The same modifier rule as [generic structs](#generic-structs) applies to type arguments, and a template nobody calls compiles to nothing. `@extern` functions cannot be generic — they name one foreign symbol.
+
 #### Extern
 
 Functions can be decorated with `@extern` to indicate that they're going to be resolved at link time. Extern functions must follow C's ABI and can only use C-compatible types.

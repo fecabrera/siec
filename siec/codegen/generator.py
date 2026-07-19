@@ -127,6 +127,12 @@ class CodeGenerator:
         # the target with its arguments substituted
         self.generic_aliases: dict = {}
 
+        # generic function templates by name; calls declare each 'f<args>'
+        # instance once and queue its body for emission
+        self.generic_functions: dict = {}
+        self.instantiated_functions: set = set()
+        self.pending_functions: list = []
+
         # the enclosing block expressions' (slot, end block, Sie type, defer
         # depth) targets, innermost last: what an 'emit' stores into and jumps to
         self.emit_targets: list[tuple] = []
@@ -284,6 +290,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                                         register_constants)
     from siec.codegen.enums import register_enums
     from siec.codegen.functions import declare_function, emit_function
+    from siec.codegen.generics import register_generic_function
     from siec.codegen.globals import register_globals
     from siec.codegen.structs import register_structs
 
@@ -314,14 +321,23 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     register_structs(gen, program)
     register_globals(gen, program)
 
-    # second pass: declare every function so calls can target ones defined later
+    # second pass: declare every function so calls can target ones defined
+    # later; a generic function is a template, declared per instantiation
     for fn in program.functions:
-        declare_function(gen, fn)
+        if fn.type_params is not None:
+            register_generic_function(gen, fn)
+        else:
+            declare_function(gen, fn)
 
     # third pass: emit the bodies of the defined functions, an '@asm'
     # function's assembly standing in for one
     for fn in program.functions:
-        if fn.body is not None or fn.asm is not None:
+        if fn.type_params is None and (fn.body is not None or fn.asm is not None):
             emit_function(gen, fn)
+
+    # calls met while emitting queue their instantiations' bodies, each of
+    # which may queue more: generic functions calling generic functions
+    while gen.pending_functions:
+        emit_function(gen, gen.pending_functions.pop(0))
 
     return gen.module

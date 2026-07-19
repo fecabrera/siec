@@ -6,6 +6,7 @@ from siec.ast import Call, Expr
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
+from siec.codegen.generics import instantiate_function, resolve_generic_call
 from siec.codegen.inference import expr_sie_type
 from siec.codegen.types import (
     fn_type_parts,
@@ -43,6 +44,15 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         symbol = gen.resolve_symbol(call.name)
         if call.name in scope or symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope)
+
+    # a generic callee instantiates for this call's type arguments,
+    # explicit or inferred; the instance is the real callee
+    template = gen.generic_functions.get(symbol)
+    if template is not None:
+        type_args = resolve_generic_call(gen, template, call, scope)
+        symbol = instantiate_function(gen, template, type_args)
+    elif call.type_args is not None:
+        raise TypeError(f"function {call.name!r} is not generic")
 
     # look up the callee among the module's declared functions
     func = gen.module.globals.get(symbol)

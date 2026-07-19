@@ -83,11 +83,18 @@ def close_angle(ts: TokenStream) -> None:
     """
     Consume one closing '>', splitting it off a glued token when the lexer
     read 'S<S<i32>>' as '>>' (or '>=', '>>=' against an assignment).
+
+    A split mutates the token; a speculative caller records each mutation
+    in 'ts.angle_journal' so a failed parse can restore the stream.
     """
     tok = ts.peek()
     if tok.syntax == ">":
         ts.next()
     elif tok.kind == "sym" and tok.value.startswith(">"):
+        journal = getattr(ts, "angle_journal", None)
+        if journal is not None:
+            journal.append((tok, tok.value))
+
         tok.value = tok.value[1:]
     else:
         raise SyntaxError(f"line {tok.line}: expected '>', got {tok.value!r}")

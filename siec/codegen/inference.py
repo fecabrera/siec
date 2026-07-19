@@ -106,6 +106,23 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
             return fn_type_parts(strip_const(gen.globals[symbol]))[1]
 
+        # a generic call's return type comes from its resolved arguments,
+        # without instantiating; an unresolvable call has no type yet
+        template = gen.generic_functions.get(symbol)
+        if template is not None:
+            from siec.codegen.generics import resolve_generic_call, substitute
+
+            if template.return_type is None:
+                return None
+
+            try:
+                type_args = resolve_generic_call(gen, template, expr, scope)
+            except TypeError:
+                return None
+
+            mapping = dict(zip(template.type_params, type_args))
+            return expand_alias(gen, substitute(template.return_type, mapping))
+
         return gen.return_types.get(symbol)
 
     # a cast produces its target type
@@ -248,16 +265,42 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
     known function that returns nothing says so.
     """
     if isinstance(expr, Call) and expr.name not in scope:
+        def generic_reason(symbol):
+            # a generic call fails to type when its template returns
+            # nothing, or when its type arguments cannot be inferred
+            template = gen.generic_functions.get(symbol)
+            if template is None:
+                return None
+
+            if template.return_type is None:
+                return TypeError(f"function {expr.name!r} returns no value")
+
+            from siec.codegen.generics import resolve_generic_call
+            try:
+                resolve_generic_call(gen, template, expr, scope)
+            except TypeError as error:
+                return error
+
+            return None
+
         if "." in expr.name:
-            if gen.resolve_qualified(expr.name.split(".")) is None:
+            symbol = gen.resolve_qualified(expr.name.split("."))
+            if symbol is None:
                 return NameError(f"undefined function {expr.name!r}")
+
+            if (reason := generic_reason(symbol)) is not None:
+                return reason
 
             return TypeError(f"function {expr.name!r} returns no value")
 
         symbol = gen.resolve_symbol(expr.name)
         if not gen.sees(expr.name) or (symbol not in gen.return_types
-                                       and symbol not in gen.globals):
+                                       and symbol not in gen.globals
+                                       and symbol not in gen.generic_functions):
             return NameError(f"undefined function {expr.name!r}")
+
+        if (reason := generic_reason(symbol)) is not None:
+            return reason
 
         return TypeError(f"function {expr.name!r} returns no value")
 

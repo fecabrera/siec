@@ -230,7 +230,13 @@ def parse_primary(ts: TokenStream) -> Expr:
             member = ts.expect("ident").value
             return parse_postfix(ts, EnumMember(tok.value, member))
 
-        if ts.peek().syntax == "(":
+        # '<A, B>(' spells a generic call's type arguments; a '<' that
+        # doesn't parse as one stays a comparison
+        type_args = None
+        if ts.peek().syntax == "<":
+            type_args = parse_type_arguments(ts)
+
+        if type_args is not None or ts.peek().syntax == "(":
             ts.next()
 
             # comma-separated argument expressions up to the closing ')'
@@ -242,13 +248,51 @@ def parse_primary(ts: TokenStream) -> Expr:
                 args.append(parse_expression(ts))
             ts.expect("sym", ")")
 
-            expr = Call(tok.value, args)
+            expr = Call(tok.value, args, type_args)
         else:
             expr = Var(tok.value)
 
         return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def parse_type_arguments(ts: TokenStream) -> list[str] | None:
+    """
+    Speculatively parse the '<A, B>' of a generic call, which must land
+    directly on the call's '('. Anything else — a '<' that reads as a
+    comparison — rewinds the stream untouched and returns None.
+    """
+    from siec.parser.types import close_angle, parse_type
+
+    saved = ts.pos
+    outer = getattr(ts, "angle_journal", None)
+    ts.angle_journal = journal = []
+
+    try:
+        ts.next()  # the '<'
+        args = [parse_type(ts)]
+        while ts.peek().syntax == ",":
+            ts.next()
+            args.append(parse_type(ts))
+        close_angle(ts)
+        ok = ts.peek().syntax == "("
+    except SyntaxError:
+        ok = False
+    finally:
+        ts.angle_journal = outer
+
+    if not ok:
+        ts.pos = saved
+        for tok, value in reversed(journal):
+            tok.value = value
+        return None
+
+    # an enclosing speculation must be able to undo this one's splits too
+    if outer is not None:
+        outer.extend(journal)
+
+    return args
 
 
 def parse_clobbers(ts: TokenStream) -> list[str]:
@@ -372,20 +416,25 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
     pure name chain calls it by its dotted name ('libc.stdio.printf(...)').
     """
     while True:
-        if (ts.peek().syntax == "(" and (names := ident_chain(expr)) is not None
+        if (ts.peek().syntax in ("(", "<") and (names := ident_chain(expr)) is not None
                 and len(names) > 1):
-            ts.next()
+            type_args = None
+            if ts.peek().syntax == "<":
+                type_args = parse_type_arguments(ts)
 
-            args = []
-            while ts.peek().syntax != ")":
-                if args:
-                    ts.expect("sym", ",")
+            if type_args is not None or ts.peek().syntax == "(":
+                ts.next()
 
-                args.append(parse_expression(ts))
-            ts.expect("sym", ")")
+                args = []
+                while ts.peek().syntax != ")":
+                    if args:
+                        ts.expect("sym", ",")
 
-            expr = Call(".".join(names), args)
-            continue
+                    args.append(parse_expression(ts))
+                ts.expect("sym", ")")
+
+                expr = Call(".".join(names), args, type_args)
+                continue
 
         if ts.peek().syntax not in ("[", "."):
             return expr

@@ -1,15 +1,26 @@
-"""Monomorphization of generic structs.
+"""Monomorphization of generics.
 
-A 'struct S<T>' declaration registers a template; each concrete spelling
-'S<i32>' met in a type position stamps out a real struct under that
-canonical name, so every use of the same arguments shares one type.
+A 'struct S<T>' or 'fn f<T>' declaration registers a template; each
+concrete spelling — 'S<i32>' in a type position, 'f(x)' or 'f<i32>(x)'
+at a call — stamps out a real struct or function under its canonical
+name, so every use of the same arguments shares one instantiation.
 """
 
+import copy
 import re
+from dataclasses import fields as dataclass_fields, is_dataclass
 
-from siec.ast import Field
+from siec.ast import Call, Field, SizeOf
+from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
-from siec.codegen.types import is_reference, resolve_type
+from siec.codegen.types import (
+    fn_type_parts,
+    is_reference,
+    raw_array,
+    resolve_type,
+    strip_const,
+    strip_reference,
+)
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 INSTANTIATION = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)<")
@@ -157,3 +168,162 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str 
 
     ident.set_body(*resolved)
     return canonical
+
+
+def register_generic_function(gen: CodeGenerator, fn) -> None:
+    """
+    Register a generic function template, instantiated by its calls.
+    """
+    with source_location(line=fn.line, file=fn.file):
+        if fn.name == "main":
+            raise TypeError("'main' cannot be generic: the C runtime "
+                            "calls it directly")
+
+        if fn.name in gen.generic_functions:
+            raise TypeError(f"function {fn.name!r} is declared more than once")
+
+        if fn.body is None and fn.asm is None:
+            raise TypeError(f"generic function {fn.name!r} needs a body: "
+                            "there is nothing to declare without one")
+
+        gen.generic_functions[fn.name] = fn
+
+
+def substitute_types(node, mapping: dict) -> None:
+    """
+    Walk an AST subtree, substituting type parameters into every type
+    annotation in place: 'let x: T', casts, sizeofs, parameters, returns,
+    and nested explicit type arguments.
+    """
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            substitute_types(item, mapping)
+        return
+
+    if not is_dataclass(node):
+        return
+
+    for field in dataclass_fields(node):
+        value = getattr(node, field.name)
+
+        if isinstance(value, str):
+            if (field.name in ("type", "return_type")
+                    or (isinstance(node, SizeOf) and field.name == "name")):
+                setattr(node, field.name, substitute(value, mapping))
+        elif isinstance(node, Call) and field.name == "type_args" and value is not None:
+            setattr(node, field.name, [substitute(v, mapping) for v in value])
+        else:
+            substitute_types(value, mapping)
+
+
+def unify(pattern: str | None, concrete: str | None,
+          type_params: list, bindings: dict) -> None:
+    """
+    Match a parameter's type pattern against an argument's concrete type,
+    binding each type parameter the pattern names.
+
+    Structural mismatches bind nothing — argument coercion reports them
+    with the instantiated types — but two arguments demanding different
+    bindings for one parameter conflict here.
+    """
+    if pattern is None or concrete is None:
+        return
+
+    pattern, concrete = strip_const(pattern), strip_const(concrete)
+    pattern, concrete = strip_reference(pattern), strip_reference(concrete)
+
+    if pattern in type_params:
+        previous = bindings.setdefault(pattern, concrete)
+        if previous != concrete:
+            raise TypeError(f"conflicting type arguments for {pattern!r}: "
+                            f"{previous!r} and {concrete!r}")
+        return
+
+    if pattern.endswith("*") and concrete.endswith("*"):
+        return unify(pattern[:-1], concrete[:-1], type_params, bindings)
+
+    if pattern.endswith("[]") and concrete.endswith("[]"):
+        return unify(pattern[:-2], concrete[:-2], type_params, bindings)
+
+    raw_p, raw_c = raw_array(pattern), raw_array(concrete)
+    if raw_p is not None and raw_c is not None:
+        return unify(raw_p[0], raw_c[0], type_params, bindings)
+
+    if pattern.startswith("fn(") and concrete.startswith("fn("):
+        p_params, p_ret, _ = fn_type_parts(pattern)
+        c_params, c_ret, _ = fn_type_parts(concrete)
+        for p, c in zip(p_params, c_params):
+            unify(p, c, type_params, bindings)
+        return unify(p_ret, c_ret, type_params, bindings)
+
+    generic_p, generic_c = split_generic(pattern), split_generic(concrete)
+    if (generic_p is not None and generic_c is not None
+            and generic_p[0] == generic_c[0]
+            and len(generic_p[1]) == len(generic_c[1])):
+        for p, c in zip(generic_p[1], generic_c[1]):
+            unify(p, c, type_params, bindings)
+
+
+def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict) -> list:
+    """
+    The type arguments of a generic call: the explicit '<...>' list, or
+    each parameter's pattern unified with its argument's type.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    if call.type_args is not None:
+        args = [expand_alias(gen, arg) for arg in call.type_args]
+        if len(args) != len(template.type_params):
+            take = len(template.type_params)
+            raise TypeError(f"generic function {template.name!r} takes {take} "
+                            f"type argument{'s' if take != 1 else ''}, "
+                            f"got {len(args)}")
+        return args
+
+    # literal arguments default like they do in any untyped context, so
+    # 'pick(3, 9)' binds T to i32 the way 'let x = 3;' would
+    from siec.codegen.inference import infer_type
+
+    bindings: dict = {}
+    for param, arg in zip(template.params, call.args):
+        unify(param.type, infer_type(gen, arg, scope),
+              template.type_params, bindings)
+
+    missing = [p for p in template.type_params if p not in bindings]
+    if missing:
+        named = ", ".join(map(repr, missing))
+        raise TypeError(f"cannot infer type argument{'s' if len(missing) != 1 else ''} "
+                        f"{named} for generic function {template.name!r}: spell "
+                        f"them explicitly, '{template.name}<...>(...)'")
+
+    return [bindings[p] for p in template.type_params]
+
+
+def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
+    """
+    Instantiate a generic function for one argument list, declaring it
+    under its canonical symbol and queuing its body for emission; every
+    call spelling the same arguments shares the one instance.
+    """
+    from siec.codegen.aliases import expand_alias
+    from siec.codegen.functions import declare_function
+
+    type_args = [expand_alias(gen, arg) for arg in type_args]
+    for arg in type_args:
+        if arg.startswith("const ") or arg.startswith("&"):
+            raise TypeError(f"cannot instantiate {template.name!r} with "
+                            f"{arg!r}: the argument carries a modifier")
+
+    symbol = f"{template.name}<{','.join(type_args)}>"
+    if symbol not in gen.instantiated_functions:
+        gen.instantiated_functions.add(symbol)
+
+        instance = copy.deepcopy(template)
+        instance.name = symbol
+        instance.type_params = None
+        substitute_types(instance, dict(zip(template.type_params, type_args)))
+
+        declare_function(gen, instance)
+        gen.pending_functions.append(instance)
+
+    return symbol

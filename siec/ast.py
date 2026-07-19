@@ -66,9 +66,13 @@ class EnumMember:
 class Call:
     """
     A call to a function by name with a list of argument expressions.
+
+    'f<i32>(x)' carries its explicit type arguments; a generic call
+    without them infers each from the value arguments.
     """
     name: str
     args: list
+    type_args: list | None = None
 
 
 @dataclass
@@ -409,6 +413,7 @@ class Function:
     symbol: str | None = None  # '@symbol("...")' module-symbol override
     asm: str | None = None  # '@asm': the raw assembly standing in for a body
     clobbers: list[str] = field(default_factory=list)
+    type_params: list[str] | None = None  # 'fn f<T, U>': generic type parameters
     line: int = _line()
     file: str = _file()
 

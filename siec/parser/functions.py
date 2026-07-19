@@ -308,6 +308,22 @@ def parse_function(ts: TokenStream) -> Function:
 
     ts.expect("kw", "fn")
     name = ts.expect("ident").value
+
+    # '<T, U>' names the type parameters of a generic function,
+    # instantiated by its calls: 'f(x)' by inference, 'f<i32>(x)' spelled
+    type_params = None
+    if ts.peek().syntax == "<":
+        if is_extern:
+            raise SyntaxError(f"line {line}: an '@extern' function cannot "
+                              "be generic: it names one foreign symbol")
+
+        ts.next()
+        type_params = [ts.expect("ident").value]
+        while ts.peek().syntax == ",":
+            ts.next()
+            type_params.append(ts.expect("ident").value)
+        ts.expect("sym", ">")
+
     ts.expect("sym", "(")
 
     # comma-separated 'name: type' params; a trailing '...' marks varargs
@@ -342,13 +358,14 @@ def parse_function(ts: TokenStream) -> Function:
 
         return Function(name, params, return_type, None, is_extern, var_arg,
                         is_inline, is_static, symbol, ts.next().value, clobbers,
-                        line=line)
+                        type_params=type_params, line=line)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
         ts.next()
         return Function(name, params, return_type, None, is_extern, var_arg,
-                        is_inline, is_static, symbol, line=line)
+                        is_inline, is_static, symbol, type_params=type_params,
+                        line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -357,4 +374,5 @@ def parse_function(ts: TokenStream) -> Function:
     body = parse_block(ts)
 
     return Function(name, params, return_type, body, is_extern, var_arg,
-                    is_inline, is_static, symbol, line=line)
+                    is_inline, is_static, symbol, type_params=type_params,
+                    line=line)
