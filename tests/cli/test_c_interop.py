@@ -107,3 +107,79 @@ def test_sie_to_sie_calls_keep_their_convention(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+RETURN_C_SOURCE = """
+#include <stdint.h>
+typedef struct { int32_t a, b; } small;
+typedef struct { double x, y; } dpair;
+typedef struct { int32_t a; double d; } mixed;
+typedef struct { int64_t a, b, c; } big;
+small make_small(int32_t a, int32_t b) { return (small){a, b}; }
+dpair make_dpair(double x, double y) { return (dpair){x, y}; }
+mixed make_mixed(int32_t a, double d) { return (mixed){a, d}; }
+big make_big(int64_t a, int64_t b, int64_t c) { return (big){a, b, c}; }
+big round_trip(big b) { b.c += 1; return b; }
+"""
+
+
+def test_structs_return_from_c_by_value(tmp_path, monkeypatch):
+    """
+    Struct returns come back the C way: registers for the small classes,
+    the hidden 'sret' slot for the large, mixing with lowered arguments.
+    """
+    (tmp_path / "ret.c").write_text(RETURN_C_SOURCE)
+    obj = tmp_path / "ret.o"
+    subprocess.run(["cc", "-c", str(tmp_path / "ret.c"), "-o", str(obj)],
+                   check=True)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        struct small { a: i32; b: i32; }
+        struct dpair { x: f64; y: f64; }
+        struct mixed { a: i32; d: f64; }
+        struct big { a: i64; b: i64; c: i64; }
+
+        @extern fn make_small(a: i32, b: i32) -> small;
+        @extern fn make_dpair(x: f64, y: f64) -> dpair;
+        @extern fn make_mixed(a: i32, d: f64) -> mixed;
+        @extern fn make_big(a: i64, b: i64, c: i64) -> big;
+        @extern fn round_trip(b: big) -> big;
+
+        fn main() -> i32 {
+            let s = make_small(3, 4);
+            let d = make_dpair(1.5, 2.5);
+            let m = make_mixed(2, 0.5);
+            let b = round_trip(make_big(7, 8, 9));
+
+            let total: i32 = s.a + s.b
+                + (d.x + d.y) as i32
+                + ((m.a as f64) + m.d) as i32
+                + (b.a + b.b + b.c) as i32;
+
+            return total; // 7 + 4 + 2 + 25
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, obj, "--run") == 38
+
+
+def test_libc_div_returns_its_struct(tmp_path, monkeypatch):
+    """
+    libc's div() returns a real struct: quotient and remainder arrive intact.
+    """
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        struct div_t { quot: i32; rem: i32; }
+
+        @extern fn div(numer: i32, denom: i32) -> div_t;
+
+        fn main() -> i32 {
+            let r = div(87, 2);
+            return r.quot - r.rem; // 43 - 1
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

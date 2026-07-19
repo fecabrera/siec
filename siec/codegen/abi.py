@@ -137,3 +137,20 @@ def lower_argument(gen: CodeGenerator, builder: ir.IRBuilder, value,
     copy = entry_alloca(builder, value.type, "abi.copy")
     builder.store(value, copy)
     return copy
+
+
+def lift_return(gen: CodeGenerator, builder: ir.IRBuilder, raw,
+                struct_type) -> ir.Value:
+    """
+    Reshape a C return back into its struct: the register-shaped value
+    lands in a stack spill and reads out as the struct.
+    """
+    data = target_data(gen.target)
+    context = gen.module.context
+
+    spill = entry_alloca(builder, raw.type, "abi.ret")
+    spill.align = max(raw.type.get_abi_alignment(data, context=context),
+                      struct_type.get_abi_alignment(data, context=context))
+
+    builder.store(raw, spill)
+    return builder.load(builder.bitcast(spill, ir.PointerType(struct_type)))

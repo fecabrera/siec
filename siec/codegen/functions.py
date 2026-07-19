@@ -74,6 +74,21 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
                 else coerce if kind == "coerce" else ir.PointerType(type_)
                 for type_, (kind, coerce) in zip(param_types, lowerings)]
 
+    # a struct return comes back the C way too: reshaped into registers,
+    # or written through a hidden first 'sret' pointer
+    ret_lowering = None
+    if fn.is_extern and (
+            (info := gen.structs.get(strip_const(fn.return_type))) is not None
+            and info.fields is not None):
+        kind, coerce = classify(gen, ret_type, info.is_union)
+        if kind == "coerce":
+            ret_lowering = ("coerce", coerce, ret_type)
+            ret_type = coerce
+        elif kind == "indirect":
+            ret_lowering = ("indirect", None, ret_type)
+            param_types = [ir.PointerType(ret_type), *param_types]
+            ret_type = ir.VoidType()
+
     func_type = ir.FunctionType(ret_type, param_types, var_arg=fn.var_arg)
 
     # an '@symbol' function lives under its chosen module symbol, its Sie
@@ -125,12 +140,21 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
         func.attributes.add("alwaysinline")
 
     # record the ABI lowerings for calls to mirror; x86-64's large
-    # aggregates carry 'byval', copying onto the stack at the call
+    # aggregates carry 'byval', copying onto the stack at the call, and an
+    # indirect return marks its hidden pointer 'sret'
+    hidden = 0
+    if ret_lowering is not None:
+        gen.abi_returns[symbol] = ret_lowering
+
+        if ret_lowering[0] == "indirect":
+            hidden = 1
+            func.args[0].add_attribute("sret")
+
     if lowerings is not None:
         gen.abi_args[symbol] = [None if low == DIRECT else low
                                 for low in lowerings]
 
-        for arg, lowering in zip(func.args, lowerings):
+        for arg, lowering in zip(func.args[hidden:], lowerings):
             if lowering == ("indirect", True):
                 arg.add_attribute("byval")
 

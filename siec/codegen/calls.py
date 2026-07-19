@@ -3,9 +3,9 @@
 from llvmlite import ir
 
 from siec.ast import Call, Expr
-from siec.codegen.abi import lower_argument
+from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
-from siec.codegen.generator import CodeGenerator
+from siec.codegen.generator import CodeGenerator, entry_alloca
 from siec.codegen.inference import expr_sie_type
 from siec.codegen.types import (
     fn_type_parts,
@@ -49,13 +49,16 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if not isinstance(func, ir.Function):
         raise NameError(f"undefined function {call.name!r}")
 
-    # check arity, letting varargs functions take extra arguments
-    param_types = func.function_type.args
+    # check arity, letting varargs functions take extra arguments; an
+    # indirect struct return hides its own first parameter
+    ret_lowering = gen.abi_returns.get(func.name)
+    hidden = 1 if ret_lowering is not None and ret_lowering[0] == "indirect" else 0
+    expected = len(func.function_type.args) - hidden
 
-    if len(call.args) < len(param_types):
+    if len(call.args) < expected:
         raise TypeError(f"too few arguments to function {call.name!r}")
 
-    if len(call.args) > len(param_types) and not func.function_type.var_arg:
+    if len(call.args) > expected and not func.function_type.var_arg:
         raise TypeError(f"too many arguments to function {call.name!r}")
 
     # coerce each argument to its parameter's Sie type; vararg extras pass
@@ -79,6 +82,16 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         for i, lowering in enumerate(lowerings):
             if lowering is not None and i < len(args):
                 args[i] = lower_argument(gen, builder, args[i], lowering)
+
+    # and its struct return comes back through registers or the hidden slot
+    if ret_lowering is not None:
+        kind, _, struct_type = ret_lowering
+        if kind == "indirect":
+            out = entry_alloca(builder, struct_type, "sret.out")
+            builder.call(func, [out, *args])
+            return builder.load(out)
+
+        return lift_return(gen, builder, builder.call(func, args), struct_type)
 
     return builder.call(func, args)
 
