@@ -143,3 +143,62 @@ def test_bad_receivers_are_rejected(compile_source):
         struct P { x: i32; }
         fn main() -> i32 { let p: P = { 1 }; return p.missing(); }
         """)
+
+
+def test_reference_returns_alias_the_receivers_storage(run):
+    """
+    'fn S::get(...) -> &T' yields assignable storage: methods chain on
+    the result, and reading it copies the value out.
+    """
+    source = """
+    struct Box { value: i32; }
+
+    struct Pair {
+        a: Box;
+        b: Box;
+    }
+
+    fn Box::bump(self: &Box, by: i32) { self.value += by; }
+
+    fn Pair::pick(self: &Pair, first: bool) -> &Box {
+        if (first) { return self.a; }
+        return self.b;
+    }
+
+    fn main() -> i32 {
+        let p: Pair = { { 10 }, { 20 } };
+
+        p.pick(true).bump(30);       // method on the returned reference
+        let copy = p.pick(false);    // reading copies the Box out
+        copy.value = 0;              // ...so this can't touch p.b
+
+        return p.pick(true).value + p.b.value + 2; // 40 + 20 + 2... 
+    }
+    """
+    assert run(source).returncode == 62
+
+
+def test_generic_reference_returns_chain(run):
+    """
+    'List<T>::get -> &T' chains through nested instantiations.
+    """
+    source = """
+    struct Slot<T> { value: T; }
+
+    struct Grid<T> {
+        cell: Slot<T>;
+    }
+
+    fn Slot<T>::set(self: &Slot<T>, value: T) { self.value = value; }
+
+    fn Grid<T>::at(self: &Grid<T>) -> &Slot<T> {
+        return self.cell;
+    }
+
+    fn main() -> i32 {
+        let g: Grid<i32>;
+        g.at().set(42);
+        return g.at().value;
+    }
+    """
+    assert run(source).returncode == 42

@@ -156,11 +156,13 @@ def test_reference_cannot_type_a_variable(compile_source):
         compile_source("fn main() -> i32 { let a: &i32; return 0; }")
 
 
-def test_reference_cannot_be_a_return_type(compile_source):
+def test_reference_return_needs_a_reference_parameter(compile_source):
     """
-    A returned reference would outlive its argument.
+    A returned reference must alias storage that outlives the call: it
+    can only derive from a reference parameter.
     """
-    with pytest.raises(TypeError, match="reference cannot be a return type"):
+    with pytest.raises(TypeError, match="reference return must derive from a "
+                                        "reference parameter"):
         compile_source("fn f() -> &i32;")
 
 

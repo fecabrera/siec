@@ -18,9 +18,14 @@ from siec.codegen.types import (
 )
 
 
-def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict):
+def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict,
+              as_address: bool = False):
     """
     Emit a call to a declared function, checking the argument count.
+
+    A '&T'-returning callee yields the T's address: reading the call
+    loads through it, while 'as_address' keeps the address itself, for
+    lvalue use — member assignment, or a method's receiver.
     """
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
@@ -85,6 +90,10 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if not isinstance(func, ir.Function):
         raise NameError(f"undefined function {call.name!r}")
 
+    # only a reference-returning call has an address to keep
+    if as_address and not is_reference(gen.return_types.get(func.name)):
+        raise TypeError("cannot take the address of a call's value")
+
     # check arity, letting varargs functions take extra arguments; an
     # indirect struct return hides its own first parameter
     ret_lowering = gen.abi_returns.get(func.name)
@@ -129,7 +138,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
         return lift_return(gen, builder, builder.call(func, args), struct_type)
 
-    return builder.call(func, args)
+    result = builder.call(func, args)
+
+    # a reference return is the referenced value's address; reading the
+    # call as a value loads through it
+    if is_reference(gen.return_types.get(func.name)):
+        return result if as_address else builder.load(result)
+
+    return result
 
 
 def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,

@@ -16,6 +16,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    MethodCall,
     NullLiteral,
     SizeOf,
     Slice,
@@ -478,6 +479,28 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 ts.expect("sym", ")")
 
                 expr = Call(".".join(names), args, type_args)
+                continue
+
+        # a call on a field of anything but a pure name chain is a method
+        # on that receiver expression: 'get(i).init(...)'
+        if (ts.peek().syntax in ("(", "<") and isinstance(expr, Member)
+                and ident_chain(expr) is None):
+            type_args = None
+            if ts.peek().syntax == "<":
+                type_args = parse_type_arguments(ts)
+
+            if type_args is not None or ts.peek().syntax == "(":
+                ts.next()
+
+                args = []
+                while ts.peek().syntax != ")":
+                    if args:
+                        ts.expect("sym", ",")
+
+                    args.append(parse_expression(ts))
+                ts.expect("sym", ")")
+
+                expr = MethodCall(expr.base, expr.field, args, type_args)
                 continue
 
         if ts.peek().syntax not in ("[", "."):

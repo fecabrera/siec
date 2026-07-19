@@ -73,12 +73,21 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     ts.expect("sym", "{")
 
-    # 'name: type;' fields until the closing brace
+    # 'name: type [= default];' fields until the closing brace
     fields = []
     while ts.peek().value != "}":
         field_name = ts.expect("ident").value
         ts.expect("sym", ":")
-        fields.append(Field(field_name, parse_type(ts)))
+        field_type = parse_type(ts)
+
+        default = None
+        if ts.peek().syntax == "=":
+            from siec.parser.expressions import parse_expression
+
+            ts.next()
+            default = parse_expression(ts)
+
+        fields.append(Field(field_name, field_type, default))
         ts.expect("sym", ";")
 
     ts.expect("sym", "}")

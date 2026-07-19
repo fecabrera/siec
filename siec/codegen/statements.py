@@ -193,6 +193,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if stmt.value is not None:
             volatile_store(gen, builder.store(
                 emit_coerced(gen, builder, stmt.value, type_name, scope), slot))
+        else:
+            # a bare declaration of a struct with field defaults starts
+            # from them, its undefaulted fields zeroed
+            from siec.codegen.expressions import default_value
+
+            if (default := default_value(gen, builder, type_name)) is not None:
+                volatile_store(gen, builder.store(default, slot))
     elif isinstance(stmt, Assign):
         # store the value into the variable's existing stack slot, typed by
         # the slot; a global's slot is its module-level storage, if this
@@ -338,6 +345,21 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                 name = builder.function.name.split(".static.")[0]
                 raise TypeError(f"function {name!r} has no return type and "
                                 "cannot return a value")
+
+            # a '&T' return yields the value's address, which must be
+            # assignable storage of exactly the referenced type
+            if is_reference(ret_type):
+                referenced = strip_reference(ret_type)
+                value_type = expr_sie_type(gen, stmt.value, scope)
+                if (value_type is not None
+                        and strip_const(value_type) != strip_const(referenced)):
+                    raise TypeError(f"cannot return a {value_type!r} value "
+                                    f"as {ret_type!r}")
+
+                value = emit_lvalue(gen, builder, stmt.value, scope)
+                flush_defers(gen, builder, gen.defer_frames)
+                builder.ret(value)
+                return
 
             # the return value is computed before any deferred statement runs
             value = emit_coerced(gen, builder, stmt.value, ret_type, scope)

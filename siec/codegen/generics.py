@@ -158,7 +158,10 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
 
     ident = gen.module.context.get_identified_type(canonical)
     mapping = dict(zip(template.params, args))
-    fields = [Field(f.name, substitute(f.type, mapping)) for f in template.fields]
+
+    # fields deep-copy so each instantiation owns its types and defaults
+    fields = copy.deepcopy(template.fields)
+    substitute_types(fields, mapping)
 
     info = StructInfo(ident, fields, align=template.align,
                       volatile=template.volatile, is_union=template.is_union)

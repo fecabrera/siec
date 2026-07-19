@@ -20,6 +20,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    MethodCall,
     NullLiteral,
     SizeOf,
     Slice,
@@ -101,6 +102,19 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         return None
 
+    # a method call on a receiver expression types like the qualified
+    # call it resolves to, the receiver joining the arguments
+    if isinstance(expr, MethodCall):
+        from siec.codegen.methods import resolve_method
+
+        symbol = resolve_method(gen, expr_sie_type(gen, expr.receiver, scope),
+                                expr.method)
+        if symbol is None:
+            return None
+
+        return expr_sie_type(
+            gen, Call(symbol, [expr.receiver, *expr.args], expr.type_args), scope)
+
     if isinstance(expr, Call):
         # a call through a function reference yields the reference's return type
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
@@ -144,9 +158,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 return None
 
             mapping = dict(zip(template.type_params, type_args))
-            return expand_alias(gen, substitute(template.return_type, mapping))
+            return strip_reference(
+                expand_alias(gen, substitute(template.return_type, mapping)))
 
-        return gen.return_types.get(symbol)
+        # a '&T' return reads as the T it aliases, like a reference parameter
+        return strip_reference(gen.return_types.get(symbol))
 
     # a cast produces its target type
     if isinstance(expr, Cast):
@@ -290,6 +306,16 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
     there is one: an unknown function or variable names itself, and a
     known function that returns nothing says so.
     """
+    if isinstance(expr, MethodCall):
+        from siec.codegen.methods import resolve_method
+
+        symbol = resolve_method(gen, expr_sie_type(gen, expr.receiver, scope),
+                                expr.method)
+        if symbol is None:
+            return TypeError(f"receiver has no method {expr.method!r}")
+
+        return TypeError(f"method {expr.method!r} returns no value")
+
     if isinstance(expr, Call) and expr.name not in scope:
         def generic_reason(symbol):
             # a generic call fails to type when its template returns

@@ -1117,6 +1117,17 @@ fn main() {
 }
 ```
 
+A function may also return a reference — `-> &T` — provided it has a reference parameter to derive it from, the receiver usually; returning storage that dies with the call (a local, a parameter's copy) has no reference to give. The `return` takes the value's address, and the call's result reads as the T it aliases, like a reference parameter does: reading copies the value out, while calling a [method](#methods) on it, or returning it along, keeps aliasing the original.
+
+```
+fn List<T>::get(self: &List<T>, index: u64) -> &T {
+    return self.data[index];
+}
+
+list.get(i).push(x);     // acts on the element inside the list
+let copy = list.get(i);  // copies the element out
+```
+
 #### Function references
 
 Function references represent references to functions with a given signature. Their type is written like a function declaration, without a name and with parameter types only:
@@ -1350,6 +1361,22 @@ fn open() -> Handle*;
 fn close(h: Handle*);
 ```
 
+#### Field defaults
+
+A field may declare a default value after its type, taken wherever the field is left unfilled:
+
+```
+struct List<T> {
+    data: T* = null;
+    length: u64;
+    capacity: u64 = 8;
+}
+```
+
+A bare declaration of a struct with any default starts from its defaults, the undefaulted fields zeroed — `let l: List<i32>;` holds `{null, 0, 8}` — and defaults of nested struct fields cascade. A named aggregate literal fills what it names and defaults the rest (`{ length = 2 }` keeps `data = null`); a positional literal still fills every field. A struct with no defaults anywhere stays uninitialized on a bare declaration, as ever.
+
+Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `sizeof` are the natural fits. Union fields take no default — their fields share one storage — and module-level globals keep their zero initialization.
+
 #### Generic structs
 
 Structs can be generic when their name is followed by `<X, Y, ...>`, where `X` and `Y` are arbitrary types.
@@ -1454,6 +1481,8 @@ Or simply by:
 ```
 s.method();
 ```
+
+The receiver may be any expression, not just a name: a field chain, an indexed element, or another call's result — `self.items.get(i).init(n)` chains through a [reference return](#references).
 
 Just like regular functions, they can return a value of type `T`:
 

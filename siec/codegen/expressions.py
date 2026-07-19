@@ -22,6 +22,7 @@ from siec.ast import (
     Index,
     IntLiteral,
     Member,
+    MethodCall,
     NullLiteral,
     SizeOf,
     Slice,
@@ -183,6 +184,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     if isinstance(expr, Call):
         return emit_call(gen, builder, expr, scope)
+
+    if isinstance(expr, MethodCall):
+        from siec.codegen.methods import emit_method_call
+
+        return emit_method_call(gen, builder, expr, scope)
 
     if isinstance(expr, Index):
         # a raw array's elements read through the base's address, or a
@@ -350,6 +356,15 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
             return gen.module.globals[symbol]
 
         raise NameError(f"undefined variable {expr.name!r}")
+
+    # a '&T'-returning call's value IS an address: assignable storage
+    if isinstance(expr, Call):
+        return emit_call(gen, builder, expr, scope, as_address=True)
+
+    if isinstance(expr, MethodCall):
+        from siec.codegen.methods import emit_method_call
+
+        return emit_method_call(gen, builder, expr, scope, as_address=True)
 
     if isinstance(expr, Member):
         # a pure name chain may be a module's member, spelled qualified
@@ -650,7 +665,8 @@ def emit_named_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: Aggreg
                          expected_type: ir.Type, scope: dict, field_names: list | None):
     """
     Emit a named aggregate literal over a zero-initialized base: each 'x =
-    v' fills its field wherever it sits, and untouched fields stay zero.
+    v' fills its field wherever it sits, and untouched fields take their
+    declared defaults, staying zero without one.
     """
     names = aggregate_fields(gen, expected_type)
     if names is None:
@@ -678,7 +694,50 @@ def emit_named_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: Aggreg
 
         value = builder.insert_value(value, field, index)
 
+    if (isinstance(expected_type, ir.IdentifiedStructType)
+            and (info := gen.structs.get(expected_type.name)) is not None
+            and info.fields is not None):
+        for index, field in enumerate(info.fields):
+            if field.name not in seen:
+                filled = field_default(gen, builder, field)
+                if filled is not None:
+                    value = builder.insert_value(value, filled, index)
+
     return value
+
+
+def field_default(gen: CodeGenerator, builder: ir.IRBuilder, field):
+    """
+    The value an unfilled field takes: its declared default, or its
+    struct type's own defaults, or None to stay zero.
+
+    A default is written in the struct's declaration, away from any local
+    names, so it emits against an empty scope.
+    """
+    if field.default is not None:
+        return emit_coerced(gen, builder, field.default, field.type, {})
+
+    return default_value(gen, builder, field.type)
+
+
+def default_value(gen: CodeGenerator, builder: ir.IRBuilder, type_name: str | None):
+    """
+    A struct type's default aggregate: each defaulted field filled, in
+    nested structs too, the rest zero; None when nothing declares one,
+    leaving a bare declaration uninitialized as ever.
+    """
+    info = gen.structs.get(strip_const(type_name) if type_name else None)
+    if info is None or info.fields is None or info.is_union:
+        return None
+
+    value, any_default = ir.Constant(info.type, None), False
+    for index, field in enumerate(info.fields):
+        filled = field_default(gen, builder, field)
+        if filled is not None:
+            value = builder.insert_value(value, filled, index)
+            any_default = True
+
+    return value if any_default else None
 
 
 def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,

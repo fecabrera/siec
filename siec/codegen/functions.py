@@ -50,9 +50,16 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     for param in fn.params:
         param.type = expand_alias(gen, param.type)
 
-    # references only pass parameters; a returned one would outlive its argument
+    # a returned reference must alias storage that outlives the call: it
+    # can only derive from a reference parameter, the receiver usually
     if is_reference(fn.return_type):
-        raise TypeError("a reference cannot be a return type")
+        if fn.is_extern:
+            raise TypeError("an '@extern' function cannot return a reference")
+
+        first = fn.params[0].type if fn.params else None
+        if not is_reference(strip_const(first)):
+            raise TypeError("a reference return must derive from a reference "
+                            "parameter: the value must outlive the call")
 
     if fn.name == "main" and fn.return_type is None:
         ret_type = ir.IntType(32)

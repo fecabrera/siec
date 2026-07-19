@@ -80,6 +80,19 @@ class Call:
 
 
 @dataclass
+class MethodCall:
+    """
+    A method call on a receiver expression that isn't a pure name chain:
+    'get(i).init(...)', 'items[0].clear()'. Name-chain receivers fold
+    into dotted Calls instead.
+    """
+    receiver: object
+    method: str
+    args: list
+    type_args: list | None = None
+
+
+@dataclass
 class Index:
     """
     An indexing expression: a base expression subscripted by an index.
@@ -427,10 +440,12 @@ class Function:
 @dataclass
 class Field:
     """
-    A struct field with its name and type annotation.
+    A struct field with its name, type annotation, and optional default
+    value, taken where a declaration or literal leaves the field unfilled.
     """
     name: str
     type: str
+    default: object | None = None
 
 
 @dataclass

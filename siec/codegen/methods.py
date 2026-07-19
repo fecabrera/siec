@@ -137,3 +137,22 @@ def method_call(gen: CodeGenerator, call: Call, scope: dict) -> tuple | None:
         return None
 
     return symbol, receiver
+
+
+def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
+                     as_address: bool = False):
+    """
+    Emit a method call on a receiver expression: the receiver's type
+    picks the method, and joins the arguments as the hidden first one.
+    """
+    from siec.codegen.calls import emit_call
+    from siec.codegen.inference import expr_sie_type
+
+    receiver_type = expr_sie_type(gen, expr.receiver, scope)
+    symbol = resolve_method(gen, receiver_type, expr.method)
+    if symbol is None:
+        raise TypeError(f"type {receiver_type or '?'} has no method "
+                        f"{expr.method!r}")
+
+    call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
+    return emit_call(gen, builder, call, scope, as_address)

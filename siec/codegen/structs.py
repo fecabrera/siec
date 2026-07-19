@@ -76,6 +76,11 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
                     raise TypeError(f"field {field.name!r} cannot be a reference")
 
             info = gen.structs[struct.name]
+
+            # a union's fields share storage: no single member's default
+            # could fill it
+            if info.is_union and any(f.default is not None for f in struct.fields):
+                raise TypeError(f"a union field cannot have a default value")
             resolved = [resolve_type(f.type, gen.structs) for f in struct.fields]
 
             # a union's fields share one storage: the most-aligned field's
