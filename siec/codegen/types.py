@@ -110,6 +110,45 @@ def raw_array(name: str | None) -> tuple[str, str, str] | None:
     return name[4:close], rest[1:end], rest[end + 1:]
 
 
+NESTING = {"{": 1, "(": 1, "[": 1, "}": -1, ")": -1, "]": -1}
+
+
+def anonymous_struct(name: str | None) -> tuple[bool, list, str] | None:
+    """
+    Split an unnamed struct or union name 'struct{a:T;b:U}...' into
+    whether it's a union, its (field name, field type) pairs, and any
+    trailing suffix; None for any other type name.
+    """
+    if name is None or not (name.startswith("struct{") or name.startswith("union{")):
+        return None
+
+    start = name.find("{")
+    depth = 0
+    for close in range(start, len(name)):
+        depth += NESTING.get(name[close], 0)
+        if depth == 0:
+            break
+    else:
+        raise TypeError(f"malformed anonymous type {name!r}")
+
+    body, suffix = name[start + 1:close], name[close + 1:]
+
+    # fields split on top-level ';', each 'name:type'
+    fields, depth, piece = [], 0, ""
+    for char in body:
+        depth += NESTING.get(char, 0)
+        if char == ";" and depth == 0:
+            fields.append(piece)
+            piece = ""
+        else:
+            piece += char
+    if piece:
+        fields.append(piece)
+
+    pairs = [tuple(field.split(":", 1)) for field in fields]
+    return name.startswith("union{"), pairs, suffix
+
+
 def type_signedness(name: str | None) -> str | None:
     """
     Classify a Sie type name as 'signed' or 'unsigned'; None for the rest.

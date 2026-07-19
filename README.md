@@ -1352,6 +1352,26 @@ u.bits; // 1.0's raw IEEE bits
 
 A union's size and alignment are its largest field's, inside enclosing structs too. Since the fields overlap, a union takes no aggregate literal: initialize it by assigning one of its fields. `@align(N)` and `@volatile` apply like a struct's; `@packed` has no field layout to act on and is refused.
 
+#### Unnamed structs and unions
+
+`struct { ... }` and `union { ... }` also work directly as types, wherever a type is written, C-style. The usual home is a field, the tagged-value pattern:
+
+```
+struct datum {
+    type: i32;
+    u: union {
+        s: char*;
+        b: bool;
+        i: i64;
+        f: f64;
+    };
+}
+
+d.u.i = 42; // fields chain through like any other
+```
+
+An unnamed type's identity is structural: two spellings with the same fields are one type, so a `struct { x: i32; y: i32; }` local passes to a `struct { x: i32; y: i32; }` parameter directly. They compose everywhere a named type would: locals, aliases, raw arrays, pointers, `sizeof`, and each other.
+
 ### Methods
 
 Structs can have methods, which are a special type of function that acts

@@ -32,6 +32,21 @@ def parse_type(ts: TokenStream) -> str:
         ts.expect("sym", "[")
         name = f"raw<{element}>[{parse_size(ts)}]"
         ts.expect("sym", "]")
+    elif ts.peek().value in ("struct", "union") and ts.peek(1).syntax == "{":
+        # an unnamed struct or union used in place: its canonical name
+        # spells out the fields, so identical shapes are one type
+        kind = ts.next().value
+        ts.expect("sym", "{")
+
+        parts = []
+        while ts.peek().value != "}":
+            field_name = ts.expect("ident").value
+            ts.expect("sym", ":")
+            parts.append(f"{field_name}:{parse_type(ts)}")
+            ts.expect("sym", ";")
+        ts.next()
+
+        name = kind + "{" + ";".join(parts) + "}"
     elif ts.peek().value == "fn":
         name = parse_fn_type(ts)
     else:

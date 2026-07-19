@@ -2,7 +2,13 @@
 
 from llvmlite import ir
 
-from siec.ast import AggregateLiteral, ArrayLiteral, BlockExpr, Cast, Expr
+from siec.ast import (
+    AggregateLiteral,
+    ArrayLiteral,
+    BlockExpr,
+    Cast,
+    Expr,
+)
 from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import (
@@ -180,7 +186,15 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # an aggregate literal coerces each element to its field's type instead
     if isinstance(expr, AggregateLiteral):
         info = type_info(gen, target_name)
-        field_names = [f.type for f in info.fields] if info is not None else None
+        if info is not None and info.is_union:
+            raise TypeError("a union takes no aggregate literal; assign one "
+                            "of its fields instead")
+
+        field_names = (
+            [f.type for f in info.fields]
+            if info is not None
+            else None
+        )
         return emit_aggregate(gen, builder, expr, target_type, scope, field_names)
 
     # a block expression coerces each emitted value to the target instead
