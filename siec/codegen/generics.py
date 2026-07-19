@@ -12,6 +12,32 @@ from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import is_reference, resolve_type
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+INSTANTIATION = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)<")
+
+
+def check_template_cycle(gen: CodeGenerator, name: str) -> None:
+    """
+    Reject a generic alias whose target reaches back to itself through
+    other generic aliases: 'A<T> = B<T>; B<T> = A<T>' can only loop.
+
+    Plain aliases expand eagerly at declaration, so only the edges among
+    templates need walking here; mixed cycles surface through that
+    eager expansion.
+    """
+    def references(base: str):
+        target = gen.generic_aliases[base].type
+        return [m.group(1) for m in INSTANTIATION.finditer(target)
+                if m.group(1) in gen.generic_aliases]
+
+    def visit(base: str, path: tuple) -> None:
+        if base in path:
+            cycle = [*path[path.index(base):], base]
+            raise TypeError("type alias cycle: " + " -> ".join(cycle))
+
+        for ref in references(base):
+            visit(ref, (*path, base))
+
+    visit(name, ())
 
 
 def split_generic(name: str) -> tuple[str, list[str]] | None:

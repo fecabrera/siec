@@ -217,3 +217,16 @@ def test_generic_alias_arity_is_checked(compile_source):
         @type cmp<T, U> = fn(T, U) -> bool;
         fn main() -> i32 { let x: cmp<i32>; return 0; }
         """)
+
+
+def test_mutual_generic_alias_cycle_is_rejected_at_declaration(compile_source):
+    """
+    A cycle among generic alias templates is an error even when nothing
+    instantiates them: expansion could only loop.
+    """
+    with pytest.raises(TypeError, match="type alias cycle: A -> B -> A"):
+        compile_source("""
+        @type A<T> = B<T>;
+        @type B<T> = A<T>;
+        fn main() -> i32 { return 0; }
+        """)

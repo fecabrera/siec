@@ -66,11 +66,16 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
                 gen.aliases[alias.name] = alias.type
 
     # expand after registration so aliases may reference one another
-    # regardless of declaration order
+    # regardless of declaration order; a generic template cannot expand
+    # without arguments, but a cycle among templates is checkable now
     for alias in program.aliases:
         with source_location(line=alias.line, file=alias.file):
             if alias.params is None:
                 gen.aliases[alias.name] = expand_alias(gen, alias.type, (alias.name,))
+            else:
+                from siec.codegen.generics import check_template_cycle
+
+                check_template_cycle(gen, alias.name)
 
 
 def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str | None:
