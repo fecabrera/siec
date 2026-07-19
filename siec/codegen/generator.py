@@ -59,11 +59,13 @@ class StructInfo:
     """
     A registered struct: its LLVM type plus its ordered fields, for member
     lookup, and its layout and access decorations ('@align(N)', '@volatile').
+    A union's fields share one storage, accessed by reinterpretation.
     """
     type: ir.Type
     fields: list[Field]
     align: int | None = None
     volatile: bool = False
+    is_union: bool = False
 
     def field(self, name: str) -> tuple[int, str]:
         """

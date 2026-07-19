@@ -435,6 +435,7 @@ class Struct:
     packed: bool = False
     align: int | None = None
     volatile: bool = False
+    is_union: bool = False  # 'union': the fields share one storage
     line: int = _line()
     file: str = _file()
 

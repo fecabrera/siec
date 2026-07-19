@@ -47,6 +47,7 @@ from siec.codegen.inference import (
     is_float,
     member_field,
     numeric_class,
+    type_info,
 )
 from siec.codegen.types import is_array_struct, is_reference, resolve_type
 
@@ -206,6 +207,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_expression(gen, builder, folded, expected_type, scope)
 
+        # a union field reads through the union's address, reinterpreted
+        info = type_info(gen, expr_sie_type(gen, expr.base, scope))
+        if info is not None and info.is_union:
+            return emit_union_member(gen, builder, expr, info, scope)
+
         # read a struct or array field: extract it from the base value by index
         index = member_field(gen, expr, scope)[0]
         base = emit_expression(gen, builder, expr.base, None, scope)
@@ -317,9 +323,17 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_lvalue(gen, builder, folded, scope)
 
-        # index into the base's address: gep past the aggregate to the field slot
-        index = member_field(gen, expr, scope)[0]
+        index, field_name = member_field(gen, expr, scope)
         base = emit_lvalue(gen, builder, expr.base, scope)
+
+        # a union field reinterprets the shared storage: the union's own
+        # address, read as the field's type
+        info = type_info(gen, expr_sie_type(gen, expr.base, scope))
+        if info is not None and info.is_union:
+            field_type = resolve_type(field_name, gen.structs)
+            return builder.bitcast(base, ir.PointerType(field_type), name=expr.field)
+
+        # index into the base's address: gep past the aggregate to the field slot
         return builder.gep(base, [ir.Constant(ir.IntType(32), 0),
                                   ir.Constant(ir.IntType(32), index)], name=expr.field)
 
@@ -356,6 +370,30 @@ def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict
         value = builder.icmp_signed("!=", value, ir.Constant(value.type, 0))
 
     return value
+
+
+def emit_union_member(gen: CodeGenerator, builder: ir.IRBuilder, expr: Member,
+                      info, scope: dict):
+    """
+    Read a union field: through the union's address when it has one, or a
+    stack spill of its value otherwise, reinterpreted as the field's type.
+    """
+    field_type = resolve_type(member_field(gen, expr, scope)[1], gen.structs)
+
+    try:
+        address = emit_lvalue(gen, builder, expr, scope)
+    except (TypeError, NameError):
+        # an unaddressable union (a call's result, say) reads via a spill
+        base = emit_expression(gen, builder, expr.base, None, scope)
+        spill = entry_alloca(builder, base.type, "union.spill")
+        builder.store(base, spill)
+        address = builder.bitcast(spill, ir.PointerType(field_type), name=expr.field)
+
+    load = builder.load(address, name=expr.field)
+    if info.volatile:
+        make_volatile(load)
+
+    return load
 
 
 def match_widths(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
@@ -515,6 +553,13 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
     # the literal takes its shape from context: an array's '{ptr, length}', say
     if not isinstance(expected_type, (ir.LiteralStructType, ir.IdentifiedStructType)):
         raise TypeError(f"aggregate literal needs a struct or array type, not {expected_type}")
+
+    # a union's fields share storage; no literal fills them field by field
+    if (isinstance(expected_type, ir.IdentifiedStructType)
+            and (info := gen.structs.get(expected_type.name)) is not None
+            and info.is_union):
+        raise TypeError("a union takes no aggregate literal; assign one "
+                        "of its fields instead")
 
     field_types = expected_type.elements
 

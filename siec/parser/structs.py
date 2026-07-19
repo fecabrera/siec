@@ -40,14 +40,24 @@ def parse_struct(ts: TokenStream) -> Struct:
             raise SyntaxError(f"line {at_line}: unknown struct decorator "
                               f"'@{decorator}'")
 
-    ts.expect("kw", "struct")
+    # 'union' declares the same shape with its fields sharing one storage
+    is_union = ts.peek().value == "union"
+    if is_union:
+        if packed:
+            raise SyntaxError(f"line {line}: a union has no field layout "
+                              "to '@packed'")
+
+        ts.next()
+    else:
+        ts.expect("kw", "struct")
+
     name = ts.expect("ident").value
 
     # a ';' in place of a body is a forward declaration, leaving the fields
     # to a later definition — or to none, for an opaque struct
     if ts.peek().value == ";":
         ts.next()
-        return Struct(name, None, packed, align, volatile, line=line)
+        return Struct(name, None, packed, align, volatile, is_union, line=line)
 
     ts.expect("sym", "{")
 
@@ -65,4 +75,4 @@ def parse_struct(ts: TokenStream) -> Struct:
     if ts.peek().value == ";":
         ts.next()
 
-    return Struct(name, fields, packed, align, volatile, line=line)
+    return Struct(name, fields, packed, align, volatile, is_union, line=line)

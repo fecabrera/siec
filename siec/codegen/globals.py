@@ -146,6 +146,10 @@ def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
     if info is None or not info.fields:
         raise TypeError(f"aggregate initializer needs a struct type, not {sie_type!r}")
 
+    if info.is_union:
+        raise TypeError("a union takes no aggregate literal; assign one "
+                        "of its fields instead")
+
     fields = info.fields
     values = [ir.Constant(field_type, None) for field_type in type_.elements]
 

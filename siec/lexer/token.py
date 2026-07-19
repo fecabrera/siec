@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "case", "when",
             "break", "continue", "emit", "defer", "and", "or", "not", "struct",
-            "enum", "true", "false", "null", "as"}
+            "union", "enum", "true", "false", "null", "as"}
 
 
 def int_value(text: str) -> int:

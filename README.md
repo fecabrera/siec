@@ -1303,6 +1303,30 @@ fn f() -> List<i32>; // a function that returns a value of type List<i32>
 let lst: List<i32>; // lst is a variable that holds a value of type List<i32>
 ```
 
+### Unions
+
+Unions are declared like structs through the `union` keyword, but their fields all share one storage: writing one field and reading another reinterprets the same bytes, C-style.
+
+```
+union <name> {
+    a: T;
+    b: U;
+}
+```
+
+```
+union pun {
+    f: f64;
+    bits: u64;
+}
+
+let u: pun;
+u.f = 1.0;
+u.bits; // 1.0's raw IEEE bits
+```
+
+A union's size and alignment are its largest field's, inside enclosing structs too. Since the fields overlap, a union takes no aggregate literal: initialize it by assigning one of its fields. `@align(N)` and `@volatile` apply like a struct's; `@packed` has no field layout to act on and is refused.
+
 ### Methods
 
 Structs can have methods, which are a special type of function that acts
