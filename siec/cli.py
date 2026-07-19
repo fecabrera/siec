@@ -69,6 +69,8 @@ def main() -> int:
                       help="compile to an object file, without linking")
     args.add_argument("-O", default=0, type=int, choices=[0, 1, 2, 3], dest="opt",
                       metavar="N", help="optimization level, cc-style (default 0)")
+    args.add_argument("-g", action="store_true", dest="debug",
+                      help="emit DWARF debug info, for source-level debugging")
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("-l", action="append", default=[], dest="libs", metavar="LIB",
@@ -112,7 +114,7 @@ def main() -> int:
     # first compile error in human-readable form instead of a traceback
     try:
         program = load_program(sources, include_paths)
-        module = codegen(program, str(sources[0]), opts.target)
+        module = codegen(program, str(sources[0]), opts.target, opts.debug)
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:
         print(format_error(str(sources[0]), error), file=sys.stderr)
         return 1

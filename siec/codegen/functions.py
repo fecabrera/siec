@@ -180,6 +180,12 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         ret_type = func.function_type.return_type
         builder = ir.IRBuilder(func.append_basic_block("entry"))
 
+        # under '-g', the function opens its debug scope, and every
+        # instruction carries a location from here on
+        if gen.debug is not None:
+            gen.debug.enter_function(fn, func)
+            builder.debug_metadata = gen.debug.location(fn.line)
+
         # an '@asm' function's parameters feed its assembly directly
         if fn.asm is not None:
             emit_asm_function(gen, builder, fn, func)
@@ -209,6 +215,21 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                 store = builder.store(arg, slot)
                 if gen.volatile_struct(arg.type):
                     make_volatile(store)
+
+        # describe each parameter's slot to the debugger; a '&T' reference
+        # arrives as a raw pointer argument, which dbg.declare cannot
+        # describe, so a debug-only spill gives it addressable storage,
+        # typed as the reference it is
+        if gen.debug is not None:
+            for position, param in enumerate(fn.params, 1):
+                slot = scope[param.name].slot
+                if is_reference(param.type):
+                    shadow = builder.alloca(slot.type, name=f"{param.name}.ref")
+                    builder.store(slot, shadow)
+                    slot = shadow
+
+                gen.debug.declare_variable(builder, slot, param.name,
+                                           param.type, fn.line, arg=position)
 
         # emit the body statements starting from the entry block
         emit_block(gen, builder, fn.body, scope)

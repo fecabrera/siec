@@ -108,6 +108,9 @@ class CodeGenerator:
         self.module.triple = self.target
         self.str_count = 0
 
+        # the '-g' debug-info builder, None when not emitting debug info
+        self.debug = None
+
         # the Sie return and parameter types of each declared function, for
         # type inference and argument coercion at calls
         self.return_types: dict[str, str | None] = {}
@@ -259,9 +262,13 @@ class CodeGenerator:
         return info is not None and info.volatile
 
 
-def codegen(program: Program, module_name: str, target: str | None = None) -> ir.Module:
+def codegen(program: Program, module_name: str, target: str | None = None,
+            debug: bool = False) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
+
+    Under 'debug', DWARF metadata rides along: line locations on every
+    instruction, and a description of each function and variable.
     """
     from siec.codegen.aliases import register_aliases
     from siec.codegen.conditionals import resolve_conditionals
@@ -275,6 +282,10 @@ def codegen(program: Program, module_name: str, target: str | None = None) -> ir
     from siec.codegen.constants import BUILTIN_CONSTANTS
 
     gen = CodeGenerator(module_name, target)
+    if debug:
+        from siec.codegen.debug import DebugInfo
+        gen.debug = DebugInfo(gen, module_name)
+
     gen.module_bindings = program.module_bindings
     gen.member_bindings = program.member_bindings
     gen.module_exports = program.module_exports

@@ -751,3 +751,16 @@ def test_run_refuses_a_foreign_target(tmp_path, capsys, monkeypatch):
     assert run_cli(monkeypatch, src, "--target", "riscv64-unknown-linux-gnu",
                    "--run") == 1
     assert "cannot jit-run" in capsys.readouterr().err
+
+
+def test_debug_flag_emits_debug_info(tmp_path, capsys, monkeypatch):
+    """
+    -g threads through to codegen: the IR carries DWARF metadata.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { let x: i32 = 0; return x; }")
+
+    assert run_cli(monkeypatch, src, "-g", "--emit-llvm") == 0
+    out = capsys.readouterr().out
+    assert "!DICompileUnit(" in out
+    assert '!DILocalVariable(' in out

@@ -143,6 +143,10 @@ def emit_statement(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: dict)
     Emit a single statement into the builder's current block, tagging errors with its line.
     """
     with source_location(line=getattr(stmt, "line", 0)):
+        # under '-g', instructions emitted from here carry this statement's line
+        if gen.debug is not None and (line := getattr(stmt, "line", 0)):
+            builder.debug_metadata = gen.debug.location(line)
+
         emit_statement_body(gen, builder, stmt, scope)
 
 
@@ -182,6 +186,9 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             slot.align = align
 
         scope[stmt.name] = Variable(slot, type_name)
+
+        if gen.debug is not None:
+            gen.debug.declare_variable(builder, slot, stmt.name, type_name, stmt.line)
 
         if stmt.value is not None:
             volatile_store(gen, builder.store(
@@ -358,6 +365,10 @@ def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
 
     scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), sie_type)
     builder.store(value, scope[stmt.name].slot)
+
+    if gen.debug is not None:
+        gen.debug.declare_variable(builder, scope[stmt.name].slot,
+                                   stmt.name, sie_type, stmt.line)
 
 
 def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: dict) -> None:
