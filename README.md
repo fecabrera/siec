@@ -59,10 +59,15 @@ fn main() -> i32 {
 }
 ```
 
-Optionally, you can pick specific members of a module through `{}` and `from`, which brings them into scope unqualified:
+Optionally, you can pick specific members of a module through `{}` and `from`, which brings them into scope unqualified; a multi-line list may close with a trailing comma:
 
 ```
 import { f } from module.submodule;
+
+import {
+    f,
+    g,
+} from module.submodule;
 ```
 
 Both members and modules can be aliased through `as`:

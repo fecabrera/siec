@@ -96,6 +96,10 @@ def parse_import(ts: TokenStream) -> Import:
             if members:
                 ts.expect("sym", ",")
 
+                # a trailing comma may close the list, one member per line
+                if ts.peek().syntax == "}":
+                    break
+
             name = ts.expect("ident").value
             binding = name
             if ts.peek().value == "as":
