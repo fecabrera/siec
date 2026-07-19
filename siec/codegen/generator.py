@@ -119,6 +119,10 @@ class CodeGenerator:
         # the registered structs by name, for type resolution and member access
         self.structs: dict[str, StructInfo] = {}
 
+        # generic struct templates by name, instantiated by use: each
+        # 'S<args>' spelling stamps a concrete struct into 'structs'
+        self.generic_structs: dict = {}
+
         # the enclosing block expressions' (slot, end block, Sie type, defer
         # depth) targets, innermost last: what an 'emit' stores into and jumps to
         self.emit_targets: list[tuple] = []

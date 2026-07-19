@@ -53,11 +53,23 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     name = ts.expect("ident").value
 
+    # '<T, U>' names the type parameters of a generic struct, instantiated
+    # by use: 'S<i32>' stamps out a concrete struct per argument list
+    params = None
+    if ts.peek().syntax == "<":
+        ts.next()
+        params = [ts.expect("ident").value]
+        while ts.peek().syntax == ",":
+            ts.next()
+            params.append(ts.expect("ident").value)
+        ts.expect("sym", ">")
+
     # a ';' in place of a body is a forward declaration, leaving the fields
     # to a later definition — or to none, for an opaque struct
     if ts.peek().value == ";":
         ts.next()
-        return Struct(name, None, packed, align, volatile, is_union, line=line)
+        return Struct(name, None, packed, align, volatile, is_union,
+                      params=params, line=line)
 
     ts.expect("sym", "{")
 
@@ -75,4 +87,5 @@ def parse_struct(ts: TokenStream) -> Struct:
     if ts.peek().value == ";":
         ts.next()
 
-    return Struct(name, fields, packed, align, volatile, is_union, line=line)
+    return Struct(name, fields, packed, align, volatile, is_union,
+                  params=params, line=line)

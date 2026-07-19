@@ -28,7 +28,7 @@ def parse_type(ts: TokenStream) -> str:
         ts.expect("ident", "raw")
         ts.expect("sym", "<")
         element = parse_type(ts)
-        ts.expect("sym", ">")
+        close_angle(ts)
         ts.expect("sym", "[")
         name = f"raw<{element}>[{parse_size(ts)}]"
         ts.expect("sym", "]")
@@ -52,6 +52,17 @@ def parse_type(ts: TokenStream) -> str:
     else:
         name = ts.expect("ident").value
 
+        # '<A, B>' after a name instantiates a generic struct; the canonical
+        # name spells out the arguments, so 'S<i32>' is one type everywhere
+        if ts.peek().syntax == "<":
+            ts.next()
+            args = [parse_type(ts)]
+            while ts.peek().syntax == ",":
+                ts.next()
+                args.append(parse_type(ts))
+            close_angle(ts)
+            name += f"<{','.join(args)}>"
+
     while True:
         if ts.peek().value in ("*", "**"):
             name += ts.next().value
@@ -66,6 +77,20 @@ def parse_type(ts: TokenStream) -> str:
                 name += "[]"
         else:
             return name
+
+
+def close_angle(ts: TokenStream) -> None:
+    """
+    Consume one closing '>', splitting it off a glued token when the lexer
+    read 'S<S<i32>>' as '>>' (or '>=', '>>=' against an assignment).
+    """
+    tok = ts.peek()
+    if tok.syntax == ">":
+        ts.next()
+    elif tok.kind == "sym" and tok.value.startswith(">"):
+        tok.value = tok.value[1:]
+    else:
+        raise SyntaxError(f"line {tok.line}: expected '>', got {tok.value!r}")
 
 
 def parse_size(ts: TokenStream) -> str:

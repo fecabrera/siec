@@ -1344,6 +1344,8 @@ fn f() -> List<i32>; // a function that returns a value of type List<i32>
 let lst: List<i32>; // lst is a variable that holds a value of type List<i32>
 ```
 
+Each argument list stamps out one concrete struct at compile time, shared by every use spelling the same arguments; arguments may be any concrete type, including other instantiations (`Box<Box<i32>>`), and a field may name its own instantiation through a pointer (`next: Node<T>*`). A modifier-carrying argument (`const T`, `&T`) is rejected: substituted into a derived position like `T*`, the modifier would silently move where it applies.
+
 ### Unions
 
 Unions are declared like structs through the `union` keyword, but their fields all share one storage: writing one field and reading another reinterprets the same bytes, C-style.

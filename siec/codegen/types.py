@@ -76,8 +76,9 @@ def sized_array(name: str | None) -> tuple[str, str] | None:
 
     base, _, size = name.rpartition("[")
 
-    # a 'raw<T>[N]' bracket is the raw array's own size, part of its type
-    if base.endswith(">"):
+    # a 'raw<T>[N]' bracket is the raw array's own size, part of its type;
+    # a generic's 'S<i32>[N]' is a true sized array of instantiations
+    if base.endswith(">") and base.startswith("raw<"):
         return None
 
     return f"{base}[]", size[:-1]

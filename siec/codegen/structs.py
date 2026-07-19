@@ -20,6 +20,20 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
     # fields from the definition when one appears
     for struct in program.structs:
         with source_location(line=struct.line, file=struct.file):
+            # a generic struct is a template: nothing registers until a
+            # concrete 'S<args>' spelling instantiates it
+            if struct.params is not None:
+                template = gen.generic_structs.get(struct.name)
+                if template is None:
+                    gen.generic_structs[struct.name] = struct
+                elif struct.fields is not None:
+                    if template.fields is not None:
+                        raise TypeError(f"struct {struct.name!r} is declared "
+                                        "more than once")
+
+                    template.fields = struct.fields
+                continue
+
             info = gen.structs.get(struct.name)
 
             if info is None:
@@ -47,7 +61,7 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
     # then set each body from the now-resolvable field types; a struct
     # never given a body stays opaque, usable only through a pointer
     for struct in program.structs:
-        if struct.fields is None:
+        if struct.fields is None or struct.params is not None:
             continue
 
         with source_location(line=struct.line, file=struct.file):

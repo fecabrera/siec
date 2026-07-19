@@ -76,7 +76,7 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
     if name is None:
         return None
 
-    if not gen.aliases and not any(m in name for m in ("raw<", "struct{", "union{")):
+    if not gen.aliases and not any(m in name for m in ("<", "struct{", "union{")):
         return name
 
     # prefixes wrap the expanded rest; a target's own 'const' isn't repeated
@@ -137,6 +137,14 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
             base, suffix = head, f"[{size}{suffix}"
         else:
             break
+
+    # a 'Name<args>' base instantiates a generic struct, registering the
+    # concrete type under its canonical spelling
+    if "<" in base:
+        from siec.codegen.generics import instantiate_generic
+
+        if (generic := instantiate_generic(gen, base, seen)) is not None:
+            return generic + suffix
 
     if base not in gen.aliases:
         return name

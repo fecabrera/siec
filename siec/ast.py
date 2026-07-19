@@ -436,6 +436,7 @@ class Struct:
     align: int | None = None
     volatile: bool = False
     is_union: bool = False  # 'union': the fields share one storage
+    params: list[str] | None = None  # 'struct S<T, U>': generic type parameters
     line: int = _line()
     file: str = _file()
 
