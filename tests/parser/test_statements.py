@@ -326,10 +326,14 @@ def test_member_of_indexed_element_assignment(ts):
 
 def test_invalid_assignment_target_is_an_error(ts):
     """
-    Assigning to something that isn't a variable or field raises a SyntaxError.
+    Assigning to something that isn't assignable storage raises a
+    SyntaxError; a call target parses, assigning through its reference.
     """
     with pytest.raises(SyntaxError, match="invalid assignment target"):
-        parse_statement(ts("f() = 5;"))
+        parse_statement(ts("a + b = 5;"))
+
+    from siec.ast import RefAssign
+    assert isinstance(parse_statement(ts("f() = 5;")), RefAssign)
 
 
 def test_expression_statement(ts):

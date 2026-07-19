@@ -184,10 +184,11 @@ def test_extern_with_a_body(compile_source):
 
 def test_invalid_assignment_target(compile_source):
     """
-    Assigning to something that isn't a variable or field is a parse error.
+    Assigning through a call needs a reference return; a value-returning
+    callee has no storage to assign.
     """
-    source = "fn f() { } fn main() -> i32 { f() = 5; return 0; }"
-    with pytest.raises(SyntaxError, match="invalid assignment target"):
+    source = "fn f() -> i32 { return 1; } fn main() -> i32 { f() = 5; return 0; }"
+    with pytest.raises(TypeError, match="cannot take the address of a call's"):
         compile_source(source)
 
 

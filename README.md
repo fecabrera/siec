@@ -1126,6 +1126,8 @@ fn List<T>::get(self: &List<T>, index: u64) -> &T {
 
 list.get(i).push(x);     // acts on the element inside the list
 let copy = list.get(i);  // copies the element out
+list.get(i) = 9;         // assigns through the reference
+list.get(i) += 1;        // compound assignment too
 ```
 
 #### Function references

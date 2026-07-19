@@ -18,6 +18,7 @@ from siec.ast import (
     Let,
     Member,
     MemberAssign,
+    RefAssign,
     Return,
     While,
 )
@@ -243,6 +244,16 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         store = builder.store(emit_coerced(gen, builder, stmt.value, field_type, scope), slot)
         if volatile_chain(gen, member, scope):
             make_volatile(store)
+    elif isinstance(stmt, RefAssign):
+        # store through the reference the call returns, typed by the
+        # referenced value
+        target_type = expr_sie_type(gen, stmt.target, scope)
+        if is_const(target_type):
+            raise TypeError(f"cannot assign through a {target_type!r} reference")
+
+        slot = emit_lvalue(gen, builder, stmt.target, scope)
+        volatile_store(gen, builder.store(
+            emit_coerced(gen, builder, stmt.value, target_type, scope), slot))
     elif isinstance(stmt, IndexAssign):
         # store the value into the element's slot, typed by the element; a
         # write into a '@volatile' struct is a volatile one

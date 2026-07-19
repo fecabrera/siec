@@ -366,6 +366,17 @@ class MemberAssign:
 
 
 @dataclass
+class RefAssign:
+    """
+    An assignment through a reference-returning call: 'list.get(i) = v;'
+    stores into the storage the call's reference aliases.
+    """
+    target: Expr
+    value: Expr
+    line: int = _line()
+
+
+@dataclass
 class IndexAssign:
     """
     An assignment of a new value to an element indexed from a base expression.

@@ -202,3 +202,35 @@ def test_generic_reference_returns_chain(run):
     }
     """
     assert run(source).returncode == 42
+
+
+def test_assignment_through_a_reference_return(run, compile_source):
+    """
+    A reference-returning call is assignable storage: plain and compound
+    assignment store through it; a plain call's value is not.
+    """
+    source = """
+    struct List<T> { data: T*; length: u64; }
+
+    fn List<T>::get(self: &List<T>, index: u64) -> &T {
+        return self.data[index];
+    }
+
+    fn main() -> i32 {
+        let backing: @raw<i32>[4];
+        let l: List<i32> = { &backing[0], 4 };
+
+        l.get(0) = 30;
+        l.get(0) += 10;
+        l.get(1) = l.get(0) + 2;
+
+        return l.get(0) + l.get(1) - 40; // 40 + 42 - 40
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="cannot take the address of a call's"):
+        compile_source("""
+        fn f(n: i32) -> i32 { return n; }
+        fn main() -> i32 { f(1) = 2; return 0; }
+        """)

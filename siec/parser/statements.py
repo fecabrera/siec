@@ -5,6 +5,7 @@ from siec.ast import (
     BinaryOp,
     Block,
     Break,
+    Call,
     Case,
     Continue,
     Defer,
@@ -17,6 +18,8 @@ from siec.ast import (
     Let,
     Member,
     MemberAssign,
+    MethodCall,
+    RefAssign,
     Return,
     Var,
     When,
@@ -269,5 +272,9 @@ def make_assignment(target, value, line: int):
 
     if isinstance(target, Index):
         return IndexAssign(target.base, target.index, value, line=line)
+
+    # a call target assigns through the reference it returns
+    if isinstance(target, (Call, MethodCall)):
+        return RefAssign(target, value, line=line)
 
     raise SyntaxError(f"line {line}: invalid assignment target")
