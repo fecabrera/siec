@@ -7,6 +7,7 @@ from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
 from siec.codegen.generics import instantiate_function, resolve_generic_call
+from siec.codegen.methods import method_call, qualified_method
 from siec.codegen.inference import expr_sie_type
 from siec.codegen.types import (
     fn_type_parts,
@@ -24,14 +25,35 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
 
-    # a dotted name resolves through the file's module bindings
+    # a dotted name is a method on its receiver chain, or resolves
+    # through the file's module bindings; a scoped receiver shadows any
+    # module prefix
+    receiver = None
     if "." in call.name:
-        symbol = gen.resolve_qualified(call.name.split("."))
+        symbol = None
+        if call.name.split(".", 1)[0] in scope:
+            if (found := method_call(gen, call, scope)) is not None:
+                symbol, receiver = found
+
+        if symbol is None:
+            symbol = gen.resolve_qualified(call.name.split("."))
+
+        if symbol is None and (found := method_call(gen, call, scope)) is not None:
+            symbol, receiver = found
+
         if symbol is None:
             raise NameError(f"undefined function {call.name!r}")
 
-        if symbol in gen.globals:
+        if receiver is None and symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope, symbol)
+    elif "::" in call.name:
+        # 'S::method(s)' passes its receiver explicitly; the type name
+        # resolves like any written type
+        symbol = qualified_method(gen, call.name)
+        if symbol is None:
+            base = call.name.partition("::")[0]
+            raise NameError(f"type {base!r} has no method "
+                            f"{call.name.partition('::')[2]!r}")
     else:
         # a name in scope is always in view; anything else must be visible
         # to this file: an imported module's names need their qualified
@@ -44,6 +66,10 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         symbol = gen.resolve_symbol(call.name)
         if call.name in scope or symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope)
+
+    # the sugar form passes the receiver as the hidden first argument
+    if receiver is not None:
+        call = Call(call.name, [receiver, *call.args], call.type_args)
 
     # a generic callee instantiates for this call's type arguments,
     # explicit or inferred; the instance is the real callee

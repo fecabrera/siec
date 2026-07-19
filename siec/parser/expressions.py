@@ -228,6 +228,27 @@ def parse_primary(ts: TokenStream) -> Expr:
         if ts.peek().syntax == "::":
             ts.next()
             member = ts.expect("ident").value
+
+            # a call after '::' is a method's fully qualified form,
+            # 'S::method(s)', optionally with explicit type arguments
+            method_args = None
+            if ts.peek().syntax == "<":
+                method_args = parse_type_arguments(ts)
+
+            if method_args is not None or ts.peek().syntax == "(":
+                ts.next()
+
+                args = []
+                while ts.peek().syntax != ")":
+                    if args:
+                        ts.expect("sym", ",")
+
+                    args.append(parse_expression(ts))
+                ts.expect("sym", ")")
+
+                return parse_postfix(
+                    ts, Call(f"{tok.value}::{member}", args, method_args))
+
             return parse_postfix(ts, EnumMember(tok.value, member))
 
         # '<A, B>(' spells a generic call's type arguments; landing on an

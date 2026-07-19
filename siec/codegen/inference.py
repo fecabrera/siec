@@ -106,12 +106,28 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
             return fn_type_parts(strip_const(scope[expr.name].type))[1]
 
-        if "." not in expr.name and not gen.sees(expr.name):
-            return None
+        call = expr
+        if "::" in expr.name and "." not in expr.name:
+            # 'S::m(s)' names a method through its receiver type
+            from siec.codegen.methods import qualified_method
 
-        symbol = gen.resolve_callee(expr.name)
-        if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
-            return fn_type_parts(strip_const(gen.globals[symbol]))[1]
+            symbol = qualified_method(gen, expr.name)
+        else:
+            if "." not in expr.name and not gen.sees(expr.name):
+                return None
+
+            symbol = gen.resolve_callee(expr.name)
+            if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
+                return fn_type_parts(strip_const(gen.globals[symbol]))[1]
+
+            # a dotted callee may be a method on its receiver chain, its
+            # receiver joining the arguments for inference
+            if symbol is None or symbol not in gen.return_types:
+                from siec.codegen.methods import method_call
+
+                if "." in expr.name and (found := method_call(gen, expr, scope)):
+                    symbol, receiver = found
+                    call = Call(expr.name, [receiver, *expr.args], expr.type_args)
 
         # a generic call's return type comes from its resolved arguments,
         # without instantiating; an unresolvable call has no type yet
@@ -123,7 +139,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 return None
 
             try:
-                type_args = resolve_generic_call(gen, template, expr, scope)
+                type_args = resolve_generic_call(gen, template, call, scope)
             except TypeError:
                 return None
 
@@ -296,12 +312,26 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
         if "." in expr.name:
             symbol = gen.resolve_qualified(expr.name.split("."))
             if symbol is None:
+                # a dotted method call may still name a real, void method
+                from siec.codegen.methods import method_call
+
+                if (found := method_call(gen, expr, scope)) is not None:
+                    return TypeError(f"function {expr.name!r} returns no value")
+
                 return NameError(f"undefined function {expr.name!r}")
 
             if (reason := generic_reason(symbol)) is not None:
                 return reason
 
             return TypeError(f"function {expr.name!r} returns no value")
+
+        if "::" in expr.name:
+            from siec.codegen.methods import qualified_method
+
+            if qualified_method(gen, expr.name) is not None:
+                return TypeError(f"function {expr.name!r} returns no value")
+
+            return NameError(f"undefined function {expr.name!r}")
 
         symbol = gen.resolve_symbol(expr.name)
         if not gen.sees(expr.name) or (symbol not in gen.return_types

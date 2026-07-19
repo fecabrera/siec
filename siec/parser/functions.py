@@ -261,6 +261,23 @@ def parse_global(ts: TokenStream) -> Global:
 DECORATORS = {"extern", "inline", "static", "asm"}
 
 
+
+def placeholders(ts: TokenStream) -> list[str] | None:
+    """
+    Parse an optional '<T, U>' placeholder list of plain identifiers.
+    """
+    if ts.peek().syntax != "<":
+        return None
+
+    ts.next()
+    names = [ts.expect("ident").value]
+    while ts.peek().syntax == ",":
+        ts.next()
+        names.append(ts.expect("ident").value)
+    ts.expect("sym", ">")
+    return names
+
+
 def parse_function(ts: TokenStream) -> Function:
     """
     Parse a function declaration or definition, including decorators
@@ -313,20 +330,27 @@ def parse_function(ts: TokenStream) -> Function:
     ts.expect("kw", "fn")
     name = ts.expect("ident").value
 
-    # '<T, U>' names the type parameters of a generic function,
-    # instantiated by its calls: 'f(x)' by inference, 'f<i32>(x)' spelled
-    type_params = None
-    if ts.peek().syntax == "<":
-        if is_extern:
-            raise SyntaxError(f"line {line}: an '@extern' function cannot "
-                              "be generic: it names one foreign symbol")
+    # '<T, U>' after the first name is either a generic function's type
+    # parameters or, before a '::', a generic struct's placeholders
+    params_list = placeholders(ts)
 
+    # 'S::m' declares a method: the name canonicalizes to 'S::m', the
+    # receiver rides along, and its own '<X, Y>' may follow the method name
+    receiver = receiver_params = type_params = None
+    if ts.peek().syntax == "::":
         ts.next()
-        type_params = [ts.expect("ident").value]
-        while ts.peek().syntax == ",":
-            ts.next()
-            type_params.append(ts.expect("ident").value)
-        ts.expect("sym", ">")
+        receiver, receiver_params = name, params_list
+        name = f"{receiver}::{ts.expect('ident').value}"
+        type_params = placeholders(ts)
+    else:
+        type_params = params_list
+
+    if is_extern and (type_params is not None or receiver is not None):
+        raise SyntaxError(f"line {line}: an '@extern' function cannot be "
+                          "generic or a method: it names one foreign symbol")
+
+    if is_static and receiver is not None:
+        raise SyntaxError(f"line {line}: a method cannot be '@static'")
 
     ts.expect("sym", "(")
 
@@ -362,13 +386,15 @@ def parse_function(ts: TokenStream) -> Function:
 
         return Function(name, params, return_type, None, is_extern, var_arg,
                         is_inline, is_static, symbol, ts.next().value, clobbers,
-                        type_params=type_params, line=line)
+                        type_params=type_params, receiver=receiver,
+                        receiver_params=receiver_params, line=line)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
         ts.next()
         return Function(name, params, return_type, None, is_extern, var_arg,
                         is_inline, is_static, symbol, type_params=type_params,
+                        receiver=receiver, receiver_params=receiver_params,
                         line=line)
 
     if is_extern:
@@ -379,4 +405,5 @@ def parse_function(ts: TokenStream) -> Function:
 
     return Function(name, params, return_type, body, is_extern, var_arg,
                     is_inline, is_static, symbol, type_params=type_params,
+                    receiver=receiver, receiver_params=receiver_params,
                     line=line)

@@ -1,0 +1,139 @@
+"""Resolution of struct methods.
+
+A method is a function named 'S::m' whose first parameter is its '&S'
+(or 'const &S') receiver. 'S::method(s)' calls it like any function;
+'s.method()' passes the receiver implicitly. A generic struct's methods
+are templates, stamped per instantiation like the struct itself.
+"""
+
+import copy
+
+from llvmlite import ir
+
+from siec.ast import Call, Member, Var
+from siec.codegen.errors import source_location
+from siec.codegen.generator import CodeGenerator
+from siec.codegen.generics import split_generic, substitute_types
+from siec.codegen.types import strip_const, strip_reference
+
+
+def register_method(gen: CodeGenerator, fn) -> None:
+    """
+    Register a method: a plain one declares like any function under its
+    'S::m' name, a generic one like a generic function, and a generic
+    struct's becomes a template stamped per struct instantiation.
+    """
+    from siec.codegen.functions import declare_function
+    from siec.codegen.generics import register_generic_function
+
+    with source_location(line=fn.line, file=fn.file):
+        expected = fn.receiver
+        if fn.receiver_params is not None:
+            expected += f"<{','.join(fn.receiver_params)}>"
+
+        first = fn.params[0].type if fn.params else None
+        if strip_const(first) != f"&{expected}":
+            raise TypeError(f"a method's first parameter must be its "
+                            f"receiver: '&{expected}' or 'const &{expected}'")
+
+        if fn.receiver_params is not None:
+            if fn.body is None and fn.asm is None:
+                raise TypeError(f"method {fn.name!r} needs a body: there is "
+                                "nothing to declare without one")
+
+            key = (fn.receiver, fn.name.partition("::")[2])
+            if key in gen.generic_methods:
+                raise TypeError(f"method {fn.name!r} is declared more than once")
+
+            gen.generic_methods[key] = fn
+        elif fn.type_params is not None:
+            register_generic_function(gen, fn)
+        else:
+            declare_function(gen, fn)
+
+
+def resolve_method(gen: CodeGenerator, receiver_type: str | None,
+                   method: str) -> str | None:
+    """
+    The symbol of a method on a receiver's type, stamping a generic
+    struct's template on first use; None when the type has none.
+    """
+    base = strip_const(strip_reference(receiver_type)) if receiver_type else None
+    if not base:
+        return None
+
+    symbol = f"{base}::{method}"
+    if (symbol in gen.generic_functions
+            or isinstance(gen.module.globals.get(symbol), ir.Function)):
+        return symbol
+
+    # a generic struct's method instantiates with the struct's arguments
+    if (parts := split_generic(base)) is None:
+        return None
+
+    struct_base, args = parts
+    template = gen.generic_methods.get((struct_base, method))
+    if template is None:
+        return None
+
+    if symbol not in gen.instantiated_functions:
+        gen.instantiated_functions.add(symbol)
+
+        instance = copy.deepcopy(template)
+        instance.name = symbol
+        instance.receiver = instance.receiver_params = None
+        substitute_types(instance, dict(zip(template.receiver_params, args)))
+
+        # a still-generic method waits for its own arguments; a concrete
+        # one declares and queues like any instantiation — either way its
+        # substituted types mix files' names, so no view gates them
+        if instance.type_params is not None:
+            gen.generic_functions[symbol] = instance
+        else:
+            from siec.codegen.functions import declare_function
+
+            gen.ungated_types += 1
+            try:
+                declare_function(gen, instance)
+            finally:
+                gen.ungated_types -= 1
+
+            gen.pending_functions.append(instance)
+
+    return symbol
+
+
+def qualified_method(gen: CodeGenerator, name: str) -> str | None:
+    """
+    Resolve a written 'S::m' callee: the receiver type expands like any
+    written type (aliases, visibility), the method resolves on the result.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    base, _, method = name.partition("::")
+    return resolve_method(gen, expand_alias(gen, base), method)
+
+
+def method_call(gen: CodeGenerator, call: Call, scope: dict) -> tuple | None:
+    """
+    Interpret a dotted call as a method on its receiver chain:
+    's.method()' or 'self.field.method()'. Returns the method's symbol
+    and the receiver expression, or None when the chain types to no
+    struct or its type has no such method.
+    """
+    from siec.codegen.inference import expr_sie_type
+
+    names = call.name.split(".")
+    receiver = Var(names[0])
+    for part in names[1:-1]:
+        receiver = Member(receiver, part)
+
+    receiver_type = expr_sie_type(gen, receiver, scope)
+    if receiver_type is None:
+        return None
+
+    symbol = resolve_method(gen, receiver_type, names[-1])
+    if symbol is None:
+        return None
+
+    return symbol, receiver

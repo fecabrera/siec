@@ -133,6 +133,10 @@ class CodeGenerator:
         self.instantiated_functions: set = set()
         self.pending_functions: list = []
 
+        # a generic struct's method templates by (struct, method) name,
+        # stamped alongside each 'S<args>' instantiation on first call
+        self.generic_methods: dict = {}
+
         # nonzero while expanding names the compiler wrote itself —
         # substituted generics — which no file's view should gate
         self.ungated_types = 0
@@ -295,6 +299,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.enums import register_enums
     from siec.codegen.functions import declare_function, emit_function
     from siec.codegen.generics import register_generic_function
+    from siec.codegen.methods import register_method
     from siec.codegen.globals import register_globals
     from siec.codegen.structs import register_structs
 
@@ -326,9 +331,12 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     register_globals(gen, program)
 
     # second pass: declare every function so calls can target ones defined
-    # later; a generic function is a template, declared per instantiation
+    # later; a generic function is a template, declared per instantiation,
+    # and a method registers under its receiver's rules
     for fn in program.functions:
-        if fn.type_params is not None:
+        if fn.receiver is not None:
+            register_method(gen, fn)
+        elif fn.type_params is not None:
             register_generic_function(gen, fn)
         else:
             declare_function(gen, fn)
@@ -336,7 +344,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # third pass: emit the bodies of the defined functions, an '@asm'
     # function's assembly standing in for one
     for fn in program.functions:
-        if fn.type_params is None and (fn.body is not None or fn.asm is not None):
+        if (fn.type_params is None and fn.receiver_params is None
+                and (fn.body is not None or fn.asm is not None)):
             emit_function(gen, fn)
 
     # calls met while emitting queue their instantiations' bodies, each of

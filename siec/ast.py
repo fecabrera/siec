@@ -418,6 +418,8 @@ class Function:
     asm: str | None = None  # '@asm': the raw assembly standing in for a body
     clobbers: list[str] = field(default_factory=list)
     type_params: list[str] | None = None  # 'fn f<T, U>': generic type parameters
+    receiver: str | None = None  # 'fn S::m': the struct the method acts on
+    receiver_params: list[str] | None = None  # 'fn S<A>::m': its placeholders
     line: int = _line()
     file: str = _file()
 
