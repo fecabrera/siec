@@ -82,6 +82,15 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if template is not None:
         type_args = resolve_generic_call(gen, template, call, scope)
         symbol = instantiate_function(gen, template, type_args)
+    elif not isinstance(gen.module.globals.get(symbol), ir.Function):
+        # no function by this name: 'S(...)' may construct a struct
+        from siec.codegen.methods import constructor_type, emit_constructor
+
+        if (ctor := constructor_type(gen, call, symbol)) is not None:
+            return emit_constructor(gen, builder, ctor, call, scope, as_address)
+
+        if call.type_args is not None:
+            raise TypeError(f"function {call.name!r} is not generic")
     elif call.type_args is not None:
         raise TypeError(f"function {call.name!r} is not generic")
 

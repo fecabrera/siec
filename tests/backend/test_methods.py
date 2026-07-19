@@ -234,3 +234,64 @@ def test_assignment_through_a_reference_return(run, compile_source):
         fn f(n: i32) -> i32 { return n; }
         fn main() -> i32 { f(1) = 2; return 0; }
         """)
+
+
+def test_constructors_build_and_init(run, compile_source):
+    """
+    'S(args)' is the expression form of 'let s: S; s.init(args);': stack
+    space, field defaults, then init — usable anywhere, arguments and
+    method chains included.
+    """
+    source = """
+    struct String {
+        data: char* = null;
+        length: u64;
+    }
+
+    fn String::init(self: &String) { self.length = 0; }
+
+    struct List<T> {
+        items: @raw<T>[8];
+        length: u64;
+    }
+
+    fn List<T>::init(self: &List<T>) { self.length = 0; }
+
+    fn List<T>::push(self: &List<T>, item: T) {
+        self.items[self.length] = item;
+        self.length += 1;
+    }
+
+    struct Counter { count: i32; }
+    fn Counter::init(self: &Counter, start: i32) { self.count = start; }
+    fn Counter::bump(self: &Counter) -> i32 { self.count += 1; return self.count; }
+
+    fn take(c: Counter) -> i32 { return c.count; }
+
+    fn main() -> i32 {
+        let lst = List<String>();
+        lst.push(String());          // constructor as an argument
+        lst.push(String());
+
+        if (lst.items[0].data != null) { return 1; } // defaults applied
+
+        return take(Counter(38))     // constructor as an argument
+            + Counter(0).bump()      // method chain on the temporary
+            + lst.length as i32 + 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="type 'P' has no 'init' method"):
+        compile_source("""
+        struct P { x: i32; }
+        fn main() -> i32 { let p = P(); return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="generic struct 'Box' needs its type "
+                                        "arguments"):
+        compile_source("""
+        struct Box<T> { v: T; }
+        fn Box<T>::init(self: &Box<T>) { }
+        fn main() -> i32 { let b = Box(); return 0; }
+        """)

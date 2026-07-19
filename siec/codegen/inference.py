@@ -161,6 +161,13 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             return strip_reference(
                 expand_alias(gen, substitute(template.return_type, mapping)))
 
+        # 'S(...)' constructs and types as the S it builds
+        if symbol not in gen.return_types:
+            from siec.codegen.methods import constructor_type
+
+            if (ctor := constructor_type(gen, call, symbol)) is not None:
+                return ctor
+
         # a '&T' return reads as the T it aliases, like a reference parameter
         return strip_reference(gen.return_types.get(symbol))
 

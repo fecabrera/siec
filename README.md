@@ -1486,6 +1486,25 @@ s.method();
 
 The receiver may be any expression, not just a name: a field chain, an indexed element, or another call's result — `self.items.get(i).init(n)` chains through a [reference return](#references).
 
+#### Constructors
+
+For a struct `S` with an `init` method, calling `S(args)` builds an instance in place: stack space, the struct's [field defaults](#field-defaults), then `S::init(self, args...)`. It is the expression form of:
+
+```
+let s: S;
+s.init(args...);
+```
+
+Being an expression, it works anywhere a value does — bound, passed, or chained:
+
+```
+let lst = List<String>();   // a generic struct spells its arguments
+lst.push(String());         // constructed in argument position
+Counter(0).bump();          // methods chain on the temporary
+```
+
+A struct without an `init` method has no constructor to call, and a generic struct constructs only with its type arguments spelled (`List<...>()`).
+
 Just like regular functions, they can return a value of type `T`:
 
 ```

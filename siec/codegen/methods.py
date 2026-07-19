@@ -156,3 +156,80 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
 
     call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
     return emit_call(gen, builder, call, scope, as_address)
+
+
+def constructor_type(gen: CodeGenerator, call, symbol: str | None) -> str | None:
+    """
+    The struct type a 'S(...)' call constructs — through aliases and
+    generic arguments alike; None when the name isn't a type's.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    if not symbol:
+        return None
+
+    name = symbol
+    if call.type_args is not None:
+        name += f"<{','.join(call.type_args)}>"
+
+    base = name.partition("<")[0]
+    if not (base in gen.structs or base in gen.generic_structs
+            or base in gen.aliases or base in gen.generic_aliases):
+        return None
+
+    if base in gen.generic_structs and "<" not in name:
+        raise TypeError(f"generic struct {base!r} needs its type arguments "
+                        f"to construct: '{base}<...>()'")
+
+    canonical = expand_alias(gen, name)
+    return canonical if strip_const(canonical) in gen.structs else None
+
+
+def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
+                     scope: dict, as_address: bool = False):
+    """
+    Emit 'S(args)': stack space for an instance, its field defaults, then
+    'S::init(self, args...)' — the expression form of
+    'let s: S; s.init(args...);', yielding the instance.
+    """
+    from llvmlite import ir as llvm
+
+    from siec.codegen.calls import emit_argument
+    from siec.codegen.expressions import default_value
+    from siec.codegen.generator import entry_alloca
+    from siec.codegen.types import resolve_type
+
+    llvm_type = resolve_type(type_name, gen.structs)
+    slot = entry_alloca(builder, llvm_type, "ctor")
+    if (align := gen.struct_align(type_name)) is not None:
+        slot.align = align
+
+    # the instance starts like a bare declaration: from its defaults
+    if (default := default_value(gen, builder, type_name)) is not None:
+        builder.store(default, slot)
+
+    symbol = resolve_method(gen, type_name, "init")
+    if symbol is None:
+        raise TypeError(f"type {type_name!r} has no 'init' method to "
+                        "construct it")
+
+    if symbol in gen.generic_functions:
+        raise TypeError(f"a generic 'init' cannot construct {type_name!r}: "
+                        "call it explicitly")
+
+    func = gen.module.globals[symbol]
+    sie_params = gen.param_types[func.name]
+    expected = len(func.function_type.args) - 1
+
+    if len(call.args) < expected:
+        raise TypeError(f"too few arguments to function {symbol!r}")
+
+    if len(call.args) > expected:
+        raise TypeError(f"too many arguments to function {symbol!r}")
+
+    args = [slot]
+    for i, arg in enumerate(call.args):
+        args.append(emit_argument(gen, builder, arg, sie_params[i + 1], scope))
+
+    builder.call(func, args)
+    return slot if as_address else builder.load(slot)
