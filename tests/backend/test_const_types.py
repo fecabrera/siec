@@ -180,6 +180,34 @@ def test_const_main_args_cannot_be_mutated(compile_source):
         """)
 
 
+def test_const_pointer_fills_a_const_aggregate(run):
+    """
+    A const target views its aliasing fields as const, the same way member
+    access does: a 'const char*' can fill a 'const char[]' literal.
+    """
+    source = """
+    fn main() -> i32 {
+        let src: const char[] = "hello";
+        let view: const char[] = {src.data, src.length};
+        return view.length as i32;
+    }
+    """
+    assert run(source).returncode == 5
+
+
+def test_const_pointer_cannot_fill_a_mutable_aggregate(compile_source):
+    """
+    The mutable direction still rejects: filling a 'char[]' with a
+    'const char*' would launder the contract through the literal.
+    """
+    with pytest.raises(TypeError, match="cannot use a 'const char\\*'"):
+        compile_source("""
+        fn f(s: const char*, n: u64) {
+            let view: char[] = {s, n};
+        }
+        """)
+
+
 def test_const_return_type(run):
     """
     A function may return a const pointer, which reads fine but stays const.

@@ -180,6 +180,7 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         raise TypeError(f"cannot use a {source_name!r} value where a mutable "
                         f"{target_name!r} is expected")
 
+    const_target = is_const(target_name)
     target_name = strip_const(target_name)
     target_type = resolve_type(target_name, gen.structs)
 
@@ -190,8 +191,13 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             raise TypeError("a union takes no aggregate literal; assign one "
                             "of its fields instead")
 
+        # a const target views its aliasing fields as const, the same way
+        # member access does, so a const pointer can fill a const array
         field_names = (
-            [f.type for f in info.fields]
+            [f"const {f.type}"
+             if const_target and is_aliasing(f.type) and not is_const(f.type)
+             else f.type
+             for f in info.fields]
             if info is not None
             else None
         )
