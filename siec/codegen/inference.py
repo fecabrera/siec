@@ -75,6 +75,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if not expr.qualified and not gen.sees(expr.name):
             return None
 
+        # 'f<i32>' outside a call has its instance's function type
+        if expr.type_args is not None:
+            from siec.codegen.generics import reference_type
+
+            return reference_type(gen, expr)
+
         # a constant carries its annotation; unannotated, it adapts like
         # its value expression written in place
         const = gen.constants.get(expr.name)
@@ -306,6 +312,14 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
 
     if isinstance(expr, Var) and expr.name not in scope:
         symbol = gen.resolve_symbol(expr.name)
+
+        # a bare generic name has no type of its own: it adopts one from
+        # a function-typed context, or from explicit arguments
+        if gen.sees(expr.name) and symbol in gen.generic_functions:
+            return TypeError(f"cannot infer type arguments for generic "
+                             f"function {expr.name!r}: annotate a function "
+                             f"type or spell '{expr.name}<...>'")
+
         if not gen.sees(expr.name) or (expr.name not in gen.constants
                                        and symbol not in gen.globals
                                        and symbol not in gen.param_types):

@@ -48,9 +48,13 @@ class Var:
     """
     A reference to a variable by name. A qualified one came through a
     module binding ('a.b.name'), already validated against its exports.
+
+    'f<i32>' outside a call carries type arguments: a reference to a
+    generic function's instance.
     """
     name: str
     qualified: bool = False
+    type_args: list | None = None
 
 
 @dataclass

@@ -677,6 +677,14 @@ let x = identity<i64>(5);
 
 Generic functions may recurse and call one another, and their return types may name generic structs (`fn make<T>(t: T) -> Box<T>`). The same modifier rule as [generic structs](#generic-structs) applies to type arguments, and a template nobody calls compiles to nothing. `@extern` functions cannot be generic — they name one foreign symbol.
 
+A generic function also works as a [function reference](#function-references): `identity<i32>` outside a call is the instance's function value, and a bare generic name bound to a function-typed context — a `fn(...)` annotation, parameter, or [generic alias](#generic-type-aliases) of one — picks its arguments by unifying the template's signature with the target:
+
+```
+let g = identity<i32>;             // explicit instance
+let h: fn(i64) -> i64 = identity;  // T unified from the annotation
+apply(identity, 40);               // T unified from apply's parameter type
+```
+
 #### Extern
 
 Functions can be decorated with `@extern` to indicate that they're going to be resolved at link time. Extern functions must follow C's ABI and can only use C-compatible types.

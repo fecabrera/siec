@@ -230,11 +230,16 @@ def parse_primary(ts: TokenStream) -> Expr:
             member = ts.expect("ident").value
             return parse_postfix(ts, EnumMember(tok.value, member))
 
-        # '<A, B>(' spells a generic call's type arguments; a '<' that
-        # doesn't parse as one stays a comparison
+        # '<A, B>(' spells a generic call's type arguments; landing on an
+        # expression terminator instead makes it a bare reference to the
+        # instance; any other '<' stays a comparison
         type_args = None
         if ts.peek().syntax == "<":
-            type_args = parse_type_arguments(ts)
+            type_args = parse_type_arguments(
+                ts, followers=("(", ";", ",", ")", "]", "}"))
+
+        if type_args is not None and ts.peek().syntax != "(":
+            return parse_postfix(ts, Var(tok.value, type_args=type_args))
 
         if type_args is not None or ts.peek().syntax == "(":
             ts.next()
@@ -257,11 +262,14 @@ def parse_primary(ts: TokenStream) -> Expr:
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
 
 
-def parse_type_arguments(ts: TokenStream) -> list[str] | None:
+def parse_type_arguments(ts: TokenStream,
+                         followers: tuple = ("(",)) -> list[str] | None:
     """
-    Speculatively parse the '<A, B>' of a generic call, which must land
-    directly on the call's '('. Anything else — a '<' that reads as a
-    comparison — rewinds the stream untouched and returns None.
+    Speculatively parse the '<A, B>' of a generic call or reference,
+    which must land directly on one of the follower tokens — a call's
+    '(', or an expression terminator for a bare 'f<i32>' reference.
+    Anything else — a '<' that reads as a comparison — rewinds the
+    stream untouched and returns None.
     """
     from siec.parser.types import close_angle, parse_type
 
@@ -276,7 +284,7 @@ def parse_type_arguments(ts: TokenStream) -> list[str] | None:
             ts.next()
             args.append(parse_type(ts))
         close_angle(ts)
-        ok = ts.peek().syntax == "("
+        ok = ts.peek().syntax in followers
     except SyntaxError:
         ok = False
     finally:

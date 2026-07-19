@@ -210,7 +210,7 @@ def substitute_types(node, mapping: dict) -> None:
             if (field.name in ("type", "return_type")
                     or (isinstance(node, SizeOf) and field.name == "name")):
                 setattr(node, field.name, substitute(value, mapping))
-        elif isinstance(node, Call) and field.name == "type_args" and value is not None:
+        elif field.name == "type_args" and value is not None:
             setattr(node, field.name, [substitute(v, mapping) for v in value])
         else:
             substitute_types(value, mapping)
@@ -327,3 +327,76 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
         gen.pending_functions.append(instance)
 
     return symbol
+
+
+def emit_generic_reference(gen: CodeGenerator, expr) -> object:
+    """
+    The function value of an explicit 'f<i32>' reference: the instance,
+    declared on first use like any generic call's.
+    """
+    symbol = gen.resolve_symbol(expr.name)
+    template = gen.generic_functions.get(symbol)
+    if template is None:
+        raise TypeError(f"function {expr.name!r} is not generic")
+
+    return gen.module.globals[instantiate_function(gen, template, expr.type_args)]
+
+
+def reference_for_target(gen: CodeGenerator, expr, target_name: str):
+    """
+    The function value of a bare generic name bound to a function-typed
+    context: 'let f: fn(i32) -> i32 = identity;' unifies the template's
+    signature with the target to pick the instance. None when the name
+    isn't a template's; the caller falls through to normal emission.
+    """
+    template = gen.generic_functions.get(gen.resolve_symbol(expr.name))
+    if template is None:
+        return None
+
+    params, ret, suffix = fn_type_parts(target_name)
+    if suffix:
+        return None
+
+    if len(params) != len(template.params):
+        take = len(template.params)
+        raise TypeError(f"cannot bind generic function {expr.name!r} to "
+                        f"{target_name!r}: it takes {take} "
+                        f"parameter{'s' if take != 1 else ''}")
+
+    bindings: dict = {}
+    for param, concrete in zip(template.params, params):
+        unify(param.type, concrete, template.type_params, bindings)
+    unify(template.return_type, ret, template.type_params, bindings)
+
+    missing = [p for p in template.type_params if p not in bindings]
+    if missing:
+        named = ", ".join(map(repr, missing))
+        raise TypeError(f"cannot infer type argument{'s' if len(missing) != 1 else ''} "
+                        f"{named} for generic function {expr.name!r} from "
+                        f"{target_name!r}: spell them, '{expr.name}<...>'")
+
+    type_args = [bindings[p] for p in template.type_params]
+    return gen.module.globals[instantiate_function(gen, template, type_args)]
+
+
+def reference_type(gen: CodeGenerator, expr) -> str | None:
+    """
+    The canonical function type of an explicit 'f<i32>' reference, for
+    inference; None when the name isn't a template's.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    template = gen.generic_functions.get(gen.resolve_symbol(expr.name))
+    if template is None:
+        return None
+
+    args = [expand_alias(gen, arg) for arg in expr.type_args]
+    mapping = dict(zip(template.type_params, args))
+
+    params = ",".join(expand_alias(gen, substitute(p.type, mapping))
+                      for p in template.params)
+    name = f"fn({params})"
+    if template.return_type is not None:
+        name += f"->{expand_alias(gen, substitute(template.return_type, mapping))}"
+
+    return name

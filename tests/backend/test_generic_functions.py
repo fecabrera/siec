@@ -142,3 +142,57 @@ def test_uninstantiated_template_costs_nothing(run):
     fn main() -> i32 { return 42; }
     """
     assert run(source).returncode == 42
+
+
+def test_references_to_generic_instances(run):
+    """
+    'identity<i32>' outside a call is a function value, and a bare
+    generic name adopts a function-typed context by unifying signatures.
+    """
+    source = """
+    @type unary<T> = fn(T) -> T;
+
+    fn identity<T>(t: T) -> T { return t; }
+    fn negate<T>(t: T) -> T { return 0 as T - t; }
+
+    fn apply(f: unary<i32>, n: i32) -> i32 { return f(n); }
+
+    fn main() -> i32 {
+        let g = identity<i32>;
+        let table: fn(i64) -> i64 = negate;
+
+        return apply(identity, 40)     // bare, unified from unary<i32>
+            + apply(identity<i32>, 2)  // explicit, in argument position
+            + g(21) - 21
+            + (table(5) + 5 as i64) as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_reference_signature_mismatch_is_reported(compile_source):
+    """
+    A target whose shape cannot fit the template names the problem.
+    """
+    with pytest.raises(TypeError, match="cannot bind generic function 'pair' "
+                                        "to 'fn\\(i32\\)->i32': it takes 2 "
+                                        "parameters"):
+        compile_source("""
+        fn pair<T>(a: T, b: T) -> T { return a; }
+        fn main() -> i32 {
+            let f: fn(i32) -> i32 = pair;
+            return 0;
+        }
+        """)
+
+
+def test_bare_generic_name_without_context_is_reported(compile_source):
+    """
+    A bare template bound to nothing cannot pick its arguments.
+    """
+    with pytest.raises(TypeError, match="cannot infer type arguments for "
+                                        "generic function 'identity'"):
+        compile_source("""
+        fn identity<T>(t: T) -> T { return t; }
+        fn main() -> i32 { let f = identity; return 0; }
+        """)

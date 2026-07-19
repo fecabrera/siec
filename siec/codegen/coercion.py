@@ -8,6 +8,7 @@ from siec.ast import (
     BlockExpr,
     Cast,
     Expr,
+    Var,
 )
 from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator
@@ -219,6 +220,16 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
         element_name = target_name[:-2] if target_name and target_name.endswith("[]") else None
         return emit_array(gen, builder, expr, target_type, scope, element_name)
+
+    # a bare generic function adopts a function-typed context, its type
+    # arguments unified from the target's signature
+    if (isinstance(expr, Var) and expr.type_args is None and expr.name not in scope
+            and target_name is not None and target_name.startswith("fn(")):
+        from siec.codegen.generics import reference_for_target
+
+        func = reference_for_target(gen, expr, target_name)
+        if func is not None:
+            return func
 
     value = emit_expression(gen, builder, expr, target_type, scope)
 
