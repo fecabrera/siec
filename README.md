@@ -21,10 +21,11 @@ Programs are compiled through `siec`, which takes one or more source files and l
 siec main.sie -o main
 ```
 
-Precompiled object files may be given alongside the sources; they skip compilation and link into the executable (and `--run` resolves their symbols too):
+Precompiled object files and static libraries may be given alongside the sources; they skip compilation and link into the executable (and `--run` resolves their symbols too, unpacking an archive's members into the JIT):
 
 ```
 siec main.sie file1.o file2.o -o main
+siec main.sie libfoo.a -o main
 ```
 
 - `-o <path>` names the output executable, `a.out` by default.

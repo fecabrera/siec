@@ -183,3 +183,35 @@ def test_libc_div_returns_its_struct(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+@pytest.mark.skipif(shutil.which("ar") is None, reason="needs ar")
+def test_static_libraries_link_and_jit(tmp_path, monkeypatch):
+    """
+    A '.a' on the command line joins the build: the linker takes it as
+    is, and '--run' unpacks its members into the JIT.
+    """
+    (tmp_path / "a.c").write_text("int forty(void) { return 40; }\n")
+    (tmp_path / "b.c").write_text("int two(void) { return 2; }\n")
+    subprocess.run(["cc", "-c", str(tmp_path / "a.c"), "-o", str(tmp_path / "a.o")],
+                   check=True)
+    subprocess.run(["cc", "-c", str(tmp_path / "b.c"), "-o", str(tmp_path / "b.o")],
+                   check=True)
+    subprocess.run(["ar", "rcs", str(tmp_path / "libnums.a"),
+                    str(tmp_path / "a.o"), str(tmp_path / "b.o")], check=True)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        @extern fn forty() -> i32;
+        @extern fn two() -> i32;
+
+        fn main() -> i32 { return forty() + two(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, tmp_path / "libnums.a", "--run") == 42
+
+    assert run_cli(monkeypatch, src, tmp_path / "libnums.a",
+                   "-o", str(tmp_path / "prog")) == 0
+    result = subprocess.run([str(tmp_path / "prog")])
+    assert result.returncode == 42

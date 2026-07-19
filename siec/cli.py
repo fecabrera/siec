@@ -86,9 +86,10 @@ def main() -> int:
                            "passing along any following arguments")
     opts = args.parse_args()
 
-    # '.o' files on the command line skip the front end and join the link
-    objects = [s for s in opts.sources if s.endswith(".o")]
-    sources = [Path(s) for s in opts.sources if not s.endswith(".o")]
+    # '.o' objects and '.a' static libraries on the command line skip the
+    # front end and join the link
+    objects = [s for s in opts.sources if s.endswith((".o", ".a"))]
+    sources = [Path(s) for s in opts.sources if not s.endswith((".o", ".a"))]
     if not sources:
         print("siec: no source files", file=sys.stderr)
         return 1

@@ -106,6 +106,42 @@ def load_library(name: str, lib_dirs: list[str]) -> None:
     raise NameError(f"cannot load library {name!r}")
 
 
+def add_archive(engine, path: str) -> None:
+    """
+    Load a static library's members into the JIT engine: the archive is
+    unpacked in place, each object joining like one given directly.
+
+    Both archive flavors are read: GNU's, with its '//' long-name table,
+    and BSD's, with '#1/<n>' names prefixed to the member's data.
+    """
+    data = Path(path).read_bytes()
+    if data[:8] != b"!<arch>\n":
+        raise NameError(f"{path!r} is not a static library")
+
+    position = 8
+    while position + 60 <= len(data):
+        header = data[position:position + 60]
+        position += 60
+
+        name = header[:16].decode("ascii", "replace").strip()
+        size = int(header[48:58])
+        content = data[position:position + size]
+        position += size + (size & 1)  # members align to two bytes
+
+        # a BSD long name rides at the front of the member's data
+        if name.startswith("#1/"):
+            length = int(name[3:])
+            name = content[:length].decode("ascii", "replace").rstrip("\0")
+            content = content[length:]
+
+        # symbol tables and the name table describe members, they aren't
+        # ones; a '/<n>' name is a real member, named through the table
+        if name in ("/", "//", "/SYM64/") or name.startswith("__.SYMDEF"):
+            continue
+
+        engine.add_object_file(binding.ObjectFileRef.from_data(content))
+
+
 def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
             libs: list[str] = (), lib_dirs: list[str] = (), opt: int = 0) -> int:
     """
@@ -121,7 +157,10 @@ def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
 
     with binding.create_mcjit_compiler(llvm_module, target_machine) as engine:
         for path in objects:
-            engine.add_object_file(binding.ObjectFileRef.from_path(path))
+            if str(path).endswith(".a"):
+                add_archive(engine, path)
+            else:
+                engine.add_object_file(binding.ObjectFileRef.from_path(path))
 
         engine.finalize_object()
         engine.run_static_constructors()
