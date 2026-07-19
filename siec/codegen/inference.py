@@ -71,15 +71,16 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope:
             return strip_reference(scope[expr.name].type)
 
-        # only names this file sees resolve unqualified
-        if not expr.qualified and not gen.sees(expr.name):
-            return None
-
-        # 'f<i32>' outside a call has its instance's function type
+        # 'f<i32>' outside a call has its instance's function type,
+        # resolved and gated by its own dotted or plain name
         if expr.type_args is not None:
             from siec.codegen.generics import reference_type
 
             return reference_type(gen, expr)
+
+        # only names this file sees resolve unqualified
+        if not expr.qualified and not gen.sees(expr.name):
+            return None
 
         # a constant carries its annotation; unannotated, it adapts like
         # its value expression written in place

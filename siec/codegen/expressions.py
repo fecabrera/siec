@@ -142,16 +142,17 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return load
 
-        # an imported module's names need their qualified spelling or a
-        # member import; only what this file sees resolves unqualified
-        if not expr.qualified and not gen.sees(expr.name):
-            raise NameError(f"undefined variable {expr.name!r}")
-
-        # 'f<i32>' outside a call references a generic function's instance
+        # 'f<i32>' outside a call references a generic function's
+        # instance, resolved and gated by its own dotted or plain name
         if expr.type_args is not None:
             from siec.codegen.generics import emit_generic_reference
 
             return emit_generic_reference(gen, expr)
+
+        # an imported module's names need their qualified spelling or a
+        # member import; only what this file sees resolves unqualified
+        if not expr.qualified and not gen.sees(expr.name):
+            raise NameError(f"undefined variable {expr.name!r}")
 
         # a constant substitutes its value expression in place, coerced to
         # its annotated type when it has one, adapting like a literal otherwise

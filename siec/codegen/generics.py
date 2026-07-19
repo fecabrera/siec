@@ -329,13 +329,32 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
     return symbol
 
 
+def reference_template(gen: CodeGenerator, name: str):
+    """
+    The template a reference names: a dotted name resolves through its
+    module binding, an unqualified one must be visible to this file.
+
+    None when the name resolves to something that isn't a template.
+    """
+    if "." in name:
+        symbol = gen.resolve_qualified(name.split("."))
+        if symbol is None:
+            raise NameError(f"undefined function {name!r}")
+    else:
+        if not gen.sees(name):
+            raise NameError(f"undefined function {name!r}")
+
+        symbol = gen.resolve_symbol(name)
+
+    return gen.generic_functions.get(symbol)
+
+
 def emit_generic_reference(gen: CodeGenerator, expr) -> object:
     """
     The function value of an explicit 'f<i32>' reference: the instance,
     declared on first use like any generic call's.
     """
-    symbol = gen.resolve_symbol(expr.name)
-    template = gen.generic_functions.get(symbol)
+    template = reference_template(gen, expr.name)
     if template is None:
         raise TypeError(f"function {expr.name!r} is not generic")
 
@@ -353,13 +372,21 @@ def reference_for_target(gen: CodeGenerator, expr, target_name: str):
     if template is None:
         return None
 
+    return bind_to_target(gen, template, expr.name, target_name)
+
+
+def bind_to_target(gen: CodeGenerator, template, name: str, target_name: str):
+    """
+    Instantiate a template for a function-typed target by unifying the
+    signatures, returning the instance's function value.
+    """
     params, ret, suffix = fn_type_parts(target_name)
     if suffix:
         return None
 
     if len(params) != len(template.params):
         take = len(template.params)
-        raise TypeError(f"cannot bind generic function {expr.name!r} to "
+        raise TypeError(f"cannot bind generic function {name!r} to "
                         f"{target_name!r}: it takes {take} "
                         f"parameter{'s' if take != 1 else ''}")
 
@@ -372,8 +399,8 @@ def reference_for_target(gen: CodeGenerator, expr, target_name: str):
     if missing:
         named = ", ".join(map(repr, missing))
         raise TypeError(f"cannot infer type argument{'s' if len(missing) != 1 else ''} "
-                        f"{named} for generic function {expr.name!r} from "
-                        f"{target_name!r}: spell them, '{expr.name}<...>'")
+                        f"{named} for generic function {name!r} from "
+                        f"{target_name!r}: spell them, '{name}<...>'")
 
     type_args = [bindings[p] for p in template.type_params]
     return gen.module.globals[instantiate_function(gen, template, type_args)]
@@ -386,7 +413,11 @@ def reference_type(gen: CodeGenerator, expr) -> str | None:
     """
     from siec.codegen.aliases import expand_alias
 
-    template = gen.generic_functions.get(gen.resolve_symbol(expr.name))
+    try:
+        template = reference_template(gen, expr.name)
+    except NameError:
+        return None
+
     if template is None:
         return None
 

@@ -685,6 +685,8 @@ let h: fn(i64) -> i64 = identity;  // T unified from the annotation
 apply(identity, 40);               // T unified from apply's parameter type
 ```
 
+Qualified spellings work the same way: `util.identity<i32>` and a bare `util.identity` in a function-typed context both resolve through the module binding.
+
 #### Extern
 
 Functions can be decorated with `@extern` to indicate that they're going to be resolved at link time. Extern functions must follow C's ABI and can only use C-compatible types.

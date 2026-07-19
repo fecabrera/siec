@@ -228,3 +228,33 @@ def test_a_modules_failing_include_names_the_module(tmp_path, monkeypatch, capsy
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 1
     assert "mod.sie at line 2: cannot resolve include 'nowhere/gone'" in capsys.readouterr().err
+
+
+def test_dotted_generic_references(tmp_path, monkeypatch):
+    """
+    A qualified generic name works as a function value: explicit
+    'util.identity<i32>' and bare 'util.identity' unified from context.
+    """
+    (tmp_path / "util.sie").write_text("""
+        fn identity<T>(t: T) -> T { return t; }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import util;
+
+        fn apply(f: fn(i32) -> i32, n: i32) -> i32 { return f(n); }
+
+        fn main() -> i32 {
+            let g = util.identity<i64>;
+            let h: fn(i32) -> i32 = util.identity;
+
+            return apply(util.identity, 20)
+                + apply(util.identity<i32>, 1)
+                + g(20) as i32
+                + h(1);
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

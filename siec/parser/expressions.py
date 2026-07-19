@@ -428,7 +428,14 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 and len(names) > 1):
             type_args = None
             if ts.peek().syntax == "<":
-                type_args = parse_type_arguments(ts)
+                type_args = parse_type_arguments(
+                    ts, followers=("(", ";", ",", ")", "]", "}"))
+
+            # '<...>' landing on a terminator is a reference to the
+            # dotted name's generic instance, not a call
+            if type_args is not None and ts.peek().syntax != "(":
+                expr = Var(".".join(names), type_args=type_args)
+                continue
 
             if type_args is not None or ts.peek().syntax == "(":
                 ts.next()
