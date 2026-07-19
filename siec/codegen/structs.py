@@ -72,6 +72,12 @@ def union_storage(gen: CodeGenerator, field_types: list) -> list:
     """
     The members backing a union: its most-aligned (then largest) field's
     type, padded with bytes up to the size of its largest.
+
+    A scalar dominant backs the union directly. An aggregate one carries
+    padding, and in a union those padding bytes are live — another
+    member's value sits in them — but a value copy of a struct moves its
+    fields, not its padding. Aggregate-led unions store as an array of
+    alignment-sized integers instead, so every byte survives a copy.
     """
     data = target_data(gen.target)
     context = gen.module.context
@@ -82,6 +88,13 @@ def union_storage(gen: CodeGenerator, field_types: list) -> list:
 
     dominant = max(field_types, key=measure)
     size = max(type_.get_abi_size(data, context=context) for type_ in field_types)
+
+    if isinstance(dominant, (ir.LiteralStructType, ir.IdentifiedStructType,
+                             ir.ArrayType)):
+        align = dominant.get_abi_alignment(data, context=context)
+        unit = align if align in (1, 2, 4, 8) else 8
+        padded = -(-size // unit) * unit
+        return [ir.ArrayType(ir.IntType(unit * 8), padded // unit)]
 
     padding = size - dominant.get_abi_size(data, context=context)
     if padding > 0:

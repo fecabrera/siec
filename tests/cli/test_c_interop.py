@@ -215,3 +215,57 @@ def test_static_libraries_link_and_jit(tmp_path, monkeypatch):
                    "-o", str(tmp_path / "prog")) == 0
     result = subprocess.run([str(tmp_path / "prog")])
     assert result.returncode == 42
+
+
+UNION_C_SOURCE = """
+#include <stdint.h>
+typedef struct {
+  int32_t type;
+  union {
+    const char *s;
+    struct { const char *ptr; int32_t len; } str;
+    struct { int32_t size; const char **key; int32_t *len; void *value; } tab;
+  } u;
+} datum;
+datum make_str(const char *s, int32_t len) {
+  datum d; d.type = 1; d.u.str.ptr = s; d.u.str.len = len; return d;
+}
+"""
+
+
+def test_padded_union_survives_the_return_copy(tmp_path, monkeypatch):
+    """
+    A union led by a padded struct keeps every byte through a C return:
+    the padding inside one member is live data of another (tomlc17's
+    'toml_datum', whose string pointer lost its high half).
+    """
+    (tmp_path / "u.c").write_text(UNION_C_SOURCE)
+    obj = tmp_path / "u.o"
+    subprocess.run(["cc", "-c", str(tmp_path / "u.c"), "-o", str(obj)],
+                   check=True)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        struct datum {
+            type: i32;
+            u: union {
+                s: const char*;
+                str: struct { ptr: const char*; len: i32; };
+                tab: struct { size: i32; key: const char**; len: i32*; value: opaque*; };
+            };
+        }
+
+        @extern fn make_str(s: const char*, len: i32) -> datum;
+        @extern fn strcmp(a: const char*, b: const char*) -> i32;
+
+        fn main() -> i32 {
+            let d = make_str("hello", 5);
+            if (d.type == 1 and strcmp(d.u.s, "hello") == 0) {
+                return d.u.str.len; // 5
+            }
+            return 100;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, obj, "--run") == 5
