@@ -20,6 +20,8 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
     # fields from the definition when one appears
     for struct in program.structs:
         with source_location(line=struct.line, file=struct.file):
+            gen.current_file = struct.file
+
             # a generic struct is a template: nothing registers until a
             # concrete 'S<args>' spelling instantiates it
             if struct.params is not None:
@@ -65,6 +67,8 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
             continue
 
         with source_location(line=struct.line, file=struct.file):
+            gen.current_file = struct.file
+
             # references only pass parameters; a field is its own storage
             for field in struct.fields:
                 field.type = expand_alias(gen, field.type)

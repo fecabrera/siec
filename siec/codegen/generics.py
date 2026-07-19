@@ -90,7 +90,8 @@ def substitute(type_name: str, mapping: dict) -> str:
     return IDENT.sub(lambda m: mapping.get(m.group(), m.group()), type_name)
 
 
-def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str | None:
+def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
+                        checked: bool = True) -> str | None:
     """
     Instantiate a generic spelling into a concrete canonical name: a
     struct template registers a real struct, an alias template expands
@@ -113,6 +114,10 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str 
     if alias is None and template is None:
         return None
 
+    # a written template name must be visible to the using file
+    if checked and not gen.sees(base):
+        raise TypeError(f"unknown type {base!r}")
+
     params = alias.params if alias is not None else template.params
     kind = "type alias" if alias is not None else "struct"
 
@@ -130,14 +135,19 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str 
                             "the argument carries a modifier")
 
     # a generic alias expands its target with the arguments substituted,
-    # like any alias one step further; 'seen' catches self-reference
+    # like any alias one step further; 'seen' catches self-reference; the
+    # substituted target mixes files' names, so no view gates it
     if alias is not None:
         if base in seen:
             cycle = " -> ".join([*seen, base])
             raise TypeError(f"type alias cycle: {cycle}")
 
         target = substitute(alias.type, dict(zip(params, args)))
-        return expand_alias(gen, target, (*seen, base))
+        gen.ungated_types += 1
+        try:
+            return expand_alias(gen, target, (*seen, base))
+        finally:
+            gen.ungated_types -= 1
 
     canonical = f"{base}<{','.join(args)}>"
     if canonical in gen.structs:
@@ -157,16 +167,23 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = ()) -> str 
 
     gen.structs[canonical] = info
 
-    for field in fields:
-        field.type = expand_alias(gen, field.type, seen)
-        if is_reference(field.type):
-            raise TypeError(f"field {field.name!r} cannot be a reference")
+    # the substituted fields mix the template's names with the using
+    # file's arguments, so no single view gates them
+    gen.ungated_types += 1
+    try:
+        for field in fields:
+            field.type = expand_alias(gen, field.type, seen)
+            if is_reference(field.type):
+                raise TypeError(f"field {field.name!r} cannot be a reference")
 
-    resolved = [resolve_type(f.type, gen.structs) for f in fields]
-    if info.is_union:
-        resolved = union_storage(gen, resolved)
+        resolved = [resolve_type(f.type, gen.structs) for f in fields]
+        if info.is_union:
+            resolved = union_storage(gen, resolved)
 
-    ident.set_body(*resolved)
+        ident.set_body(*resolved)
+    finally:
+        gen.ungated_types -= 1
+
     return canonical
 
 
@@ -323,7 +340,13 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
         instance.type_params = None
         substitute_types(instance, dict(zip(template.type_params, type_args)))
 
-        declare_function(gen, instance)
+        # the instance's signature mixes files' names; no view gates it
+        gen.ungated_types += 1
+        try:
+            declare_function(gen, instance)
+        finally:
+            gen.ungated_types -= 1
+
         gen.pending_functions.append(instance)
 
     return symbol

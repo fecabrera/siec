@@ -104,6 +104,7 @@ def register_constants(gen: CodeGenerator, program: Program) -> None:
             if const.name in gen.constants:
                 raise TypeError(f"constant {const.name!r} is declared more than once")
 
+            gen.current_file = const.file
             const.type = expand_alias(gen, const.type)
             gen.constants[const.name] = const
 

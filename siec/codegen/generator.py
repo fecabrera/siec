@@ -133,6 +133,10 @@ class CodeGenerator:
         self.instantiated_functions: set = set()
         self.pending_functions: list = []
 
+        # nonzero while expanding names the compiler wrote itself —
+        # substituted generics — which no file's view should gate
+        self.ungated_types = 0
+
         # the enclosing block expressions' (slot, end block, Sie type, defer
         # depth) targets, innermost last: what an 'emit' stores into and jumps to
         self.emit_targets: list[tuple] = []
@@ -336,8 +340,14 @@ def codegen(program: Program, module_name: str, target: str | None = None,
             emit_function(gen, fn)
 
     # calls met while emitting queue their instantiations' bodies, each of
-    # which may queue more: generic functions calling generic functions
+    # which may queue more: generic functions calling generic functions;
+    # their substituted types mix files' names, so no view gates them
     while gen.pending_functions:
-        emit_function(gen, gen.pending_functions.pop(0))
+        instance = gen.pending_functions.pop(0)
+        gen.ungated_types += 1
+        try:
+            emit_function(gen, instance)
+        finally:
+            gen.ungated_types -= 1
 
     return gen.module

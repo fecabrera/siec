@@ -15,9 +15,17 @@ from siec.codegen.types import is_reference, resolve_type, strip_const
 def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:
     """
     Declare a function in the module, reusing a matching earlier declaration.
+
+    The declaring file's view resolves the signature's type names; the
+    file is restored after, as instantiations declare mid-emission.
     """
     with source_location(line=fn.line, file=fn.file):
-        return declare_function_body(gen, fn)
+        previous = gen.current_file
+        gen.current_file = fn.file
+        try:
+            return declare_function_body(gen, fn)
+        finally:
+            gen.current_file = previous
 
 
 def main_takes_args(fn: Function) -> bool:

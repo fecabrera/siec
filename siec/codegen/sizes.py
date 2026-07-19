@@ -36,7 +36,8 @@ def size_of(gen: CodeGenerator, name: str, scope: dict | None = None) -> int:
     elif (symbol := gen.resolve_symbol(name)) in gen.globals:
         name = gen.globals[symbol]
 
-    name = expand_alias(gen, name)
+    # a measured name may be an inferred foreign type; no view gates it
+    name = expand_alias(gen, name, checked=False)
     resolved = resolve_type(name, gen.structs)
 
     if isinstance(resolved, ir.VoidType):

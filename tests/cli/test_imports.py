@@ -258,3 +258,106 @@ def test_dotted_generic_references(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def write_shapes(tmp_path):
+    """
+    Lay out 'shapes.sie' with one exportable type of each kind.
+    """
+    (tmp_path / "shapes.sie").write_text("""
+        struct Point { x: i32; y: i32; }
+        struct Box<T> { value: T; }
+        enum Color { RED = 1, BLUE = 2 }
+        @type coord = i64;
+
+        fn origin() -> Point {
+            let p: Point = { 0, 0 };
+            return p;
+        }
+    """)
+
+
+def test_types_resolve_through_module_bindings(tmp_path, monkeypatch):
+    """
+    'import shapes;' binds the module's types under 'shapes.<Name>':
+    structs, generic instantiations, aliases, and enums alike.
+    """
+    write_shapes(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import shapes;
+
+        fn main() -> i32 {
+            let p: shapes.Point = { 30, 10 };
+            let b: shapes.Box<i32> = { 1 };
+            let c: shapes.coord = 1;
+            let o = shapes.origin();
+
+            return p.x + p.y + b.value + c as i32 + o.x; // 42
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_member_imported_types_come_into_view(tmp_path, monkeypatch):
+    """
+    'import { Point, Box as Crate } from shapes;' binds types unqualified,
+    a generic under its chosen name.
+    """
+    write_shapes(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { Point, Box as Crate } from shapes;
+
+        fn main() -> i32 {
+            let p: Point = { 40, 1 };
+            let c: Crate<i32> = { 1 };
+            return p.x + p.y + c.value;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_unqualified_foreign_types_stay_out_of_view(tmp_path, monkeypatch, capsys):
+    """
+    A module's types don't leak unqualified: 'Point' needs its module's
+    spelling or a member import.
+    """
+    write_shapes(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import shapes;
+
+        fn main() -> i32 {
+            let p: Point;
+            return 0;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "unknown type 'Point'" in capsys.readouterr().err
+
+
+def test_inferred_foreign_types_still_flow(tmp_path, monkeypatch):
+    """
+    A call's inferred return type works without importing the type's
+    name: only written annotations are held to the file's view.
+    """
+    write_shapes(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import shapes;
+
+        fn main() -> i32 {
+            let o = shapes.origin();  // 'Point' inferred, never written
+            return o.x + o.y + 42;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

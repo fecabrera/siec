@@ -78,7 +78,7 @@ A module offers every one of its top-level declarations except its `@static` one
 
 An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
 
-Type declarations (structs, enums, aliases) are the exception, sharing one namespace across the program like C's: a module's types are usable by name wherever the module is loaded, no qualification needed.
+Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position — `let pkg: package.Package;`, `shapes.Box<i32>`, casts and `sizeof` included — or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). A type's name written without either is an error; only types *inferred* across the boundary — a call's return type, say — flow without their module's name in view.
 
 #### Include
 

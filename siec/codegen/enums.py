@@ -45,6 +45,7 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
             if enum.name in gen.enums or enum.name in gen.structs:
                 raise TypeError(f"type {enum.name!r} is declared more than once")
 
+            gen.current_file = enum.file
             enum.type = expand_alias(gen, enum.type)
             if enum.type not in INTEGER_TYPES:
                 raise TypeError(f"enum {enum.name!r} needs an integer backing "

@@ -52,6 +52,12 @@ def parse_type(ts: TokenStream) -> str:
     else:
         name = ts.expect("ident").value
 
+        # a dotted name reaches a type through a module binding:
+        # 'package.Package' resolves against the imported module's exports
+        while ts.peek().syntax == "." and ts.peek(1).kind == "ident":
+            ts.next()
+            name += f".{ts.expect('ident').value}"
+
         # '<A, B>' after a name instantiates a generic struct; the canonical
         # name spells out the arguments, so 'S<i32>' is one type everywhere
         if ts.peek().syntax == "<":

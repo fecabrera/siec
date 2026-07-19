@@ -40,6 +40,15 @@ def register_anonymous(gen: CodeGenerator, name: str, is_union: bool,
                                    is_union=is_union)
 
 
+def names_type(gen: CodeGenerator, name: str) -> bool:
+    """
+    Whether a name is a declared type's: a struct, enum, alias, or
+    generic template, wherever it was declared.
+    """
+    return (name in gen.structs or name in gen.enums or name in gen.aliases
+            or name in gen.generic_structs or name in gen.generic_aliases)
+
+
 def register_aliases(gen: CodeGenerator, program: Program) -> None:
     """
     Register every 'type' alias, then expand each target to its canonical
@@ -49,6 +58,8 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
 
     for alias in program.aliases:
         with source_location(line=alias.line, file=alias.file):
+            gen.current_file = alias.file
+
             if alias.name in SCALAR_TYPES or alias.name == "opaque":
                 raise TypeError(f"type alias {alias.name!r} shadows a builtin type")
 
@@ -70,6 +81,8 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
     # without arguments, but a cycle among templates is checkable now
     for alias in program.aliases:
         with source_location(line=alias.line, file=alias.file):
+            gen.current_file = alias.file
+
             if alias.params is None:
                 gen.aliases[alias.name] = expand_alias(gen, alias.type, (alias.name,))
             else:
@@ -78,34 +91,43 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
                 check_template_cycle(gen, alias.name)
 
 
-def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str | None:
+def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
+                 checked: bool = True) -> str | None:
     """
     Canonicalize a type name by substituting aliases with their targets,
     inside prefixes ('const', '&'), suffixes ('*', '[]', '[N]'), and
     function reference types, and settling raw array sizes to decimals.
+
+    A checked expansion holds written names to the file's view: a dotted
+    name resolves through its module binding, and an unqualified one must
+    be visible here. Names the compiler carries itself — inferred types,
+    substituted generics — expand unchecked.
     """
     if name is None:
         return None
 
-    if not gen.aliases and not any(m in name for m in ("<", "struct{", "union{")):
+    if (not gen.aliases and not gen.visible
+            and not any(m in name for m in ("<", "struct{", "union{", "."))):
         return name
+
+    checked = checked and not gen.ungated_types
 
     # prefixes wrap the expanded rest; a target's own 'const' isn't repeated
     if name.startswith("const "):
-        inner = expand_alias(gen, name.removeprefix("const "), seen)
+        inner = expand_alias(gen, name.removeprefix("const "), seen, checked)
         return inner if inner.startswith("const ") else f"const {inner}"
 
     if name.startswith("&"):
-        return f"&{expand_alias(gen, name[1:], seen)}"
+        return f"&{expand_alias(gen, name[1:], seen, checked)}"
 
     # a function reference type expands its parameter and return names,
     # keeping any '*'/'[]' suffix on the reference itself
     if name.startswith("fn("):
         params, ret, suffix = fn_type_parts(name)
-        expanded = f"fn({','.join(expand_alias(gen, p, seen) for p in params)})"
+        expanded = f"fn({','.join(expand_alias(gen, p, seen, checked) for p in params)})"
 
         if ret is not None:
-            expanded += f"->{expand_alias(gen, ret, seen)}"
+            expanded += f"->{expand_alias(gen, ret, seen, checked)}"
 
         return expanded + suffix
 
@@ -115,7 +137,8 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
         from siec.codegen.types import anonymous_struct
 
         is_union, pairs, suffix = anonymous_struct(name)
-        pairs = [(field, expand_alias(gen, type_, seen)) for field, type_ in pairs]
+        pairs = [(field, expand_alias(gen, type_, seen, checked))
+                 for field, type_ in pairs]
 
         kind = "union" if is_union else "struct"
         canon = kind + "{" + ";".join(f"{f}:{t}" for f, t in pairs) + "}"
@@ -130,7 +153,7 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
         from siec.codegen.types import raw_array
 
         element, size, suffix = raw_array(name)
-        element = expand_alias(gen, element, seen)
+        element = expand_alias(gen, element, seen, checked)
 
         if not size.isdigit():
             size = str(evaluate_size(gen, size))
@@ -149,12 +172,30 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
         else:
             break
 
+    # a dotted base reaches a type through the file's module bindings,
+    # its membership validated against the module's exports
+    if "." in base:
+        head, angle, rest = base.partition("<")
+        member = gen.resolve_qualified(head.split("."))
+        if member is None:
+            raise TypeError(f"unknown type {name!r}")
+
+        return expand_alias(gen, member + angle + rest, seen, checked=False) + suffix
+
+    # a member import binds a module's type under the file's chosen name;
+    # a generic spelling translates its base, keeping the arguments
+    head, angle, rest = base.partition("<")
+    if checked and (bound := gen.member_bindings.get((gen.current_file, head))):
+        if bound != head and names_type(gen, bound):
+            return expand_alias(gen, bound + angle + rest, seen,
+                                checked=False) + suffix
+
     # a 'Name<args>' base instantiates a generic struct or expands a
     # generic alias, landing on the concrete canonical spelling
     if "<" in base:
         from siec.codegen.generics import instantiate_generic
 
-        if (generic := instantiate_generic(gen, base, seen)) is not None:
+        if (generic := instantiate_generic(gen, base, seen, checked)) is not None:
             if suffix and (generic.startswith("const ") or generic.startswith("&")):
                 raise TypeError(f"cannot derive {name!r} from {base!r}: its "
                                 f"target {generic!r} carries a modifier")
@@ -162,13 +203,22 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
             return generic + suffix
 
     if base not in gen.aliases:
+        # a type declared by an unimported module doesn't resolve here
+        if (checked and not gen.sees(base)
+                and (base in gen.structs or base in gen.enums
+                     or base in gen.generic_structs)):
+            raise TypeError(f"unknown type {base!r}")
+
         return name
+
+    if checked and not gen.sees(base):
+        raise TypeError(f"unknown type {base!r}")
 
     if base in seen:
         cycle = " -> ".join([*seen, base])
         raise TypeError(f"type alias cycle: {cycle}")
 
-    target = expand_alias(gen, gen.aliases[base], (*seen, base))
+    target = expand_alias(gen, gen.aliases[base], (*seen, base), checked=False)
 
     # a modifier marks the whole written type; deriving a pointer or array
     # from a modified target would silently move where it applies

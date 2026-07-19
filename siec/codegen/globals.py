@@ -28,6 +28,7 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
     """
     for glob in program.globals:
         with source_location(line=glob.line, file=glob.file):
+            gen.current_file = glob.file
             glob.type = expand_alias(gen, glob.type)
 
             symbol = glob.name
