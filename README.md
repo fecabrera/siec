@@ -1005,6 +1005,31 @@ arr[:3];  // [1, 2, 3]
 arr[1:3]; // [2, 3]
 ```
 
+#### Raw arrays
+
+`@raw<T>[N]` is C's `T[N]`: exactly N elements of inline storage, no pointer and no runtime length. Where an `X[]` is a `{pointer, length}` pair over backing data, a raw array *is* its data, which is what C ABIs expect of fixed-size array fields:
+
+```
+struct buf {
+    len: i32;
+    data: @raw<u8>[16]; // 16 bytes inline, C layout
+}
+```
+
+`N` is any constant integer expression: literals, `@const` names, `sizeof`, or any mix. The size is part of the type, so `@raw<i32>[4]` and `@raw<i32>[8]` never convert into each other.
+
+```
+@const N = 4;
+
+let a: @raw<u8>[N * 2 + sizeof(i32)];
+a[0] = 1;              // elements index in place, unchecked like C's
+a.length;              // the element count, a compile-time constant
+let p: u8* = &a[0];    // a plain pointer into the storage
+let q: @raw<u8>[12]* = &a; // or to the whole array
+```
+
+A raw array is a value: assignments and calls copy all N elements. There is no implicit decay; pass `&a[0]` where a `T*` is wanted.
+
 #### String literals
 
 String literals are arrays of type `char[]`. They can be initialized with characters enclosed by `""`.

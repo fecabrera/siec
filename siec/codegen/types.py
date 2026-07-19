@@ -75,7 +75,39 @@ def sized_array(name: str | None) -> tuple[str, str] | None:
         return None
 
     base, _, size = name.rpartition("[")
+
+    # a 'raw<T>[N]' bracket is the raw array's own size, part of its type
+    if base.endswith(">"):
+        return None
+
     return f"{base}[]", size[:-1]
+
+
+def raw_array(name: str | None) -> tuple[str, str, str] | None:
+    """
+    Split a raw array name 'raw<T>[N]...' into its element type name, its
+    size text, and any trailing suffix; None for any other type name.
+    """
+    if name is None or not name.startswith("raw<"):
+        return None
+
+    depth = 0
+    for close, char in enumerate(name):
+        if char == "<":
+            depth += 1
+        elif char == ">":
+            depth -= 1
+            if depth == 0:
+                break
+    else:
+        raise TypeError(f"malformed raw array type {name!r}")
+
+    rest = name[close + 1:]
+    end = rest.find("]")
+    if not rest.startswith("[") or end == -1:
+        raise TypeError(f"malformed raw array type {name!r}")
+
+    return name[4:close], rest[1:end], rest[end + 1:]
 
 
 def type_signedness(name: str | None) -> str | None:
@@ -198,6 +230,13 @@ def resolve_type(name: str | None, structs: dict | None = None,
         # an 'X[]' array is a struct of a pointer to X and a u64 length
         element = resolve_type(base[:-2], structs, allow_opaque=True)
         resolved = ir.LiteralStructType([ir.PointerType(element), ir.IntType(64)])
+    elif (raw := raw_array(base)) is not None:
+        # a 'raw<T>[N]' is N elements of inline storage, C's 'T[N]'
+        element_name, size, _ = raw
+        if not size.isdigit():
+            raise TypeError(f"unresolved raw array size {size!r} in {base!r}")
+
+        resolved = ir.ArrayType(resolve_type(element_name, structs), int(size))
     elif base == "opaque":
         if pointer_depth == 0:
             raise TypeError("'opaque' can only be used as a pointer (opaque*)")

@@ -37,9 +37,9 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
     """
     Canonicalize a type name by substituting aliases with their targets,
     inside prefixes ('const', '&'), suffixes ('*', '[]', '[N]'), and
-    function reference types.
+    function reference types, and settling raw array sizes to decimals.
     """
-    if name is None or not gen.aliases:
+    if name is None or (not gen.aliases and "raw<" not in name):
         return name
 
     # prefixes wrap the expanded rest; a target's own 'const' isn't repeated
@@ -60,6 +60,21 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = ()) -> str 
             expanded += f"->{expand_alias(gen, ret, seen)}"
 
         return expanded + suffix
+
+    # a raw array expands its element and settles its size to a decimal,
+    # so 'raw<byte>[N]' and 'raw<u8>[8]' agree wherever they meet
+    if name.startswith("raw<"):
+        # deferred import: the evaluator's module imports this one
+        from siec.codegen.enums import evaluate_size
+        from siec.codegen.types import raw_array
+
+        element, size, suffix = raw_array(name)
+        element = expand_alias(gen, element, seen)
+
+        if not size.isdigit():
+            size = str(evaluate_size(gen, size))
+
+        return f"raw<{element}>[{size}]{suffix}"
 
     # peel derivation suffixes down to the base name; sizes pass through
     # untouched for codegen to evaluate

@@ -49,7 +49,8 @@ from siec.codegen.inference import (
     numeric_class,
     type_info,
 )
-from siec.codegen.types import is_array_struct, is_reference, resolve_type
+from siec.codegen.types import (is_array_struct, is_reference, raw_array,
+                                resolve_type, strip_const)
 
 
 def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
@@ -176,6 +177,20 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_call(gen, builder, expr, scope)
 
     if isinstance(expr, Index):
+        # a raw array's elements read through the base's address, or a
+        # stack spill when it has none (a call's result, say)
+        if is_raw(gen, expr.base, scope):
+            index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
+            try:
+                base = emit_lvalue(gen, builder, expr.base, scope)
+            except (TypeError, NameError):
+                value = emit_expression(gen, builder, expr.base, None, scope)
+                base = entry_alloca(builder, value.type, "raw.spill")
+                builder.store(value, base)
+
+            slot = builder.gep(base, [ir.Constant(ir.IntType(32), 0), index])
+            return builder.load(slot)
+
         # the element context implies the base's array shape, which is what
         # gives a literal base ('{ptr, n}[1]', say) its type
         base_context = None
@@ -206,6 +221,16 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # a pure name chain may be a module's member, spelled qualified
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_expression(gen, builder, folded, expected_type, scope)
+
+        # a raw array's 'length' is its compile-time element count,
+        # adopting an integer context like a literal
+        base_name = strip_const(expr_sie_type(gen, expr.base, scope))
+        if raw_array(base_name) is not None and expr.field == "length":
+            size = int(raw_array(base_name)[1])
+            if isinstance(expected_type, ir.IntType):
+                return ir.Constant(expected_type, size)
+
+            return ir.Constant(ir.IntType(64), size)
 
         # a union field reads through the union's address, reinterpreted
         info = type_info(gen, expr_sie_type(gen, expr.base, scope))
@@ -338,6 +363,12 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
                                   ir.Constant(ir.IntType(32), index)], name=expr.field)
 
     if isinstance(expr, Index):
+        # a raw array's elements sit inline: index into the base's address
+        if is_raw(gen, expr.base, scope):
+            base = emit_lvalue(gen, builder, expr.base, scope)
+            index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
+            return builder.gep(base, [ir.Constant(ir.IntType(32), 0), index])
+
         # offset the base pointer's value to the element's address, C-style;
         # an array's elements are addressed through its data pointer
         base = emit_expression(gen, builder, expr.base, None, scope)
@@ -351,6 +382,14 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         return builder.gep(base, [index])
 
     raise TypeError(f"expression is not assignable: {expr!r}")
+
+
+def is_raw(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
+    """
+    Whether an expression's Sie type is a raw array, behind any 'const'.
+    """
+    name = strip_const(expr_sie_type(gen, expr, scope))
+    return (raw := raw_array(name)) is not None and not raw[2]
 
 
 def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict):

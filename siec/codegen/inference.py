@@ -34,6 +34,7 @@ from siec.codegen.types import (
     fn_type_parts,
     is_aliasing,
     is_const,
+    raw_array,
     resolve_type,
     sized_array,
     strip_const,
@@ -125,6 +126,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             return expr_sie_type(gen, folded, scope)
 
         base_name = expr_sie_type(gen, expr.base, scope)
+
+        # a raw array's 'length' is its compile-time element count
+        if raw_array(strip_const(base_name)) is not None and expr.field == "length":
+            return "u64"
         info = type_info(gen, base_name)
         if info is None:
             return None
@@ -143,7 +148,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             return None
 
         stripped = strip_const(base)
-        element = stripped[:-2] if stripped.endswith("[]") else stripped.removesuffix("*")
+        if (raw := raw_array(stripped)) is not None and not raw[2]:
+            element = raw[0]
+        else:
+            element = stripped[:-2] if stripped.endswith("[]") else stripped.removesuffix("*")
+
         if is_const(base) and is_aliasing(element):
             return f"const {element}"
 
