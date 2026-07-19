@@ -330,8 +330,16 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             else:
                 builder.ret_void()
         else:
-            # the return value is computed before any deferred statement runs
+            # a function without a return type has nothing to return; main
+            # is the exception, lowered to i32 with an implicit 0
             ret_type = gen.return_types[builder.function.name]
+            if ret_type is None and isinstance(
+                    builder.function.function_type.return_type, ir.VoidType):
+                name = builder.function.name.split(".static.")[0]
+                raise TypeError(f"function {name!r} has no return type and "
+                                "cannot return a value")
+
+            # the return value is computed before any deferred statement runs
             value = emit_coerced(gen, builder, stmt.value, ret_type, scope)
             flush_defers(gen, builder, gen.defer_frames)
             builder.ret(value)

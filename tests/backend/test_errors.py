@@ -159,6 +159,21 @@ def test_missing_return_value(compile_source):
         compile_source("fn main() -> i32 { }")
 
 
+def test_void_function_cannot_return_a_value(compile_source):
+    """
+    'return <value>' in a function with no return type is an error; main
+    keeps its implicit i32, so 'return 0' there stays legal.
+    """
+    with pytest.raises(TypeError, match="'log_it' has no return type and "
+                                        "cannot return a value"):
+        compile_source("""
+        fn log_it(n: i32) { return n; }
+        fn main() -> i32 { log_it(1); return 0; }
+        """)
+
+    compile_source("fn main() { return 0; }")
+
+
 def test_extern_with_a_body(compile_source):
     """
     An extern function cannot carry a body.
