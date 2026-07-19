@@ -191,9 +191,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         operand = expr_sie_type(gen, expr.operand, scope)
         return f"{operand}*" if operand is not None else None
 
-    # 'A::member' carries its enum's type name
+    # 'A::member' carries its enum's type name, dotted spellings
+    # resolving to the registered one
     if isinstance(expr, EnumMember):
-        return expr.enum
+        from siec.codegen.enums import resolve_enum
+
+        return resolve_enum(gen, expr.enum)
 
     # a char literal is exactly a 'char'
     if isinstance(expr, CharLiteral):

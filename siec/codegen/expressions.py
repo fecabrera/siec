@@ -33,7 +33,7 @@ from siec.ast import (
 from siec.codegen.asm import emit_asm_block
 from siec.codegen.calls import emit_call
 from siec.codegen.coercion import emit_cast, emit_coerced
-from siec.codegen.enums import member_value
+from siec.codegen.enums import member_value, resolve_enum
 from siec.codegen.generator import CodeGenerator, entry_alloca, make_volatile
 from siec.codegen.sizes import size_of
 from siec.codegen.inference import (
@@ -109,7 +109,8 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if isinstance(expected_type, ir.IntType):
             return ir.Constant(expected_type, value)
 
-        return ir.Constant(resolve_type(gen.enums[expr.enum].backing), value)
+        backing = gen.enums[resolve_enum(gen, expr.enum)].backing
+        return ir.Constant(resolve_type(backing), value)
 
     if isinstance(expr, SizeOf):
         # 'sizeof' is a compile-time constant adopting an integer context

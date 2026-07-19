@@ -71,11 +71,34 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
                 counter += 1
 
 
+def resolve_enum(gen: CodeGenerator, name: str) -> str:
+    """
+    The registered name an enum spelling reaches: a dotted one through
+    the file's module bindings, a member-imported one through its
+    binding, and a plain one held to the file's view — like any type.
+    """
+    if "." in name:
+        member = gen.resolve_qualified(name.split("."))
+        if member is None:
+            raise NameError(f"undefined enum {name!r}")
+
+        return member
+
+    bound = gen.member_bindings.get((gen.current_file, name))
+    if bound is not None and bound != name and bound in gen.enums:
+        return bound
+
+    if name in gen.enums and not gen.ungated_types and not gen.sees(name):
+        raise TypeError(f"unknown type {name!r}")
+
+    return name
+
+
 def member_value(gen: CodeGenerator, expr: EnumMember) -> int:
     """
     Look up an 'A::member' reference, checking the enum and member exist.
     """
-    info = gen.enums.get(expr.enum)
+    info = gen.enums.get(resolve_enum(gen, expr.enum))
     if info is None:
         raise NameError(f"undefined enum {expr.enum!r}")
 

@@ -361,3 +361,39 @@ def test_inferred_foreign_types_still_flow(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_enum_members_resolve_through_module_bindings(tmp_path, monkeypatch, capsys):
+    """
+    'shapes.Color::RED' reaches an enum's member through its module; a
+    member import (renamed or not) binds it unqualified; a bare foreign
+    enum stays out of view.
+    """
+    write_shapes(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import shapes;
+        import { Color as Hue } from shapes;
+
+        fn main() -> i32 {
+            let c = shapes.Color::RED;
+            let d: shapes.Color = shapes.Color::BLUE;
+
+            case (d) {
+                when shapes.Color::BLUE: return 40 + c as i32 + Hue::RED;
+            }
+            return 0;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+    leak = tmp_path / "leak.sie"
+    leak.write_text("""
+        import shapes;
+
+        fn main() -> i32 { return Color::RED; }
+    """)
+    assert run_cli(monkeypatch, leak, "--run") == 1
+    assert "unknown type 'Color'" in capsys.readouterr().err
