@@ -1,0 +1,35 @@
+{
+    "name": "sie-lang",
+    "displayName": "Sie Language",
+    "description": "Syntax highlighting for the Sie programming language",
+    "version": "0.1.0",
+    "publisher": "sielang",
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "sie",
+                "aliases": [
+                    "Sie",
+                    "sie"
+                ],
+                "extensions": [
+                    ".sie"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "sie",
+                "scopeName": "source.sie",
+                "path": "./syntaxes/sie.tmLanguage.json"
+            }
+        ]
+    }
+}
