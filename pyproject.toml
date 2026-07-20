@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "siec"
+version = "0.1.0"
+description = "A compiler for the Sie language, a modern C-flavored language with minimal syntax, a strong type system and type inference."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Felipe Cabrera", email = "fecabrera@protonmail.com" }]
+keywords = ["compiler", "language", "llvm", "sie"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Compilers",
+]
+dependencies = ["llvmlite"]
+
+[project.urls]
+Homepage = "https://github.com/fecabrera/siec"
+Repository = "https://github.com/fecabrera/siec"
+
+[project.scripts]
+siec = "siec.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest", "coverage"]
+
+[tool.setuptools.packages.find]
+include = ["siec*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
