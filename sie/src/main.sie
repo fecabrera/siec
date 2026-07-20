@@ -1,0 +1,94 @@
+import std;
+import std.io;
+import stdio;
+import {
+    snprintf,
+    stderr,
+    fprintf,
+    fopen,
+    fclose,
+} from stdio;
+import { strlen } from string;
+import {
+    toml_get,
+    toml_parse_file,
+    toml_free,
+    toml_type,
+} from tomlc17;
+import { Package } from package;
+
+@const MAX_PATH_LEN = 1024;
+
+fn main(args: char*[]) -> i32 {
+    let path: char[MAX_PATH_LEN];
+
+    if (args.length > 1) {
+        snprintf(path, MAX_PATH_LEN, "%s/package.toml", args[1]);
+    } else {
+        snprintf(path, MAX_PATH_LEN, "package.toml");
+    }
+
+    let fp = fopen(path, "r");
+    if (fp == null) {
+        fprintf(stderr, "%s not found\n", path);
+        return 1;
+    }
+    defer fclose(fp);
+
+    let result = toml_parse_file(fp);
+    defer toml_free(result);
+
+    if (not result.ok) {
+        fprintf(stderr, "could not parse %s\n", path);
+        return 2;
+    }
+
+    let pkg_tab = toml_get(result.toptab, "package");
+    if (pkg_tab.type != toml_type::TABLE) {
+        fprintf(stderr, "missing or invalid 'package' property in %s\n", path);
+        return 3;
+    }
+
+    let pkg = Package({args[1], strlen(args[1])});
+    defer pkg.destroy();
+
+    let res = pkg.parse(pkg_tab);
+    if (not res.ok) {
+        fprintf(stderr, "parsing error %d\n", res.error);
+        return 4;
+    }
+    
+    // name@version
+    std.io.print("package: ");
+    std.io.print(pkg.name.as_array());
+    std.io.print("@");
+    std.io.println(pkg.version.as_array());
+
+    // path
+    std.io.print("path:    ");
+    std.io.println(pkg.path.as_array());
+    
+    // inc1, inc2, ...
+    std.io.print("include: ");
+    foreach (el : enumerate(pkg.include)) {
+        if (el.index)
+            std.io.print(", ");
+        
+        std.io.print("-I ");
+        std.io.print(el.value.as_array());
+    }
+    std.io.println("");
+
+    // l1, l2, ...    
+    std.io.print("libs:    ");
+    foreach (el : enumerate(pkg.libs)) {
+        if (el.index)
+            std.io.print(", ");
+        
+        std.io.print("-l ");
+        std.io.print(el.value.as_array());
+    }
+    std.io.println("");
+    
+    return 0;
+}

@@ -1,0 +1,99 @@
+import { String, List } from std;
+import { printf } from stdio;
+import { toml_get, toml_datum, toml_type } from tomlc17;
+
+enum PackageError {
+    FieldRequired,
+}
+
+struct Package {
+    path: String;
+    name: String;
+    version: String;
+    include: List<String>;
+    libs: List<String>;
+}
+
+fn Package::init(&self, path: char[]) {
+    self.setPath(path);
+}
+
+fn Package::parse(&self, package: &toml_datum) -> Result<PackageError> {
+    let name = toml_get(package, "name");
+    if (name.type == toml_type::STRING) {
+        self.setName({name.str.ptr, name.str.len as u64});
+    } else {
+        return Error(PackageError::FieldRequired);
+    }
+
+    let version = toml_get(package, "version");
+    if (version.type == toml_type::STRING) {
+        self.setVersion({version.str.ptr, version.str.len as u64});
+    } else {
+        return Error(PackageError::FieldRequired);
+    }
+
+    let include = toml_get(package, "include");
+    if (include.type == toml_type::ARRAY) {
+        let elements: toml_datum[] = {include.arr.elem, include.arr.size as u64};
+        self.include = List<String>(elements.length);
+        
+        foreach (el : elements) {
+            self.include.push(String::from_array({el.str.ptr, el.str.len as u64}));
+        }
+    }
+
+    let libs = toml_get(package, "libs");
+    if (libs.type == toml_type::ARRAY) {
+        let elements: toml_datum[] = {libs.arr.elem, libs.arr.size as u64};
+        self.libs = List<String>(elements.length);
+        
+        foreach (el : elements) {
+            self.libs.push(String::from_array({el.str.ptr, el.str.len as u64}));
+        }
+    }
+
+    return Ok();
+}
+
+fn Package::destroy(&self) {
+    self.name.destroy();
+    self.version.destroy();
+    
+    foreach (s : self.include)
+        s.destroy();
+    
+    self.include.destroy();
+    
+    foreach (s : self.libs)
+        s.destroy();
+    
+    self.libs.destroy();
+}
+
+fn Package::setPath(&self, str: const char[]) {
+    if (self.path.data)
+        self.path.reset();
+    else
+        self.path = String(str.length);
+    
+    self.path.append(str);
+}
+
+fn Package::setName(&self, str: const char[]) {
+    if (self.name.data)
+        self.name.reset();
+    else
+        self.name = String(str.length);
+    
+    self.name.append(str);
+}
+
+fn Package::setVersion(&self, str: const char[]) {
+    if (self.version.data)
+        self.version.reset();
+    else
+        self.version = String(str.length);
+    
+    self.version.append(str);
+}
