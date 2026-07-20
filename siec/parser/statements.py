@@ -12,6 +12,7 @@ from siec.ast import (
     Emit,
     ExprStmt,
     For,
+    Foreach,
     If,
     Index,
     IndexAssign,
@@ -147,6 +148,19 @@ def parse_statement(ts: TokenStream):
         ts.expect("sym", ")")
 
         return While(condition, parse_body(ts), line=line)
+
+    # 'foreach (v : iterable) body' walks the iterable's elements, 'v'
+    # referencing each in turn
+    if tok.kind == "kw" and tok.value == "foreach":
+        ts.next()
+
+        ts.expect("sym", "(")
+        name = ts.expect("ident").value
+        ts.expect("sym", ":")
+        iterable = parse_expression(ts)
+        ts.expect("sym", ")")
+
+        return Foreach(name, iterable, parse_body(ts), line=line)
 
     # 'for (init; cond; step) body': the init runs once, the condition
     # is checked before each pass, and the step runs after each

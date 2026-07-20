@@ -56,11 +56,17 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         return None
 
     # a 'T[]' array answers 'iterator()' itself, through the builtin
-    # ArrayIterator<T>: that is how arrays implement Iterable<T>
+    # ArrayIterator<T>: that is how arrays implement Iterable<T>; a
+    # 'const T[]' iterates through ConstArrayIterator<T>, its elements
+    # referenced 'const &T'
     if base.endswith("[]") and method == "iterator":
         from siec.codegen.generics import instantiate_function
+        from siec.codegen.types import is_const
 
-        template = gen.generic_functions.get("__array_iterator")
+        helper = ("__const_array_iterator"
+                  if is_const(strip_reference(receiver_type))
+                  else "__array_iterator")
+        template = gen.generic_functions.get(helper)
         if template is not None:
             return instantiate_function(gen, template, [base[:-2]])
 

@@ -12,6 +12,7 @@ from siec.ast import (
     Emit,
     ExprStmt,
     For,
+    Foreach,
     If,
     Index,
     IndexAssign,
@@ -282,6 +283,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_while(gen, builder, stmt, scope)
     elif isinstance(stmt, For):
         emit_for(gen, builder, stmt, scope)
+    elif isinstance(stmt, Foreach):
+        emit_foreach(gen, builder, stmt, scope)
     elif isinstance(stmt, Defer):
         # a defer's own block cannot re-defer: the frame it would join is
         # the one being flushed; a scope of its own inside it can
@@ -433,6 +436,90 @@ def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: di
     builder.position_at_end(body_block)
     gen.loop_targets.append((end_block, cond_block, len(gen.defer_frames)))
     emit_block(gen, builder, stmt.body, dict(scope))
+    gen.loop_targets.pop()
+
+    if not builder.block.is_terminated:
+        builder.branch(cond_block)
+
+    builder.position_at_end(end_block)
+
+
+def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
+                 scope: dict) -> None:
+    """
+    Emit 'foreach (v : iterable)': the iterable hands out its iterator
+    ('iterator()', or itself when it already is one), and each pass binds
+    'v' to the address 'next()' returns - a true reference into the
+    collection, not a copy, exactly like a reference parameter.
+    """
+    from siec.ast import Call, MethodCall, Var
+    from siec.codegen.calls import emit_call
+    from siec.codegen.methods import resolve_method
+    from siec.codegen.types import resolve_type
+
+    source_type = expr_sie_type(gen, stmt.iterable, scope)
+    source = strip_reference(source_type) if source_type else None
+    if not source:
+        raise TypeError("cannot iterate: the expression has no type")
+
+    loop_scope = dict(scope)
+    it_name = "__foreach_it"
+
+    # an Iterable hands out its iterator; a value that already is an
+    # iterator iterates itself, from a copy of its state
+    if resolve_method(gen, source, "iterator") is not None:
+        getter = MethodCall(stmt.iterable, "iterator", [], None)
+        it_type = expr_sie_type(gen, getter, scope)
+        it_value = emit_expression(gen, builder, getter, None, scope)
+    elif resolve_method(gen, source, "has_next") is not None:
+        it_type = strip_const(source)
+        it_value = emit_expression(gen, builder, stmt.iterable, None, scope)
+    else:
+        raise TypeError(f"cannot iterate a {source_type!r} value: it is "
+                        "neither an Iterable nor an Iterator")
+
+    slot = entry_alloca(builder, resolve_type(it_type, gen.structs), "foreach.it")
+    if (align := gen.struct_align(it_type)) is not None:
+        slot.align = align
+
+    builder.store(it_value, slot)
+    loop_scope[it_name] = Variable(slot, it_type)
+
+    has_next = resolve_method(gen, it_type, "has_next")
+    next_ = resolve_method(gen, it_type, "next")
+    if has_next is None or next_ is None:
+        raise TypeError(f"cannot iterate: type {it_type!r} has no "
+                        f"{'has_next' if has_next is None else 'next'!r} method")
+
+    # 'v' aliases storage, so the elements must come as references
+    next_ret = gen.return_types.get(next_)
+    if not is_reference(next_ret):
+        raise TypeError(f"'foreach' needs {it_type!r}'s 'next' to return "
+                        "a reference '&T'")
+
+    func = builder.function
+    cond_block = func.append_basic_block("foreach.cond")
+    body_block = func.append_basic_block("foreach.body")
+    end_block = func.append_basic_block("foreach.end")
+
+    builder.branch(cond_block)
+
+    builder.position_at_end(cond_block)
+    builder.cbranch(emit_bool(gen, builder, Call(has_next, [Var(it_name)]),
+                              loop_scope),
+                    body_block, end_block)
+
+    # each pass takes the next element's address and binds 'v' to it,
+    # the way a reference parameter binds its caller's storage
+    builder.position_at_end(body_block)
+    address = emit_call(gen, builder, Call(next_, [Var(it_name)]),
+                        loop_scope, as_address=True)
+
+    body_scope = dict(loop_scope)
+    body_scope[stmt.name] = Variable(address, next_ret)
+
+    gen.loop_targets.append((end_block, cond_block, len(gen.defer_frames)))
+    emit_block(gen, builder, stmt.body, body_scope)
     gen.loop_targets.pop()
 
     if not builder.block.is_terminated:

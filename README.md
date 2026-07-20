@@ -426,6 +426,26 @@ for (let i: i32 = 0; i < n; i += 1) total += i;
 
 Unlike other languages, there are no increment or decrement operators (`i++`, `i--`); this is intentional, and a step is written `i += 1`.
 
+#### Foreach
+
+`foreach (v : iterable)` walks a collection's elements through [the iteration interfaces](#the-iteration-interfaces): the iterable hands out its iterator (`iterator()`, or itself when it already is one), and each pass binds `v` to the element `next()` references.
+
+```
+foreach (v : nums) {
+    total += v;
+}
+```
+
+`v` is a true [reference](#references) into the collection, not a copy, exactly like a reference parameter: assigning it writes the element in place, and calling a mutating method on it mutates the collection's own.
+
+```
+foreach (v : nums) {
+    v = v * 2;    // doubles the array's elements themselves
+}
+```
+
+Anything `Iterable<T>` works - [arrays come iterable](#the-iteration-interfaces) - and `break`/`continue` steer the loop like any other. Iterating a bare iterator value walks a copy of its state, from wherever it stands. A `const` array iterates too, through the builtin `ConstArrayIterator<T>`: its elements read as `const &T`, so the contract follows them and writing one is an error.
+
 #### Break and continue
 
 `break` leaves the innermost enclosing loop; `continue` jumps to its next pass. In a `for`, `continue` lands on the step, so the loop always advances:

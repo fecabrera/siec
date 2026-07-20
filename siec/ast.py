@@ -305,6 +305,18 @@ class While:
 
 
 @dataclass
+class Foreach:
+    """
+    A 'foreach (v : iterable) body' loop: the iterable hands out its
+    iterator, and 'v' references each element in turn.
+    """
+    name: str
+    iterable: Expr
+    body: list
+    line: int = _line()
+
+
+@dataclass
 class Break:
     """
     A 'break': leaves the innermost enclosing loop.
