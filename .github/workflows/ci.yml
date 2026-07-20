@@ -34,7 +34,11 @@ jobs:
           pipenv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 

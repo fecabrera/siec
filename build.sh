@@ -1,5 +1,5 @@
 #!/bin/bash
-SIEC="${SIEC:-python -m siec}"
+SIEC="${SIEC:-pipenv run python -m siec}"
 SIE_FLAGS="${SIE_FLAGS:-}"
 SIE_INCLUDES=("packages/libc/src" "packages/posix/src" "packages/tomlc17/src" "packages/core/src" "packages/mpdecimal/src", "packages/zlib/src")
 SIE_LIB_DIRS=("$(brew --prefix)/lib")
@@ -29,6 +29,5 @@ run_echo $SIEC \
     sie/src/*.sie\
     ${SIE_LIB_OBJS[@]}\
     -o dist/bin/sie
-
 
 run_echo pip wheel . --no-deps -w dist
