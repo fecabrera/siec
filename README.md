@@ -651,6 +651,31 @@ Copies of non-aliasing values discard the contract naturally: a `const i32` argu
 
 This is also how a method's receiver declares whether it mutates the struct: a mutating method takes `self: &S`, while one that only reads from it takes `self: const &S`.
 
+#### Default arguments
+
+A parameter can declare a default value with `= expr`, letting calls omit its argument:
+
+```
+fn greet(name: const char*, times: i32 = 1) {
+    // ...
+}
+
+greet("sie");       // times is 1
+greet("sie", 3);
+```
+
+Only the last parameters can carry defaults — they fill a call's omitted trailing arguments, so a parameter after a defaulted one needs a default too.
+
+The default is any expression, evaluated at each call as if written there, but resolved in the declaring file: it can reference that file's constants, globals, and functions without the caller importing them. [Methods](#methods) take defaults the same way, from either call form, and a [constructor](#constructors) fills `init`'s:
+
+```
+fn List<T>::init(self: &List<T>, capacity: u64 = DEFAULT_CAPACITY) { ... }
+
+let l = List<i32>();    // capacity is DEFAULT_CAPACITY
+```
+
+A call through a [function reference](#function-references) passes every argument: the reference's `fn(...)` type carries no defaults.
+
 #### Generic functions
 
 Functions are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.

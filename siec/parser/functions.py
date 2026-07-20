@@ -354,7 +354,8 @@ def parse_function(ts: TokenStream) -> Function:
 
     ts.expect("sym", "(")
 
-    # comma-separated 'name: type' params; a trailing '...' marks varargs
+    # comma-separated 'name: type' params, each with an optional
+    # '= default'; a trailing '...' marks varargs
     params = []
     var_arg = False
     while ts.peek().value != ")":
@@ -366,9 +367,23 @@ def parse_function(ts: TokenStream) -> Function:
             var_arg = True
             break
 
+        param_line = ts.peek().line
         param_name = ts.expect("ident").value
         ts.expect("sym", ":")
-        params.append(Param(param_name, parse_type(ts)))
+        param_type = parse_type(ts)
+
+        default = None
+        if ts.peek().syntax == "=":
+            ts.next()
+            default = parse_expression(ts)
+        elif params and params[-1].default is not None:
+            # defaults fill a call's omitted trailing arguments, so
+            # only the last parameters can carry them
+            raise SyntaxError(f"line {param_line}: parameter "
+                              f"{param_name!r} needs a default: it "
+                              "follows a defaulted parameter")
+
+        params.append(Param(param_name, param_type, default))
 
     ts.expect("sym", ")")
 

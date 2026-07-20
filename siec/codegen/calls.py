@@ -110,7 +110,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     hidden = 1 if ret_lowering is not None and ret_lowering[0] == "indirect" else 0
     expected = len(func.function_type.args) - hidden
 
-    if len(call.args) < expected:
+    # trailing parameters with defaults are optional at the call
+    defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))
+    required = expected
+    while (required and required <= len(defaults)
+           and defaults[required - 1] is not None):
+        required -= 1
+
+    if len(call.args) < required:
         raise TypeError(f"too few arguments to function {call.name!r}")
 
     if len(call.args) > expected and not func.function_type.var_arg:
@@ -130,6 +137,17 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
                 value = builder.fpext(value, ir.DoubleType())
 
             args.append(value)
+
+    # omitted arguments take their declared defaults, emitted under the
+    # declaring file's view, away from any local names
+    if len(call.args) < expected:
+        previous, gen.current_file = gen.current_file, defaults_file
+        try:
+            for i in range(len(call.args), expected):
+                args.append(emit_argument(gen, builder, defaults[i],
+                                          sie_params[i], {}))
+        finally:
+            gen.current_file = previous
 
     # an '@extern' callee's struct arguments reshape for the C ABI
     lowerings = gen.abi_args.get(func.name)

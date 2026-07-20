@@ -134,6 +134,11 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     gen.return_types[symbol] = fn.return_type
     gen.param_types[symbol] = [p.type for p in fn.params]
 
+    # defaults fill omitted call arguments; they emit under the
+    # declaring file's view, so it travels with them
+    if any(p.default is not None for p in fn.params):
+        gen.param_defaults[symbol] = ([p.default for p in fn.params], fn.file)
+
     # redeclarations are allowed as long as the signature matches
     existing = gen.module.globals.get(symbol)
     if existing is not None:

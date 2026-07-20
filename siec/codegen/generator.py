@@ -115,6 +115,9 @@ class CodeGenerator:
         # type inference and argument coercion at calls
         self.return_types: dict[str, str | None] = {}
         self.param_types: dict[str, list[str]] = {}
+        # per-symbol parameter defaults with the declaring file, whose
+        # view resolves the default expressions at call sites
+        self.param_defaults: dict[str, tuple[list, str]] = {}
 
         # the registered structs by name, for type resolution and member access
         self.structs: dict[str, StructInfo] = {}

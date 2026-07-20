@@ -281,7 +281,14 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
     sie_params = gen.param_types[func.name]
     expected = len(func.function_type.args) - 1
 
-    if len(call.args) < expected:
+    # trailing parameters with defaults are optional here too
+    defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))
+    required = expected
+    while (required and required + 1 <= len(defaults)
+           and defaults[required] is not None):
+        required -= 1
+
+    if len(call.args) < required:
         raise TypeError(f"too few arguments to function {symbol!r}")
 
     if len(call.args) > expected:
@@ -290,6 +297,17 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
     args = [slot]
     for i, arg in enumerate(call.args):
         args.append(emit_argument(gen, builder, arg, sie_params[i + 1], scope))
+
+    # omitted arguments take init's declared defaults, emitted under the
+    # declaring file's view, away from any local names
+    if len(call.args) < expected:
+        previous, gen.current_file = gen.current_file, defaults_file
+        try:
+            for i in range(len(call.args), expected):
+                args.append(emit_argument(gen, builder, defaults[i + 1],
+                                          sie_params[i + 1], {}))
+        finally:
+            gen.current_file = previous
 
     builder.call(func, args)
     return slot if as_address else builder.load(slot)

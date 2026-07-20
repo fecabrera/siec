@@ -419,10 +419,12 @@ class ExprStmt:
 @dataclass
 class Param:
     """
-    A function parameter with its name and type annotation.
+    A function parameter with its name, type annotation, and optional
+    default value, taken when a call omits its argument.
     """
     name: str
     type: str
+    default: object | None = None
 
 
 @dataclass
