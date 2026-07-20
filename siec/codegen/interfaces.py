@@ -1,0 +1,290 @@
+"""Interfaces: abstract types a struct nominally implements.
+
+An interface declares fields and action signatures; 'struct S: I' claims
+conformance, checked once every declaration is in. An interface-typed
+parameter turns its function into a template: each call stamps an
+instance for the concrete argument type, gated on it implementing the
+interface. There is no runtime dispatch; everything monomorphizes.
+"""
+
+import re
+
+from siec.codegen.errors import source_location
+from siec.codegen.generator import CodeGenerator
+from siec.codegen.generics import split_generic, substitute
+from siec.codegen.types import strip_const
+
+IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def find_interface_spelling(gen: CodeGenerator, text: str | None):
+    """
+    The first complete interface spelling inside a type name: the bare
+    name or, with its '<...>', the whole generic form. Returns the
+    spelling with its start and end, or None.
+    """
+    if not text:
+        return None
+
+    for match in IDENT.finditer(text):
+        if match.group() not in gen.interfaces:
+            continue
+
+        end = match.end()
+        if end < len(text) and text[end] == "<":
+            depth = 0
+            for i in range(end, len(text)):
+                if text[i] == "<":
+                    depth += 1
+                elif text[i] == ">":
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+
+        return text[match.start():end], match.start(), end
+
+    return None
+
+
+def adapt_interface_params(gen: CodeGenerator, fn) -> None:
+    """
+    Rewrite a function's interface-typed parameters into type parameters
+    constrained to the interface: 'fn f(n: Named)' becomes a template
+    stamped per concrete argument type, each call checked to implement.
+
+    Each parameter gets its own placeholder, so two 'Named' parameters
+    take two independent implementing types.
+    """
+    previous, gen.current_file = gen.current_file, fn.file
+    try:
+        constraints = {}
+        start = 1 if fn.receiver is not None and fn.params else 0
+        for param in fn.params[start:]:
+            while (found := find_interface_spelling(gen, param.type)) is not None:
+                spelling, begin, end = found
+                placeholder = f"__I{len(constraints)}"
+                param.type = param.type[:begin] + placeholder + param.type[end:]
+                constraints[placeholder] = spelling
+
+        with source_location(line=fn.line, file=fn.file):
+            if find_interface_spelling(gen, fn.return_type) is not None:
+                raise TypeError(f"function {fn.name!r} cannot return an "
+                                "interface value: return the concrete "
+                                "struct type")
+
+        if constraints:
+            with source_location(line=fn.line, file=fn.file):
+                if fn.is_extern:
+                    raise TypeError(f"an '@extern' function cannot take an "
+                                    "interface parameter: it names one "
+                                    "foreign symbol")
+
+            fn.type_params = [*(fn.type_params or []), *constraints]
+            fn.constraints = {**(fn.constraints or {}), **constraints}
+    finally:
+        gen.current_file = previous
+
+
+def register_action(gen: CodeGenerator, fn) -> None:
+    """
+    Register an interface action: a bodiless method signature on an
+    interface receiver, required of every implementing struct.
+    """
+    with source_location(line=fn.line, file=fn.file):
+        if fn.body is not None or fn.asm is not None:
+            raise TypeError(f"an interface action cannot have a body: "
+                            f"{fn.name!r} declares a required signature")
+
+        iface = gen.interfaces[fn.receiver]
+        declared = len(iface.params or ())
+        given = len(fn.receiver_params or ())
+        if declared != given:
+            raise TypeError(f"interface {fn.receiver!r} takes {declared} type "
+                            f"parameter{'s' if declared != 1 else ''}, "
+                            f"its action spells {given}")
+
+        key = (fn.receiver, fn.name.partition("::")[2])
+        if key in gen.interface_actions:
+            raise TypeError(f"action {fn.name!r} is declared more than once")
+
+        gen.interface_actions[key] = fn
+
+
+def canonical_interface(gen: CodeGenerator, spelling: str) -> str:
+    """
+    An interface spelling under canonical type arguments, so every way of
+    writing one instance compares equal.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    if (parts := split_generic(spelling)) is None:
+        return spelling
+
+    base, args = parts
+    return f"{base}<{','.join(expand_alias(gen, a, checked=False) for a in args)}>"
+
+
+def declare_implements(gen: CodeGenerator, name: str, template_base: str,
+                       spellings: list[str], line: int, file: str) -> None:
+    """
+    Record what a struct claims to implement and queue the conformance
+    check, run once every method is declared; checks queued after that
+    point run immediately.
+    """
+    canonical = [canonical_interface(gen, s) for s in spellings]
+    gen.implements[name] = set(canonical)
+
+    entry = (name, template_base, canonical, line, file)
+    if gen.conformance_ready:
+        check_conformance(gen, *entry)
+    else:
+        gen.pending_conformance.append(entry)
+
+
+def run_conformance(gen: CodeGenerator) -> None:
+    """
+    Drain the queued conformance checks; later claims check on the spot.
+    """
+    gen.conformance_ready = True
+    while gen.pending_conformance:
+        check_conformance(gen, *gen.pending_conformance.pop(0))
+
+
+def check_conformance(gen: CodeGenerator, name: str, template_base: str,
+                      spellings: list[str], line: int, file: str) -> None:
+    """
+    Check one struct against every interface it claims: the fields
+    declared, the actions provided with matching signatures.
+    """
+    with source_location(line=line, file=file):
+        info = gen.structs.get(name)
+        fields = info.fields if info is not None else None
+
+        for spelling in spellings:
+            base, args = split_generic(spelling) or (spelling, [])
+            iface = gen.interfaces.get(base)
+            if iface is None:
+                kind = "a struct" if base in gen.structs or base in gen.generic_structs else "not"
+                raise TypeError(f"{base!r} is {kind} an interface: "
+                                f"{name!r} cannot implement it")
+
+            declared = len(iface.params or ())
+            if declared != len(args):
+                raise TypeError(f"interface {base!r} takes {declared} type "
+                                f"argument{'s' if declared != 1 else ''}, "
+                                f"got {len(args)}")
+
+            mapping = dict(zip(iface.params or (), args))
+
+            # every interface field, at its declared type
+            for required in iface.fields or ():
+                required_type = expand_lax(gen, substitute(required.type, mapping))
+                field = next((f for f in fields or ()
+                              if f.name == required.name), None)
+                if field is None:
+                    raise TypeError(f"struct {template_base!r} does not "
+                                    f"implement {spelling!r}: it is missing "
+                                    f"the field '{required.name}: "
+                                    f"{required.type}'")
+
+                if strip_const(expand_lax(gen, field.type)) != strip_const(required_type):
+                    raise TypeError(f"struct {template_base!r} does not "
+                                    f"implement {spelling!r}: field "
+                                    f"{required.name!r} must be "
+                                    f"{required_type!r}, not {field.type!r}")
+
+            # every action, resolvable as a method with the right signature
+            for (action_iface, method), action in list(gen.interface_actions.items()):
+                if action_iface != base:
+                    continue
+
+                check_action(gen, name, template_base, spelling, method,
+                             action, mapping)
+
+
+def check_action(gen: CodeGenerator, name: str, template_base: str,
+                 spelling: str, method: str, action, mapping: dict) -> None:
+    """
+    Check one required action against the struct's method of that name.
+    """
+    from siec.codegen.methods import resolve_method
+
+    symbol = resolve_method(gen, name, method)
+    if symbol is None:
+        raise TypeError(f"struct {template_base!r} does not implement "
+                        f"{spelling!r}: it is missing the method {method!r}")
+
+    # a still-generic method matches by existence; a concrete one by shape
+    have_params = gen.param_types.get(symbol)
+    if have_params is None:
+        return
+
+    required = [expand_lax(gen, substitute(p.type, mapping))
+                for p in action.params[1:]]
+    if [strip_const(p) for p in have_params[1:]] != [strip_const(p) for p in required]:
+        raise TypeError(f"struct {template_base!r} does not implement "
+                        f"{spelling!r}: method {method!r} must take "
+                        f"({', '.join(required)})")
+
+    required_ret = action.return_type and expand_lax(
+        gen, substitute(action.return_type, mapping))
+    have_ret = gen.return_types.get(symbol)
+    if implements_or_equals(gen, have_ret, required_ret):
+        return
+
+    raise TypeError(f"struct {template_base!r} does not implement "
+                    f"{spelling!r}: method {method!r} must return "
+                    f"{required_ret!r}")
+
+
+def implements_or_equals(gen: CodeGenerator, have: str | None,
+                         required: str | None) -> bool:
+    """
+    Whether a provided return type satisfies a required one: the same
+    type, or, when the requirement is an interface, any implementer.
+    """
+    if have == required:
+        return True
+
+    if required is None or have is None:
+        return False
+
+    base = required.partition("<")[0]
+    if base in gen.interfaces:
+        return required in gen.implements.get(strip_const(have), set())
+
+    return strip_const(have) == strip_const(required)
+
+
+def expand_lax(gen: CodeGenerator, name: str | None) -> str | None:
+    """
+    Expand a type spelling without visibility gating, for signature
+    comparison; interface names pass through as themselves.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    if name is None:
+        return None
+
+    base = name.partition("<")[0].removeprefix("const ").lstrip("&")
+    if base in gen.interfaces:
+        return canonical_interface(gen, name)
+
+    return expand_alias(gen, name, checked=False)
+
+
+def check_constraints(gen: CodeGenerator, template, mapping: dict) -> None:
+    """
+    Check a template's interface constraints against one instantiation:
+    each bound type must implement the constraining interface.
+    """
+    for placeholder, spelling in (template.constraints or {}).items():
+        concrete = mapping.get(placeholder)
+        if concrete is None:
+            continue
+
+        required = canonical_interface(gen, substitute(spelling, mapping))
+        if required not in gen.implements.get(strip_const(concrete), set()):
+            raise TypeError(f"type {concrete!r} does not implement "
+                            f"interface {required!r}")

@@ -446,6 +446,7 @@ class Function:
     type_params: list[str] | None = None  # 'fn f<T, U>': generic type parameters
     receiver: str | None = None  # 'fn S::m': the struct the method acts on
     receiver_params: list[str] | None = None  # 'fn S<A>::m': its placeholders
+    constraints: dict | None = None  # interface bound per synthetic type param
     line: int = _line()
     file: str = _file()
 
@@ -476,6 +477,8 @@ class Struct:
     volatile: bool = False
     is_union: bool = False  # 'union': the fields share one storage
     params: list[str] | None = None  # 'struct S<T, U>': generic type parameters
+    is_interface: bool = False  # 'interface I': an abstract type, no storage
+    interfaces: list[str] | None = None  # 'struct S: I, J': what it implements
     line: int = _line()
     file: str = _file()
 

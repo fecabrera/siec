@@ -40,12 +40,20 @@ def parse_struct(ts: TokenStream) -> Struct:
             raise SyntaxError(f"line {at_line}: unknown struct decorator "
                               f"'@{decorator}'")
 
-    # 'union' declares the same shape with its fields sharing one storage
+    # 'union' declares the same shape with its fields sharing one storage;
+    # 'interface' an abstract type, all requirement and no storage
     is_union = ts.peek().value == "union"
+    is_interface = ts.peek().value == "interface"
     if is_union:
         if packed:
             raise SyntaxError(f"line {line}: a union has no field layout "
                               "to '@packed'")
+
+        ts.next()
+    elif is_interface:
+        if packed or align is not None or volatile:
+            raise SyntaxError(f"line {line}: an interface has no layout "
+                              "to decorate")
 
         ts.next()
     else:
@@ -64,12 +72,25 @@ def parse_struct(ts: TokenStream) -> Struct:
             params.append(ts.expect("ident").value)
         ts.expect("sym", ">")
 
+    # ': I, J<T>' after a struct's name declares the interfaces it
+    # implements; there is no inheritance, so ':' always means interfaces
+    interfaces = None
+    if ts.peek().syntax == ":" and not is_interface:
+        ts.next()
+        interfaces = [parse_type(ts)]
+        while ts.peek().syntax == ",":
+            ts.next()
+            interfaces.append(parse_type(ts))
+
     # a ';' in place of a body is a forward declaration, leaving the fields
-    # to a later definition - or to none, for an opaque struct
+    # to a later definition - or to none, for an opaque struct; a bodiless
+    # interface simply requires no fields
     if ts.peek().value == ";":
         ts.next()
-        return Struct(name, None, packed, align, volatile, is_union,
-                      params=params, line=line)
+        return Struct(name, [] if is_interface else None, packed, align,
+                      volatile, is_union, params=params,
+                      is_interface=is_interface, interfaces=interfaces,
+                      line=line)
 
     ts.expect("sym", "{")
 
@@ -104,4 +125,5 @@ def parse_struct(ts: TokenStream) -> Struct:
         ts.next()
 
     return Struct(name, fields, packed, align, volatile, is_union,
-                  params=params, line=line)
+                  params=params, is_interface=is_interface,
+                  interfaces=interfaces, line=line)

@@ -65,7 +65,7 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
         elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static", "symbol")
               and declares_global(ts)):
             program.globals.append(parse_global(ts))
-        elif ts.peek().value in ("struct", "union") or (
+        elif ts.peek().value in ("struct", "union", "interface") or (
                 ts.peek().value == "@" and ts.peek(1).value in ("packed", "align", "volatile")):
             program.structs.append(parse_struct(ts))
         elif ts.peek().value == "enum":

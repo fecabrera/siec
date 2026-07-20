@@ -117,6 +117,15 @@ class CodeGenerator:
         self.param_types: dict[str, list[str]] = {}
         # same-named generic templates with other type-parameter counts
         self.generic_overloads: dict[str, list] = {}
+
+        # interfaces: declarations, their required actions, what each
+        # struct claims, and the claims queued for checking once every
+        # method is declared
+        self.interfaces: dict = {}
+        self.interface_actions: dict = {}
+        self.implements: dict[str, set] = {}
+        self.pending_conformance: list = []
+        self.conformance_ready = False
         # per-symbol parameter defaults with the declaring file, whose
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
@@ -400,14 +409,28 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     # second pass: declare every function so calls can target ones defined
     # later; a generic function is a template, declared per instantiation,
-    # and a method registers under its receiver's rules
+    # a method registers under its receiver's rules, an interface receiver
+    # marks a required action, and an interface-typed parameter turns the
+    # function into a constrained template
+    from siec.codegen.interfaces import (adapt_interface_params,
+                                         register_action, run_conformance)
+
     for fn in program.functions:
+        if fn.receiver is not None and fn.receiver in gen.interfaces:
+            register_action(gen, fn)
+            continue
+
+        adapt_interface_params(gen, fn)
+
         if fn.receiver is not None:
             register_method(gen, fn)
         elif fn.type_params is not None:
             register_generic_function(gen, fn)
         else:
             declare_function(gen, fn)
+
+    # every declaration is in: check each struct's interface claims
+    run_conformance(gen)
 
     # third pass: emit the bodies of the defined functions, an '@asm'
     # function's assembly standing in for one

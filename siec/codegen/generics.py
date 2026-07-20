@@ -190,6 +190,16 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
             resolved = union_storage(gen, resolved)
 
         ident.set_body(*resolved)
+
+        # the template's interface claims carry to each instance, its
+        # arguments substituted in: 'List<T>: Iterable<T>' makes
+        # 'List<i32>' implement 'Iterable<i32>'
+        if template.interfaces:
+            from siec.codegen.interfaces import declare_implements
+
+            declare_implements(gen, canonical, base,
+                               [substitute(s, mapping) for s in template.interfaces],
+                               template.line, template.file)
     finally:
         gen.ungated_types -= 1
 
@@ -248,6 +258,9 @@ def substitute_types(node, mapping: dict) -> None:
                 setattr(node, field.name, substitute(value, mapping))
         elif field.name == "type_args" and value is not None:
             setattr(node, field.name, [substitute(v, mapping) for v in value])
+        elif field.name == "constraints" and value is not None:
+            setattr(node, field.name,
+                    {k: substitute(v, mapping) for k, v in value.items()})
         else:
             substitute_types(value, mapping)
 
@@ -413,6 +426,13 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
         if arg.startswith("const ") or arg.startswith("&"):
             raise TypeError(f"cannot instantiate {template.name!r} with "
                             f"{arg!r}: the argument carries a modifier")
+
+    # an interface-constrained parameter only takes an implementing type
+    if template.constraints:
+        from siec.codegen.interfaces import check_constraints
+
+        check_constraints(gen, template,
+                          dict(zip(template.type_params, type_args)))
 
     symbol = f"{template.name}<{','.join(type_args)}>"
     if symbol not in gen.instantiated_functions:

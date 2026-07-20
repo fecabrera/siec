@@ -106,7 +106,7 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
     if name is None:
         return None
 
-    if (not gen.aliases and not gen.visible
+    if (not gen.aliases and not gen.visible and not gen.interfaces
             and not any(m in name for m in ("<", "struct{", "union{", "."))):
         return name
 
@@ -203,6 +203,14 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
             return generic + suffix
 
     if base not in gen.aliases:
+        # an interface is abstract: only a parameter's type can take one,
+        # standing for any implementing struct
+        if base.partition("<")[0] in gen.interfaces:
+            named = base.partition("<")[0]
+            raise TypeError(f"interface {named!r} is not a concrete type: "
+                            "only a parameter can take an interface, "
+                            "standing for any struct implementing it")
+
         # a type declared by an unimported module doesn't resolve here
         if (checked and not gen.sees(base)
                 and (base in gen.structs or base in gen.enums

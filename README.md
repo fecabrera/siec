@@ -1662,13 +1662,17 @@ They can be used as types, standing for any struct that implements them:
 fn f(n: Named); // a function that receives any struct implementing Named
 ```
 
+An interface can only type a parameter. There is no runtime dispatch: like [generic functions](#generic-functions), `f` compiles once per concrete argument type, and each call checks that its argument's type implements the interface. Each interface parameter is independent, so `fn both(a: Named, b: Named)` takes two different implementers. The body can use the interface's fields and actions, and a function cannot return an interface value: it returns the concrete type.
+
 Their actions are declared the same way as struct methods, but with the interface as the receiver's type and no body, describing the signature a struct must implement:
 
 ```
 fn Named::greet(self: &Named) -> char[];
 ```
 
-Interface conformance is nominal: a struct only implements an interface when it says so, through `: I` after the struct's name. Since there's no inheritance, `:` in that position always introduces interfaces. Implementing one still requires declaring its fields and providing its actions:
+Actions take the [`&self` sugar](#methods) like any method declaration.
+
+Interface conformance is nominal: a struct only implements an interface when it says so, through `: I` after the struct's name. Since there's no inheritance, `:` in that position always introduces interfaces. Implementing one still requires declaring its fields (with the declared types) and providing its actions (with the declared signatures); each claim is checked once every declaration is in, and a generic struct's instances check with their arguments substituted, so `struct List<T>: Iterable<T>` makes each `List<i32>` implement `Iterable<i32>`:
 
 ```
 struct Person: Named {

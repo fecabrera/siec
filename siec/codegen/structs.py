@@ -22,6 +22,25 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
         with source_location(line=struct.line, file=struct.file):
             gen.current_file = struct.file
 
+            # an interface is all requirement: it registers its shape
+            # and stamps no storage
+            if struct.is_interface:
+                if struct.name in gen.interfaces:
+                    raise TypeError(f"interface {struct.name!r} is declared "
+                                    "more than once")
+
+                gen.interfaces[struct.name] = struct
+                continue
+
+            # a concrete struct's interface claims queue for checking
+            # once every method is declared; a template's wait for its
+            # instantiations, their arguments substituted in
+            if struct.interfaces and struct.params is None:
+                from siec.codegen.interfaces import declare_implements
+
+                declare_implements(gen, struct.name, struct.name,
+                                   struct.interfaces, struct.line, struct.file)
+
             # a generic struct is a template: nothing registers until a
             # concrete 'S<args>' spelling instantiates it; same-named
             # templates with different arities live under '#arity' keys
@@ -67,9 +86,10 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
                 info.is_union = True
 
     # then set each body from the now-resolvable field types; a struct
-    # never given a body stays opaque, usable only through a pointer
+    # never given a body stays opaque, usable only through a pointer;
+    # an interface's fields are requirements, not storage
     for struct in program.structs:
-        if struct.fields is None or struct.params is not None:
+        if struct.fields is None or struct.params is not None or struct.is_interface:
             continue
 
         with source_location(line=struct.line, file=struct.file):
