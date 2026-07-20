@@ -10,8 +10,8 @@ from llvmlite import binding, ir
 
 def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None) -> tuple:
     """
-    Verify an LLVM module against its target — the host, or the triple
-    given — returning the target machine and the module round-tripped
+    Verify an LLVM module against its target - the host, or the triple
+    given - returning the target machine and the module round-tripped
     through the LLVM binding.
 
     An optimization level above 0 runs LLVM's standard pass pipeline over

@@ -58,8 +58,8 @@ def test_defaults_on_methods_and_constructors(run):
 
 def test_a_default_needs_the_declaring_files_view_only(tmp_path, monkeypatch):
     """
-    A default referencing the declaring file's own names — a '@const', a
-    '@static' global — still fills a call in a file that sees neither.
+    A default referencing the declaring file's own names - a '@const', a
+    '@static' global - still fills a call in a file that sees neither.
     """
     from tests.cli.test_cli import run_cli
 

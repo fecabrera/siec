@@ -75,7 +75,7 @@ def resolve_enum(gen: CodeGenerator, name: str) -> str:
     """
     The registered name an enum spelling reaches: a dotted one through
     the file's module bindings, a member-imported one through its
-    binding, and a plain one held to the file's view — like any type.
+    binding, and a plain one held to the file's view - like any type.
     """
     if "." in name:
         member = gen.resolve_qualified(name.split("."))

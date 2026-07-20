@@ -1,4 +1,4 @@
-"""siec — a minimal compiler for the Sie language.
+"""siec - a minimal compiler for the Sie language.
 
 Pipeline: lexer -> parser -> codegen -> backend.
 

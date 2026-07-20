@@ -100,8 +100,8 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
 
     A checked expansion holds written names to the file's view: a dotted
     name resolves through its module binding, and an unqualified one must
-    be visible here. Names the compiler carries itself — inferred types,
-    substituted generics — expand unchecked.
+    be visible here. Names the compiler carries itself - inferred types,
+    substituted generics - expand unchecked.
     """
     if name is None:
         return None

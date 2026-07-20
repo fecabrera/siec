@@ -78,7 +78,7 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         substitute_types(instance, dict(zip(template.receiver_params, args)))
 
         # a still-generic method waits for its own arguments; a concrete
-        # one declares and queues like any instantiation — either way its
+        # one declares and queues like any instantiation - either way its
         # substituted types mix files' names, so no view gates them
         if instance.type_params is not None:
             gen.generic_functions[symbol] = instance
@@ -116,8 +116,8 @@ def qualified_method(gen: CodeGenerator, name: str) -> str | None:
     Resolve a written 'S::m' callee: the receiver type expands like any
     written type (aliases, visibility), the method resolves on the result.
 
-    A name that is already a resolved symbol — one a receiver's carried
-    type stamped — is its own answer, unexpanded: the receiver picked
+    A name that is already a resolved symbol - one a receiver's carried
+    type stamped - is its own answer, unexpanded: the receiver picked
     the method, no file's view gates it.
     """
     from siec.codegen.aliases import expand_alias
@@ -222,7 +222,7 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
 
 def constructor_type(gen: CodeGenerator, call, symbol: str | None) -> str | None:
     """
-    The struct type a 'S(...)' call constructs — through aliases and
+    The struct type a 'S(...)' call constructs - through aliases and
     generic arguments alike; None when the name isn't a type's.
     """
     from siec.codegen.aliases import expand_alias
@@ -251,7 +251,7 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
                      scope: dict, as_address: bool = False):
     """
     Emit 'S(args)': stack space for an instance, its field defaults, then
-    'S::init(self, args...)' — the expression form of
+    'S::init(self, args...)' - the expression form of
     'let s: S; s.init(args...);', yielding the instance.
     """
     from siec.codegen.calls import emit_argument

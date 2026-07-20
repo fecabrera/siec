@@ -12,8 +12,8 @@ REG = """
 
 def test_volatile_marks_every_access(compile_source):
     """
-    Reads and writes of a volatile struct — whole values, fields, and
-    through pointers — all carry the volatile flag.
+    Reads and writes of a volatile struct - whole values, fields, and
+    through pointers - all carry the volatile flag.
     """
     module = str(compile_source(REG + """
     fn main() -> i32 {

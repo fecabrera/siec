@@ -65,7 +65,7 @@ def parse_struct(ts: TokenStream) -> Struct:
         ts.expect("sym", ">")
 
     # a ';' in place of a body is a forward declaration, leaving the fields
-    # to a later definition — or to none, for an opaque struct
+    # to a later definition - or to none, for an opaque struct
     if ts.peek().value == ";":
         ts.next()
         return Struct(name, None, packed, align, volatile, is_union,

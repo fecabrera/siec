@@ -439,7 +439,7 @@ def test_methods_resolve_on_carried_foreign_types(tmp_path, monkeypatch):
             info.fill();
 
             // dotted-chain form, and an indexed receiver in argument
-            // position — both resolve on the carried 'List<...>' type
+            // position - both resolve on the carried 'List<...>' type
             let n = info.items.size();
             if (n != 1) { return 1; }
             return check(info.items.data[0].size()) - 3;

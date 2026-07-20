@@ -115,7 +115,7 @@ def close_angle(ts: TokenStream) -> None:
 def parse_size(ts: TokenStream) -> str:
     """
     Parse an array size as its canonical text: a constant integer
-    expression — literals, '@const' names, 'sizeof', or any mix. A plain
+    expression - literals, '@const' names, 'sizeof', or any mix. A plain
     literal normalizes to decimal, so '[0x10]' and '[16]' agree; anything
     else keeps its tokens for codegen to evaluate.
     """

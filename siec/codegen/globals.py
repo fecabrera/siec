@@ -66,7 +66,7 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
                 var.linkage = "external"
 
             # a sized array declares an 'X[]', the size only directing its
-            # backing — the same canonical type a local declaration records
+            # backing - the same canonical type a local declaration records
             sie_type = glob.type
             if (sized := sized_array(strip_const(sie_type))) is not None:
                 sie_type = f"const {sized[0]}" if is_const(sie_type) else sized[0]

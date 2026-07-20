@@ -36,8 +36,8 @@ def format_error(source_name: str, error: Exception) -> str:
     """
     Render a compile error as '<source> at line <n>: <message>' when a line is known.
 
-    The source names the file the error came from — an included file when the
-    error carries one — falling back to the command-line source otherwise.
+    The source names the file the error came from - an included file when the
+    error carries one - falling back to the command-line source otherwise.
     """
     message = str(error)
 

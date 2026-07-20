@@ -103,8 +103,8 @@ def union_storage(gen: CodeGenerator, field_types: list) -> list:
     type, padded with bytes up to the size of its largest.
 
     A scalar dominant backs the union directly. An aggregate one carries
-    padding, and in a union those padding bytes are live — another
-    member's value sits in them — but a value copy of a struct moves its
+    padding, and in a union those padding bytes are live - another
+    member's value sits in them - but a value copy of a struct moves its
     fields, not its padding. Aggregate-led unions store as an array of
     alignment-sized integers instead, so every byte survives a copy.
     """

@@ -92,8 +92,8 @@ def test_result_flows_through_generics_and_methods(run):
 def test_ok_and_error_construct_results(run):
     """
     The builtin 'Ok'/'Error' constructors build Results, their type
-    arguments driven by the expected type — a return, an annotated let,
-    an argument — or spelled explicitly; the count picks the overload.
+    arguments driven by the expected type - a return, an annotated let,
+    an argument - or spelled explicitly; the count picks the overload.
     """
     source = """
     fn divide(a: i32, b: i32) -> Result<i32, u8> {

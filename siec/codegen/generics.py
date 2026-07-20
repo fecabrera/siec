@@ -1,8 +1,8 @@
 """Monomorphization of generics.
 
 A 'struct S<T>' or 'fn f<T>' declaration registers a template; each
-concrete spelling — 'S<i32>' in a type position, 'f(x)' or 'f<i32>(x)'
-at a call — stamps out a real struct or function under its canonical
+concrete spelling - 'S<i32>' in a type position, 'f(x)' or 'f<i32>(x)'
+at a call - stamps out a real struct or function under its canonical
 name, so every use of the same arguments shares one instantiation.
 """
 
@@ -258,8 +258,8 @@ def unify(pattern: str | None, concrete: str | None,
     Match a parameter's type pattern against an argument's concrete type,
     binding each type parameter the pattern names.
 
-    Structural mismatches bind nothing — argument coercion reports them
-    with the instantiated types — but two arguments demanding different
+    Structural mismatches bind nothing - argument coercion reports them
+    with the instantiated types - but two arguments demanding different
     bindings for one parameter conflict here.
     """
     if pattern is None or concrete is None:
@@ -304,7 +304,7 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
                          expected: str | None = None) -> list:
     """
     The type arguments of a generic call: the explicit '<...>' list, or
-    each parameter's pattern unified with its argument's type — the
+    each parameter's pattern unified with its argument's type - the
     expected result type driving inference where arguments cannot:
     'return Ok(v);' binds V and E from the declared return type.
     """
@@ -367,8 +367,8 @@ def accepts_arity(template, count: int) -> bool:
 def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
                       expected: str | None = None) -> tuple:
     """
-    Resolve a call against a generic function's templates — arity
-    overloads included — returning the winning template and its type
+    Resolve a call against a generic function's templates - arity
+    overloads included - returning the winning template and its type
     arguments. The call's shape filters the candidates; the first that
     resolves wins.
     """

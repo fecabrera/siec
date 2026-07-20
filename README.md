@@ -32,7 +32,7 @@ siec main.sie libfoo.a -o main
 - `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise.
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
 - `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form, including executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
-- `-g` emits DWARF debug info, cc-style: every instruction maps to its source line, and every function, parameter, and variable is described with its type. A `-g` build debugs at source level in lldb or gdb — breakpoints by file and line, stepping, `bt` with Sie lines, and `frame variable` showing struct fields, arrays as their `{data, length}` pair, and unions. Debug at `-O0`, where nothing is reordered; on macOS, keep the `.o` the build leaves next to the executable, since the debugger reads the DWARF from it.
+- `-g` emits DWARF debug info, cc-style: every instruction maps to its source line, and every function, parameter, and variable is described with its type. A `-g` build debugs at source level in lldb or gdb: breakpoints by file and line, stepping, `bt` with Sie lines, and `frame variable` showing struct fields, arrays as their `{data, length}` pair, and unions. Debug at `-O0`, where nothing is reordered; on macOS, keep the `.o` the build leaves next to the executable, since the debugger reads the DWARF from it.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
 - `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as the JIT runs in-process.
@@ -83,7 +83,7 @@ A module offers every one of its top-level declarations except its `@static` one
 
 An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
 
-Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position — `let pkg: package.Package;`, `shapes.Box<i32>`, casts and `sizeof` included — or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types *inferred* across the boundary — a call's return type, say — flow without their module's name in view.
+Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types *inferred* across the boundary (a call's return type, say) flow without their module's name in view.
 
 #### Include
 
@@ -664,7 +664,7 @@ greet("sie");       // times is 1
 greet("sie", 3);
 ```
 
-Only the last parameters can carry defaults — they fill a call's omitted trailing arguments, so a parameter after a defaulted one needs a default too.
+Only the last parameters can carry defaults: they fill a call's omitted trailing arguments, so a parameter after a defaulted one needs a default too.
 
 The default is any expression, evaluated at each call as if written there, but resolved in the declaring file: it can reference that file's constants, globals, and functions without the caller importing them. [Methods](#methods) take defaults the same way, from either call form, and a [constructor](#constructors) fills `init`'s:
 
@@ -698,20 +698,20 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
                        // that can be replaced by any concrete types at compile time
 ```
 
-A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments — `identity(n)` on an `i32` compiles `identity<i32>` — by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
+A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments (`identity(n)` on an `i32` compiles `identity<i32>`) by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
 
-In a typed context — a declared return type, an annotated `let`, an argument's parameter — the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:
+In a typed context (a declared return type, an annotated `let`, an argument's parameter) the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:
 
 ```
 let p = empty<i32>();
 let x = identity<i64>(5);
 ```
 
-Same-named generic functions with different type-parameter counts coexist, like [generic structs](#generic-structs) of different arities: the call's shape — its explicit `<...>` count, its argument count, and what resolves — picks the template.
+Same-named generic functions with different type-parameter counts coexist, like [generic structs](#generic-structs) of different arities: the call's shape (its explicit `<...>` count, its argument count, and what resolves) picks the template.
 
-Generic functions may recurse and call one another, and their return types may name generic structs (`fn make<T>(t: T) -> Box<T>`). The same modifier rule as [generic structs](#generic-structs) applies to type arguments, and a template nobody calls compiles to nothing. `@extern` functions cannot be generic — they name one foreign symbol.
+Generic functions may recurse and call one another, and their return types may name generic structs (`fn make<T>(t: T) -> Box<T>`). The same modifier rule as [generic structs](#generic-structs) applies to type arguments, and a template nobody calls compiles to nothing. `@extern` functions cannot be generic: they name one foreign symbol.
 
-A generic function also works as a [function reference](#function-references): `identity<i32>` outside a call is the instance's function value, and a bare generic name bound to a function-typed context — a `fn(...)` annotation, parameter, or [generic alias](#generic-type-aliases) of one — picks its arguments by unifying the template's signature with the target:
+A generic function also works as a [function reference](#function-references): `identity<i32>` outside a call is the instance's function value, and a bare generic name bound to a function-typed context (a `fn(...)` annotation, parameter, or [generic alias](#generic-type-aliases) of one) picks its arguments by unifying the template's signature with the target:
 
 ```
 let g = identity<i32>;             // explicit instance
@@ -1146,7 +1146,7 @@ fn main() {
 }
 ```
 
-A function may also return a reference — `-> &T` — provided it has a reference parameter to derive it from, the receiver usually; returning storage that dies with the call (a local, a parameter's copy) has no reference to give. The `return` takes the value's address, and the call's result reads as the T it aliases, like a reference parameter does: reading copies the value out, while calling a [method](#methods) on it, or returning it along, keeps aliasing the original.
+A function may also return a reference, `-> &T`, provided it has a reference parameter to derive it from, the receiver usually; returning storage that dies with the call (a local, a parameter's copy) has no reference to give. The `return` takes the value's address, and the call's result reads as the T it aliases, like a reference parameter does: reading copies the value out, while calling a [method](#methods) on it, or returning it along, keeps aliasing the original.
 
 ```
 fn List<T>::get(self: &List<T>, index: u64) -> &T {
@@ -1404,9 +1404,9 @@ struct List<T> {
 }
 ```
 
-A bare declaration of a struct with any default starts from its defaults, the undefaulted fields zeroed — `let l: List<i32>;` holds `{null, 0, 8}` — and defaults of nested struct fields cascade. A named aggregate literal fills what it names and defaults the rest (`{ length = 2 }` keeps `data = null`); a positional literal still fills every field. A struct with no defaults anywhere stays uninitialized on a bare declaration, as ever.
+A bare declaration of a struct with any default starts from its defaults, the undefaulted fields zeroed (`let l: List<i32>;` holds `{null, 0, 8}`), and defaults of nested struct fields cascade. A named aggregate literal fills what it names and defaults the rest (`{ length = 2 }` keeps `data = null`); a positional literal still fills every field. A struct with no defaults anywhere stays uninitialized on a bare declaration, as ever.
 
-Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `sizeof` are the natural fits. Union fields take no default — their fields share one storage — and module-level globals keep their zero initialization.
+Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `sizeof` are the natural fits. Union fields take no default, since their fields share one storage, and module-level globals keep their zero initialization.
 
 #### Generic structs
 
@@ -1474,7 +1474,7 @@ d.u.i = 42; // fields chain through like any other
 
 An unnamed type's identity is structural: two spellings with the same fields are one type, so a `struct { x: i32; y: i32; }` local passes to a `struct { x: i32; y: i32; }` parameter directly. They compose everywhere a named type would: locals, aliases, raw arrays, pointers, `sizeof`, and each other.
 
-An unnamed struct or union can also be a member with no name of its own — its fields then hoist into the enclosing struct, C-style, nesting included:
+An unnamed struct or union can also be a member with no name of its own: its fields then hoist into the enclosing struct, C-style, nesting included:
 
 ```
 struct Result {
@@ -1506,7 +1506,7 @@ fn S::method(self: &S) {
 }
 ```
 
-`&self` is sugar for exactly that, spelling the receiver's type for you — `&S<A, B>` included for a [generic struct's](#methods-of-a-generic-struct) methods:
+`&self` is sugar for exactly that, spelling the receiver's type for you, `&S<A, B>` included for a [generic struct's](#methods-of-a-generic-struct) methods:
 
 ```
 fn S::method(&self) {
@@ -1514,7 +1514,7 @@ fn S::method(&self) {
 }
 ```
 
-If the method does not mutate the instance, the receiver should be declared `self: const &S` — or `const &self` — instead, so it can also be called on a `const S`. Calling a mutating method (`self: &S`) on a `const` instance is an error.
+If the method does not mutate the instance, the receiver should be declared `self: const &S` (or `const &self`) instead, so it can also be called on a `const S`. Calling a mutating method (`self: &S`) on a `const` instance is an error.
 
 ```
 fn S::read(const &self) -> T {
@@ -1535,7 +1535,7 @@ Or simply by:
 s.method();
 ```
 
-The receiver may be any expression, not just a name: a field chain, an indexed element, or another call's result — `self.items.get(i).init(n)` chains through a [reference return](#references).
+The receiver may be any expression, not just a name: a field chain, an indexed element, or another call's result: `self.items.get(i).init(n)` chains through a [reference return](#references).
 
 #### Constructors
 
@@ -1546,7 +1546,7 @@ let s: S;
 s.init(args...);
 ```
 
-Being an expression, it works anywhere a value does — bound, passed, or chained:
+Being an expression, it works anywhere a value does (bound, passed, or chained):
 
 ```
 let lst = List<String>();   // a generic struct spells its arguments
@@ -1585,7 +1585,7 @@ fn List<T>::from_array(arr: const T[]) -> List<T> {
 }
 ```
 
-It is called through the type — `S::method(args...)`, a generic struct spelling its arguments, `S<A, B>::method(args...)` — or through an instance, which passes nothing extra either way:
+It is called through the type (`S::method(args...)`, with a generic struct spelling its arguments: `S<A, B>::method(args...)`) or through an instance, which passes nothing extra either way:
 
 ```
 let lst = List<i32>::from_array(arr);
@@ -1596,7 +1596,7 @@ A [type alias](#type-aliases) reaches them like the type it names. Since `S(args
 
 #### Method references
 
-A bare `S::method` — or `S<A, B>::method` for a generic struct — is a [function reference](#function-references) value. An instance method's reference takes the receiver as an ordinary `&S` first argument; a static's takes only its own.
+A bare `S::method` (or `S<A, B>::method` for a generic struct) is a [function reference](#function-references) value. An instance method's reference takes the receiver as an ordinary `&S` first argument; a static's takes only its own.
 
 ```
 let read = Counter::value;      // fn(const &Counter) -> i32
@@ -1732,7 +1732,7 @@ fn Error<V, E>(e: E) -> Result<V, E>; // ok = false, error = e
 fn Error<E>(e: E) -> Result<E>;      // ok = false, error = e
 ```
 
-Their type arguments usually come from the expected type — the declared return type, an annotated `let`, or a parameter — since the arguments alone cannot name both `V` and `E`; anywhere else they're spelled explicitly:
+Their type arguments usually come from the expected type (the declared return type, an annotated `let`, or a parameter), since the arguments alone cannot name both `V` and `E`; anywhere else they're spelled explicitly:
 
 ```
 fn divide(a: i32, b: i32) -> Result<i32, MathError> {

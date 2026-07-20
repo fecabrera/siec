@@ -304,7 +304,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             return builder.not_(emit_bool(gen, builder, expr.operand, scope))
 
         # '&' takes the address of an assignable expression: its stack slot;
-        # a reference parameter is not dereferenceable — no address rooted
+        # a reference parameter is not dereferenceable - no address rooted
         # at it may be taken ('&s' and '&s.member' would both leak the
         # caller's storage)
         if expr.op == "&":
@@ -846,7 +846,7 @@ def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,
     from 'from' (default 0) to 'to' (default the array's length).
 
     A slice keeps its base's type, so the context's expected type passes
-    through — it's what gives a literal base its shape.
+    through - it's what gives a literal base its shape.
     """
     base = emit_expression(gen, builder, expr.base, expected_type, scope)
     if not is_array_struct(base.type):

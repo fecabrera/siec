@@ -1,7 +1,7 @@
 """Type analysis of expressions: Sie types, signedness, and numeric classes.
 
-Everything here answers questions about expressions — what type is this,
-how does it classify — without emitting any IR.
+Everything here answers questions about expressions - what type is this,
+how does it classify - without emitting any IR.
 """
 
 from llvmlite import ir

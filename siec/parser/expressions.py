@@ -316,9 +316,9 @@ def parse_type_arguments(ts: TokenStream,
                          followers: tuple = ("(",)) -> list[str] | None:
     """
     Speculatively parse the '<A, B>' of a generic call or reference,
-    which must land directly on one of the follower tokens — a call's
+    which must land directly on one of the follower tokens - a call's
     '(', or an expression terminator for a bare 'f<i32>' reference.
-    Anything else — a '<' that reads as a comparison — rewinds the
+    Anything else - a '<' that reads as a comparison - rewinds the
     stream untouched and returns None.
     """
     from siec.parser.types import close_angle, parse_type

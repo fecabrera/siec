@@ -1,6 +1,6 @@
 """Shared fixtures for backend feature tests: source text through the whole pipeline.
 
-Each test hands over Sie source and observes the result — the program's exit
+Each test hands over Sie source and observes the result - the program's exit
 code and output, or the compile-time error the source is expected to raise.
 The CLI and include loader are deliberately left out; source goes straight
 through lex, parse, codegen, and the backend.

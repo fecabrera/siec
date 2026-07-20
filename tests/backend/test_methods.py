@@ -177,7 +177,7 @@ def test_static_methods(run):
 def test_amp_self_receiver_sugar(run):
     """
     '&self' opens a method's parameters as sugar for 'self: &S', and
-    'const &self' for 'self: const &S' — generic receivers included.
+    'const &self' for 'self: const &S' - generic receivers included.
     """
     source = """
     struct Counter { count: i32; }
@@ -361,7 +361,7 @@ def test_assignment_through_a_reference_return(run, compile_source):
 def test_constructors_build_and_init(run, compile_source):
     """
     'S(args)' is the expression form of 'let s: S; s.init(args);': stack
-    space, field defaults, then init — usable anywhere, arguments and
+    space, field defaults, then init - usable anywhere, arguments and
     method chains included.
     """
     source = """

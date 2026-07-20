@@ -25,7 +25,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     A '&T'-returning callee yields the T's address: reading the call
     loads through it, while 'as_address' keeps the address itself, for
-    lvalue use — member assignment, or a method's receiver.
+    lvalue use - member assignment, or a method's receiver.
     """
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression

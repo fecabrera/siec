@@ -80,7 +80,7 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
     Run deferred statements along the current path: innermost frame first,
     each frame in reverse, last deferred first.
 
-    The frames stay in place — other paths out of the same scopes flush
+    The frames stay in place - other paths out of the same scopes flush
     their own copies.
     """
     gen.flushing_defers += 1

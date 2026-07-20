@@ -169,7 +169,7 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     'const T' is a contract, not a type: a mutable T passes as const T freely,
     but an aliasing const value (a pointer or array) never passes where a
-    mutable one is expected — only an explicit cast sheds the contract.
+    mutable one is expected - only an explicit cast sheds the contract.
     """
     # deferred import: coercion and expressions are mutually recursive
     from siec.codegen.expressions import (

@@ -142,8 +142,8 @@ class CodeGenerator:
         # stamped alongside each 'S<args>' instantiation on first call
         self.generic_methods: dict = {}
 
-        # nonzero while expanding names the compiler wrote itself —
-        # substituted generics — which no file's view should gate
+        # nonzero while expanding names the compiler wrote itself
+        # (substituted generics), which no file's view should gate
         self.ungated_types = 0
 
         # the enclosing block expressions' (slot, end block, Sie type, defer
@@ -291,7 +291,7 @@ class CodeGenerator:
 
 # builtin declarations every program starts from: 'Result<V, E>' holds a
 # value or an error behind its 'ok' tag, 'Result<E>' only the error, and
-# 'Ok'/'Error' construct them — usually inferred from the expected type
+# 'Ok'/'Error' construct them - usually inferred from the expected type
 PRELUDE = """
 struct Result<V, E> {
     ok: bool;
@@ -384,7 +384,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     gen.builtin_names.update(("Result", "Ok", "Error"))
 
-    # first pass: register the named declarations — aliases first so every
+    # first pass: register the named declarations - aliases first so every
     # later type annotation expands through them, constants next so enum
     # values can reference them, then the '@if' conditions, which those
     # constants decide, splicing in the chosen declarations; enums next so
