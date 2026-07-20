@@ -191,4 +191,11 @@ def link(obj_paths: list[str], output: str, libs: list[str] = (),
     against the named libraries, searched in the given directories.
     """
     flags = [f"-L{d}" for d in lib_dirs] + [f"-l{name}" for name in libs]
-    subprocess.run(["cc", *obj_paths, "-o", output, *flags], check=True)
+    try:
+        process = subprocess.run(["cc", *obj_paths, "-o", output, *flags])
+    except FileNotFoundError:
+        raise OSError("no 'cc' on this system to link with") from None
+
+    # the linker has already reported its own errors on stderr
+    if process.returncode != 0:
+        raise OSError("linking failed")

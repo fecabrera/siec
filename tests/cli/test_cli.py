@@ -405,6 +405,23 @@ def test_links_against_libraries(tmp_path, monkeypatch):
     assert subprocess.run([str(exe)], env=env).returncode == 33
 
 
+def test_link_failure_reports_cleanly(tmp_path, capsys, monkeypatch):
+    """
+    A failed link exits with a one-line diagnostic, not a traceback; the
+    linker's own error report precedes it on stderr.
+    """
+    source = """\
+    fn main() -> i32 { return 0; }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, "-l", "no-such-library-anywhere", "-o", exe) == 1
+    assert "siec: linking failed" in capsys.readouterr().err
+
+
 def test_run_jits_the_program(tmp_path, monkeypatch):
     """
     --run executes the program in-process and returns its exit code.

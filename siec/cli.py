@@ -155,5 +155,11 @@ def main() -> int:
     output = opts.output or "a.out"
     obj_path = output + ".o"
     compile_to_object(module, obj_path, opts.opt, opts.target)
-    link([obj_path, *objects], output, opts.libs, opts.lib_dirs)
+
+    try:
+        link([obj_path, *objects], output, opts.libs, opts.lib_dirs)
+    except OSError as error:
+        print(f"siec: {error}", file=sys.stderr)
+        return 1
+
     return 0
