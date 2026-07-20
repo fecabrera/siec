@@ -34,7 +34,16 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # through the file's module bindings; a scoped receiver shadows any
     # module prefix
     receiver = None
-    if "." in call.name:
+    if "::" in call.name:
+        # 'S::method(s)' passes its receiver explicitly, and a static's
+        # arguments pass as-is; the type name resolves like any written
+        # type, so it may carry dotted generic arguments
+        symbol = qualified_method(gen, call.name)
+        if symbol is None:
+            base = call.name.partition("::")[0]
+            raise NameError(f"type {base!r} has no method "
+                            f"{call.name.partition('::')[2]!r}")
+    elif "." in call.name:
         symbol = None
         if call.name.split(".", 1)[0] in scope:
             if (found := method_call(gen, call, scope)) is not None:
@@ -51,14 +60,6 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
         if receiver is None and symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope, symbol)
-    elif "::" in call.name:
-        # 'S::method(s)' passes its receiver explicitly; the type name
-        # resolves like any written type
-        symbol = qualified_method(gen, call.name)
-        if symbol is None:
-            base = call.name.partition("::")[0]
-            raise NameError(f"type {base!r} has no method "
-                            f"{call.name.partition('::')[2]!r}")
     else:
         # a name in scope is always in view; anything else must be visible
         # to this file: an imported module's names need their qualified

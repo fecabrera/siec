@@ -105,15 +105,16 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a method call on a receiver expression types like the qualified
     # call it resolves to, the receiver joining the arguments
     if isinstance(expr, MethodCall):
-        from siec.codegen.methods import resolve_method
+        from siec.codegen.methods import resolve_method, takes_receiver
 
         symbol = resolve_method(gen, expr_sie_type(gen, expr.receiver, scope),
                                 expr.method)
         if symbol is None:
             return None
 
-        return expr_sie_type(
-            gen, Call(symbol, [expr.receiver, *expr.args], expr.type_args), scope)
+        args = ([expr.receiver, *expr.args] if takes_receiver(gen, symbol)
+                else expr.args)
+        return expr_sie_type(gen, Call(symbol, args, expr.type_args), scope)
 
     if isinstance(expr, Call):
         # a call through a function reference yields the reference's return type
@@ -121,7 +122,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             return fn_type_parts(strip_const(scope[expr.name].type))[1]
 
         call = expr
-        if "::" in expr.name and "." not in expr.name:
+        if "::" in expr.name:
             # 'S::m(s)' names a method through its receiver type
             from siec.codegen.methods import qualified_method
 
@@ -141,7 +142,9 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
                 if "." in expr.name and (found := method_call(gen, expr, scope)):
                     symbol, receiver = found
-                    call = Call(expr.name, [receiver, *expr.args], expr.type_args)
+                    if receiver is not None:
+                        call = Call(expr.name, [receiver, *expr.args],
+                                    expr.type_args)
 
         # a generic call's return type comes from its resolved arguments,
         # without instantiating; an unresolvable call has no type yet
@@ -342,7 +345,7 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
 
             return None
 
-        if "." in expr.name:
+        if "." in expr.name and "::" not in expr.name:
             symbol = gen.resolve_qualified(expr.name.split("."))
             if symbol is None:
                 # a dotted method call may still name a real, void method

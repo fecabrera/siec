@@ -252,13 +252,40 @@ def parse_primary(ts: TokenStream) -> Expr:
 
             return parse_postfix(ts, EnumMember(tok.value, member))
 
-        # '<A, B>(' spells a generic call's type arguments; landing on an
-        # expression terminator instead makes it a bare reference to the
-        # instance; any other '<' stays a comparison
+        # '<A, B>(' spells a generic call's type arguments; '<A, B>::' a
+        # generic type's qualified method; landing on an expression
+        # terminator instead makes it a bare reference to the instance;
+        # any other '<' stays a comparison
         type_args = None
         if ts.peek().syntax == "<":
             type_args = parse_type_arguments(
-                ts, followers=("(", ";", ",", ")", "]", "}"))
+                ts, followers=("(", ";", ",", ")", "]", "}", "::"))
+
+        # 'S<T>::method(...)' calls through the generic instance, the
+        # type arguments joining the receiver type's name
+        if type_args is not None and ts.peek().syntax == "::":
+            ts.next()
+            member = ts.expect("ident").value
+            name = f"{tok.value}<{','.join(type_args)}>::{member}"
+
+            method_args = None
+            if ts.peek().syntax == "<":
+                method_args = parse_type_arguments(ts)
+
+            if method_args is None and ts.peek().syntax != "(":
+                raise SyntaxError(f"line {tok.line}: expected a call "
+                                  f"on {name!r}")
+            ts.next()
+
+            args = []
+            while ts.peek().syntax != ")":
+                if args:
+                    ts.expect("sym", ",")
+
+                args.append(parse_expression(ts))
+            ts.expect("sym", ")")
+
+            return parse_postfix(ts, Call(name, args, method_args))
 
         if type_args is not None and ts.peek().syntax != "(":
             return parse_postfix(ts, Var(tok.value, type_args=type_args))

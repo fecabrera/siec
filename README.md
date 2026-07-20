@@ -1522,6 +1522,27 @@ fn S::method(self: &S, a: A, b: B) {
 }
 ```
 
+#### Static methods
+
+A method whose first parameter is not its receiver is a static method: it belongs to the type, and no instance joins its arguments.
+
+```
+fn List<T>::from_array(arr: const T[]) -> List<T> {
+    let lst = List<T>(arr.length);
+    lst.append(arr);
+    return lst;
+}
+```
+
+It is called through the type — `S::method(args...)`, a generic struct spelling its arguments, `S<A, B>::method(args...)` — or through an instance, which passes nothing extra either way:
+
+```
+let lst = List<i32>::from_array(arr);
+let cpy = lst.from_array(other);
+```
+
+A [type alias](#type-aliases) reaches them like the type it names. Since `S(args)` passes the instance as `init`'s receiver, a static `init` leaves the type without a [constructor](#constructors).
+
 #### Generic methods
 
 Just like functions, methods can be generic when they declare an arbitrary number of placeholder types `A`, `B`, ... after their name, enclosed by `<>` and separated by commas.

@@ -1,8 +1,10 @@
 """Resolution of struct methods.
 
-A method is a function named 'S::m' whose first parameter is its '&S'
-(or 'const &S') receiver. 'S::method(s)' calls it like any function;
-'s.method()' passes the receiver implicitly. A generic struct's methods
+A method is a function named 'S::m'. One whose first parameter is its
+'&S' (or 'const &S') receiver is an instance method: 'S::method(s)'
+calls it like any function, and 's.method()' passes the receiver
+implicitly. Any other first parameter makes it static: no instance
+joins the arguments, from either spelling. A generic struct's methods
 are templates, stamped per instantiation like the struct itself.
 """
 
@@ -27,15 +29,6 @@ def register_method(gen: CodeGenerator, fn) -> None:
     from siec.codegen.generics import register_generic_function
 
     with source_location(line=fn.line, file=fn.file):
-        expected = fn.receiver
-        if fn.receiver_params is not None:
-            expected += f"<{','.join(fn.receiver_params)}>"
-
-        first = fn.params[0].type if fn.params else None
-        if strip_const(first) != f"&{expected}":
-            raise TypeError(f"a method's first parameter must be its "
-                            f"receiver: '&{expected}' or 'const &{expected}'")
-
         if fn.receiver_params is not None:
             if fn.body is None and fn.asm is None:
                 raise TypeError(f"method {fn.name!r} needs a body: there is "
@@ -103,6 +96,21 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     return symbol
 
 
+def takes_receiver(gen: CodeGenerator, symbol: str) -> bool:
+    """
+    Whether a resolved method's first parameter is its receiver; a static
+    method has none, and its calls pass no instance.
+    """
+    base = symbol.partition("::")[0]
+    if (template := gen.generic_functions.get(symbol)) is not None:
+        first = template.params[0].type if template.params else None
+    else:
+        params = gen.param_types.get(symbol, ())
+        first = params[0] if params else None
+
+    return first is not None and strip_const(first) == f"&{base}"
+
+
 def qualified_method(gen: CodeGenerator, name: str) -> str | None:
     """
     Resolve a written 'S::m' callee: the receiver type expands like any
@@ -136,7 +144,8 @@ def method_call(gen: CodeGenerator, call: Call, scope: dict) -> tuple | None:
     if symbol is None:
         return None
 
-    return symbol, receiver
+    # a static reached through an instance takes no receiver argument
+    return symbol, (receiver if takes_receiver(gen, symbol) else None)
 
 
 def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
@@ -153,6 +162,14 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
     if symbol is None:
         raise TypeError(f"type {receiver_type or '?'} has no method "
                         f"{expr.method!r}")
+
+    # a static's receiver expression evaluates only for its effects
+    if not takes_receiver(gen, symbol):
+        from siec.codegen.expressions import emit_expression
+
+        emit_expression(gen, builder, expr.receiver, None, scope)
+        call = Call(symbol, list(expr.args), expr.type_args)
+        return emit_call(gen, builder, call, scope, as_address)
 
     call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
     return emit_call(gen, builder, call, scope, as_address)
@@ -192,8 +209,6 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
     'S::init(self, args...)' — the expression form of
     'let s: S; s.init(args...);', yielding the instance.
     """
-    from llvmlite import ir as llvm
-
     from siec.codegen.calls import emit_argument
     from siec.codegen.expressions import default_value
     from siec.codegen.generator import entry_alloca
@@ -212,6 +227,10 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
     if symbol is None:
         raise TypeError(f"type {type_name!r} has no 'init' method to "
                         "construct it")
+
+    if not takes_receiver(gen, symbol):
+        raise TypeError(f"a static 'init' cannot construct {type_name!r}: "
+                        "the constructor passes the instance as its receiver")
 
     if symbol in gen.generic_functions:
         raise TypeError(f"a generic 'init' cannot construct {type_name!r}: "

@@ -126,22 +126,64 @@ def test_generic_methods_infer_and_spell_their_arguments(run):
     assert run(source).returncode == 42
 
 
-def test_bad_receivers_are_rejected(compile_source):
+def test_missing_method_names_itself(compile_source):
     """
-    The first parameter must be the receiver reference, and a missing
-    method names itself.
+    Calling a method the receiver's type does not declare is an error.
     """
-    with pytest.raises(TypeError, match="first parameter must be its "
-                                        "receiver: '&P' or 'const &P'"):
-        compile_source("""
-        struct P { x: i32; }
-        fn P::get(self: P) -> i32 { return self.x; }
-        """)
-
     with pytest.raises(NameError, match="undefined function 'p.missing'"):
         compile_source("""
         struct P { x: i32; }
         fn main() -> i32 { let p: P = { 1 }; return p.missing(); }
+        """)
+
+
+def test_static_methods(run):
+    """
+    A method without a receiver first parameter is static: it is called
+    through the type ('S::m(...)', 'S<T>::m(...)') or through an
+    instance, which joins no arguments either way.
+    """
+    source = """
+    struct Counter { count: i32; }
+    fn Counter::init(self: &Counter, start: i32) { self.count = start; }
+    fn Counter::make(start: i32) -> Counter { return Counter(start + 1); }
+
+    struct Box<T> { value: T; }
+    fn Box<T>::init(self: &Box<T>, value: T) { self.value = value; }
+    fn Box<T>::of(value: T) -> Box<T> { return Box<T>(value); }
+
+    struct Math { pad: i32; }
+    fn Math::max<T>(a: T, b: T) -> T { return a > b ? a : b; }
+
+    @type IntBox = Box<i32>;
+
+    fn main() -> i32 {
+        let a = Counter::make(10);      // qualified static
+        let b = a.make(20);             // static through an instance
+
+        let x = Box<i32>::of(4);        // generic-instance qualified static
+        let y = x.of(2);                // and through an instance
+        let z = IntBox::of(1);          // through an alias
+
+        let m = Math::max(1, 2);        // generic static, inferred
+        // 11 + 21 + 4 + 2 + 1 + 2 + 1
+        return a.count + b.count + x.value + y.value + z.value + m
+               + Math::max<i32>(0, 1) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_static_init_cannot_construct(compile_source):
+    """
+    'S(...)' passes the instance as init's receiver, so a receiverless
+    'init' leaves the type without a constructor.
+    """
+    with pytest.raises(TypeError, match="a static 'init' cannot construct"):
+        compile_source("""
+        struct P { x: i32; }
+        fn P::init(start: i32) -> P { let p: P = { start }; return p; }
+        fn main() -> i32 { let p = P(1); return p.x; }
         """)
 
 
