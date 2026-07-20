@@ -198,19 +198,29 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
 
 def register_generic_function(gen: CodeGenerator, fn) -> None:
     """
-    Register a generic function template, instantiated by its calls.
+    Register a generic function template, instantiated by its calls; a
+    same-named template with a different type-parameter count joins as
+    an arity overload, picked per call.
     """
     with source_location(line=fn.line, file=fn.file):
         if fn.name == "main":
             raise TypeError("'main' cannot be generic: the C runtime "
                             "calls it directly")
 
-        if fn.name in gen.generic_functions:
-            raise TypeError(f"function {fn.name!r} is declared more than once")
-
         if fn.body is None and fn.asm is None:
             raise TypeError(f"generic function {fn.name!r} needs a body: "
                             "there is nothing to declare without one")
+
+        primary = gen.generic_functions.get(fn.name)
+        if primary is not None:
+            overloads = gen.generic_overloads.setdefault(fn.name, [])
+            arities = {len(t.type_params) for t in (primary, *overloads)}
+            if len(fn.type_params) in arities:
+                raise TypeError(f"function {fn.name!r} is declared more "
+                                "than once")
+
+            overloads.append(fn)
+            return
 
         gen.generic_functions[fn.name] = fn
 
@@ -290,10 +300,13 @@ def unify(pattern: str | None, concrete: str | None,
             unify(p, c, type_params, bindings)
 
 
-def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict) -> list:
+def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
+                         expected: str | None = None) -> list:
     """
     The type arguments of a generic call: the explicit '<...>' list, or
-    each parameter's pattern unified with its argument's type.
+    each parameter's pattern unified with its argument's type — the
+    expected result type driving inference where arguments cannot:
+    'return Ok(v);' binds V and E from the declared return type.
     """
     from siec.codegen.aliases import expand_alias
 
@@ -311,9 +324,22 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict) -> lis
     from siec.codegen.inference import infer_type
 
     bindings: dict = {}
+    if expected is not None and template.return_type is not None:
+        unify(template.return_type, expected, template.type_params, bindings)
+
+    # arguments fill what the expected type left unbound; where both
+    # speak, the declared type wins and the argument coerces to it
+    inferred: dict = {}
     for param, arg in zip(template.params, call.args):
-        unify(param.type, infer_type(gen, arg, scope),
-              template.type_params, bindings)
+        try:
+            unify(param.type, infer_type(gen, arg, scope),
+                  template.type_params, inferred)
+        except TypeError:
+            if not bindings:
+                raise
+
+    for name, value in inferred.items():
+        bindings.setdefault(name, value)
 
     missing = [p for p in template.type_params if p not in bindings]
     if missing:
@@ -323,6 +349,54 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict) -> lis
                         f"them explicitly, '{template.name}<...>(...)'")
 
     return [bindings[p] for p in template.type_params]
+
+
+def accepts_arity(template, count: int) -> bool:
+    """
+    Whether a template's parameter list can take a call's argument count,
+    trailing defaults making their parameters optional.
+    """
+    params = template.params
+    required = len(params)
+    while required and params[required - 1].default is not None:
+        required -= 1
+
+    return required <= count and (count <= len(params) or template.var_arg)
+
+
+def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
+                      expected: str | None = None) -> tuple:
+    """
+    Resolve a call against a generic function's templates — arity
+    overloads included — returning the winning template and its type
+    arguments. The call's shape filters the candidates; the first that
+    resolves wins.
+    """
+    candidates = [t for t in (gen.generic_functions.get(symbol),
+                              *gen.generic_overloads.get(symbol, ()))
+                  if t is not None]
+
+    failure = None
+    for template in candidates:
+        if (call.type_args is not None
+                and len(call.type_args) != len(template.type_params)):
+            continue
+
+        if not accepts_arity(template, len(call.args)):
+            continue
+
+        try:
+            return template, resolve_generic_call(gen, template, call, scope,
+                                                  expected)
+        except TypeError as error:
+            failure = failure or error
+
+    if failure is not None:
+        raise failure
+
+    # nothing fit the call's shape: report against the primary template
+    return candidates[0], resolve_generic_call(gen, candidates[0], call,
+                                               scope, expected)
 
 
 def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:

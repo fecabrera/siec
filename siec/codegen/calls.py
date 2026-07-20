@@ -6,7 +6,7 @@ from siec.ast import Call, Expr
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
-from siec.codegen.generics import instantiate_function, resolve_generic_call
+from siec.codegen.generics import instantiate_function, pick_generic_call
 from siec.codegen.methods import method_call, qualified_method
 from siec.codegen.inference import expr_sie_type
 from siec.codegen.types import (
@@ -29,6 +29,10 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     """
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
+
+    # a typed context (a coercion target) may drive a generic callee's
+    # type arguments; captured before any receiver rewrite drops it
+    expected = getattr(call, "expected_type", None)
 
     # a dotted name is a method on its receiver chain, or resolves
     # through the file's module bindings; a scoped receiver shadows any
@@ -78,10 +82,11 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         call = Call(call.name, [receiver, *call.args], call.type_args)
 
     # a generic callee instantiates for this call's type arguments,
-    # explicit or inferred; the instance is the real callee
-    template = gen.generic_functions.get(symbol)
-    if template is not None:
-        type_args = resolve_generic_call(gen, template, call, scope)
+    # explicit, inferred, or driven by the expected result type; the
+    # call's shape picks among arity overloads
+    if gen.generic_functions.get(symbol) is not None:
+        template, type_args = pick_generic_call(gen, symbol, call, scope,
+                                                expected)
         symbol = instantiate_function(gen, template, type_args)
     elif not isinstance(gen.module.globals.get(symbol), ir.Function):
         # no function by this name: 'S(...)' may construct a struct

@@ -210,9 +210,13 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
 
         emit_expression(gen, builder, expr.receiver, None, scope)
         call = Call(symbol, list(expr.args), expr.type_args)
-        return emit_call(gen, builder, call, scope, as_address)
+    else:
+        call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
 
-    call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
+    # a coercion target rides along to drive a generic method's arguments
+    if (context := getattr(expr, "expected_type", None)) is not None:
+        call.expected_type = context
+
     return emit_call(gen, builder, call, scope, as_address)
 
 

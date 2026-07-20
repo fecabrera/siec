@@ -115,6 +115,8 @@ class CodeGenerator:
         # type inference and argument coercion at calls
         self.return_types: dict[str, str | None] = {}
         self.param_types: dict[str, list[str]] = {}
+        # same-named generic templates with other type-parameter counts
+        self.generic_overloads: dict[str, list] = {}
         # per-symbol parameter defaults with the declaring file, whose
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
@@ -288,7 +290,8 @@ class CodeGenerator:
 
 
 # builtin declarations every program starts from: 'Result<V, E>' holds a
-# value or an error behind its 'ok' tag; 'Result<E>' only the error
+# value or an error behind its 'ok' tag, 'Result<E>' only the error, and
+# 'Ok'/'Error' construct them — usually inferred from the expected type
 PRELUDE = """
 struct Result<V, E> {
     ok: bool;
@@ -301,6 +304,33 @@ struct Result<V, E> {
 struct Result<E> {
     ok: bool;
     error: E;
+}
+
+fn Ok<V, E>(v: V) -> Result<V, E> {
+    let r: Result<V, E>;
+    r.ok = true;
+    r.value = v;
+    return r;
+}
+
+fn Ok<E>() -> Result<E> {
+    let r: Result<E>;
+    r.ok = true;
+    return r;
+}
+
+fn Error<V, E>(e: E) -> Result<V, E> {
+    let r: Result<V, E>;
+    r.ok = false;
+    r.error = e;
+    return r;
+}
+
+fn Error<E>(e: E) -> Result<E> {
+    let r: Result<E>;
+    r.ok = false;
+    r.error = e;
+    return r;
 }
 """
 
@@ -351,7 +381,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # in every file's view
     prelude = parse_prelude()
     program.structs = [*prelude.structs, *program.structs]
-    gen.builtin_names.add("Result")
+    program.functions = [*prelude.functions, *program.functions]
+    gen.builtin_names.update(("Result", "Ok", "Error"))
 
     # first pass: register the named declarations — aliases first so every
     # later type annotation expands through them, constants next so enum

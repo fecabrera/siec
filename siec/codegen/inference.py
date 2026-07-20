@@ -149,16 +149,17 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         # a generic call's return type comes from its resolved arguments,
         # without instantiating; an unresolvable call has no type yet
-        template = gen.generic_functions.get(symbol)
-        if template is not None:
-            from siec.codegen.generics import resolve_generic_call, substitute
-
-            if template.return_type is None:
-                return None
+        if gen.generic_functions.get(symbol) is not None:
+            from siec.codegen.generics import pick_generic_call, substitute
 
             try:
-                type_args = resolve_generic_call(gen, template, call, scope)
+                template, type_args = pick_generic_call(
+                    gen, symbol, call, scope,
+                    getattr(expr, "expected_type", None))
             except TypeError:
+                return None
+
+            if template.return_type is None:
                 return None
 
             mapping = dict(zip(template.type_params, type_args))

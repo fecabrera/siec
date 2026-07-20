@@ -6,9 +6,11 @@ from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
     BlockExpr,
+    Call,
     Cast,
     Expr,
     Member,
+    MethodCall,
     Var,
 )
 from siec.codegen.aliases import expand_alias
@@ -26,6 +28,7 @@ from siec.codegen.types import (
     is_const,
     resolve_type,
     strip_const,
+    strip_reference,
 )
 
 
@@ -175,6 +178,11 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         emit_block_expr,
         emit_expression,
     )
+
+    # the target may drive a generic callee's type arguments where its
+    # own cannot: 'let r: Result<i32, u8> = Ok(5);' binds E from the target
+    if isinstance(expr, (Call, MethodCall)) and target_name is not None:
+        expr.expected_type = strip_reference(strip_const(target_name))
 
     source_name = expr_sie_type(gen, expr, scope)
     if (target_name is not None and is_const(source_name) and not is_const(target_name)

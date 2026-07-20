@@ -698,12 +698,16 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
                        // that can be replaced by any concrete types at compile time
 ```
 
-A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments — `identity(n)` on an `i32` compiles `identity<i32>` — by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context. When no argument pins a parameter down (`fn empty<T>() -> T*`), spell the arguments explicitly:
+A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments — `identity(n)` on an `i32` compiles `identity<i32>` — by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
+
+In a typed context — a declared return type, an annotated `let`, an argument's parameter — the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:
 
 ```
 let p = empty<i32>();
 let x = identity<i64>(5);
 ```
+
+Same-named generic functions with different type-parameter counts coexist, like [generic structs](#generic-structs) of different arities: the call's shape — its explicit `<...>` count, its argument count, and what resolves — picks the template.
 
 Generic functions may recurse and call one another, and their return types may name generic structs (`fn make<T>(t: T) -> Box<T>`). The same modifier rule as [generic structs](#generic-structs) applies to type arguments, and a template nobody calls compiles to nothing. `@extern` functions cannot be generic — they name one foreign symbol.
 
@@ -1711,23 +1715,31 @@ struct Result<E> {
 
 `ok` tags which member holds: in `Result<V, E>`, `value` and `error` share one storage through the [unnamed union](#unnamed-structs-and-unions), so the whole result costs one tag plus the larger of the two.
 
+Results are built through the builtin `Ok` and `Error` functions, one pair per `Result` shape:
+
+```
+fn Ok<V, E>(v: V) -> Result<V, E>;   // ok = true, value = v
+fn Ok<E>() -> Result<E>;             // ok = true
+fn Error<V, E>(e: E) -> Result<V, E>; // ok = false, error = e
+fn Error<E>(e: E) -> Result<E>;      // ok = false, error = e
+```
+
+Their type arguments usually come from the expected type — the declared return type, an annotated `let`, or a parameter — since the arguments alone cannot name both `V` and `E`; anywhere else they're spelled explicitly:
+
 ```
 fn divide(a: i32, b: i32) -> Result<i32, MathError> {
-    let r: Result<i32, MathError>;
     if (b == 0) {
-        r.ok = false;
-        r.error = MathError::DIVISION_BY_ZERO;
-        return r;
+        return Error(MathError::DIVISION_BY_ZERO);
     }
-    r.ok = true;
-    r.value = a / b;
-    return r;
+    return Ok(a / b);
 }
 
 let r = divide(10, 2);
 if (r.ok) {
     // r.value holds the quotient; r.error is meaningless here
 }
+
+let e = Error<i32, MathError>(MathError::OVERFLOW); // no context: spelled out
 ```
 
 ## Concepts
