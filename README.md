@@ -1506,10 +1506,18 @@ fn S::method(self: &S) {
 }
 ```
 
-If the method does not mutate the instance, the receiver should be declared `self: const &S` instead, so it can also be called on a `const S`. Calling a mutating method (`self: &S`) on a `const` instance is an error.
+`&self` is sugar for exactly that, spelling the receiver's type for you — `&S<A, B>` included for a [generic struct's](#methods-of-a-generic-struct) methods:
 
 ```
-fn S::read(self: const &S) -> T {
+fn S::method(&self) {
+    // ...
+}
+```
+
+If the method does not mutate the instance, the receiver should be declared `self: const &S` — or `const &self` — instead, so it can also be called on a `const S`. Calling a mutating method (`self: &S`) on a `const` instance is an error.
+
+```
+fn S::read(const &self) -> T {
     // cannot mutate self here
     return t;
 }

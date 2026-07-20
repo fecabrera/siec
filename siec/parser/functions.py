@@ -367,6 +367,27 @@ def parse_function(ts: TokenStream) -> Function:
             var_arg = True
             break
 
+        # '&self' (or 'const &self') opening a method's parameters is
+        # sugar for 'self: &S', the receiver's type spelled for it
+        if (receiver is not None and not params
+                and (ts.peek().syntax == "&" and ts.peek(1).value == "self"
+                     or (ts.peek().value == "const" and ts.peek(1).syntax == "&"
+                         and ts.peek(2).value == "self"))):
+            prefix = ""
+            if ts.peek().value == "const":
+                ts.next()
+                prefix = "const "
+
+            ts.next()  # the '&'
+            ts.next()  # 'self'
+
+            expected = receiver
+            if receiver_params is not None:
+                expected += f"<{','.join(receiver_params)}>"
+
+            params.append(Param("self", f"{prefix}&{expected}"))
+            continue
+
         param_line = ts.peek().line
         param_name = ts.expect("ident").value
         ts.expect("sym", ":")

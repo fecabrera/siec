@@ -174,6 +174,41 @@ def test_static_methods(run):
     assert run(source).returncode == 0
 
 
+def test_amp_self_receiver_sugar(run):
+    """
+    '&self' opens a method's parameters as sugar for 'self: &S', and
+    'const &self' for 'self: const &S' — generic receivers included.
+    """
+    source = """
+    struct Counter { count: i32; }
+    fn Counter::init(&self, start: i32 = 0) { self.count = start; }
+    fn Counter::bump(&self) { self.count += 1; }
+    fn Counter::value(const &self) -> i32 { return self.count; }
+
+    struct List<T> { length: u64; }
+    fn List<T>::init(&self) { self.length = 0; }
+    fn List<T>::push(&self, item: T) { self.length += 1; }
+    fn List<T>::scale<U>(const &self, by: U) -> U {
+        return (self.length as U) * by;
+    }
+
+    fn main() -> i32 {
+        let c = Counter(40);
+        c.bump();
+        c.bump();
+
+        let ro: const Counter = c;      // const receiver on a const instance
+
+        let l = List<i32>();
+        l.push(7);
+        l.push(8);
+
+        return ro.value() + (l.scale(0 as i64) as i32) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_method_references(run):
     """
     A bare 'S::m' or 'S<T>::m' is a function-reference value: an instance
