@@ -272,9 +272,10 @@ def parse_primary(ts: TokenStream) -> Expr:
             if ts.peek().syntax == "<":
                 method_args = parse_type_arguments(ts)
 
+            # without a call, the name is a bare reference to the method
             if method_args is None and ts.peek().syntax != "(":
-                raise SyntaxError(f"line {tok.line}: expected a call "
-                                  f"on {name!r}")
+                return parse_postfix(
+                    ts, EnumMember(f"{tok.value}<{','.join(type_args)}>", member))
             ts.next()
 
             args = []

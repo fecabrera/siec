@@ -397,3 +397,54 @@ def test_enum_members_resolve_through_module_bindings(tmp_path, monkeypatch, cap
     """)
     assert run_cli(monkeypatch, leak, "--run") == 1
     assert "unknown type 'Color'" in capsys.readouterr().err
+
+def test_methods_resolve_on_carried_foreign_types(tmp_path, monkeypatch):
+    """
+    A method resolves on its receiver's carried type even when that
+    type's name is not in the calling file's view: an element of a
+    foreign generic field calls its methods without the caller ever
+    importing the generic struct behind it.
+    """
+    mod = tmp_path / "coll"
+    mod.mkdir()
+    (mod / "list.sie").write_text("""
+        struct List<T> { data: T*; length: u64; }
+        fn List<T>::size(self: &List<T>) -> u64 { return self.length; }
+    """)
+
+    pkg = tmp_path / "pack"
+    pkg.mkdir()
+    (pkg / "info.sie").write_text("""
+        import { List } from coll.list;
+
+        struct Info { items: List<List<u8>>; }
+
+        @static let backing: List<u8>;
+
+        fn Info::fill(self: &Info) {
+            backing.length = 3;
+            self.items.data = &backing;
+            self.items.length = 1;
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { Info } from pack.info;
+
+        fn check(n: u64) -> i32 { return n as i32; }
+
+        fn main() -> i32 {
+            let info: Info;
+            info.fill();
+
+            // dotted-chain form, and an indexed receiver in argument
+            // position — both resolve on the carried 'List<...>' type
+            let n = info.items.size();
+            if (n != 1) { return 1; }
+            return check(info.items.data[0].size()) - 3;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0

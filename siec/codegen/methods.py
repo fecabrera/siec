@@ -115,11 +115,52 @@ def qualified_method(gen: CodeGenerator, name: str) -> str | None:
     """
     Resolve a written 'S::m' callee: the receiver type expands like any
     written type (aliases, visibility), the method resolves on the result.
+
+    A name that is already a resolved symbol — one a receiver's carried
+    type stamped — is its own answer, unexpanded: the receiver picked
+    the method, no file's view gates it.
     """
     from siec.codegen.aliases import expand_alias
 
+    if (name in gen.generic_functions
+            or isinstance(gen.module.globals.get(name), ir.Function)):
+        return name
+
     base, _, method = name.partition("::")
     return resolve_method(gen, expand_alias(gen, base), method)
+
+
+def method_reference(gen: CodeGenerator, expr) -> ir.Function | None:
+    """
+    The function a bare 'S::m' spelling references, when S names a type
+    with that method; the value calls like any function reference, an
+    instance method taking its receiver as an ordinary '&S' argument.
+    """
+    try:
+        symbol = qualified_method(gen, f"{expr.enum}::{expr.member}")
+    except (NameError, TypeError):
+        return None
+
+    func = gen.module.globals.get(symbol) if symbol is not None else None
+    return func if isinstance(func, ir.Function) else None
+
+
+def method_reference_type(gen: CodeGenerator, expr) -> str | None:
+    """
+    The 'fn(...)' type a bare 'S::m' method reference carries; None when
+    the spelling references no concrete method.
+    """
+    try:
+        symbol = qualified_method(gen, f"{expr.enum}::{expr.member}")
+    except (NameError, TypeError):
+        return None
+
+    if symbol is None or symbol not in gen.param_types:
+        return None
+
+    params = ",".join(gen.param_types[symbol])
+    ret = gen.return_types.get(symbol)
+    return f"fn({params})" + (f"->{ret}" if ret else "")
 
 
 def method_call(gen: CodeGenerator, call: Call, scope: dict) -> tuple | None:

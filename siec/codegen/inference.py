@@ -117,9 +117,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         return expr_sie_type(gen, Call(symbol, args, expr.type_args), scope)
 
     if isinstance(expr, Call):
-        # a call through a function reference yields the reference's return type
+        # a call through a function reference yields the reference's return
+        # type, a '&T' return reading as the T it aliases
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
-            return fn_type_parts(strip_const(scope[expr.name].type))[1]
+            return strip_reference(fn_type_parts(strip_const(scope[expr.name].type))[1])
 
         call = expr
         if "::" in expr.name:
@@ -133,7 +134,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
             symbol = gen.resolve_callee(expr.name)
             if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
-                return fn_type_parts(strip_const(gen.globals[symbol]))[1]
+                return strip_reference(fn_type_parts(strip_const(gen.globals[symbol]))[1])
 
             # a dotted callee may be a method on its receiver chain, its
             # receiver joining the arguments for inference
@@ -234,11 +235,26 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         return f"{operand}*" if operand is not None else None
 
     # 'A::member' carries its enum's type name, dotted spellings
-    # resolving to the registered one
+    # resolving to the registered one; an 'S::m' whose base is no enum
+    # types as a reference to the method
     if isinstance(expr, EnumMember):
         from siec.codegen.enums import resolve_enum
 
-        return resolve_enum(gen, expr.enum)
+        try:
+            name, error = resolve_enum(gen, expr.enum), None
+        except (NameError, TypeError) as raised:
+            name, error = None, raised
+
+        if name is None or name not in gen.enums:
+            from siec.codegen.methods import method_reference_type
+
+            if (fn := method_reference_type(gen, expr)) is not None:
+                return fn
+
+        if error is not None:
+            raise error
+
+        return name
 
     # a char literal is exactly a 'char'
     if isinstance(expr, CharLiteral):

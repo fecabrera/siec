@@ -104,6 +104,30 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         raise TypeError("'null' needs a pointer context")
 
     if isinstance(expr, EnumMember):
+        # an 'S::m' whose base is no enum references the method itself
+        try:
+            known_enum = gen.enums.get(resolve_enum(gen, expr.enum)) is not None
+        except (NameError, TypeError):
+            known_enum = False
+
+        if not known_enum:
+            from siec.codegen.methods import method_reference
+
+            if (func := method_reference(gen, expr)) is not None:
+                return func
+
+            # a struct base names its missing method precisely
+            from siec.codegen.aliases import expand_alias
+
+            try:
+                named = strip_const(expand_alias(gen, expr.enum))
+            except (NameError, TypeError):
+                named = None
+
+            if named in gen.structs:
+                raise TypeError(f"type {expr.enum!r} has no method "
+                                f"{expr.member!r}")
+
         # an enum member adopts an integer context like a literal would,
         # defaulting to its enum's backing type
         value = member_value(gen, expr)

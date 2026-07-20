@@ -174,6 +174,51 @@ def test_static_methods(run):
     assert run(source).returncode == 0
 
 
+def test_method_references(run):
+    """
+    A bare 'S::m' or 'S<T>::m' is a function-reference value: an instance
+    method takes its receiver as an ordinary '&S' argument, a static
+    only its own, and a '&T' return loads through like a direct call.
+    """
+    source = """
+    struct Counter { count: i32; }
+    fn Counter::init(self: &Counter, start: i32) { self.count = start; }
+    fn Counter::value(self: const &Counter) -> i32 { return self.count; }
+    fn Counter::twice(n: i32) -> i32 { return n * 2; }
+
+    struct Box<T> { value: T; }
+    fn Box<T>::init(self: &Box<T>, value: T) { self.value = value; }
+    fn Box<T>::get(self: &Box<T>) -> &T { return self.value; }
+
+    fn apply(f: fn(i32) -> i32, n: i32) -> i32 { return f(n); }
+
+    fn main() -> i32 {
+        let c = Counter(10);
+        let read = Counter::value;              // instance method
+        let dbl: fn(i32) -> i32 = Counter::twice;   // static, annotated
+
+        let b = Box<i32>(7);
+        let get = Box<i32>::get;                // reference return
+
+        // 10 + 22 + 6 + 7 - 45 + apply(...) - 0
+        return read(c) + dbl(11) + apply(Counter::twice, 3)
+               + get(b) - 45 + apply(dbl, 0);
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_missing_method_reference_names_the_type(compile_source):
+    """
+    Referencing a method a struct does not declare names both precisely.
+    """
+    with pytest.raises(TypeError, match="type 'S' has no method 'missing'"):
+        compile_source("""
+        struct S { x: i32; }
+        fn main() -> i32 { let f = S::missing; return 0; }
+        """)
+
+
 def test_a_static_init_cannot_construct(compile_source):
     """
     'S(...)' passes the instance as init's receiver, so a receiverless

@@ -219,4 +219,11 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
     args = [emit_argument(gen, builder, arg, sie_params[i], scope)
             for i, arg in enumerate(call.args)]
 
-    return builder.call(callee, args)
+    result = builder.call(callee, args)
+
+    # a reference-returning callee yields the value's address; reading
+    # the call as a value loads through it
+    if is_reference(fn_type_parts(var_type)[1] or ""):
+        return builder.load(result)
+
+    return result

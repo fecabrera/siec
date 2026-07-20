@@ -1543,6 +1543,20 @@ let cpy = lst.from_array(other);
 
 A [type alias](#type-aliases) reaches them like the type it names. Since `S(args)` passes the instance as `init`'s receiver, a static `init` leaves the type without a [constructor](#constructors).
 
+#### Method references
+
+A bare `S::method` — or `S<A, B>::method` for a generic struct — is a [function reference](#function-references) value. An instance method's reference takes the receiver as an ordinary `&S` first argument; a static's takes only its own.
+
+```
+let read = Counter::value;      // fn(const &Counter) -> i32
+let dbl = Counter::twice;       // a static: fn(i32) -> i32
+
+read(c);
+apply(Counter::twice, 5);       // passed like any function reference
+```
+
+A method with its own generic parameters has no bare reference: there is no single function to refer to.
+
 #### Generic methods
 
 Just like functions, methods can be generic when they declare an arbitrary number of placeholder types `A`, `B`, ... after their name, enclosed by `<>` and separated by commas.
