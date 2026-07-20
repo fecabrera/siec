@@ -55,21 +55,21 @@ def test_generic_interfaces(run):
     generic struct, consumed through an 'Iterator<i32>' parameter.
     """
     source = """
-    interface Iterator<T>;
+    interface Cursor<T>;
 
-    fn Iterator<T>::next(self: &Iterator<T>, value: &T) -> bool;
+    fn Cursor<T>::next(self: &Cursor<T>, value: &T) -> bool;
 
-    struct ArrayIterator<T>: Iterator<T> {
+    struct ArrayCursor<T>: Cursor<T> {
         arr: T[];
         index: u64;
     }
 
-    fn ArrayIterator<T>::init(&self, arr: T[]) {
+    fn ArrayCursor<T>::init(&self, arr: T[]) {
         self.arr = arr;
         self.index = 0;
     }
 
-    fn ArrayIterator<T>::next(&self, value: &T) -> bool {
+    fn ArrayCursor<T>::next(&self, value: &T) -> bool {
         if (self.index >= self.arr.length) {
             return false;
         }
@@ -78,7 +78,7 @@ def test_generic_interfaces(run):
         return true;
     }
 
-    fn sum(it: Iterator<i32>) -> i32 {
+    fn sum(it: Cursor<i32>) -> i32 {
         let total = 0;
         let v: i32;
         while (it.next(v)) {
@@ -89,11 +89,138 @@ def test_generic_interfaces(run):
 
     fn main() -> i32 {
         let nums: i32[] = [10, 12, 20];
-        let it = ArrayIterator<i32>(nums);
+        let it = ArrayCursor<i32>(nums);
         return sum(it) - 42;
     }
     """
     assert run(source).returncode == 0
+
+
+def test_builtin_iterator_interface(run):
+    """
+    'Iterator<T>' is builtin: 'has_next' and 'next() -> &T' required of
+    implementers, no declaration or import needed, and 'next' aliases
+    the underlying storage like any reference return.
+    """
+    source = """
+    struct ArrayIterator<T>: Iterator<T> {
+        arr: T[];
+        index: u64;
+    }
+
+    fn ArrayIterator<T>::init(&self, arr: T[]) {
+        self.arr = arr;
+        self.index = 0;
+    }
+
+    fn ArrayIterator<T>::has_next(&self) -> bool {
+        return self.index < self.arr.length;
+    }
+
+    fn ArrayIterator<T>::next(&self) -> &T {
+        self.index += 1;
+        return self.arr[self.index - 1];
+    }
+
+    fn sum(it: Iterator<i32>) -> i32 {
+        let total = 0;
+        while (it.has_next()) {
+            total += it.next();
+        }
+        return total;
+    }
+
+    fn main() -> i32 {
+        let nums: i32[] = [10, 12, 20];
+        let it = ArrayIterator<i32>(nums);
+        if (sum(it) != 42) { return 1; }
+
+        let again = ArrayIterator<i32>(nums);
+        again.next() = 5;                    // the reference assigns through
+        if (nums[0] != 5) { return 2; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_builtin_iterable_interface(run):
+    """
+    'Iterable<T>' is builtin: 'iterator() -> Iterator<T>' satisfied by
+    any method returning an implementing type, and an 'Iterable<i32>'
+    parameter walks the chain.
+    """
+    source = """
+    struct ArrayIterator<T>: Iterator<T> {
+        arr: T[];
+        index: u64;
+    }
+
+    fn ArrayIterator<T>::init(&self, arr: T[]) {
+        self.arr = arr;
+        self.index = 0;
+    }
+
+    fn ArrayIterator<T>::has_next(&self) -> bool {
+        return self.index < self.arr.length;
+    }
+
+    fn ArrayIterator<T>::next(&self) -> &T {
+        self.index += 1;
+        return self.arr[self.index - 1];
+    }
+
+    struct List<T>: Iterable<T> {
+        data: T*;
+        length: u64;
+    }
+
+    fn List<T>::iterator(&self) -> ArrayIterator<T> {
+        return ArrayIterator<T>({self.data, self.length});
+    }
+
+    fn total(coll: Iterable<i32>) -> i32 {
+        let it = coll.iterator();
+        let sum = 0;
+        while (it.has_next()) {
+            sum += it.next();
+        }
+        return sum;
+    }
+
+    fn main() -> i32 {
+        let nums: i32[] = [10, 12, 20];
+        let l: List<i32> = { nums.data, nums.length };
+        return total(l) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_iterable_requires_an_iterator_return(compile_source):
+    """
+    'iterator' must return a type implementing 'Iterator<T>'.
+    """
+    with pytest.raises(TypeError, match="method 'iterator' must return "
+                                        "'Iterator<i32>'"):
+        compile_source("""
+        struct NotIter<T> { x: T; }
+        struct L<T>: Iterable<T> { x: T; }
+        fn L<T>::iterator(&self) -> NotIter<T> { let n: NotIter<T>; return n; }
+        fn main() -> i32 { let l: L<i32>; return 0; }
+        """)
+
+
+def test_builtin_iterator_cannot_be_redeclared(compile_source):
+    """
+    'Iterator' is builtin: a user interface under the name collides.
+    """
+    with pytest.raises(TypeError, match="interface 'Iterator' is declared "
+                                        "more than once"):
+        compile_source("""
+        interface Iterator<T>;
+        fn main() -> i32 { return 0; }
+        """)
 
 
 def test_multiple_interfaces(run):
@@ -156,8 +283,6 @@ def test_conformance_is_checked(compile_source):
     with pytest.raises(TypeError, match="struct 'Broken' does not implement "
                                         "'Iterator<i32>'"):
         compile_source("""
-        interface Iterator<T>;
-        fn Iterator<T>::next(self: &Iterator<T>, value: &T) -> bool;
         struct Broken<T>: Iterator<T> { x: T; }
         fn main() -> i32 { let b: Broken<i32>; return 0; }
         """)

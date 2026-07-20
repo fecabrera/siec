@@ -300,8 +300,18 @@ class CodeGenerator:
 
 # builtin declarations every program starts from: 'Result<V, E>' holds a
 # value or an error behind its 'ok' tag, 'Result<E>' only the error, and
-# 'Ok'/'Error' construct them - usually inferred from the expected type
+# 'Ok'/'Error' construct them - usually inferred from the expected type;
+# 'Iterator<T>' and 'Iterable<T>' are the interfaces iteration speaks
 PRELUDE = """
+interface Iterator<T>;
+
+fn Iterator<T>::has_next(&self) -> bool;
+fn Iterator<T>::next(&self) -> &T;
+
+interface Iterable<T>;
+
+fn Iterable<T>::iterator(&self) -> Iterator<T>;
+
 struct Result<V, E> {
     ok: bool;
     union {
@@ -391,7 +401,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     prelude = parse_prelude()
     program.structs = [*prelude.structs, *program.structs]
     program.functions = [*prelude.functions, *program.functions]
-    gen.builtin_names.update(("Result", "Ok", "Error"))
+    gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable"))
 
     # first pass: register the named declarations - aliases first so every
     # later type annotation expands through them, constants next so enum

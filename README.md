@@ -1700,10 +1700,33 @@ Interfaces can be generic just like structs, when their name is followed by `<T>
 interface Iterable<T>;
 
 fn Iterable<T>::iterator(self: &Iterable<T>) -> Iterator<T>;
+```
 
+#### The iteration interfaces
+
+`Iterator<T>` and `Iterable<T>` are builtin, visible everywhere without an import:
+
+```
 interface Iterator<T>;
 
-fn Iterator<T>::next(self: &Iterator<T>) -> Result<T, IterationError>;
+fn Iterator<T>::has_next(&self) -> bool;
+fn Iterator<T>::next(&self) -> &T;
+
+interface Iterable<T>;
+
+fn Iterable<T>::iterator(&self) -> Iterator<T>;
+```
+
+A struct claiming `: Iterator<T>` provides both actions, `next` handing back a [reference](#references) to the element. A collection claims `: Iterable<T>` and provides `iterator`, whose declared `Iterator<T>` return is satisfied by any implementing type; that is the general rule when an action declares an interface return. Any `Iterator<T>` parameter then walks the elements:
+
+```
+fn sum(it: Iterator<i32>) -> i32 {
+    let total = 0;
+    while (it.has_next()) {
+        total += it.next();
+    }
+    return total;
+}
 ```
 
 ### Error handling
