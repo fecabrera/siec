@@ -7,6 +7,8 @@ htmlcov/
 .coverage*
 !.coveragerc
 
+dist/
+
 # OS
 .DS_Store
 
