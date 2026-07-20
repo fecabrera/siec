@@ -287,6 +287,34 @@ class CodeGenerator:
         return info is not None and info.volatile
 
 
+# builtin declarations every program starts from: 'Result<V, E>' holds a
+# value or an error behind its 'ok' tag; 'Result<E>' only the error
+PRELUDE = """
+struct Result<V, E> {
+    ok: bool;
+    union {
+        value: V;
+        error: E;
+    };
+}
+
+struct Result<E> {
+    ok: bool;
+    error: E;
+}
+"""
+
+
+def parse_prelude() -> Program:
+    """
+    Parse the builtin prelude into its declarations.
+    """
+    from siec.lexer import lex
+    from siec.parser import parse
+
+    return parse(lex(PRELUDE))
+
+
 def codegen(program: Program, module_name: str, target: str | None = None,
             debug: bool = False) -> ir.Module:
     """
@@ -318,6 +346,12 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     gen.module_exports = program.module_exports
     gen.visible = program.visible
     gen.builtin_names = set(BUILTIN_CONSTANTS)
+
+    # the builtin prelude's declarations join every program, its names
+    # in every file's view
+    prelude = parse_prelude()
+    program.structs = [*prelude.structs, *program.structs]
+    gen.builtin_names.add("Result")
 
     # first pass: register the named declarations — aliases first so every
     # later type annotation expands through them, constants next so enum

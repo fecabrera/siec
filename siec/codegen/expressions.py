@@ -45,6 +45,7 @@ from siec.codegen.inference import (
     enum_backing,
     expr_sie_type,
     fold_qualified,
+    hoist_member,
     is_float,
     member_field,
     numeric_class,
@@ -260,6 +261,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_expression(gen, builder, folded, expected_type, scope)
 
+        # an unnamed member's fields hoist: 'r.value' reads through 'r.#n'
+        hoist_member(gen, expr, scope)
+
         # a raw array's 'length' is its compile-time element count,
         # adopting an integer context like a literal
         base_name = strip_const(expr_sie_type(gen, expr.base, scope))
@@ -394,6 +398,9 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         # a pure name chain may be a module's member, spelled qualified
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_lvalue(gen, builder, folded, scope)
+
+        # an unnamed member's fields hoist: 'r.value' writes through 'r.#n'
+        hoist_member(gen, expr, scope)
 
         index, field_name = member_field(gen, expr, scope)
         base = emit_lvalue(gen, builder, expr.base, scope)

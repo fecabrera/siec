@@ -85,6 +85,41 @@ def test_anonymous_local_and_positional_literal(run):
     assert result.returncode == 42
 
 
+def test_unnamed_members_hoist_their_fields(run):
+    """
+    An unnamed 'struct { ... };' or 'union { ... };' member hoists its
+    fields into the enclosing struct, C-style, nesting included.
+    """
+    result = run("""
+        struct packet {
+            kind: u8;
+            struct {
+                x: i32;
+                y: i32;
+            };
+            union {
+                raw: u64;
+                struct {
+                    lo: u32;
+                    hi: u32;
+                };
+            };
+        }
+
+        fn main() -> i32 {
+            let p: packet;
+            p.x = 3;
+            p.y = 4;
+
+            p.raw = 0x100000002;
+            if (p.lo != 2 or p.hi != 1) { return 1; }
+
+            return p.x + p.y - 7;
+        }
+    """)
+    assert result.returncode == 0
+
+
 def test_anonymous_union_literal_is_rejected(compile_source):
     """
     An unnamed union refuses aggregate literals like a named one.

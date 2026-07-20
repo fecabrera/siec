@@ -111,6 +111,12 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
     base, args = parts
     alias = gen.generic_aliases.get(base)
     template = gen.generic_structs.get(base)
+
+    # the argument count picks among same-named struct templates:
+    # 'Result<E>' and 'Result<V, E>' are distinct shapes
+    if template is not None and len(args) != len(template.params):
+        template = gen.generic_structs.get(f"{base}#{len(args)}") or template
+
     if alias is None and template is None:
         return None
 

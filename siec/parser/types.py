@@ -40,6 +40,12 @@ def parse_type(ts: TokenStream) -> str:
 
         parts = []
         while ts.peek().value != "}":
+            # a nested unnamed member hoists here too, under a '#n' slot
+            if ts.peek().value in ("struct", "union") and ts.peek(1).syntax == "{":
+                parts.append(f"#{len(parts)}:{parse_type(ts)}")
+                ts.expect("sym", ";")
+                continue
+
             field_name = ts.expect("ident").value
             ts.expect("sym", ":")
             parts.append(f"{field_name}:{parse_type(ts)}")

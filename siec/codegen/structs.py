@@ -23,11 +23,17 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
             gen.current_file = struct.file
 
             # a generic struct is a template: nothing registers until a
-            # concrete 'S<args>' spelling instantiates it
+            # concrete 'S<args>' spelling instantiates it; same-named
+            # templates with different arities live under '#arity' keys
             if struct.params is not None:
-                template = gen.generic_structs.get(struct.name)
+                key = struct.name
+                template = gen.generic_structs.get(key)
+                if template is not None and len(template.params) != len(struct.params):
+                    key = f"{struct.name}#{len(struct.params)}"
+                    template = gen.generic_structs.get(key)
+
                 if template is None:
-                    gen.generic_structs[struct.name] = struct
+                    gen.generic_structs[key] = struct
                 elif struct.fields is not None:
                     if template.fields is not None:
                         raise TypeError(f"struct {struct.name!r} is declared "

@@ -192,6 +192,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return expr_sie_type(gen, folded, scope)
 
+        # an unnamed member's fields hoist into its struct: 'r.value'
+        # resolves through the 'r.#n' that carries it
+        hoist_member(gen, expr, scope)
+
         base_name = expr_sie_type(gen, expr.base, scope)
 
         # a raw array's 'length' is its compile-time element count
@@ -540,10 +544,51 @@ def type_info(gen: CodeGenerator, type_name: str | None) -> StructInfo | None:
     return gen.structs.get(type_name)
 
 
+def unnamed_hops(gen: CodeGenerator, info: StructInfo, name: str) -> list[str] | None:
+    """
+    The chain of unnamed '#n' members leading to a hoisted field, or None
+    when no unnamed member carries it.
+    """
+    for field in info.fields or ():
+        if not field.name.startswith("#"):
+            continue
+
+        inner = type_info(gen, field.type)
+        if inner is None or inner.fields is None:
+            continue
+
+        if any(f.name == name for f in inner.fields):
+            return [field.name]
+
+        if (deeper := unnamed_hops(gen, inner, name)) is not None:
+            return [field.name, *deeper]
+
+    return None
+
+
+def hoist_member(gen: CodeGenerator, expr: Member, scope: dict) -> None:
+    """
+    Splice unnamed-member hops into a member chain, in place: when the
+    base's struct lacks the field but an unnamed '#n' member's type
+    carries it, 'r.value' resolves as 'r.#n.value', C-style.
+    """
+    info = type_info(gen, expr_sie_type(gen, expr.base, scope))
+    if info is None or info.fields is None:
+        return
+
+    if any(f.name == expr.field for f in info.fields):
+        return
+
+    for hop in unnamed_hops(gen, info, expr.field) or ():
+        expr.base = Member(expr.base, hop)
+
+
 def member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, str]:
     """
     Resolve a member access to its field index and Sie type, checking the base has fields.
     """
+    hoist_member(gen, expr, scope)
+
     base_type = expr_sie_type(gen, expr.base, scope)
     info = type_info(gen, base_type)
     if info is None:

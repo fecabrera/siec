@@ -1470,6 +1470,20 @@ d.u.i = 42; // fields chain through like any other
 
 An unnamed type's identity is structural: two spellings with the same fields are one type, so a `struct { x: i32; y: i32; }` local passes to a `struct { x: i32; y: i32; }` parameter directly. They compose everywhere a named type would: locals, aliases, raw arrays, pointers, `sizeof`, and each other.
 
+An unnamed struct or union can also be a member with no name of its own — its fields then hoist into the enclosing struct, C-style, nesting included:
+
+```
+struct Result {
+    ok: bool;
+    union {
+        value: i64;
+        error: u8;
+    };
+}
+
+r.value = 42; // reaches the unnamed union's field directly
+```
+
 ### Methods
 
 Structs can have methods, which are a special type of function that acts
@@ -1678,16 +1692,41 @@ fn Iterator<T>::next(self: &Iterator<T>) -> Result<T, IterationError>;
 
 ### Error handling
 
-Errors are handled through `Result<V, E>`, a builtin struct that contains a return value or an error; and `Result<E>`, a builtin struct that only contains an error value.
+Errors are handled through `Result<V, E>`, a builtin struct that contains a return value or an error; and `Result<E>`, a builtin struct that only contains an error value. Both are visible everywhere without an import, and the argument count picks between them.
 
 ```
 struct Result<V, E> {
-    value: V;
-    error: E;
+    ok: bool;
+    union {
+        value: V;
+        error: E;
+    };
 }
 
 struct Result<E> {
+    ok: bool;
     error: E;
+}
+```
+
+`ok` tags which member holds: in `Result<V, E>`, `value` and `error` share one storage through the [unnamed union](#unnamed-structs-and-unions), so the whole result costs one tag plus the larger of the two.
+
+```
+fn divide(a: i32, b: i32) -> Result<i32, MathError> {
+    let r: Result<i32, MathError>;
+    if (b == 0) {
+        r.ok = false;
+        r.error = MathError::DIVISION_BY_ZERO;
+        return r;
+    }
+    r.ok = true;
+    r.value = a / b;
+    return r;
+}
+
+let r = divide(10, 2);
+if (r.ok) {
+    // r.value holds the quotient; r.error is meaningless here
 }
 ```
 

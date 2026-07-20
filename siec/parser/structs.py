@@ -76,6 +76,13 @@ def parse_struct(ts: TokenStream) -> Struct:
     # 'name: type [= default];' fields until the closing brace
     fields = []
     while ts.peek().value != "}":
+        # an unnamed 'struct { ... }' or 'union { ... }' member hoists its
+        # fields into this type, C-style; '#n' names its own slot
+        if ts.peek().value in ("struct", "union") and ts.peek(1).syntax == "{":
+            fields.append(Field(f"#{len(fields)}", parse_type(ts)))
+            ts.expect("sym", ";")
+            continue
+
         field_name = ts.expect("ident").value
         ts.expect("sym", ":")
         field_type = parse_type(ts)
