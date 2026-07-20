@@ -32,3 +32,49 @@ jobs:
           echo "# Coverage Report (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           pipenv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Install dependencies
+        run: pipenv sync --dev
+
+      - name: Build the wheel
+        run: pip wheel . --no-deps -w dist
+
+      - name: Install the wheel
+        run: pip install dist/*.whl
+
+      - name: Upload the wheel
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sie-wheel
+          path: dist/*.whl
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Install dependencies
+        run: pipenv sync --dev
+
+      - name: Build Sie
+        run: |
+          git clone https://github.com/cktan/tomlc17.git
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload Sie
+        uses: actions/upload-artifact@v4
+        with:
+          name: sie
+          path: dist/bin/sie
