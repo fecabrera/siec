@@ -252,7 +252,7 @@ def implements_or_equals(gen: CodeGenerator, have: str | None,
 
     base = required.partition("<")[0]
     if base in gen.interfaces:
-        return required in gen.implements.get(strip_const(have), set())
+        return type_implements(gen, have, required)
 
     return strip_const(have) == strip_const(required)
 
@@ -274,6 +274,18 @@ def expand_lax(gen: CodeGenerator, name: str | None) -> str | None:
     return expand_alias(gen, name, checked=False)
 
 
+def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
+    """
+    Whether a concrete type implements an interface: by its declared
+    claim, or, for a 'T[]' array, the builtin 'Iterable<T>'.
+    """
+    concrete = strip_const(concrete)
+    if required in gen.implements.get(concrete, set()):
+        return True
+
+    return concrete.endswith("[]") and required == f"Iterable<{concrete[:-2]}>"
+
+
 def check_constraints(gen: CodeGenerator, template, mapping: dict) -> None:
     """
     Check a template's interface constraints against one instantiation:
@@ -285,6 +297,6 @@ def check_constraints(gen: CodeGenerator, template, mapping: dict) -> None:
             continue
 
         required = canonical_interface(gen, substitute(spelling, mapping))
-        if required not in gen.implements.get(strip_const(concrete), set()):
+        if not type_implements(gen, concrete, required):
             raise TypeError(f"type {concrete!r} does not implement "
                             f"interface {required!r}")

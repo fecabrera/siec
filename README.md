@@ -1729,6 +1729,18 @@ fn sum(it: Iterator<i32>) -> i32 {
 }
 ```
 
+[Arrays](#arrays) come iterable: a `T[]` implements `Iterable<T>` through the builtin `ArrayIterator<T>`, so an array passes to an `Iterable<T>` parameter and answers `iterator()` directly:
+
+```
+struct ArrayIterator<T>: Iterator<T> {
+    arr: T[];
+    index: u64;
+}
+
+let it = nums.iterator();   // an ArrayIterator over the array
+it.next() = 5;              // the references reach the array itself
+```
+
 ### Error handling
 
 Errors are handled through `Result<V, E>`, a builtin struct that contains a return value or an error; and `Result<E>`, a builtin struct that only contains an error value. Both are visible everywhere without an import, and the argument count picks between them.

@@ -129,7 +129,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
             symbol = qualified_method(gen, expr.name)
         else:
-            if "." not in expr.name and not gen.sees(expr.name):
+            # a name carrying '<' is a resolved instance the compiler
+            # wrote; no file's view gates it
+            if ("." not in expr.name and "<" not in expr.name
+                    and not gen.sees(expr.name)):
                 return None
 
             symbol = gen.resolve_callee(expr.name)

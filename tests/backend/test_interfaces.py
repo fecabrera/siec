@@ -103,21 +103,21 @@ def test_builtin_iterator_interface(run):
     the underlying storage like any reference return.
     """
     source = """
-    struct ArrayIterator<T>: Iterator<T> {
+    struct StepIter<T>: Iterator<T> {
         arr: T[];
         index: u64;
     }
 
-    fn ArrayIterator<T>::init(&self, arr: T[]) {
+    fn StepIter<T>::init(&self, arr: T[]) {
         self.arr = arr;
         self.index = 0;
     }
 
-    fn ArrayIterator<T>::has_next(&self) -> bool {
+    fn StepIter<T>::has_next(&self) -> bool {
         return self.index < self.arr.length;
     }
 
-    fn ArrayIterator<T>::next(&self) -> &T {
+    fn StepIter<T>::next(&self) -> &T {
         self.index += 1;
         return self.arr[self.index - 1];
     }
@@ -132,10 +132,10 @@ def test_builtin_iterator_interface(run):
 
     fn main() -> i32 {
         let nums: i32[] = [10, 12, 20];
-        let it = ArrayIterator<i32>(nums);
+        let it = StepIter<i32>(nums);
         if (sum(it) != 42) { return 1; }
 
-        let again = ArrayIterator<i32>(nums);
+        let again = StepIter<i32>(nums);
         again.next() = 5;                    // the reference assigns through
         if (nums[0] != 5) { return 2; }
         return 0;
@@ -151,21 +151,21 @@ def test_builtin_iterable_interface(run):
     parameter walks the chain.
     """
     source = """
-    struct ArrayIterator<T>: Iterator<T> {
+    struct StepIter<T>: Iterator<T> {
         arr: T[];
         index: u64;
     }
 
-    fn ArrayIterator<T>::init(&self, arr: T[]) {
+    fn StepIter<T>::init(&self, arr: T[]) {
         self.arr = arr;
         self.index = 0;
     }
 
-    fn ArrayIterator<T>::has_next(&self) -> bool {
+    fn StepIter<T>::has_next(&self) -> bool {
         return self.index < self.arr.length;
     }
 
-    fn ArrayIterator<T>::next(&self) -> &T {
+    fn StepIter<T>::next(&self) -> &T {
         self.index += 1;
         return self.arr[self.index - 1];
     }
@@ -175,8 +175,8 @@ def test_builtin_iterable_interface(run):
         length: u64;
     }
 
-    fn List<T>::iterator(&self) -> ArrayIterator<T> {
-        return ArrayIterator<T>({self.data, self.length});
+    fn List<T>::iterator(&self) -> StepIter<T> {
+        return StepIter<T>({self.data, self.length});
     }
 
     fn total(coll: Iterable<i32>) -> i32 {
@@ -192,6 +192,39 @@ def test_builtin_iterable_interface(run):
         let nums: i32[] = [10, 12, 20];
         let l: List<i32> = { nums.data, nums.length };
         return total(l) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_arrays_are_iterable(run):
+    """
+    'T[]' implements 'Iterable<T>' through the builtin ArrayIterator<T>:
+    an array passes to an Iterable parameter, answers 'iterator()'
+    directly, and 'next()' references the array's own elements.
+    """
+    source = """
+    fn total(coll: Iterable<i32>) -> i32 {
+        let it = coll.iterator();
+        let sum = 0;
+        while (it.has_next()) {
+            sum += it.next();
+        }
+        return sum;
+    }
+
+    fn main() -> i32 {
+        let nums: i32[] = [10, 12, 20];
+        if (total(nums) != 42) { return 1; }
+
+        let it = nums.iterator();
+        if (it.next() != 10) { return 2; }
+
+        it.next() = 99;                     // writes through to the array
+        if (nums[1] != 99) { return 3; }
+
+        let direct = ArrayIterator<i32>(nums);
+        return direct.has_next() ? 0 : 4;
     }
     """
     assert run(source).returncode == 0

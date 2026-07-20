@@ -55,6 +55,15 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     if not base:
         return None
 
+    # a 'T[]' array answers 'iterator()' itself, through the builtin
+    # ArrayIterator<T>: that is how arrays implement Iterable<T>
+    if base.endswith("[]") and method == "iterator":
+        from siec.codegen.generics import instantiate_function
+
+        template = gen.generic_functions.get("__array_iterator")
+        if template is not None:
+            return instantiate_function(gen, template, [base[:-2]])
+
     symbol = f"{base}::{method}"
     if (symbol in gen.generic_functions
             or isinstance(gen.module.globals.get(symbol), ir.Function)):
@@ -108,7 +117,17 @@ def takes_receiver(gen: CodeGenerator, symbol: str) -> bool:
         params = gen.param_types.get(symbol, ())
         first = params[0] if params else None
 
-    return first is not None and strip_const(first) == f"&{base}"
+    if first is None:
+        return False
+
+    # a plain function standing in for a method (an array's 'iterator')
+    # takes the receiver as its reference first parameter
+    if "::" not in symbol:
+        from siec.codegen.types import is_reference
+
+        return is_reference(strip_const(first))
+
+    return strip_const(first) == f"&{base}"
 
 
 def qualified_method(gen: CodeGenerator, name: str) -> str | None:

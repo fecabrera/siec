@@ -67,8 +67,10 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     else:
         # a name in scope is always in view; anything else must be visible
         # to this file: an imported module's names need their qualified
-        # spelling or a member import
-        if call.name not in scope and not gen.sees(call.name):
+        # spelling or a member import. A name carrying '<' is a resolved
+        # instance the compiler wrote; no file's view gates it
+        if (call.name not in scope and "<" not in call.name
+                and not gen.sees(call.name)):
             raise NameError(f"undefined function {call.name!r}")
 
         # a variable or global holding a function reference is called through

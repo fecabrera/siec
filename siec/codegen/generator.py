@@ -312,6 +312,29 @@ interface Iterable<T>;
 
 fn Iterable<T>::iterator(&self) -> Iterator<T>;
 
+struct ArrayIterator<T>: Iterator<T> {
+    arr: T[];
+    index: u64;
+}
+
+fn ArrayIterator<T>::init(&self, arr: T[]) {
+    self.arr = arr;
+    self.index = 0;
+}
+
+fn ArrayIterator<T>::has_next(&self) -> bool {
+    return self.index < self.arr.length;
+}
+
+fn ArrayIterator<T>::next(&self) -> &T {
+    self.index += 1;
+    return self.arr[self.index - 1];
+}
+
+fn __array_iterator<T>(self: &T[]) -> ArrayIterator<T> {
+    return ArrayIterator<T>(self);
+}
+
 struct Result<V, E> {
     ok: bool;
     union {
@@ -401,7 +424,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     prelude = parse_prelude()
     program.structs = [*prelude.structs, *program.structs]
     program.functions = [*prelude.functions, *program.functions]
-    gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable"))
+    gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
+                              "ArrayIterator"))
 
     # first pass: register the named declarations - aliases first so every
     # later type annotation expands through them, constants next so enum
