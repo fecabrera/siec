@@ -354,6 +354,34 @@ fn __const_array_iterator<T>(self: const &T[]) -> ConstArrayIterator<T> {
     return it;
 }
 
+struct Enumerated<T> {
+    index: u64;
+    value: T;
+}
+
+struct EnumerateIterator<I, T> {
+    inner: I;
+    count: u64;
+    current: Enumerated<T>;
+}
+
+fn EnumerateIterator<I, T>::has_next(&self) -> bool {
+    return self.inner.has_next();
+}
+
+fn EnumerateIterator<I, T>::next(&self) -> &Enumerated<T> {
+    self.current = { self.count, self.inner.next() };
+    self.count += 1;
+    return self.current;
+}
+
+fn __enumerate<I, T>(it: I) -> EnumerateIterator<I, T> {
+    let e: EnumerateIterator<I, T>;
+    e.inner = it;
+    e.count = 0;
+    return e;
+}
+
 struct Result<V, E> {
     ok: bool;
     union {
@@ -444,7 +472,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.structs = [*prelude.structs, *program.structs]
     program.functions = [*prelude.functions, *program.functions]
     gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
-                              "ArrayIterator", "ConstArrayIterator"))
+                              "ArrayIterator", "ConstArrayIterator",
+                              "Enumerated", "EnumerateIterator", "__enumerate"))
 
     # first pass: register the named declarations - aliases first so every
     # later type annotation expands through them, constants next so enum

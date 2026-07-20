@@ -34,6 +34,13 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # type arguments; captured before any receiver rewrite drops it
     expected = getattr(call, "expected_type", None)
 
+    # the builtin 'enumerate(x)' resolves to its '__enumerate' instance
+    if call.name == "enumerate":
+        from siec.codegen.methods import rewrite_enumerate
+
+        if (rewritten := rewrite_enumerate(gen, call, scope)) is not None:
+            call = rewritten
+
     # a dotted name is a method on its receiver chain, or resolves
     # through the file's module bindings; a scoped receiver shadows any
     # module prefix

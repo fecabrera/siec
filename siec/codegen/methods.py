@@ -68,7 +68,12 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
                   else "__array_iterator")
         template = gen.generic_functions.get(helper)
         if template is not None:
-            return instantiate_function(gen, template, [base[:-2]])
+            # the element is a carried canonical name; no view gates it
+            gen.ungated_types += 1
+            try:
+                return instantiate_function(gen, template, [base[:-2]])
+            finally:
+                gen.ungated_types -= 1
 
     symbol = f"{base}::{method}"
     if (symbol in gen.generic_functions
@@ -153,6 +158,66 @@ def qualified_method(gen: CodeGenerator, name: str) -> str | None:
 
     base, _, method = name.partition("::")
     return resolve_method(gen, expand_alias(gen, base), method)
+
+
+def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | None:
+    """
+    Rewrite the builtin 'enumerate(x)' into its '__enumerate<I, T>' call:
+    the argument's iterator type and element type spell the arguments,
+    an Iterable handing out its iterator first. A user declaration named
+    'enumerate' takes precedence; None leaves the call untouched.
+    """
+    from siec.ast import MethodCall
+    from siec.codegen.inference import expr_sie_type
+    from siec.codegen.types import is_reference
+
+    if call.name != "enumerate" or "enumerate" in scope:
+        return None
+
+    # a declared 'enumerate' - the user's - wins over the builtin
+    symbol = gen.resolve_symbol("enumerate")
+    if (symbol in gen.generic_functions
+            or isinstance(gen.module.globals.get(symbol), ir.Function)):
+        return None
+
+    if len(call.args) != 1 or call.type_args is not None:
+        raise TypeError("'enumerate' takes one iterable value")
+
+    arg = call.args[0]
+    source = expr_sie_type(gen, arg, scope)
+    source = strip_reference(source) if source else None
+    if not source:
+        raise TypeError("cannot enumerate: the expression has no type")
+
+    # an Iterable hands out its iterator; an iterator enumerates itself
+    if resolve_method(gen, source, "iterator") is not None:
+        arg = MethodCall(arg, "iterator", [], None)
+        it_type = expr_sie_type(gen, arg, scope)
+    elif resolve_method(gen, strip_const(source), "has_next") is not None:
+        it_type = strip_const(source)
+    else:
+        raise TypeError(f"cannot enumerate a {source!r} value: it is "
+                        "neither an Iterable nor an Iterator")
+
+    next_ = resolve_method(gen, it_type, "next")
+    next_ret = gen.return_types.get(next_) if next_ is not None else None
+    if not is_reference(next_ret):
+        raise TypeError(f"cannot enumerate: type {it_type!r} has no "
+                        "'next' returning a reference")
+
+    element = strip_const(strip_reference(next_ret))
+
+    # the arguments are carried canonical names; no view gates them
+    from siec.codegen.generics import instantiate_function
+
+    gen.ungated_types += 1
+    try:
+        symbol = instantiate_function(gen, gen.generic_functions["__enumerate"],
+                                      [it_type, element])
+    finally:
+        gen.ungated_types -= 1
+
+    return Call(symbol, [arg])
 
 
 def method_reference(gen: CodeGenerator, expr) -> ir.Function | None:

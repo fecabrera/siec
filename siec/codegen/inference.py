@@ -122,6 +122,13 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
             return strip_reference(fn_type_parts(strip_const(scope[expr.name].type))[1])
 
+        # the builtin 'enumerate(x)' types as its '__enumerate' instance
+        if expr.name == "enumerate":
+            from siec.codegen.methods import rewrite_enumerate
+
+            if (rewritten := rewrite_enumerate(gen, expr, scope)) is not None:
+                return expr_sie_type(gen, rewritten, scope)
+
         call = expr
         if "::" in expr.name:
             # 'S::m(s)' names a method through its receiver type

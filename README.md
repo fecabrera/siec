@@ -446,6 +446,18 @@ foreach (v : nums) {
 
 Anything `Iterable<T>` works - [arrays come iterable](#the-iteration-interfaces) - and `break`/`continue` steer the loop like any other. Iterating a bare iterator value walks a copy of its state, from wherever it stands. A `const` array iterates too, through the builtin `ConstArrayIterator<T>`: its elements read as `const &T`, so the contract follows them and writing one is an error.
 
+#### Enumerate
+
+The builtin `enumerate(x)` wraps an Iterable (or an iterator) in an iterator of `{index: u64, value: T}` pairs, counting from zero:
+
+```
+foreach (e : enumerate(nums)) {
+    printf("%llu: %d\n", e.index, e.value);
+}
+```
+
+`value` is a copy of the element, not a reference into the collection; a declared function named `enumerate` takes precedence over the builtin.
+
 #### Break and continue
 
 `break` leaves the innermost enclosing loop; `continue` jumps to its next pass. In a `for`, `continue` lands on the step, so the loop always advances:
