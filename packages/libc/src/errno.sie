@@ -10,7 +10,7 @@
 
 @if (TARGET_OS == OS_DARWIN) {
     @extern @symbol("__error") fn errno_location() -> i32*;
-} @else {
+} @else @if (TARGET_OS == OS_LINUX) {
     @extern @symbol("__errno_location") fn errno_location() -> i32*;
 }
 
@@ -28,13 +28,8 @@ fn set_errno(value: i32) {
  * Error codes
  ***************************************/
 
-// The three error codes the C standard defines. EDOM and ERANGE share the same
-// value on macOS and Linux; EILSEQ does not.
-const EDOM = 33;     // argument outside a function's domain
-const ERANGE = 34;   // result outside the representable range
-
 @if (TARGET_OS == OS_DARWIN) {
-    const EILSEQ = 92;   // illegal byte sequence
-} @else {
-    const EILSEQ = 84;
+    @include("darwin/_errno");
+} @else @if (TARGET_OS == OS_LINUX) {
+    @include("linux/_errno");
 }
