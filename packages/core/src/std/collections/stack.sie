@@ -35,7 +35,7 @@ fn Stack<T>::pop(&self) -> T {
     return self.data[self.top];
 }
 
-fn Stack<T>::peek(const &self) -> T {
+fn Stack<T>::peek(const &self) -> &T {
     return self.data[self.top - 1];
 }
 
