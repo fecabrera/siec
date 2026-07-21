@@ -1,0 +1,51 @@
+import stdio;
+import mpdecimal;
+import { String } from std;
+
+@static let __default_ctx: mpdecimal.mpd_context;
+@static let __default_ctx_ready: bool = false;
+
+@static fn __get_default_context() -> mpdecimal.mpd_context* {
+    if (not __default_ctx_ready) {
+        mpdecimal.mpd_defaultcontext(&__default_ctx);
+        __default_ctx_ready = true;
+    }
+    return &__default_ctx;
+}
+
+struct Decimal {
+    ctx: mpdecimal.mpd_context*;
+    mpd: mpdecimal.mpd*;
+}
+
+fn Decimal::init(&self) {
+    self.ctx = __get_default_context();
+    self.mpd = mpdecimal.mpd_new(self.ctx);
+}
+
+fn Decimal::destroy(&self) {
+    mpdecimal.mpd_del(self.mpd);
+}
+
+fn Decimal::from_str(value: const char[]) -> Decimal {
+    let dec = Decimal();
+    dec.set(value);
+    return dec;
+}
+
+fn Decimal::to_string(&self) -> String {
+    let ptr: char[];
+    ptr.length = mpdecimal.mpd_to_sci_size(&ptr.data, self.mpd, 0) as u64;
+    defer mpdecimal.mpd_free(ptr.data);
+    return String::from_array(ptr);
+}
+
+fn Decimal::set(&self, value: const char[]) {
+    mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
+}
+
+fn Decimal::sqrt(&self) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_sqrt(result.mpd, self.mpd, self.ctx);
+    return result;
+}
