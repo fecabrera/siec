@@ -11,12 +11,12 @@
  * String examination
  ***************************************/
 
-@extern fn strlen(str: char*) -> u64;
-@extern fn strnlen(str: char*, count: u64) -> u64;
-@extern fn strcmp(lhs: char*, rhs: char*) -> i32;
-@extern fn strncmp(lhs: char*, rhs: char*, count: u64) -> i32;
-@extern fn strcoll(lhs: char*, rhs: char*) -> i32;
-@extern fn strxfrm(dest: char*, src: char*, count: u64) -> u64;
+@extern fn strlen(str: const char*) -> u64;
+@extern fn strnlen(str: const char*, count: u64) -> u64;
+@extern fn strcmp(lhs: const char*, rhs: const char*) -> i32;
+@extern fn strncmp(lhs: const char*, rhs: const char*, count: u64) -> i32;
+@extern fn strcoll(lhs: const char*, rhs: const char*) -> i32;
+@extern fn strxfrm(dest: const char*, src: const char*, count: u64) -> u64;
 
 /***************************************
  * String searching

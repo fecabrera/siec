@@ -12,9 +12,15 @@
  * Program termination
  ***************************************/
 
-@extern fn exit(status: i32);
-@extern fn abort();
-@extern fn _Exit(status: i32);
+@const EXIT_FAILURE = 1;
+@const EXIT_SUCCESS = 0;
+
+@extern fn atexit(func: fn()) -> i32;
+@noreturn @extern fn exit(status: i32);
+@noreturn @extern fn quick_exit(status: i32);
+@noreturn @extern fn abort();
+@noreturn @extern fn _Exit(status: i32);
+
 
 /***************************************
  * Integer arithmetic
