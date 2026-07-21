@@ -244,10 +244,16 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Slice):
         return expr_sie_type(gen, expr.base, scope)
 
-    # '&' yields a pointer to its operand's type
+    # '&' yields a pointer to its operand's type; an address rooted in
+    # const storage keeps the contract, since the pointer is an alias
+    # of that storage, not a copy of its value
     if isinstance(expr, UnaryOp) and expr.op == "&":
         operand = expr_sie_type(gen, expr.operand, scope)
-        return f"{operand}*" if operand is not None else None
+        if operand is None:
+            return None
+
+        pointer = f"{strip_const(operand)}*"
+        return f"const {pointer}" if const_chain(gen, expr.operand, scope) else pointer
 
     # '*' dereferences a pointer: the element type its 'p[0]' spelling reads
     if isinstance(expr, UnaryOp) and expr.op == "*":
@@ -285,6 +291,28 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 or expr_sie_type(gen, expr.orelse, scope))
 
     return None
+
+
+def const_chain(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
+    """
+    Whether an lvalue chain passes through anything 'const': the expression
+    itself, or any member, index, or dereference link it reads through.
+
+    Member and index links drop 'const' from a non-aliasing element's value,
+    which is right for a copy but not for the storage it came from; walking
+    the links finds the contract wherever it was declared.
+    """
+    node = expr
+    while True:
+        if is_const(expr_sie_type(gen, node, scope)):
+            return True
+
+        if isinstance(node, (Member, Index)):
+            node = node.base
+        elif isinstance(node, UnaryOp) and node.op == "*":
+            node = node.operand
+        else:
+            return False
 
 
 def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:

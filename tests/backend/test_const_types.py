@@ -104,6 +104,51 @@ def test_inference_keeps_the_contract(compile_source):
         """)
 
 
+def test_address_of_const_storage_stays_const(compile_source):
+    """
+    '&' through a const chain yields a const pointer: an address is an
+    alias of the storage, not a copy of its value, so the contract holds
+    however the place is spelled.
+    """
+    for place in ("&s", "&s.x", "&*p", "&p[0]", "&p->x"):
+        with pytest.raises(TypeError, match="cannot use a 'const "):
+            compile_source(f"""
+            struct P {{ x: i32; }}
+            fn f(s: const P, p: const P*) {{
+                let q = {place};
+                let m: {'P' if place == '&s' else 'i32'}* = q;
+            }}
+            """)
+
+
+def test_write_through_an_address_of_const_storage_is_rejected(compile_source):
+    """
+    '*&s.x = v' cannot launder a const struct's field into a mutable slot.
+    """
+    with pytest.raises(TypeError, match="cannot mutate a 'const i32\\*'"):
+        compile_source("""
+        struct P { x: i32; }
+        fn f(s: const P) { *&s.x = 5; }
+        """)
+
+
+def test_address_of_mutable_storage_stays_mutable(run):
+    """
+    The const contract only follows const chains: addresses into mutable
+    storage write freely.
+    """
+    source = """
+    struct P { x: i32; }
+
+    fn main() -> i32 {
+        let s: P = {1};
+        *&s.x = 42;
+        return s.x;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_const_field_cannot_be_assigned(compile_source):
     """
     A field declared const cannot be assigned, even on a mutable struct.
