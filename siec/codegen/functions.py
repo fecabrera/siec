@@ -159,6 +159,12 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     if fn.is_inline:
         func.attributes.add("alwaysinline")
 
+    # an '@noreturn' function never gives control back: calls to it end
+    # their paths, and its own body must not return
+    if fn.noreturn:
+        func.attributes.add("noreturn")
+        gen.noreturns.add(symbol)
+
     # record the ABI lowerings for calls to mirror; x86-64's large
     # aggregates carry 'byval', copying onto the stack at the call, and an
     # indirect return marks its hidden pointer 'sret'
@@ -257,7 +263,11 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         # a void function may fall off the end, and so may main, whose
         # implicit exit code is 0; anything else must return
         if not builder.block.is_terminated:
-            if isinstance(ret_type, ir.VoidType):
+            # an '@noreturn' body leaves through a noreturn call or loops
+            # forever, so an open end block cannot actually be reached
+            if fn.noreturn:
+                builder.unreachable()
+            elif isinstance(ret_type, ir.VoidType):
                 builder.ret_void()
             elif fn.name == "main" and fn.return_type is None:
                 builder.ret(ir.Constant(ret_type, 0))

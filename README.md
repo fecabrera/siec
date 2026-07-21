@@ -831,7 +831,7 @@ Functions can be decorated with `@static` to make them local to their file: no o
 }
 ```
 
-Decorators stack, so `@static @inline fn` is both, except for `@extern`, whose function has no body for the others to act on.
+Decorators stack, so `@static @inline fn` is both, except for `@extern`, whose function has no body for the others to act on; only `@noreturn`, which describes the signature rather than the body, rides along with it.
 
 `@static let` declares a file-local global variable the same way: one storage location shared by every call, visible only to its own file. Its initializer, when given, must be a compile-time constant; without one it starts at zero, C-style.
 
@@ -843,6 +843,31 @@ fn bump() -> i32 {
     return count;
 }
 ```
+
+#### Noreturn
+
+Functions can be decorated with `@noreturn` to declare that they never give control back to their caller: they exit the process, loop forever, or hand off to another `@noreturn` function.
+
+```
+@extern @noreturn fn exit(code: i32);
+
+@noreturn fn die(code: i32) {
+    exit(code);
+}
+```
+
+A statement calling an `@noreturn` function ends its path, so it satisfies a required return the same way a `return` would — in a whole function or a single branch:
+
+```
+fn checked(x: i32) -> i32 {
+    if (x < 0) {
+        die(1);       // this branch needs no return
+    }
+    return x;
+}
+```
+
+Since it hands nothing back, an `@noreturn` function cannot declare a return type, and a `return` inside its body is a compile-time error. The promise passes to LLVM, which optimizes on it.
 
 #### Asm
 

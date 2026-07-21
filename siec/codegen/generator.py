@@ -115,6 +115,8 @@ class CodeGenerator:
         # type inference and argument coercion at calls
         self.return_types: dict[str, str | None] = {}
         self.param_types: dict[str, list[str]] = {}
+        # the symbols declared '@noreturn', whose bodies must not return
+        self.noreturns: set[str] = set()
         # same-named generic templates with other type-parameter counts
         self.generic_overloads: dict[str, list] = {}
 

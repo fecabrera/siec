@@ -339,6 +339,11 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         flush_defers(gen, builder, gen.defer_frames[depth:])
         builder.branch(break_block if isinstance(stmt, Break) else continue_block)
     elif isinstance(stmt, Return):
+        # an '@noreturn' function promises to never give control back
+        if builder.function.name in gen.noreturns:
+            name = builder.function.name.split(".static.")[0]
+            raise TypeError(f"'@noreturn' function {name!r} cannot return")
+
         # a deferred statement runs on the way out of a scope; returning
         # there would flush the very frame holding it
         if gen.flushing_defers:
@@ -385,7 +390,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             flush_defers(gen, builder, gen.defer_frames)
             builder.ret(value)
     elif isinstance(stmt, ExprStmt):
-        emit_expression(gen, builder, stmt.expr, None, scope)
+        value = emit_expression(gen, builder, stmt.expr, None, scope)
+
+        # a statement calling an '@noreturn' function ends its path: the
+        # block terminates here, satisfying any required return after it
+        if (isinstance(value, ir.CallInstr) and isinstance(value.callee, ir.Function)
+                and "noreturn" in value.callee.attributes):
+            builder.unreachable()
     else:
         raise TypeError(f"cannot generate code for statement {stmt!r}")
 

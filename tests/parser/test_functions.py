@@ -41,12 +41,15 @@ def test_decorators_stack(ts):
     assert fn.is_inline
 
 
-def test_extern_combines_with_nothing(ts):
+def test_extern_combines_only_with_noreturn(ts):
     """
-    '@extern' functions have no body for other decorators to act on.
+    '@extern' functions have no body for other decorators to act on;
+    '@noreturn', which describes the signature, is the one exception.
     """
-    with pytest.raises(SyntaxError, match="'@extern' cannot combine"):
+    with pytest.raises(SyntaxError, match="'@extern' only combines"):
         parse_function(ts("@extern @static fn f();"))
+
+    assert parse_function(ts("@extern @noreturn fn f();")).noreturn
 
 
 def test_extern_let_parses_to_a_global(ts):

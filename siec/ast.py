@@ -455,6 +455,7 @@ class Function:
     symbol: str | None = None  # '@symbol("...")' module-symbol override
     asm: str | None = None  # '@asm': the raw assembly standing in for a body
     clobbers: list[str] = field(default_factory=list)
+    noreturn: bool = False  # '@noreturn': never gives control back to a caller
     type_params: list[str] | None = None  # 'fn f<T, U>': generic type parameters
     receiver: str | None = None  # 'fn S::m': the struct the method acts on
     receiver_params: list[str] | None = None  # 'fn S<A>::m': its placeholders

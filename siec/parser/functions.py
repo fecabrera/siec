@@ -258,7 +258,7 @@ def parse_global(ts: TokenStream) -> Global:
     return Global(name, var_type, kind == "static", value, symbol, line=line)
 
 
-DECORATORS = {"extern", "inline", "static", "asm"}
+DECORATORS = {"extern", "inline", "static", "asm", "noreturn"}
 
 
 
@@ -286,8 +286,9 @@ def parse_function(ts: TokenStream) -> Function:
     line = ts.peek().line
 
     # decorators may stack ('@static @inline'), except '@extern', whose
-    # function has no body for the others to act on; '@symbol("name")'
-    # names the module symbol and rides along with any of them
+    # function has no body for the others to act on - only '@noreturn',
+    # which describes the signature, rides along with it; '@symbol("name")'
+    # names the module symbol and combines with any of them
     decorators = set()
     symbol = None
     clobbers = []
@@ -315,9 +316,10 @@ def parse_function(ts: TokenStream) -> Function:
     is_inline = "inline" in decorators
     is_static = "static" in decorators
     is_asm = "asm" in decorators
+    noreturn = "noreturn" in decorators
 
-    if is_extern and len(decorators) > 1:
-        raise SyntaxError(f"line {line}: '@extern' cannot combine with other decorators")
+    if is_extern and decorators - {"extern", "noreturn"}:
+        raise SyntaxError(f"line {line}: '@extern' only combines with '@noreturn'")
 
     # a static function's symbol is the compiler's to mangle
     if is_static and symbol is not None:
@@ -414,6 +416,11 @@ def parse_function(ts: TokenStream) -> Function:
         ts.next()
         return_type = parse_type(ts)
 
+    # an '@noreturn' function hands nothing back: there is no return to type
+    if noreturn and return_type is not None:
+        raise SyntaxError(f"line {line}: an '@noreturn' function cannot "
+                          "declare a return type")
+
     # an '@asm' function's body is raw assembly, captured whole by the lexer
     if is_asm:
         if ts.peek().kind != "asm":
@@ -422,16 +429,16 @@ def parse_function(ts: TokenStream) -> Function:
 
         return Function(name, params, return_type, None, is_extern, var_arg,
                         is_inline, is_static, symbol, ts.next().value, clobbers,
-                        type_params=type_params, receiver=receiver,
+                        noreturn, type_params=type_params, receiver=receiver,
                         receiver_params=receiver_params, line=line)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
         ts.next()
         return Function(name, params, return_type, None, is_extern, var_arg,
-                        is_inline, is_static, symbol, type_params=type_params,
-                        receiver=receiver, receiver_params=receiver_params,
-                        line=line)
+                        is_inline, is_static, symbol, noreturn=noreturn,
+                        type_params=type_params, receiver=receiver,
+                        receiver_params=receiver_params, line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -440,6 +447,6 @@ def parse_function(ts: TokenStream) -> Function:
     body = parse_block(ts)
 
     return Function(name, params, return_type, body, is_extern, var_arg,
-                    is_inline, is_static, symbol, type_params=type_params,
-                    receiver=receiver, receiver_params=receiver_params,
-                    line=line)
+                    is_inline, is_static, symbol, noreturn=noreturn,
+                    type_params=type_params, receiver=receiver,
+                    receiver_params=receiver_params, line=line)
