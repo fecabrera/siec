@@ -53,10 +53,20 @@ jobs:
       - name: Install dependencies
         run: pipenv sync --dev
 
+      # ubuntu-latest (24.04) has no libmpdec package - Ubuntu dropped
+      # mpdecimal after 22.04 and only reintroduced it in 25.10 - so the
+      # library builds from the upstream release instead
       - name: Install libmpdec
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update && sudo apt-get install -y libdevel
+          curl -LO https://bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz
+          echo "96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8  mpdecimal-4.0.1.tar.gz" | sha256sum -c
+          tar xf mpdecimal-4.0.1.tar.gz
+          cd mpdecimal-4.0.1
+          ./configure
+          make -j"$(nproc)"
+          sudo make install
+          sudo ldconfig
 
       - name: Install libmpdec
         if: matrix.os == 'macos-latest'
