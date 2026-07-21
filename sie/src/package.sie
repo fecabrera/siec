@@ -1,6 +1,7 @@
 import { String, List } from std;
 import { printf } from stdio;
-import { toml_get, toml_datum, toml_type } from tomlc17;
+import { toml_get, toml_datum, toml_type, toml_result } from tomlc17;
+import { Dependency } from dependency;
 
 enum PackageError {
     FieldRequired,
@@ -12,13 +13,44 @@ struct Package {
     version: String;
     include: List<String>;
     libs: List<String>;
+    dependencies: List<Dependency>;
 }
 
 fn Package::init(&self, path: char[]) {
-    self.setPath(path);
+    self.path = String::from_array(path);
+    self.name = String();
+    self.version = String();
+    self.dependencies = List<Dependency>(0);
+    self.include = List<String>(0);
+    self.libs = List<String>(0);
 }
 
-fn Package::parse(&self, package: &toml_datum) -> Result<PackageError> {
+fn Package::destroy(&self) {
+    self.name.destroy();
+    self.version.destroy();
+    
+    foreach (s : self.include)
+        s.destroy();
+    
+    self.include.destroy();
+    
+    foreach (s : self.libs)
+        s.destroy();
+    
+    self.libs.destroy();
+
+    foreach (s : self.dependencies)
+        s.destroy();
+
+    self.dependencies.destroy();
+}
+
+fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
+    let package = toml_get(result.toptab, "package");
+    if (package.type != toml_type::TABLE) {
+        return Error(PackageError::FieldRequired);
+    }
+
     let name = toml_get(package, "name");
     if (name.type == toml_type::STRING) {
         self.setName({name.str.ptr, name.str.len as u64});
@@ -36,8 +68,6 @@ fn Package::parse(&self, package: &toml_datum) -> Result<PackageError> {
     let include = toml_get(package, "include");
     if (include.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {include.arr.elem, include.arr.size as u64};
-        self.include = List<String>(elements.length);
-        
         foreach (el : elements) {
             self.include.push(String::from_array({el.str.ptr, el.str.len as u64}));
         }
@@ -46,54 +76,43 @@ fn Package::parse(&self, package: &toml_datum) -> Result<PackageError> {
     let libs = toml_get(package, "libs");
     if (libs.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {libs.arr.elem, libs.arr.size as u64};
-        self.libs = List<String>(elements.length);
-        
         foreach (el : elements) {
             self.libs.push(String::from_array({el.str.ptr, el.str.len as u64}));
+        }
+    }
+
+    let deps = toml_get(result.toptab, "dependencies");
+    if (deps.type == toml_type::TABLE) {
+        let key_ptrs: const char*[] = {deps.tab.key, deps.tab.size as u64};
+        let key_lens: i32[] = {deps.tab.len, deps.tab.size as u64};
+        let values: toml_datum[] = {deps.tab.value, deps.tab.size as u64};
+
+        foreach (el : enumerate(values)) {
+            if (el.value.type == toml_type::STRING) {
+                let dep = Dependency();
+                dep.setName({key_ptrs[el.index], key_lens[el.index] as u64});
+                dep.setVersion({el.value.str.ptr, el.value.str.len as u64});
+                self.dependencies.push(dep);
+            } else {
+                return Error(PackageError::FieldRequired);
+            }
         }
     }
 
     return Ok();
 }
 
-fn Package::destroy(&self) {
-    self.name.destroy();
-    self.version.destroy();
-    
-    foreach (s : self.include)
-        s.destroy();
-    
-    self.include.destroy();
-    
-    foreach (s : self.libs)
-        s.destroy();
-    
-    self.libs.destroy();
+fn Package::setPath(&self, path: const char[]) {
+    self.path.reset();
+    self.path.append(path);
 }
 
-fn Package::setPath(&self, str: const char[]) {
-    if (self.path.data)
-        self.path.reset();
-    else
-        self.path = String(str.length);
-    
-    self.path.append(str);
+fn Package::setName(&self, name: const char[]) {
+    self.name.reset();
+    self.name.append(name);
 }
 
-fn Package::setName(&self, str: const char[]) {
-    if (self.name.data)
-        self.name.reset();
-    else
-        self.name = String(str.length);
-    
-    self.name.append(str);
-}
-
-fn Package::setVersion(&self, str: const char[]) {
-    if (self.version.data)
-        self.version.reset();
-    else
-        self.version = String(str.length);
-    
-    self.version.append(str);
+fn Package::setVersion(&self, version: const char[]) {
+    self.version.reset();
+    self.version.append(version);
 }

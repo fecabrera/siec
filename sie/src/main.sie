@@ -1,3 +1,4 @@
+import { String } from std;
 import std;
 import std.io;
 import stdio;
@@ -43,18 +44,12 @@ fn main(args: char*[]) -> i32 {
         return 2;
     }
 
-    let pkg_tab = toml_get(result.toptab, "package");
-    if (pkg_tab.type != toml_type::TABLE) {
-        fprintf(stderr, "missing or invalid 'package' property in %s\n", path);
-        return 3;
-    }
-
     let pkg = Package({args[1], strlen(args[1])});
     defer pkg.destroy();
 
-    let res = pkg.parse(pkg_tab);
+    let res = pkg.parse(result);
     if (not res.ok) {
-        fprintf(stderr, "parsing error %d\n", res.error);
+        fprintf(stderr, "could not parse package: %d\n", res.error);
         return 4;
     }
     
@@ -67,28 +62,34 @@ fn main(args: char*[]) -> i32 {
     // path
     std.io.print("path:    ");
     std.io.println(pkg.path.as_array());
-    
-    // inc1, inc2, ...
-    std.io.print("include: ");
-    foreach (el : enumerate(pkg.include)) {
-        if (el.index)
-            std.io.print(", ");
-        
-        std.io.print("-I ");
-        std.io.print(el.value.as_array());
+
+    let compile_cmd = String::from_array("python -m siec");
+
+    foreach (dep : pkg.dependencies) {
+        compile_cmd.append(" -L packages/"); 
+        compile_cmd.append(dep.name.as_array());
+        compile_cmd.append("/src"); 
     }
-    std.io.println("");
 
     // l1, l2, ...    
-    std.io.print("libs:    ");
-    foreach (el : enumerate(pkg.libs)) {
-        if (el.index)
-            std.io.print(", ");
-        
-        std.io.print("-l ");
-        std.io.print(el.value.as_array());
+    foreach (lib : pkg.libs) {
+        compile_cmd.append(" -l ");
+        compile_cmd.append(lib.as_array());
     }
-    std.io.println("");
+    
+    // inc1, inc2, ...
+    foreach (inc : pkg.include) {
+        compile_cmd.append(" ");
+        compile_cmd.append(pkg.path.as_array());
+        compile_cmd.append("/");
+        compile_cmd.append(inc.as_array());
+        compile_cmd.append("*.sie");
+    }
+    
+    compile_cmd.append(" -o dist/bin/");
+    compile_cmd.append(pkg.name.as_array());
+
+    std.io.println(compile_cmd.as_array());
     
     return 0;
 }

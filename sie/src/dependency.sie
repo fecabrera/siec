@@ -1,0 +1,26 @@
+import { String } from std;
+
+struct Dependency {
+    name: String;
+    version: String;
+}
+
+fn Dependency::init(&self) {
+    self.name = String(0);
+    self.version = String(0);
+}
+
+fn Dependency::destroy(&self) {
+    self.name.destroy();
+    self.version.destroy();
+}
+
+fn Dependency::setName(&self, name: const char[]) {
+    self.name.reset();
+    self.name.append(name);
+}
+
+fn Dependency::setVersion(&self, version: const char[]) {
+    self.version.reset();
+    self.version.append(version); 
+}

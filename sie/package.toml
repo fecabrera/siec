@@ -1,0 +1,9 @@
+[package]
+name = "sie"
+version = "0.1.0"
+include = ["src/"]
+
+[dependencies]
+core = "~1"
+libc = "~1"
+tomlc17 = "~1"
