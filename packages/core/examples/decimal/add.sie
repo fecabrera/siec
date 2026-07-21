@@ -1,7 +1,6 @@
 import { stderr, fprintf, printf } from stdio;
 import { strlen } from string;
 import { Decimal } from decimal;
-import mpdecimal;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length != 3) {
