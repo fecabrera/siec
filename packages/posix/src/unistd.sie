@@ -19,13 +19,15 @@
 @const STDERR_FILENO = 2;    /* standard error file descriptor */
 
 @type mode_t = u16;
-@type pid_t = i32;
 
 @extern fn chdir(path: const char*) -> i32;
 @extern fn fchdir(fd: i32) -> i32;
 
 @extern fn chmod(path: const char*, mode: mode_t) -> i32;
 @extern fn fchmodat(dirfd: i32, path: const char*, mode: mode_t, flag: i32) -> i32;
+
+@extern fn getcwd(buf: char*, size: u64) -> char*;
+@extern fn get_current_dir_name() -> char*;
 
 @extern fn open(pathname: const char*, flags: i32, ...) -> i32;
 @extern fn openat(dirfd: i32, path: const char*, flags: i32, ...) -> i32;
@@ -42,10 +44,16 @@
  * PROCESS
  ***************************************/
 
+@type useconds_t = u32;
+@type pid_t = i32;
+
 @extern let environ: char**;
 
 @extern fn getpid() -> pid_t;
 @extern fn getppid() -> pid_t;
+
+@extern sleep(seconds: u32) -> u32;
+@extern usleep(usec: useconds_t) -> i32;
 
 @extern fn wait(wstatus: i32*) -> pid_t;
 @extern fn waitpid(pid: pid_t, wstatus: i32*, options: i32) -> pid_t;
