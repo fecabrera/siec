@@ -21,6 +21,7 @@ from siec.ast import (
     MemberAssign,
     RefAssign,
     Return,
+    UnaryOp,
     While,
 )
 from siec.codegen.aliases import expand_alias
@@ -112,6 +113,8 @@ def volatile_chain(gen: CodeGenerator, expr, scope: dict) -> bool:
 
         if isinstance(node, (Member, Index)):
             node = node.base
+        elif isinstance(node, UnaryOp) and node.op == "*":
+            node = node.operand
         else:
             return False
 
@@ -136,6 +139,8 @@ def reject_const_base(gen: CodeGenerator, scope: dict, base) -> None:
 
         if isinstance(base, (Member, Index)):
             base = base.base
+        elif isinstance(base, UnaryOp) and base.op == "*":
+            base = base.operand
         else:
             return
 

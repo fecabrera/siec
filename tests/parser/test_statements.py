@@ -18,6 +18,7 @@ from siec.ast import (
     MemberAssign,
     Return,
     StrLiteral,
+    UnaryOp,
     Var,
 )
 from siec.parser.statements import parse_block, parse_statement
@@ -314,6 +315,31 @@ def test_compound_index_assignment_desugars(ts):
     assert parse_statement(ts("p[1] += 2;")) == IndexAssign(
         Var("p"), IntLiteral(1),
         BinaryOp("+", Index(Var("p"), IntLiteral(1)), IntLiteral(2)))
+
+
+def test_dereference_assignment_desugars(ts):
+    """
+    '*p = expr;' desugars to the 'p[0] = expr' it means.
+    """
+    assert parse_statement(ts("*p = 5;")) == IndexAssign(
+        Var("p"), IntLiteral(0), IntLiteral(5))
+
+
+def test_compound_dereference_assignment_desugars(ts):
+    """
+    '*p += v' desugars to 'p[0] = *p + v'.
+    """
+    assert parse_statement(ts("*p += 2;")) == IndexAssign(
+        Var("p"), IntLiteral(0),
+        BinaryOp("+", UnaryOp("*", Var("p")), IntLiteral(2)))
+
+
+def test_arrow_member_assignment(ts):
+    """
+    'p->field = expr;' parses to a MemberAssign over the dereferenced base.
+    """
+    assert parse_statement(ts("p->x = 5;")) == MemberAssign(
+        UnaryOp("*", Var("p")), "x", IntLiteral(5))
 
 
 def test_member_of_indexed_element_assignment(ts):

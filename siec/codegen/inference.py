@@ -249,6 +249,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         operand = expr_sie_type(gen, expr.operand, scope)
         return f"{operand}*" if operand is not None else None
 
+    # '*' dereferences a pointer: the element type its 'p[0]' spelling reads
+    if isinstance(expr, UnaryOp) and expr.op == "*":
+        return expr_sie_type(gen, Index(expr.operand, IntLiteral(0)), scope)
+
     # 'A::member' carries its enum's type name, dotted spellings
     # resolving to the registered one; an 'S::m' whose base is no enum
     # types as a reference to the method
@@ -318,8 +322,12 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, NullLiteral):
         return "opaque*"
 
-    # 'not' yields a bool; '-' and '~' keep their operand's type
+    # 'not' yields a bool; '-' and '~' keep their operand's type; '*' types
+    # only through its operand's declared type, which expr_sie_type read
     if isinstance(expr, UnaryOp):
+        if expr.op == "*":
+            return None
+
         return "bool" if expr.op == "not" else infer_type(gen, expr.operand, scope)
 
     if isinstance(expr, BinaryOp):
@@ -469,6 +477,10 @@ def signedness(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # named values take the signedness of their declared Sie type; an
     # enum-typed value takes its backing type's
     if isinstance(expr, (Var, Call, Member, Index, EnumMember)):
+        return type_signedness(enum_backing(gen, expr_sie_type(gen, expr, scope)))
+
+    # a dereference reads a stored element: its declared type's signedness
+    if isinstance(expr, UnaryOp) and expr.op == "*":
         return type_signedness(enum_backing(gen, expr_sie_type(gen, expr, scope)))
 
     # arithmetic keeps the signedness of its operands; literals adapt to either

@@ -1015,6 +1015,24 @@ let field: i32* = &pt.y;   // address of a field
 let elem: i32* = &arr[1];  // address of an element
 ```
 
+The `*` operator dereferences a pointer: `*p` is `p[0]` by another spelling, and can be read or assigned to the same way. Prefixes stack, so `**pp` peels a pointer to a pointer.
+
+```
+let x: i32 = 1;
+let p: i32* = &x;
+
+let v: i32 = *p; // read
+*p = 5;          // write
+*p += 5;         // compound write
+```
+
+The `->` operator reaches through a pointer to a struct: `p->field` is `(*p).field`, C-style, for fields and methods alike.
+
+```
+let p: Point* = &pt;
+p->x = 5;        // (*p).x = 5
+```
+
 ##### Null
 
 `null` is the pointer literal. It works as an `opaque*`, adapting to whatever pointer type its context expects: initializing, comparing, passing, and returning any `T*`.

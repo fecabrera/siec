@@ -309,8 +309,13 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # caller's storage)
         if expr.op == "&":
             root = expr.operand
-            while isinstance(root, (Member, Index)):
-                root = root.base
+            while True:
+                if isinstance(root, (Member, Index)):
+                    root = root.base
+                elif isinstance(root, UnaryOp) and root.op == "*":
+                    root = root.operand
+                else:
+                    break
 
             if (isinstance(root, Var) and root.name in scope
                     and is_reference(scope[root.name].type)):
@@ -319,6 +324,12 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                                 f"parameter {root.name!r}")
 
             return emit_lvalue(gen, builder, expr.operand, scope)
+
+        # '*' dereferences a pointer, reading the element it points at:
+        # 'p[0]' by another spelling, sharing indexing's semantics
+        if expr.op == "*":
+            return emit_expression(gen, builder, Index(expr.operand, IntLiteral(0)),
+                                   expected_type, scope)
 
         raise TypeError(f"unknown unary operator {expr.op!r}")
 
@@ -372,7 +383,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict):
     """
     Emit the address of an assignable expression: a variable, a struct/array
-    field, or a pointer-indexed element.
+    field, a pointer-indexed element, or a dereferenced pointer.
     """
     if isinstance(expr, Var):
         if expr.name in scope:
@@ -434,6 +445,11 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
         return builder.gep(base, [index])
+
+    # a dereference names the storage its pointer points at, addressed as
+    # its 'p[0]' spelling would be
+    if isinstance(expr, UnaryOp) and expr.op == "*":
+        return emit_lvalue(gen, builder, Index(expr.operand, IntLiteral(0)), scope)
 
     raise TypeError(f"expression is not assignable: {expr!r}")
 

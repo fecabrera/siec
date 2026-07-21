@@ -16,12 +16,14 @@ from siec.ast import (
     If,
     Index,
     IndexAssign,
+    IntLiteral,
     Let,
     Member,
     MemberAssign,
     MethodCall,
     RefAssign,
     Return,
+    UnaryOp,
     Var,
     When,
     While,
@@ -276,7 +278,7 @@ def parse_step(ts: TokenStream):
 def make_assignment(target, value, line: int):
     """
     Build the assignment for an lvalue target: a variable, a struct field,
-    or an indexed element.
+    an indexed element, or a dereferenced pointer.
     """
     if isinstance(target, Var):
         return Assign(target.name, value, line=line)
@@ -286,6 +288,11 @@ def make_assignment(target, value, line: int):
 
     if isinstance(target, Index):
         return IndexAssign(target.base, target.index, value, line=line)
+
+    # a dereference target desugars to the 'p[0] = v' it means, writing
+    # the element the pointer points at
+    if isinstance(target, UnaryOp) and target.op == "*":
+        return IndexAssign(target.operand, IntLiteral(0), value, line=line)
 
     # a call target assigns through the reference it returns
     if isinstance(target, (Call, MethodCall)):

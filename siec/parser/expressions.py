@@ -116,7 +116,7 @@ def parse_primary(ts: TokenStream) -> Expr:
     """
     tok = ts.next()
 
-    # prefix '-', '~', 'not', and '&' bind tighter than any binary operator
+    # prefix '-', '~', 'not', '&', and '*' bind tighter than any binary operator
     if tok.syntax == "-":
         # fold '-' over a numeric literal into a negative constant, keeping it instruction-free
         if ts.peek().kind == "int":
@@ -127,8 +127,12 @@ def parse_primary(ts: TokenStream) -> Expr:
 
         return UnaryOp("-", parse_primary(ts))
 
-    if tok.syntax in ("~", "not", "&"):
+    if tok.syntax in ("~", "not", "&", "*"):
         return UnaryOp(tok.value, parse_primary(ts))
+
+    # '**' opening an operand is two dereferences ('**pp'), not a power
+    if tok.syntax == "**":
+        return UnaryOp("*", UnaryOp("*", parse_primary(ts)))
 
     # 'true' and 'false' are boolean literals
     if tok.kind == "kw" and tok.value in ("true", "false"):
@@ -469,9 +473,9 @@ def ident_chain(expr: Expr) -> list[str] | None:
 
 def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
     """
-    Apply postfix '[index]', '[from:to]', and '.field' chains to an expression:
-    variables, call results, groupings, and literals alike. A '(' after a
-    pure name chain calls it by its dotted name ('libc.stdio.printf(...)').
+    Apply postfix '[index]', '[from:to]', '.field', and '->field' chains to an
+    expression: variables, call results, groupings, and literals alike. A '('
+    after a pure name chain calls it by its dotted name ('libc.stdio.printf(...)').
     """
     while True:
         # '::' after a pure name chain reaches an enum's member through
@@ -531,10 +535,11 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 expr = MethodCall(expr.base, expr.field, args, type_args)
                 continue
 
-        if ts.peek().syntax not in ("[", "."):
+        if ts.peek().syntax not in ("[", ".", "->"):
             return expr
 
-        if ts.next().value == "[":
+        tok = ts.next()
+        if tok.value == "[":
             # a ':' anywhere in the brackets makes it a slice, either bound optional
             start = None if ts.peek().syntax == ":" else parse_expression(ts)
 
@@ -546,6 +551,9 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
             else:
                 ts.expect("sym", "]")
                 expr = Index(expr, start)
+        elif tok.value == "->":
+            # 'p->field' reaches through a pointer: '(*p).field', C-style
+            expr = Member(UnaryOp("*", expr), ts.expect("ident").value)
         else:
             expr = Member(expr, ts.expect("ident").value)
 
