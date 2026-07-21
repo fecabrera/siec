@@ -1,0 +1,73 @@
+import { malloc, realloc, free } from stdlib;
+
+@const DEFAULT_LIST_CAPACITY = 2;
+
+struct List<T>: Iterable<T> {
+    data: T* = null;
+    length: u64;
+    capacity: u64;
+}
+
+fn List<T>::init(&self, capacity: u64 = DEFAULT_LIST_CAPACITY) {
+    self.data = malloc(capacity * sizeof(T)) as T*;
+    self.length = 0;
+    self.capacity = capacity;
+}
+
+fn List<T>::destroy(&self) {
+    free(self.data);
+}
+
+fn List<T>::from_array(arr: const T[]) -> List<T> {
+    let lst = List<T>(arr.length);
+    lst.append(arr);
+    return lst;
+}
+
+fn List<T>::as_array(&self) -> T[] {
+    return {self.data, self.length};
+}
+
+fn List<T>::reset(&self) {
+    self.length = 0;
+}
+
+fn List<T>::get(&self, index: u64) -> &T {
+    return self.data[index];
+}
+
+fn List<T>::push(&self, value: T) {
+    if (self.length == self.capacity)
+        self.grow();
+
+    self.data[self.length] = value;
+    self.length += 1;
+}
+
+fn List<T>::append(&self, arr: const T[]) {
+    foreach (el : arr) {
+        self.push(el);
+    }
+}
+
+fn List<T>::iterator(&self) -> ArrayIterator<T> {
+    return ArrayIterator<T>(self.as_array());
+}
+
+fn List<T>::equals(&self, arr: const T[]) -> bool {
+    if (self.length != arr.length)
+        return false;
+    
+    for (let i: u64 = 0; i < arr.length; i += 1) {
+        if (self.data[i] != arr[i])
+            return false;
+    }
+
+    return true;
+}
+
+fn List<T>::grow(&self) {
+    let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
+    self.data = realloc(self.data, capacity * sizeof(T)) as T*;
+    self.capacity = capacity;
+}

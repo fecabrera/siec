@@ -1,0 +1,113 @@
+// Bindings for the C <math.h> double-precision functions. mcc's only floating
+// type is f64 (C double), so the float/long-double variants (sinf, sinl,
+// ...) are omitted. Link with -lm (the driver does this automatically).
+
+/***************************************
+ * Trigonometric
+ ***************************************/
+
+@extern fn sin(x: f64) -> f64;
+@extern fn cos(x: f64) -> f64;
+@extern fn tan(x: f64) -> f64;
+@extern fn asin(x: f64) -> f64;
+@extern fn acos(x: f64) -> f64;
+@extern fn atan(x: f64) -> f64;
+@extern fn atan2(y: f64, x: f64) -> f64;
+
+/***************************************
+ * Hyperbolic
+ ***************************************/
+
+@extern fn sinh(x: f64) -> f64;
+@extern fn cosh(x: f64) -> f64;
+@extern fn tanh(x: f64) -> f64;
+
+@extern fn asinh(x: f64) -> f64;
+@extern fn acosh(x: f64) -> f64;
+@extern fn atanh(x: f64) -> f64;
+
+/***************************************
+ * Exponential and logarithmic
+ ***************************************/
+
+@extern fn exp(x: f64) -> f64;
+@extern fn exp2(x: f64) -> f64;
+@extern fn expm1(x: f64) -> f64;
+@extern fn log(x: f64) -> f64;
+@extern fn log10(x: f64) -> f64;
+@extern fn log2(x: f64) -> f64;
+@extern fn log1p(x: f64) -> f64;
+@extern fn logb(x: f64) -> f64;
+@extern fn ilogb(x: f64) -> i32;
+
+@extern fn frexp(x: f64, exp: i32*) -> f64;
+@extern fn ldexp(x: f64, exp: i32) -> f64;
+
+@extern fn modf(x: f64, iptr: f64*) -> f64;
+
+@extern fn scalbn(x: f64, n: i32) -> f64;
+
+/***************************************
+ * Power and absolute value
+ ***************************************/
+
+@extern fn pow(base: f64, exp: f64) -> f64;
+@extern fn sqrt(x: f64) -> f64;
+@extern fn cbrt(x: f64) -> f64;
+@extern fn hypot(x: f64, y: f64) -> f64;
+@extern fn fabs(x: f64) -> f64;
+
+/***************************************
+ * Error and gamma
+ ***************************************/
+
+@extern fn erf(x: f64) -> f64;
+@extern fn erfc(x: f64) -> f64;
+@extern fn lgamma(x: f64) -> f64;
+@extern fn tgamma(x: f64) -> f64;
+
+/***************************************
+ * Nearest integer
+ ***************************************/
+
+@extern fn ceil(x: f64) -> f64;
+@extern fn floor(x: f64) -> f64;
+@extern fn trunc(x: f64) -> f64;
+@extern fn round(x: f64) -> f64;
+
+@extern fn nearbyint(x: f64) -> f64;
+@extern fn rint(x: f64) -> f64;
+@extern fn lround(x: f64) -> i64;
+@extern fn llround(x: f64) -> i64;
+@extern fn lrint(x: f64) -> i64;
+@extern fn llrint(x: f64) -> i64;
+
+/***************************************
+ * Remainder
+ ***************************************/
+
+@extern fn fmod(x: f64, y: f64) -> f64;
+@extern fn remainder(x: f64, y: f64) -> f64;
+@extern fn remquo(x: f64, y: f64, quo: i32*) -> f64;
+
+/***************************************
+ * Floating-point manipulation
+ ***************************************/
+
+@extern fn copysign(x: f64, y: f64) -> f64;
+@extern fn nextafter(x: f64, y: f64) -> f64;
+@extern fn nan(tagp: u8*) -> f64;
+
+/***************************************
+ * Maximum, minimum, positive difference
+ ***************************************/
+
+@extern fn fdim(x: f64, y: f64) -> f64;
+@extern fn fmax(x: f64, y: f64) -> f64;
+@extern fn fmin(x: f64, y: f64) -> f64;
+
+/***************************************
+ * Fused multiply-add
+ ***************************************/
+
+@extern fn fma(x: f64, y: f64, z: f64) -> f64;

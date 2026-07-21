@@ -1,0 +1,17 @@
+/**
+ * splitmix64 finalizer -- good avalanche for integer keys. This is the
+ * u64 core mixer; the generic overload below converts and forwards here.
+ *
+ * @param key: key to hash
+ *
+ * @return hashed key
+ */
+fn splitmix64(key: u64) -> u64 {
+    let hash = key;
+    hash ^= hash >> 30;
+    hash *= 13787848793156543929;  // 0xbf58476d1ce4e5b9
+    hash ^= hash >> 27;
+    hash *= 10723151780598845931;  // 0x94d049bb133111eb
+    hash ^= hash >> 31;
+    return hash;
+}

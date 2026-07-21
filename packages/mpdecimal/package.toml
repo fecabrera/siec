@@ -1,0 +1,8 @@
+[package]
+name = "mpdecimal"
+version = "1.0.0"
+libs = ["mpdec"]
+include = ["src/"]
+
+[dependencies]
+libc = "~1"

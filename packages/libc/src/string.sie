@@ -1,0 +1,47 @@
+/***************************************
+ * String manipulation
+ ***************************************/
+
+@extern fn strcpy(dest: char*, src: char*) -> char*;
+@extern fn strncpy(dest: char*, src: char*, count: u64) -> char*;
+@extern fn strcat(dest: char*, src: char*) -> char*;
+@extern fn strncat(dest: char*, src: char*, count: u64) -> char*;
+
+/***************************************
+ * String examination
+ ***************************************/
+
+@extern fn strlen(str: char*) -> u64;
+@extern fn strnlen(str: char*, count: u64) -> u64;
+@extern fn strcmp(lhs: char*, rhs: char*) -> i32;
+@extern fn strncmp(lhs: char*, rhs: char*, count: u64) -> i32;
+@extern fn strcoll(lhs: char*, rhs: char*) -> i32;
+@extern fn strxfrm(dest: char*, src: char*, count: u64) -> u64;
+
+/***************************************
+ * String searching
+ ***************************************/
+
+@extern fn strchr(str: char*, ch: i32) -> char*;
+@extern fn strrchr(str: char*, ch: i32) -> char*;
+@extern fn strstr(haystack: char*, needle: char*) -> char*;
+@extern fn strspn(str: char*, accept: char*) -> u32;
+@extern fn strcspn(str: char*, reject: char*) -> u32;
+@extern fn strpbrk(str: char*, accept: char*) -> char*;
+@extern fn strtok(str: char*, delim: char*) -> char*;
+
+/***************************************
+ * Character array manipulation
+ ***************************************/
+
+@extern fn memchr(ptr: opaque*, ch: i32, count: u32) -> opaque*;
+@extern fn memcmp(lhs: opaque*, rhs: opaque*, count: u32) -> i32;
+@extern fn memset(dest: opaque*, value: i32, count: u32) -> opaque*;
+@extern fn memcpy(dest: opaque*, src: opaque*, count: u32) -> opaque*;
+@extern fn memmove(dest: opaque*, src: opaque*, count: u32) -> opaque*;
+
+/***************************************
+ * Error messages
+ ***************************************/
+
+@extern fn strerror(errnum: i32) -> char*;

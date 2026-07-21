@@ -1,0 +1,78 @@
+import { malloc, free } from stdlib;
+
+struct QueueNode<T> {
+    value: T;
+    next: QueueNode<T>* = null;
+}
+
+// Linked-list FIFO queue<T>. Values enqueue at the tail and dequeue at the
+// head, both in O(1). Nodes are heap-allocated per push.
+struct Queue<T>: Iterable<T> {
+    head: QueueNode<T>*;   // front: next to dequeue (oldest)
+    tail: QueueNode<T>*;   // back: last enqueued (newest)
+}
+
+struct QueueIterator<T>: Iterator<T> {
+    current: QueueNode<T>*; // next node to yield
+}
+
+fn Queue<T>::init(&self) {
+    self.head = null;
+    self.tail = null;
+}
+
+fn Queue<T>::destroy(&self) {
+    while (not self.is_empty())
+        self.pop();
+
+    self.head = null;
+    self.tail = null;
+}
+
+fn Queue<T>::push(&self, value: T) {
+    let node = malloc(sizeof(QueueNode<T>)) as QueueNode<T>*;
+    *node = { value = value };
+    
+    if (self.tail == null) {
+        self.head = node;
+    } else {
+        self.tail->next = node;
+    }
+    
+    self.tail = node;
+}
+
+fn Queue<T>::pop(&self) -> T {
+    let node = self.head;
+    self.head = node->next;
+    
+    if (self.head == null)
+        self.tail = null;
+    
+    let value = node->value;
+    free(node);
+
+    return value;
+}
+
+fn Queue<T>::peek(const &self) -> T {
+    return self.head->value;
+}
+
+fn Queue<T>::is_empty(const &self) -> bool {
+    return self.head == null;
+}
+
+fn Queue<T>::iterator(&self) -> QueueIterator<T> {
+    return { self.head };
+}
+
+fn QueueIterator<T>::has_next(&self) -> bool {
+    return self.current != null;
+}
+
+fn QueueIterator<T>::next(&self) -> &T {
+    let current = self.current;
+    self.current = self.current->next;
+    return current->value;
+}

@@ -1,0 +1,91 @@
+struct FILE;  /** Forward-declaration of FILE */
+
+@const TOMLC17_RELEASE_AFTER = "260618";
+
+enum toml_type {
+    UNKNOWN = 0, /**< Unknown or invalid type */
+    STRING,      /**< String type */
+    INT64,       /**< 64-bit integer type */
+    FP64,        /**< 64-bit floating point type */
+    BOOLEAN,     /**< Boolean type */
+    DATE,        /**< Local date type */
+    TIME,        /**< Local time type */
+    DATETIME,    /**< Local datetime type */
+    DATETIMETZ,  /**< Offset datetime type */
+    ARRAY,       /**< Array type */
+    TABLE,       /**< Table type */
+}
+
+struct toml_datum {
+    type: toml_type;                /**< Type of the datum */
+    flag: u32;                      /**< Internal flag, do not use */
+    lineno: i32;                    /**< 1-based source line number, 0 if synthesized */
+    colno: i32;                     /**< 1-based source column number, 0 if synthesized */
+    source: const char*;            /**< Source name (e.g. filename), NULL if not provided.
+                                         Owned by the result; valid until toml_free(). */
+    union {
+        s: const char*;             /**< Shorthand for str.ptr */
+        str: struct {
+            ptr: const char*;       /**< NUL terminated string pointer */
+            len: i32;               /**< Length of the string excluding the terminating NUL */
+        };
+        int64: i64;                 /**< 64-bit integer value */
+        fp64: f64;                  /**< 64-bit floating point value */
+        boolean: bool;              /**< Boolean value */
+        ts: struct {                /**< Date and time components */
+            year: i16;
+            month: i16;
+            day: i16;
+            hour: i16;
+            minute: i16;
+            second: i16;
+            usec: i32;
+            tz: i16;                /**< Timezone offset in minutes */
+        };
+        arr: struct {               /**< Array data */
+            size: i32;              /**< Number of elements in the array */
+            elem: toml_datum*;      /**< Array of elements */
+        };
+        tab: struct {               /**< Table data */
+            size: i32;              /**< Number of keys in the table */
+            key: const char**;      /**< Array of keys */
+            len: i32*;              /**< Array of key lengths */
+            value: toml_datum*;     /**< Array of values corresponding to keys */
+        };
+    };
+}
+
+struct toml_result {
+    ok: bool;                       /**< True if parsing was successful */
+    toptab: toml_datum;             /**< The top-level table (valid if ok is true) */
+    errmsg: @raw<char>[200];        /**< Error message (valid if ok is false) */
+    __internal: opaque*;            /**< Internal state, do not use */
+}
+
+@const TOML_FLAG_INLINED = 1;   /**< appeared in inline form, e.g. {x = 1} or [1, 2] */
+@const TOML_FLAG_STDEXPR = 2;   /**< table created by a [table] header */
+@const TOML_FLAG_EXPLICIT = 4;  /**< table explicitly defined */
+
+@extern fn toml_parse(src: const char*, len: i32) -> toml_result;
+@extern fn toml_parse_named(src: const char*, len: i32, name: const char*) -> toml_result;
+@extern fn toml_parse_file(fp: FILE*) -> toml_result;
+@extern fn toml_parse_file_named(fp: FILE*, name: const char*) -> toml_result;
+@extern fn toml_parse_file_ex(fname: const char*) -> toml_result;
+@extern fn toml_free(result: toml_result);
+@extern fn toml_get(table: toml_datum, key: const char*) -> toml_datum;
+@extern fn toml_seek(table: toml_datum, multipart_key: const char*) -> toml_datum;
+@extern fn toml_merge(r1: const toml_result*, r2: const toml_result*) -> toml_result;
+@extern fn toml_equiv(r1: const toml_result*, r2: const toml_result*) -> bool;
+
+@type toml_realloc_fnc = fn (opaque*, u64) -> opaque*;
+@type toml_free_fnc = fn (opaque*);
+
+struct toml_option {
+  check_utf8: bool;                 /**< If true, check if all characters are valid UTF-8.
+                                         Default: false. */
+  mem_realloc: toml_realloc_fnc;    /**< Custom realloc function. Default: realloc(). */
+  mem_free: toml_free_fnc;          /**< Custom free function. Default: free(). */
+}
+
+@extern fn toml_default_option() -> toml_option;
+@extern fn toml_set_option(opt: toml_option);

@@ -1,0 +1,7 @@
+[package]
+name = "tomlc17"
+version = "1.0.0"
+libs = ["tomlc17"]
+
+[dependencies]
+libc = "~1"

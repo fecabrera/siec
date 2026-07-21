@@ -1,0 +1,25 @@
+import stdio;
+import mpdecimal;
+
+struct Decimal {
+    ctx: mpdecimal.mpd_context*;
+    mpd: mpdecimal.mpd*;
+}
+
+fn Decimal::init(&self, value: char[]) {
+    self.ctx = stdio.malloc(sizeof(mpdecimal.mpd_context));
+    mpdecimal.mpd_defaultcontext(self.ctx);
+    
+    self.mpd = mpdecimal.mpd_new(self.ctx);
+    self.set(value);
+}
+
+fn Decimal::set(&self, value: char[]) {
+    mpd_set_string(self.mpd, value, self.ctx);
+}
+
+fn Decimal::destroy(&self) {
+    mpdecimal.mpd_del(self.mpd);
+    mpdecimal.mpd_free(self.ctx);
+    free(self.ctx);
+}

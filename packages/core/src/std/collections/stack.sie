@@ -1,0 +1,50 @@
+import { malloc, realloc, free } from stdlib;
+
+@const DEFAULT_STACK_CAPACITY = 2;
+
+struct Stack<T> {
+    data: T*;
+    top: u64;
+    capacity: u64;
+}
+
+fn Stack<T>::init(&self, capacity: u64 = DEFAULT_STACK_CAPACITY) {
+    self.data = malloc(capacity * sizeof(T)) as T*;
+    self.top = 0;
+    self.capacity = capacity;
+}
+
+fn Stack<T>::destroy(&self) {
+    free(self.data);
+
+    self.data = null;
+    self.top = 0;
+    self.capacity = 0;
+}
+
+fn Stack<T>::push(&self, value: T) {
+    if (self.top == self.capacity)
+        self.grow();
+
+    self.data[self.top] = value;
+    self.top += 1;
+}
+
+fn Stack<T>::pop(&self) -> T {
+    self.top -= 1;
+    return self.data[self.top];
+}
+
+fn Stack<T>::peek(const &self) -> T {
+    return self.data[self.top - 1];
+}
+
+fn Stack<T>::is_empty(const &self) -> bool {
+    return self.top == 0;
+}
+
+fn stack<T>::grow(&self) {
+    let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
+    self.data = realloc(self.data, capacity * sizeof(T)) as T*;
+    self.capacity = capacity;
+}

@@ -1,0 +1,3 @@
+import list;
+
+@type String = list.List<char>;

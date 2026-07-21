@@ -1,0 +1,37 @@
+import stdio;
+import {
+    mpd_init,
+    mpd_new,
+    mpd_del,
+    mpd_set_string,
+    mpd_sqrt,
+    mpd_to_sci,
+    mpd_free
+} from mpdecimal;
+
+fn main(args: char*[]) -> i32 {
+    if (args.length != 2) {
+		stdio.fprintf(stdio.stderr, "sqrt: usage: %s x\n", args[0]);
+		return 1;
+	}
+
+    let ctx: mpd_context;
+    mpd_init(&ctx, 28);
+
+    let a = mpd_new(&ctx);
+    defer mpd_del(a);
+    
+    let result = mpd_new(&ctx);
+    defer mpd_del(result);
+    
+    mpd_set_string(a, args[1], &ctx);
+
+    mpd_sqrt(result, a, &ctx);
+
+    let s = mpd_to_sci(result, 0);
+    defer mpd_free(s);
+
+    stdio.printf("%s\n", s);
+
+    return 0;
+}

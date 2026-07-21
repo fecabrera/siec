@@ -1,0 +1,14 @@
+@extern fn isalnum(c: i32) -> i32;
+@extern fn isalpha(c: i32) -> i32;
+@extern fn isblank(c: i32) -> i32;
+@extern fn iscntrl(c: i32) -> i32;
+@extern fn isdigit(c: i32) -> i32;
+@extern fn isgraph(c: i32) -> i32;
+@extern fn islower(c: i32) -> i32;
+@extern fn isprint(c: i32) -> i32;
+@extern fn ispunct(c: i32) -> i32;
+@extern fn isspace(c: i32) -> i32;
+@extern fn isupper(c: i32) -> i32;
+@extern fn isxdigit(c: i32) -> i32;
+@extern fn tolower(c: i32) -> i32;
+@extern fn toupper(c: i32) -> i32;

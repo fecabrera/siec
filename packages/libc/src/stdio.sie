@@ -1,0 +1,137 @@
+/***************************************
+ * Constants
+ ***************************************/
+
+@const EOF = -1;
+
+// `whence` values for fseek.
+@const SEEK_SET = 0;   // from the start of the file
+@const SEEK_CUR = 1;   // from the current position
+@const SEEK_END = 2;   // from the end of the file
+
+// Default stream buffer size, for setvbuf/setbuf. Platform-specific.
+@if (TARGET_OS == OS_DARWIN) {
+    @const BUFSIZ = 1024;
+} @else {
+    @const BUFSIZ = 8192;
+}
+
+// `mode` values for setvbuf.
+@const _IOFBF = 0;   // fully buffered
+@const _IOLBF = 1;   // line buffered
+@const _IONBF = 2;   // unbuffered
+
+/***************************************
+ * Streams (FILE*)
+ ***************************************/
+
+// An opaque handle to an open stream. Its layout belongs to the C library, so
+// it is only ever used through a pointer (FILE*).
+struct FILE;
+
+// The three standard streams. Their underlying linker symbols differ by
+// platform -- macOS exposes __stdinp/__stdoutp/__stderrp, while glibc exposes
+// stdin/stdout/stderr -- so @if + @symbol bind the right ones behind a single
+// set of names.
+@if (TARGET_OS == OS_DARWIN) {
+    @extern @symbol("__stdinp")  let stdin:  FILE*;
+    @extern @symbol("__stdoutp") let stdout: FILE*;
+    @extern @symbol("__stderrp") let stderr: FILE*;
+} @else {
+    @extern @symbol("stdin")  let stdin:  FILE*;
+    @extern @symbol("stdout") let stdout: FILE*;
+    @extern @symbol("stderr") let stderr: FILE*;
+}
+
+/***************************************
+ * Formatted output
+ ***************************************/
+
+@extern fn printf(fmt: char*, ...) -> i32;
+// @extern fn vprintf(format: char*, args: va_list) -> i32;
+@extern fn sprintf(str: char*, format: char*, ...) -> i32;
+@extern fn snprintf(str: char*, size: u64, format: char*, ...) -> i32;
+// @extern fn vsprintf(str: char*, format: char*, args: va_list) -> i32;
+// @extern fn vsnprintf(str: char*, size: u64, format: char*, args: va_list) -> i32;
+
+/***************************************
+ * Formatted input
+ ***************************************/
+
+@extern fn scanf(format: char*, ...) -> i32;
+@extern fn sscanf(str: char*, format: char*, ...) -> i32;
+
+/***************************************
+ * Character input/output
+ ***************************************/
+
+@extern fn getchar() -> i32;
+@extern fn putchar(ch: i32) -> i32;
+@extern fn puts(str: const char*) -> i32;
+
+/***************************************
+ * File operations
+ ***************************************/
+
+@extern fn remove(filename: char*) -> i32;
+@extern fn rename(old_name: char*, new_name: char*) -> i32;
+
+/***************************************
+ * Error reporting
+ ***************************************/
+
+@extern fn perror(str: char*);
+
+/***************************************
+ * Opening and closing streams
+ ***************************************/
+
+@extern fn fopen(filename: const char*, mode: const char*) -> FILE*;
+@extern fn freopen(filename: const char*, mode: const char*, stream: FILE*) -> FILE*;
+@extern fn fclose(stream: FILE*) -> i32;
+@extern fn fflush(stream: FILE*) -> i32;
+
+/***************************************
+ * Block input/output
+ ***************************************/
+@extern fn fread(ptr: const opaque*, size: u64, count: u64, stream: FILE*) -> u64;
+@extern fn fwrite(ptr: const opaque*, size: u64, count: u64, stream: FILE*) -> u64;
+
+/***************************************
+ * Stream positioning
+ ***************************************/
+
+@extern fn fseek(stream: FILE*, offset: i64, whence: i32) -> i32;
+@extern fn ftell(stream: FILE*) -> i64;
+@extern fn rewind(stream: FILE*);
+
+/***************************************
+ * Stream character input/output
+ ***************************************/
+
+@extern fn fgetc(stream: FILE*) -> i32;
+@extern fn getc(stream: FILE*) -> i32;
+@extern fn fputc(ch: i32, stream: FILE*) -> i32;
+@extern fn putc(ch: i32, stream: FILE*) -> i32;
+@extern fn ungetc(ch: i32, stream: FILE*) -> i32;
+@extern fn fgets(str: char*, size: i32, stream: FILE*) -> char*;
+@extern fn fputs(str: const char*, stream: FILE*) -> i32;
+
+/***************************************
+ * Stream formatted input/output
+ ***************************************/
+
+@extern fn fprintf(stream: FILE*, format: char*, ...) -> i32;
+// @extern fn vfprintf(stream: FILE*, format: char*, args: va_list) -> i32;
+@extern fn fscanf(stream: FILE*, format: char*, ...) -> i32;
+// @extern fn vfscanf(stream: FILE*, format: char*, args: va_list) -> i32;
+
+/***************************************
+ * Stream buffering and state
+ ***************************************/
+
+@extern fn setbuf(stream: FILE*, buf: opaque*);
+@extern fn setvbuf(stream: FILE*, buf: opaque*, mode: i32, size: u64) -> i32;
+@extern fn clearerr(stream: FILE*);
+@extern fn feof(stream: FILE*) -> i32;
+@extern fn ferror(stream: FILE*) -> i32;

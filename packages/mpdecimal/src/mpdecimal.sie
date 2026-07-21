@@ -1,0 +1,591 @@
+import stdio;
+
+/******************************************************************************/
+/*                                  Version                                   */
+/******************************************************************************/
+
+@const MPD_MAJOR_VERSION = 4;
+@const MPD_MINOR_VERSION = 0;
+@const MPD_MICRO_VERSION = 1;
+
+@const MPD_VERSION = "4.0.1";
+
+@const MPD_VERSION_HEX = (MPD_MAJOR_VERSION << 24)
+                         | (MPD_MINOR_VERSION << 16)
+                         | (MPD_MICRO_VERSION <<  8);
+
+@extern fn mpd_version() -> const char*;
+
+
+/******************************************************************************/
+/*                              Configuration                                 */
+/******************************************************************************/
+
+@const MPD_CONFIG_64 = 1;
+
+@const MPD_UINT_MAX         = 0xFFFFFFFFFFFFFFFF;
+@const MPD_BITS_PER_UINT    = 64;
+@const MPD_RADIX            = 10000000000000000000;
+@const MPD_RDIGITS          = 19;
+@const MPD_MAX_POW10        = 19;
+@const MPD_EXPDIGITS        = 19;
+@const MPD_MAXTRANSFORM_2N  = 4294967296;
+@const MPD_MAX_PREC         = 999999999999999999;
+@const MPD_MAX_PREC_LOG2    = 64;
+@const MPD_ELIMIT           = 1000000000000000000;
+@const MPD_MAX_EMAX         = 999999999999999999;
+@const MPD_MIN_EMIN         = -999999999999999999;
+@const MPD_MIN_ETINY        = MPD_MIN_EMIN - (MPD_MAX_PREC - 1);
+@const MPD_EXP_INF          = 2000000000000000001;
+@const MPD_EXP_CLAMP        = -4000000000000000001;
+@const MPD_MAXIMPORT        = 105263157894736842;
+@const MPD_IEEE_CONTEXT_MAX_BITS = 512;
+
+@const MPD_MINALLOC_MIN     = 2;
+@const MPD_MINALLOC_MAX     = 64;
+
+@const MPD_NUM_FLAGS        = 15;
+@const MPD_MAX_FLAG_STRING  = 208;
+@const MPD_MAX_FLAG_LIST    = MPD_MAX_FLAG_STRING + 18;
+@const MPD_MAX_SIGNAL_LIST  = 121;
+
+
+/******************************************************************************/
+/*                                Context                                     */
+/******************************************************************************/
+
+enum mpd_round: i32 {
+    UP              = 0,    /* round away from 0               */
+    DOWN            = 1,    /* round toward 0 (truncate)       */
+    CEILING         = 2,    /* round toward +infinity          */
+    FLOOR           = 3,    /* round toward -infinity          */
+    HALF_UP         = 4,    /* 0.5 is rounded up               */
+    HALF_DOWN       = 5,    /* 0.5 is rounded down             */
+    HALF_EVEN       = 6,    /* 0.5 is rounded to even          */
+    ZERO_FIVE_UP    = 7,    /* round zero or five away from 0  */
+    TRUNC           = 8,    /* truncate, but set infinity      */
+    GUARD           = 9,
+}
+
+enum mpd_clamp: i32 {
+    DEFAULT         = 0,
+    IEEE_754        = 1,
+    GUARD           = 2,
+}
+
+@extern let mpd_round_string: const @raw<char*>[mpd_round::GUARD];
+@extern let mpd_clamp_string: const @raw<char*>[mpd_clamp::GUARD];
+
+enum mpd_status: u32 {
+    Clamped             = 0x00000001,
+    Conversion_syntax   = 0x00000002,
+    Division_by_zero    = 0x00000004,
+    Division_impossible = 0x00000008,
+    Division_undefined  = 0x00000010,
+    Fpu_error           = 0x00000020,
+    Inexact             = 0x00000040,
+    Invalid_context     = 0x00000080,
+    Invalid_operation   = 0x00000100,
+    Malloc_error        = 0x00000200,
+    Not_implemented     = 0x00000400,
+    Overflow            = 0x00000800,
+    Rounded             = 0x00001000,
+    Subnormal           = 0x00002000,
+    Underflow           = 0x00004000,
+    Max_status          = 0x00008000 - 1,
+}
+
+@const MPD_IEEE_Invalid_operation = 0x000003BE;
+@const MPD_Errors                 = 0x000003C6;
+@const MPD_Traps                  = 0x00000C06;
+@const MPD_Insufficient_storage   = 0x00000200;
+
+struct mpd_context {
+    prec:       i64;      /* precision */
+    emax:       i64;      /* max positive exp */
+    emin:       i64;      /* min negative exp */
+    traps:      u32;     /* status events that should be trapped */
+    status:     mpd_status; /* status flags */
+    newtrap:    u32;     /* set by mpd_addstatus_raise() */
+    round:      mpd_round;  /* rounding mode */
+    clamp:      mpd_clamp;  /* clamp mode */
+    allcr:      i32;      /* all functions correctly rounded */
+}
+
+enum mpd_decimal_size: i32 {
+    DECIMAL32   = 32,
+    DECIMAL64   = 64,
+    DECIMAL128  = 128,
+}
+
+@extern let MPD_MINALLOC: i64;
+@extern let mpd_traphandler: fn(mpd_context*);
+
+@extern fn mpd_dflt_traphandler(ctx: mpd_context*);
+@extern fn mpd_setminalloc(n: i64);
+@extern fn mpd_init(ctx: mpd_context*, prec: i64);
+@extern fn mpd_maxcontext(ctx: mpd_context*);
+@extern fn mpd_defaultcontext(ctx: mpd_context*);
+@extern fn mpd_basiccontext(ctx: mpd_context*);
+@extern fn mpd_ieee_context(ctx: mpd_context*, bits: i32) -> i32;
+
+@extern fn mpd_getprec(ctx: mpd_context*) -> i64;
+@extern fn mpd_getemax(ctx: mpd_context*) -> i64;
+@extern fn mpd_getemin(ctx: mpd_context*) -> i64;
+@extern fn mpd_getround(ctx: mpd_context*) -> i32;
+@extern fn mpd_gettraps(ctx: mpd_context*) -> u32;
+@extern fn mpd_getstatus(ctx: mpd_context*) -> u32;
+@extern fn mpd_getclamp(ctx: mpd_context*) -> i32;
+@extern fn mpd_getcr(ctx: mpd_context*) -> i32;
+
+@extern fn mpd_qsetprec(ctx: mpd_context*, prec: i64) -> i32;
+@extern fn mpd_qsetemax(ctx: mpd_context*, emax: i64) -> i32;
+@extern fn mpd_qsetemin(ctx: mpd_context*, emin: i64) -> i32;
+@extern fn mpd_qsetround(ctx: mpd_context*, newround: i32) -> i32;
+@extern fn mpd_qsettraps(ctx: mpd_context*, flags: u32) -> i32;
+@extern fn mpd_qsetstatus(ctx: mpd_context*, flags: u32) -> i32;
+@extern fn mpd_qsetclamp(ctx: mpd_context*, c: i32) -> i32;
+@extern fn mpd_qsetcr(ctx: mpd_context*, c: i32) -> i32;
+@extern fn mpd_addstatus_raise(ctx: mpd_context*, flags: u32);
+
+
+/******************************************************************************/
+/*                           Decimal Arithmetic                               */
+/******************************************************************************/
+
+enum mpd_flags: u8 {
+    POS         = 0,
+    NEG         = 1,
+    INF         = 2,
+    NAN         = 4,
+    SNAN        = 8,
+    SPECIAL     = mpd_flags::INF | mpd_flags::NAN | mpd_flags::SNAN,
+    STATIC      = 16,
+    STATIC_DATA = 32,
+    SHARED_DATA = 64,
+    CONST_DATA  = 128,
+    DATAFLAGS   = mpd_flags::STATIC_DATA | mpd_flags::SHARED_DATA | mpd_flags::CONST_DATA,
+}
+
+struct mpd {
+    flags:      mpd_flags;
+    exp:        i64;
+    digits:     i64;
+    length:     i64;
+    alloc:      i64;
+    data:       u64*;
+}
+
+
+/******************************************************************************/
+/*                                    Triple                                  */
+/******************************************************************************/
+
+enum mpd_triple_class: u8 {
+    NORMAL  = 0,
+    INF     = 1,
+    QNAN    = 2,
+    SNAN    = 3,
+    ERROR   = 4,
+}
+
+struct mpd_uint128_triple {
+    tag:      mpd_triple_class;
+    sign:     u8;
+    hi:       u64;
+    lo:       u64;
+    exp:      i64;
+}
+
+@extern fn mpd_from_uint128_triple(result: mpd*, triple: mpd_uint128_triple*, status: mpd_status*) -> i32;
+@extern fn mpd_as_uint128_triple(a: mpd*) -> mpd_uint128_triple;
+
+
+/******************************************************************************/
+/*                       Quiet, thread-safe functions                         */
+/******************************************************************************/
+
+struct mpd_spec {
+    min_width:      i64;            /* minimum field width */
+    prec:           i64;            /* fraction digits or significant digits */
+    type:           char;           /* conversion specifier */
+    align:          char;           /* alignment */
+    sign:           char;           /* sign printing/alignment */
+    sign_coerce:    char;           /* coerce to positive zero */
+    fill:           char[5];        /* fill character */
+    dot:            const char*;    /* decimal point */
+    sep:            const char*;    /* thousands separator */
+    grouping:       const char*;    /* grouping of digits */
+}
+
+@extern fn mpd_to_sci(dec: mpd*, fmt: i32) -> char*;
+@extern fn mpd_to_eng(dec: mpd*, fmt: i32) -> char*;
+@extern fn mpd_to_sci_size(res: char**, dec: mpd*, fmt: i32) -> i64;
+@extern fn mpd_to_eng_size(res: char**, dec: mpd*, fmt: i32) -> i64;
+@extern fn mpd_validate_lconv(spec: mpd_spec*) -> i32;
+@extern fn mpd_parse_fmt_str(spec: mpd_spec*, fmt: char*, caps: i32) -> i32;
+@extern fn mpd_qformat_spec(dec: mpd*, spec: mpd_spec*, ctx: mpd_context*, status: mpd_status*) -> char*;
+@extern fn mpd_qformat(dec: mpd*, fmt: char*, ctx: mpd_context*, status: mpd_status*) -> char*;
+
+@extern fn mpd_snprint_flags(dest: char*, nmemb: i32, flags: u32) -> i32;
+@extern fn mpd_lsnprint_flags(dest: char*, nmemb: i32, flags: u32, flag_string: const char**) -> i32;
+@extern fn mpd_lsnprint_signals(dest: char*, nmemb: i32, flags: u32, signal_string: const char**) -> i32;
+
+@extern fn mpd_fprint(file: FILE*, dec: mpd*);
+@extern fn mpd_print(dec: mpd*);
+
+/* assignment from a string */
+@extern fn mpd_qset_string(dec: mpd*, s: char*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_string_exact(dec: mpd*, s: char*, status: mpd_status*);
+
+/* set to NaN with error flags */
+@extern fn mpd_seterror(result: mpd*, flags: u32, status: mpd_status*);
+/* set a special with sign and type */
+@extern fn mpd_setspecial(result: mpd*, sign: u8, type: u8);
+/* set coefficient to zero or all nines */
+@extern fn mpd_zerocoeff(result: mpd*);
+@extern fn mpd_qmaxcoeff(result: mpd*, ctx: mpd_context*, status: mpd_status*);
+
+/* quietly assign a C integer type to an mpd_t */
+@extern fn mpd_qset_ssize(result: mpd*, a: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_i32(result: mpd*, a: i32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_uint(result: mpd*, a: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_u32(result: mpd*, a: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_i64(result: mpd*, a: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_u64(result: mpd*, a: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qset_i64_exact(result: mpd*, a: i64, status: mpd_status*);
+@extern fn mpd_qset_u64_exact(result: mpd*, a: u64, status: mpd_status*);
+
+/* quietly assign a C integer type to an mpd_t with a static coefficient */
+@extern fn mpd_qsset_ssize(result: mpd*, a: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsset_i32(result: mpd*, a: i32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsset_uint(result: mpd*, a: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsset_u32(result: mpd*, a: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsset_i64(result: mpd*, a: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsset_u64(result: mpd*, a: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsset_i64_exact(result: mpd*, a: i64, status: mpd_status*);
+@extern fn mpd_qsset_u64_exact(result: mpd*, a: u64, status: mpd_status*);
+
+/* quietly get a C integer type from an mpd_t */
+@extern fn mpd_qget_ssize(dec: mpd*, status: mpd_status*) -> i64;
+@extern fn mpd_qget_i32(dec: mpd*, status: mpd_status*) -> i32;
+@extern fn mpd_qget_uint(dec: mpd*, status: mpd_status*) -> u64;
+@extern fn mpd_qget_u32(dec: mpd*, status: mpd_status*) -> u32;
+@extern fn mpd_qget_i64(dec: mpd*, status: mpd_status*) -> i64;
+@extern fn mpd_qget_u64(dec: mpd*, status: mpd_status*) -> u64;
+@extern fn mpd_qabs_uint(dec: mpd*, status: mpd_status*) -> u64;
+
+/* quiet functions */
+@extern fn mpd_qcheck_nan(nanresult: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*) -> i32;
+@extern fn mpd_qcheck_nans(nansresult: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*) -> i32;
+@extern fn mpd_qfinalize(result: mpd*, ctx: mpd_context*, status: mpd_status*);
+
+@extern fn mpd_class(a: mpd*, ctx: mpd_context*) -> const char*;
+
+@extern fn mpd_qcopy(result: mpd*, a: mpd*, status: mpd_status*) -> i32;
+@extern fn mpd_qcopy_cxx(result: mpd*, a: mpd*) -> i32;
+@extern fn mpd_qncopy(a: mpd*) -> mpd*;
+@extern fn mpd_qcopy_abs(result: mpd*, a: mpd*, status: mpd_status*) -> i32;
+@extern fn mpd_qcopy_negate(result: mpd*, a: mpd*, status: mpd_status*) -> i32;
+@extern fn mpd_qcopy_sign(result: mpd*, a: mpd*, b: mpd*, status: mpd_status*) -> i32;
+
+@extern fn mpd_qand(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qinvert(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qlogb(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qor(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qscaleb(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qxor(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_same_quantum(a: mpd*, b: mpd*) -> i32;
+
+@extern fn mpd_qrotate(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qshiftl(result: mpd*, a: mpd*, n: i64, status: mpd_status*) -> i32;
+@extern fn mpd_qshiftr(result: mpd*, a: mpd*, n: i64, status: mpd_status*) -> u64;
+@extern fn mpd_qshiftr_inplace(result: mpd*, n: i64) -> u64;
+@extern fn mpd_qshift(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qshiftn(result: mpd*, a: mpd*, n: i64, ctx: mpd_context*, status: mpd_status*);
+
+@extern fn mpd_qcmp(a: mpd*, b: mpd*, status: mpd_status*) -> i32;
+@extern fn mpd_qcompare(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*) -> i32;
+@extern fn mpd_qcompare_signal(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*) -> i32;
+@extern fn mpd_cmp_total(a: mpd*, b: mpd*) -> i32;
+@extern fn mpd_cmp_total_mag(a: mpd*, b: mpd*) -> i32;
+@extern fn mpd_compare_total(result: mpd*, a: mpd*, b: mpd*) -> i32;
+@extern fn mpd_compare_total_mag(result: mpd*, a: mpd*, b: mpd*) -> i32;
+
+@extern fn mpd_qround_to_intx(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qround_to_int(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qtrunc(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qfloor(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qceil(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+
+@extern fn mpd_qabs(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmax(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmax_mag(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmin(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmin_mag(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qminus(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qplus(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qnext_minus(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qnext_plus(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qnext_toward(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qquantize(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qrescale(result: mpd*, a: mpd*, exp: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qrescale_fmt(result: mpd*, a: mpd*, exp: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qreduce(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qfma(result: mpd*, a: mpd*, b: mpd*, c: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv(q: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdivint(q: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qrem(r: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qrem_near(r: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdivmod(q: mpd*, r: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qpow(result: mpd*, base: mpd*, exp: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qpowmod(result: mpd*, base: mpd*, exp: mpd*, mod: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qexp(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qln10(result: mpd*, prec: i64, status: mpd_status*);
+@extern fn mpd_qln(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qlog10(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsqrt(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qinvroot(result: mpd*, a: mpd*, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qadd_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qsub_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qmul_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qdiv_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*, status: mpd_status*);
+
+@extern fn mpd_sizeinbase(a: mpd*, base: u32) -> u64;
+@extern fn mpd_qimport_u16(result: mpd*, src: u16*, src_len: u64, src_sign: u8, src_base: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qimport_u32(result: mpd*, src: u32*, src_len: u64, src_sign: u8, src_base: u32, ctx: mpd_context*, status: mpd_status*);
+@extern fn mpd_qexport_u16(rdata: u16**, rlen: u64, base: u32, src: mpd*, status: mpd_status*) -> u64;
+@extern fn mpd_qexport_u32(rdata: u32**, rlen: u64, base: u32, src: mpd*, status: mpd_status*) -> u64;
+
+
+/******************************************************************************/
+/*                           Signalling functions                             */
+/******************************************************************************/
+
+@extern fn mpd_format(dec: mpd*, fmt: char*, ctx: mpd_context*) -> char*;
+@extern fn mpd_import_u16(result: mpd*, src: u16*, src_len: u64, src_sign: u8, src_base: u32, ctx: mpd_context*);
+@extern fn mpd_import_u32(result: mpd*, src: u32*, src_len: u64, src_sign: u8, src_base: u32, ctx: mpd_context*);
+@extern fn mpd_export_u16(rdata: u16**, rlen: u64, base: u32, src: mpd*, ctx: mpd_context*) -> u64;
+@extern fn mpd_export_u32(rdata: u32**, rlen: u64, base: u32, src: mpd*, ctx: mpd_context*) -> u64;
+@extern fn mpd_finalize(result: mpd*, ctx: mpd_context*);
+@extern fn mpd_check_nan(nanresult: mpd*, a: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_check_nans(nansresult: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_set_string(result: mpd*, s: char*, ctx: mpd_context*);
+@extern fn mpd_maxcoeff(result: mpd*, ctx: mpd_context*);
+@extern fn mpd_sset_ssize(result: mpd*, a: i64, ctx: mpd_context*);
+@extern fn mpd_sset_i32(result: mpd*, a: i32, ctx: mpd_context*);
+@extern fn mpd_sset_uint(result: mpd*, a: u64, ctx: mpd_context*);
+@extern fn mpd_sset_u32(result: mpd*, a: u32, ctx: mpd_context*);
+@extern fn mpd_sset_i64(result: mpd*, a: i64, ctx: mpd_context*);
+@extern fn mpd_sset_u64(result: mpd*, a: u64, ctx: mpd_context*);
+@extern fn mpd_set_ssize(result: mpd*, a: i64, ctx: mpd_context*);
+@extern fn mpd_set_i32(result: mpd*, a: i32, ctx: mpd_context*);
+@extern fn mpd_set_uint(result: mpd*, a: u64, ctx: mpd_context*);
+@extern fn mpd_set_u32(result: mpd*, a: u32, ctx: mpd_context*);
+@extern fn mpd_set_i64(result: mpd*, a: i64, ctx: mpd_context*);
+@extern fn mpd_set_u64(result: mpd*, a: u64, ctx: mpd_context*);
+
+@extern fn mpd_get_ssize(dec: mpd*, ctx: mpd_context*) -> i64;
+@extern fn mpd_get_uint(dec: mpd*, ctx: mpd_context*) -> u64;
+@extern fn mpd_abs_uint(dec: mpd*, ctx: mpd_context*) -> u64;
+@extern fn mpd_get_i32(dec: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_get_u32(dec: mpd*, ctx: mpd_context*) -> u32;
+@extern fn mpd_get_i64(dec: mpd*, ctx: mpd_context*) -> i64;
+@extern fn mpd_get_u64(dec: mpd*, ctx: mpd_context*) -> u64;
+
+@extern fn mpd_and(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_copy(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_canonical(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_copy_abs(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_copy_negate(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_copy_sign(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_invert(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_logb(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_or(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_rotate(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_scaleb(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_shiftl(result: mpd*, a: mpd*, n: i64, ctx: mpd_context*);
+@extern fn mpd_shiftr(result: mpd*, a: mpd*, n: i64, ctx: mpd_context*) -> u64;
+@extern fn mpd_shiftn(result: mpd*, a: mpd*, n: i64, ctx: mpd_context*);
+@extern fn mpd_shift(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_xor(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_abs(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_cmp(a: mpd*, b: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_compare(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_compare_signal(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_add(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_add_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_add_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*);
+@extern fn mpd_add_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_add_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*);
+@extern fn mpd_sub(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_sub_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_sub_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*);
+@extern fn mpd_sub_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_sub_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*);
+@extern fn mpd_div(q: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_div_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_div_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*);
+@extern fn mpd_div_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_div_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*);
+@extern fn mpd_divmod(q: mpd*, r: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_divint(q: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_exp(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_fma(result: mpd*, a: mpd*, b: mpd*, c: mpd*, ctx: mpd_context*);
+@extern fn mpd_ln(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_log10(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_max(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_max_mag(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_min(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_min_mag(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_minus(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_mul(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_mul_ssize(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_mul_i32(result: mpd*, a: mpd*, b: i32, ctx: mpd_context*);
+@extern fn mpd_mul_uint(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_mul_u32(result: mpd*, a: mpd*, b: u32, ctx: mpd_context*);
+@extern fn mpd_next_minus(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_next_plus(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_next_toward(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_plus(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_pow(result: mpd*, base: mpd*, exp: mpd*, ctx: mpd_context*);
+@extern fn mpd_powmod(result: mpd*, base: mpd*, exp: mpd*, mod: mpd*, ctx: mpd_context*);
+@extern fn mpd_quantize(result: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_rescale(result: mpd*, a: mpd*, exp: i64, ctx: mpd_context*);
+@extern fn mpd_rescale_fmt(result: mpd*, a: mpd*, exp: i64, ctx: mpd_context*);
+@extern fn mpd_reduce(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_rem(r: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_rem_near(r: mpd*, a: mpd*, b: mpd*, ctx: mpd_context*);
+@extern fn mpd_round_to_intx(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_round_to_int(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_trunc(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_floor(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_ceil(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_sqrt(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_invroot(result: mpd*, a: mpd*, ctx: mpd_context*);
+@extern fn mpd_add_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_add_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_sub_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_sub_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_div_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_div_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+@extern fn mpd_mul_i64(result: mpd*, a: mpd*, b: i64, ctx: mpd_context*);
+@extern fn mpd_mul_u64(result: mpd*, a: mpd*, b: u64, ctx: mpd_context*);
+
+
+/******************************************************************************/
+/*                       Get attributes of a decimal                          */
+/******************************************************************************/
+
+@extern fn mpd_adjexp(dec: mpd*) -> i64;
+@extern fn mpd_etiny(ctx: mpd_context*) -> i64;
+@extern fn mpd_etop(ctx: mpd_context*) -> i64;
+@extern fn mpd_msword(dec: mpd*) -> u64;
+@extern fn mpd_word_digits(word: u64) -> i32;
+@extern fn mpd_msd(word: u64) -> u64;
+@extern fn mpd_lsd(word: u64) -> u64;
+@extern fn mpd_digits_to_size(digits: i64) -> i64;
+@extern fn mpd_exp_digits(exp: i64) -> i32;
+@extern fn mpd_iscanonical(dec: mpd*) -> i32;
+@extern fn mpd_isfinite(dec: mpd*) -> i32;
+@extern fn mpd_isinfinite(dec: mpd*) -> i32;
+@extern fn mpd_isinteger(dec: mpd*) -> i32;
+@extern fn mpd_isnan(dec: mpd*) -> i32;
+@extern fn mpd_isnegative(dec: mpd*) -> i32;
+@extern fn mpd_ispositive(dec: mpd*) -> i32;
+@extern fn mpd_isqnan(dec: mpd*) -> i32;
+@extern fn mpd_issigned(dec: mpd*) -> i32;
+@extern fn mpd_issnan(dec: mpd*) -> i32;
+@extern fn mpd_isspecial(dec: mpd*) -> i32;
+@extern fn mpd_iszero(dec: mpd*) -> i32;
+@extern fn mpd_iszerocoeff(dec: mpd*) -> i32;
+@extern fn mpd_isnormal(dec: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_issubnormal(dec: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_isoddword(word: u64) -> i32;
+@extern fn mpd_isoddcoeff(dec: mpd*) -> i32;
+@extern fn mpd_isodd(dec: mpd*) -> i32;
+@extern fn mpd_iseven(dec: mpd*) -> i32;
+@extern fn mpd_sign(dec: mpd*) -> u8;
+@extern fn mpd_arith_sign(dec: mpd*) -> i32;
+@extern fn mpd_radix() -> i32;
+@extern fn mpd_isdynamic(dec: mpd*) -> i32;
+@extern fn mpd_isstatic(dec: mpd*) -> i32;
+@extern fn mpd_isdynamic_data(dec: mpd*) -> i32;
+@extern fn mpd_isstatic_data(dec: mpd*) -> i32;
+@extern fn mpd_isshared_data(dec: mpd*) -> i32;
+@extern fn mpd_isconst_data(dec: mpd*) -> i32;
+@extern fn mpd_trail_zeros(dec: mpd*) -> i64;
+
+
+/******************************************************************************/
+/*                       Set attributes of a decimal                          */
+/******************************************************************************/
+
+@extern fn mpd_setdigits(result: mpd*);
+@extern fn mpd_set_sign(result: mpd*, sign: u8);
+@extern fn mpd_signcpy(result: mpd*, a: mpd*);
+@extern fn mpd_set_infinity(result: mpd*);
+@extern fn mpd_set_qnan(result: mpd*);
+@extern fn mpd_set_snan(result: mpd*);
+@extern fn mpd_set_negative(result: mpd*);
+@extern fn mpd_set_positive(result: mpd*);
+@extern fn mpd_set_dynamic(result: mpd*);
+@extern fn mpd_set_static(result: mpd*);
+@extern fn mpd_set_dynamic_data(result: mpd*);
+@extern fn mpd_set_static_data(result: mpd*);
+@extern fn mpd_set_shared_data(result: mpd*);
+@extern fn mpd_set_const_data(result: mpd*);
+@extern fn mpd_clear_flags(result: mpd*);
+@extern fn mpd_set_flags(result: mpd*, flags: u8);
+@extern fn mpd_copy_flags(result: mpd*, a: mpd*);
+
+
+/******************************************************************************/
+/*                            Memory handling                                 */
+/******************************************************************************/
+
+@extern let mpd_mallocfunc: fn(u64) -> opaque*;
+@extern let mpd_callocfunc: fn(u64, u64) -> opaque*;
+@extern let mpd_reallocfunc: fn(opaque*, u64) -> opaque*;
+@extern let mpd_free: fn(opaque*);
+
+@extern fn mpd_callocfunc_em(nmemb: u64, size: u64) -> opaque*;
+@extern fn mpd_alloc(nmemb: u64, size: u64) -> opaque*;
+@extern fn mpd_calloc(nmemb: u64, size: u64) -> opaque*;
+@extern fn mpd_realloc(ptr: opaque*, nmemb: u64, size: u64, err: u8*) -> opaque*;
+@extern fn mpd_sh_alloc(struct_size: u64, nmemb: u64, size: u64) -> opaque*;
+
+@extern fn mpd_qnew() -> mpd*;
+@extern fn mpd_new(ctx: mpd_context*) -> mpd*;
+@extern fn mpd_qnew_size(nwords: i64) -> mpd*;
+@extern fn mpd_del(dec: mpd*);
+
+@extern fn mpd_uint_zero(dest: u64*, count: u64);
+@extern fn mpd_qresize(result: mpd*, nwords: i64, status: mpd_status*) -> i32;
+@extern fn mpd_qresize_zero(result: mpd*, nwords: i64, status: mpd_status*) -> i32;
+@extern fn mpd_minalloc(result: mpd*);
+@extern fn mpd_resize(result: mpd*, nwords: i64, ctx: mpd_context*) -> i32;
+@extern fn mpd_resize_zero(result: mpd*, nwords: i64, ctx: mpd_context*) -> i32;

@@ -1,0 +1,57 @@
+/***************************************
+ * ARGUMENTS
+ ***************************************/
+
+@extern fn getopt(argc: i32, argv: char**, optstring: const char*) -> i32;
+
+@extern let optarg: char*;
+@extern let optind: i32;
+@extern let opterr: i32;
+@extern let optopt: i32;
+
+
+/***************************************
+ * FILESYSTEM 
+ ***************************************/
+
+@const STDIN_FILENO = 0;     /* standard input file descriptor */
+@const STDOUT_FILENO = 1;    /* standard output file descriptor */
+@const STDERR_FILENO = 2;    /* standard error file descriptor */
+
+@type mode_t = u16;
+@type pid_t = i32;
+
+@extern fn chdir(path: const char*) -> i32;
+@extern fn fchdir(fd: i32) -> i32;
+
+@extern fn chmod(path: const char*, mode: mode_t) -> i32;
+@extern fn fchmodat(dirfd: i32, path: const char*, mode: mode_t, flag: i32) -> i32;
+
+@extern fn open(pathname: const char*, flags: i32, ...) -> i32;
+@extern fn openat(dirfd: i32, path: const char*, flags: i32, ...) -> i32;
+@extern fn close(fd: i32) -> i32;
+
+@extern fn read(fd: i32, buf: opaque*, count: u64) -> i64;
+@extern fn write(fd: i32, buf: const opaque*, count: u64) -> i64;
+
+@extern fn mkdir(path: const char*, mode: mode_t) -> i32;
+@extern fn rmdir(path: const char*) -> i32;
+
+
+/***************************************
+ * PROCESS
+ ***************************************/
+
+@extern let environ: char**;
+
+@extern fn getpid() -> pid_t;
+@extern fn getppid() -> pid_t;
+
+@extern fn wait(wstatus: i32*) -> pid_t;
+@extern fn waitpid(pid: pid_t, wstatus: i32*, options: i32) -> pid_t;
+
+@extern fn execv(path: const char*, argv: const char**) -> i32;
+@extern fn execvp(file: const char*, argv: const char**) -> i32;
+@extern fn execvpe(file: const char*, argv: const char**, envp: const char**) -> i32;
+
+@extern fn fork() -> pid_t;

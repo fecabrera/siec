@@ -1,0 +1,77 @@
+/***************************************
+ * Memory management
+ ***************************************/
+
+@extern fn malloc(size: u64) -> opaque*;
+@extern fn calloc(count: u64, size: u64) -> opaque*;
+@extern fn realloc(ptr: opaque*, size: u64) -> opaque*;
+@extern fn aligned_alloc(alignment: u64, size: u64) -> opaque*;
+@extern fn free(ptr: opaque*);
+
+/***************************************
+ * Program termination
+ ***************************************/
+
+@extern fn exit(status: i32);
+@extern fn abort();
+@extern fn _Exit(status: i32);
+
+/***************************************
+ * Integer arithmetic
+ ***************************************/
+
+@extern fn abs(n: i32) -> i32;
+@extern fn labs(n: i64) -> i64;
+@extern fn llabs(n: i64) -> i64;
+
+struct div_t {
+    quot: i32;   // the quotient numer / denom
+    rem: i32;    // the remainder numer % denom
+}
+
+struct ldiv_t {
+    quot: i64;   // the quotient numer / denom
+    rem: i64;    // the remainder numer % denom
+}
+
+struct lldiv_t {
+    quot: i64;   // the quotient numer / denom
+    rem: i64;    // the remainder numer % denom
+}
+
+/***************************************
+ * String conversion
+ ***************************************/
+
+@extern fn atoi(str: char*) -> i32;
+@extern fn atol(str: char*) -> i64;
+@extern fn atoll(str: char*) -> i64;
+@extern fn atof(str: char*) -> f64;
+@extern fn strtol(str: char*, endptr: char**, base: i32) -> i64;
+@extern fn strtoll(str: char*, endptr: char**, base: i32) -> i64;
+@extern fn strtoul(str: char*, endptr: char**, base: i32) -> u64;
+@extern fn strtoull(str: char*, endptr: char**, base: i32) -> u64;
+@extern fn strtod(str: char*, endptr: char**) -> f64;
+
+/***************************************
+ * Pseudo-random numbers
+ ***************************************/
+
+@extern fn rand() -> i32;
+@extern fn srand(seed: u32);
+
+/***************************************
+ * Searching and sorting
+ ***************************************/
+
+@extern fn qsort(base: opaque*, count: u64, size: u64,
+                 cmp: fn(opaque*, opaque*) -> i32);
+@extern fn bsearch(key: opaque*, base: opaque*, count: u64, size: u64,
+                   cmp: fn(opaque*, opaque*) -> i32) -> opaque*;
+
+/***************************************
+ * Environment
+ ***************************************/
+
+@extern fn getenv(name: char*) -> char*;
+@extern fn system(command: char*) -> i32;

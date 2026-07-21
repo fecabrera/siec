@@ -1,0 +1,384 @@
+@const ZLIB_VERSION          = "1.3.1";
+@const ZLIB_VERNUM           = 0x1310;
+@const ZLIB_VER_MAJOR        = 1;
+@const ZLIB_VER_MINOR        = 3;
+@const ZLIB_VER_REVISION     = 1;
+@const ZLIB_VER_SUBREVISION  = 0;
+
+/** Flush values controlling how much output deflate()/inflate() produce and
+    how the internal state is affected. Z_NO_FLUSH gives the best compression;
+    the others trade ratio for the ability to flush pending output or align to
+    byte boundaries. Passed as the `flush` argument to deflate() and inflate(). */
+enum z_flush: i32 {
+    Z_NO_FLUSH      = 0, /* accumulate input; flush only when the buffers fill (best ratio) */
+    Z_PARTIAL_FLUSH = 1, /* flush all pending output without aligning to a byte boundary */
+    Z_SYNC_FLUSH    = 2, /* flush all pending output and align to a byte boundary */
+    Z_FULL_FLUSH    = 3, /* like SYNC_FLUSH but also reset the compression state */
+    Z_FINISH        = 4, /* no more input will follow; finish the stream */
+    Z_BLOCK         = 5, /* stop at a deflate block boundary (advanced use) */
+    Z_TREES         = 6, /* like BLOCK but also stop at the end of each block header */
+}
+
+/** Return/status codes shared by most zlib functions. Non-negative values are
+    success indications; negative values are errors. Callers should generally
+    check for Z_OK (and Z_STREAM_END where the stream can end) before proceeding. */
+enum z_status: i32 {
+    Z_OK            =  0, /* operation completed successfully */
+    Z_STREAM_END    =  1, /* end of the stream reached; all input consumed and output produced */
+    Z_NEED_DICT     =  2, /* a preset dictionary is required to continue decompression */
+    Z_ERRNO         = -1, /* a filesystem/OS error occurred (consult errno) */
+    Z_STREAM_ERROR  = -2, /* the stream state is inconsistent or a parameter was invalid */
+    Z_DATA_ERROR    = -3, /* the input data was corrupted or incomplete */
+    Z_MEM_ERROR     = -4, /* not enough memory to complete the operation */
+    Z_BUF_ERROR     = -5, /* no progress possible: output buffer full or input exhausted */
+    Z_VERSION_ERROR = -6, /* the zlib version is incompatible with the caller's headers */
+}
+
+/** Compression levels for deflateInit(). Higher levels compress more but run
+    slower; the special value Z_DEFAULT_COMPRESSION picks a balanced trade-off. */
+enum z_level: i32 {
+    Z_NO_COMPRESSION      =  0, /* store only, no compression */
+    Z_BEST_SPEED          =  1, /* fastest, lowest compression ratio */
+    Z_BEST_COMPRESSION    =  9, /* slowest, highest compression ratio */
+    Z_DEFAULT_COMPRESSION = -1, /* library default (currently equivalent to level 6) */
+}
+
+/** Compression tuning strategy for the advanced init routines. The default suits
+    general data; the others help specific input distributions such as filtered
+    data, plain text/RLE-friendly data, or when a fixed Huffman table is desired. */
+enum z_strategy {
+    Z_FILTERED         = 1, /* for data produced by a filter/predictor (mostly small values) */
+    Z_HUFFMAN_ONLY     = 2, /* skip string matching; Huffman-encode only */
+    Z_RLE              = 3, /* limit matches to distance one (fast, good for PNG/image data) */
+    Z_FIXED            = 4, /* disable dynamic Huffman codes for a simpler decoder */
+    Z_DEFAULT_STRATEGY = 0, /* the standard strategy for ordinary data */
+}
+
+/** Guess about the nature of the data being compressed, reported in
+    z_stream.data_type. Also settable to hint the compressor. */
+enum z_type: i32 {
+    Z_BINARY  = 0,                  /* binary (non-text) data */
+    Z_TEXT    = 1,                  /* text data */
+    Z_ASCII   = z_type::Z_TEXT,     /* for compatibility with 1.2.2 and earlier */
+    Z_UNKNOWN = 2,                  /* data type could not be determined */
+}
+
+/** Compression method. DEFLATE (value 8) is the only method defined by the
+    zlib format. */
+enum z_deflate {
+    Z_DEFLATED = 8,
+}
+
+/** Custom allocator callback: (opaque, item_count, item_size) -> pointer.
+    Set z_stream.zalloc to null to use the library's default allocator. */
+@type alloc_func = fn (opaque*, u32, u32) -> opaque*;
+
+/** Custom deallocator callback: (opaque, pointer). Set z_stream.zfree to null
+    to use the library's default deallocator. */
+@type free_func = fn (opaque*, opaque*);
+
+/** Opaque placeholder for zlib's internal compression state. Its layout is
+    private to the library; only ever hold a pointer to it. */
+struct internal_state;
+
+/** The central data structure describing a (de)compression stream. The caller
+    fills in the input/output buffer fields and allocator hooks before calling
+    deflate()/inflate(); zlib updates the pointers, counters, and status fields
+    as data is processed. */
+struct z_stream {
+    next_in:    u8*;                /* next input byte the library will read */
+    avail_in:   u32;                /* number of bytes available at next_in */
+    total_in:   u64;                /* running total of input bytes consumed so far */
+    next_out:   u8*;                /* next position in the output buffer to write */
+    avail_out:  u32;                /* remaining free space at next_out */
+    total_out:  u64;                /* running total of output bytes produced so far */
+    msg:        char*;              /* last error message, or null if none */
+    state:      internal_state*;    /* library-private state; not touched by the caller */
+    zalloc:     alloc_func;         /* custom allocator, or null for the default */
+    zfree:      free_func;          /* custom deallocator, or null for the default */
+    opaque:     opaque*;            /* private data passed through to zalloc/zfree */
+    data_type:  z_type;             /* best guess about the data type (see z_type) */
+    adler:      u64;                /* Adler-32 (or CRC-32) checksum of uncompressed data */
+    reserved:   u64;                /* reserved for future use; must be zero */
+}
+
+/** gzip header fields, used with the advanced deflate/inflate header routines to
+    read or write the metadata of a gzip-wrapped stream. When writing, populate
+    the fields you want emitted (leaving pointer fields as Z_NULL to omit them);
+    when reading, provide buffers and their `*_max` sizes for zlib to fill in. */
+struct gz_header {
+    text:       i32;                /* true if compressed data believed to be text */
+    time:       u32;                /* modification time */
+    xflags:     i32;                /* extra flags (not used when writing a gzip file) */
+    os:         i32;                /* operating system */
+    extra:      opaque*;            /* pointer to extra field or Z_NULL if none */
+    extra_len:  u32;                /* extra field length (valid if extra != Z_NULL) */
+    extra_max:  u32;                /* space at extra (only when reading header) */
+    name:       char*;              /* pointer to zero-terminated file name or Z_NULL */
+    name_max:   u32;                /* space at name (only when reading header) */
+    comment:    char*;              /* pointer to zero-terminated comment or Z_NULL */
+    comm_max:   u32;                /* space at comment (only when reading header) */
+    hcrc:       i32;                /* true if there was or will be a header crc */
+    done:       i32;                /* true when done reading gzip header (not used
+                                       when writing a gzip file) */
+}
+
+/** Initialize `strm` for decompression. Convenience wrapper that fills in the
+    version and struct size for inflateInit_. The zalloc/zfree/opaque and input
+    buffer fields of `strm` should be set up (or zeroed) beforehand.
+    Returns Z_OK on success, Z_MEM_ERROR if memory could not be allocated, or
+    Z_VERSION_ERROR on a library/header mismatch. */
+@inline
+fn inflateInit(strm: z_stream*) -> z_status {
+    return inflateInit_(strm, ZLIB_VERSION, sizeof(z_stream) as i32);
+}
+
+/** Initialize `strm` for compression at the given `level`. Convenience wrapper
+    that fills in the version and struct size for deflateInit_.
+    Returns Z_OK on success, Z_MEM_ERROR if memory could not be allocated,
+    Z_STREAM_ERROR if `level` is invalid, or Z_VERSION_ERROR on a version
+    mismatch. */
+@inline
+fn deflateInit(strm: z_stream*,
+               level: z_level) -> z_status {
+    return deflateInit_(strm, level, ZLIB_VERSION, sizeof(z_stream) as i32);
+}
+
+/** Return the runtime version string of the linked zlib library. Compare against
+    ZLIB_VERSION to detect a mismatch between headers and the shared library. */
+@extern
+fn zlibVersion() -> char*;
+
+/** Low-level compression initializer. Prefer deflateInit(); this variant takes
+    the caller's ZLIB_VERSION and sizeof(z_stream) explicitly so the library can
+    verify ABI compatibility. */
+@extern
+fn deflateInit_(strm: z_stream*,
+                level: z_level,
+                version: char*,
+                stream_size: i32) -> z_status;
+
+/** Compress as much input as possible and produce output. Call repeatedly,
+    refilling next_in/avail_in and draining next_out/avail_out, until finishing
+    with flush = Z_FINISH. Returns Z_OK while making progress, Z_STREAM_END once
+    Z_FINISH has consumed all input, or Z_STREAM_ERROR/Z_BUF_ERROR on problems. */
+@extern
+fn deflate(strm: z_stream*,
+           flush: z_flush) -> z_status;
+
+/** Free all state allocated for the compression stream `strm`. Call once
+    compression is complete. Returns Z_OK, or Z_STREAM_ERROR if the state was
+    inconsistent (e.g. never initialized). */
+@extern
+fn deflateEnd(strm: z_stream*) -> z_status;
+
+/** Low-level decompression initializer. Prefer inflateInit(); this variant takes
+    the caller's ZLIB_VERSION and sizeof(z_stream) explicitly so the library can
+    verify ABI compatibility. */
+@extern
+fn inflateInit_(strm: z_stream*,
+                version: char*,
+                stream_size: i32) -> z_status;
+
+/** Decompress as much input as possible and produce output. Call repeatedly,
+    refilling next_in/avail_in and draining next_out/avail_out. Returns Z_OK
+    while making progress, Z_STREAM_END when the compressed stream is fully
+    decoded, Z_NEED_DICT if a preset dictionary is required, or a negative status
+    (Z_DATA_ERROR, Z_MEM_ERROR, ...) on failure. */
+@extern
+fn inflate(strm: z_stream*,
+           flush: z_flush) -> z_status;
+
+/** Free all state allocated for the decompression stream `strm`. Call once
+    decompression is complete. Returns Z_OK, or Z_STREAM_ERROR if the state was
+    inconsistent. */
+@extern
+fn inflateEnd(strm: z_stream*) -> z_status;
+
+/** Set a preset dictionary for compression. Must be called after deflateInit()
+    but before the first deflate(); the same dictionary must be supplied to the
+    decompressor via inflateSetDictionary(). Returns Z_OK, or Z_STREAM_ERROR if
+    the parameters or stream state are invalid. */
+@extern
+fn deflateSetDictionary(strm: z_stream*,
+                        dictionary: char*,
+                        dictLength: u32) -> z_status;
+
+/** Retrieve the sliding-window dictionary currently in use by the compressor.
+    On entry `*dictLength` is ignored; on return it holds the number of bytes
+    written into `dictionary` (pass null for `dictionary` to query the length
+    only). Returns Z_OK, or Z_STREAM_ERROR if the stream state is inconsistent. */
+@extern
+fn deflateGetDictionary(strm: z_stream*,
+                        dictionary: char*,
+                        dictLength: u32*) -> z_status;
+
+/** Duplicate the compression stream `source` into `dest`, including its internal
+    state. Useful for saving a checkpoint before trying alternative input.
+    Returns Z_OK, Z_MEM_ERROR if allocation failed, or Z_STREAM_ERROR if the
+    source state was inconsistent. */
+@extern
+fn deflateCopy(dest: z_stream*,
+               source: z_stream*) -> z_status;
+
+/** Reset `strm` to the state left by deflateInit() without reallocating, so the
+    same stream can compress a new set of data. Returns Z_OK, or Z_STREAM_ERROR
+    if the stream state is inconsistent. */
+@extern
+fn deflateReset(strm: z_stream*) -> z_status;
+
+/** Change the compression `level` and `strategy` mid-stream. Any pending input
+    is flushed at the current settings before the new ones take effect. Returns
+    Z_OK, Z_STREAM_ERROR for invalid parameters, or Z_BUF_ERROR if output space
+    was insufficient to flush the pending data. */
+@extern
+fn deflateParams(strm: z_stream*,
+                 level: z_level,
+                 strategy: z_strategy) -> z_status;
+
+/** Fine-tune the internal compression heuristics (match lengths and hash-chain
+    search depth) for the current level. Advanced use only; the defaults are
+    suitable for most data. Returns Z_OK, or Z_STREAM_ERROR if the stream state
+    is inconsistent. */
+@extern
+fn deflateTune(strm: z_stream*,
+               good_length: i32,
+               max_lazy: i32,
+               nice_length: i32,
+               max_chain: i32) -> z_status;
+
+/** Return an upper bound on the compressed size for `sourceLen` input bytes at
+    the stream's current settings. Use it to size the output buffer for a
+    single-shot deflate. Call after deflateInit(); if `strm` is null a conservative
+    bound is returned. */
+@extern
+fn deflateBound(strm: z_stream*,
+                sourceLen: u64) -> u64;
+
+/** Report how much compressed output is still buffered inside the compressor.
+    `*pending` receives the number of bytes and `*bits` the number of bits that
+    have been generated but not yet flushed. Returns Z_OK, or Z_STREAM_ERROR if
+    the stream state is inconsistent. */
+@extern
+fn deflatePending(strm: z_stream*,
+                  pending: u32*,
+                  bits: i32*) -> z_status;
+
+/** Insert `bits` (the low-order bits of `value`, 0..16) directly into the output
+    stream ahead of the next deflate output. Used to align or prepend custom data.
+    Returns Z_OK, or Z_STREAM_ERROR if there was not enough room in the internal
+    buffer. */
+@extern
+fn deflatePrime(strm: z_stream*,
+                bits: i32,
+                value: i32) -> z_status;
+
+/** Provide a gzip header to emit when compressing in gzip mode. Must be called
+    after deflateInit2() with gzip wrapping and before the first deflate().
+    Returns Z_OK, or Z_STREAM_ERROR if the stream is not in gzip mode. */
+@extern
+fn deflateSetHeader(strm: z_stream*,
+                    head: gz_header*) -> z_status;
+
+/** Set the preset dictionary for decompression. Call after inflate() returns
+    Z_NEED_DICT (matching the Adler-32 in strm.adler), using the same dictionary
+    the compressor used. Returns Z_OK, or Z_STREAM_ERROR/Z_DATA_ERROR if the
+    dictionary or state is wrong. */
+@extern
+fn inflateSetDictionary(strm: z_stream*,
+                        dictionary: char*,
+                        dictLength: u32) -> z_status;
+
+/** Retrieve the sliding-window dictionary currently in use by the decompressor.
+    On return `*dictLength` holds the number of bytes written into `dictionary`
+    (pass null for `dictionary` to query the length only). Returns Z_OK, or
+    Z_STREAM_ERROR if the stream state is inconsistent. */
+@extern
+fn inflateGetDictionary(strm: z_stream*,
+                        dictionary: char*,
+                        dictLength: u32*) -> z_status;
+
+/** Skip forward in corrupted input to the next possible full-flush point so
+    decompression can resume after damaged data. Returns Z_OK if a sync point was
+    found, Z_BUF_ERROR if none was available yet, or Z_STREAM_ERROR/Z_DATA_ERROR
+    on inconsistent state. */
+@extern
+fn inflateSync(strm: z_stream*) -> z_status;
+
+/** Duplicate the decompression stream `source` into `dest`, including its
+    internal state, for checkpointing. Returns Z_OK, Z_MEM_ERROR if allocation
+    failed, or Z_STREAM_ERROR if the source state was inconsistent. */
+@extern
+fn inflateCopy(dest: z_stream*,
+               source: z_stream*) -> z_status;
+
+/** Reset `strm` to the state left by inflateInit() without reallocating, so the
+    same stream can decompress a new set of data. Returns Z_OK, or Z_STREAM_ERROR
+    if the stream state is inconsistent. */
+@extern
+fn inflateReset(strm: z_stream*) -> z_status;
+
+/** Like inflateReset() but also reconfigures the window size and wrapping mode
+    from `windowBits` (the same encoding accepted by inflateInit2). Returns Z_OK,
+    or Z_STREAM_ERROR if `windowBits` or the stream state is invalid. */
+@extern
+fn inflateReset2(strm: z_stream*,
+                 windowBits: i32) -> z_status;
+
+/** Prime the decompressor with `bits` (the low-order bits of `value`) before the
+    next input byte, e.g. to resume mid-stream at a non-byte boundary. Passing
+    bits < 0 clears any primed bits. Returns Z_OK, or Z_STREAM_ERROR on invalid
+    parameters or state. */
+@extern
+fn inflatePrime(strm: z_stream*,
+                bits: i32,
+                value: i32) -> z_status;
+
+/** Return a bit-packed marker locating the current decompression position within
+    the input, used with inflatePrime() to seek within a stream. The high bits
+    hold the byte offset and the low 16 bits the bit offset; a negative value
+    indicates an error or inconsistent state. */
+@extern
+fn inflateMark(strm: z_stream*) -> i64;
+
+/** Request that the gzip header of the stream being decompressed be stored into
+    `*head`. Must be called after inflateInit2() in gzip mode and before the
+    first inflate(); check head.done to know when the header is complete. Returns
+    Z_OK, or Z_STREAM_ERROR if the stream is not in gzip mode. */
+@extern
+fn inflateGetHeader(strm: z_stream*,
+                    head: gz_header*) -> z_status;
+
+
+/** Input callback for inflateBack(): given the caller's descriptor, sets `*buf`
+    to the next block of input and returns the number of bytes available (0 to
+    signal end of input). */
+@type in_func = fn(u8*, u8**) -> u32;
+
+/** Output callback for inflateBack(): given the caller's descriptor, a buffer and
+    its length, consumes the decompressed data and returns 0 on success or nonzero
+    to abort. */
+@type out_func = fn(u8*, u8*, u32) -> i32;
+
+/** Decompress a raw deflate stream using caller-supplied input and output
+    callbacks instead of the next_in/next_out buffers, running to completion in a
+    single call with a fixed window. Requires the stream to be prepared with
+    inflateBackInit(). Returns Z_STREAM_END on success, or Z_DATA_ERROR/
+    Z_STREAM_ERROR/Z_BUF_ERROR on failure. */
+@extern
+fn inflateBack(strm: z_stream*,
+               in_cb: in_func,
+               in_desc: u8*,
+               out_cb: out_func,
+               out_desc: u8*) -> z_status;
+
+/** Free all state allocated for an inflateBack() stream. Returns Z_OK, or
+    Z_STREAM_ERROR if the state was inconsistent. */
+@extern
+fn inflateBackEnd(strm: z_stream*) -> z_status;
+
+/** Return a bit-packed set of flags describing the options zlib was compiled
+    with (type sizes, feature toggles, and debugging settings). Useful for
+    diagnosing ABI or configuration mismatches. */
+@extern
+fn zlibCompileFlags() -> u64;

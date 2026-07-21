@@ -1,0 +1,13 @@
+import { String } from collections;
+import { FILE, stdout, fwrite } from stdio;
+
+fn print(str: const char[], fp: FILE* = stdout) {
+    fwrite(str.data, sizeof(char), str.length, fp);
+}
+
+fn println(str: const char[], fp: FILE* = stdout) {
+    let tmp = String::from_array(str);
+    defer tmp.destroy();
+    tmp.push('\n');
+    print(tmp.as_array(), fp);
+}
