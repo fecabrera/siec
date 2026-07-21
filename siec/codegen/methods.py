@@ -231,6 +231,11 @@ def method_reference(gen: CodeGenerator, expr) -> ir.Function | None:
     except (NameError, TypeError):
         return None
 
+    # an overloaded method has no arguments to pick its candidate by
+    if symbol is not None and len(gen.overloads.get(symbol, ())) > 1:
+        raise TypeError(f"ambiguous reference to overloaded method "
+                        f"'{expr.enum}::{expr.member}'")
+
     func = gen.module.globals.get(symbol) if symbol is not None else None
     return func if isinstance(func, ir.Function) else None
 

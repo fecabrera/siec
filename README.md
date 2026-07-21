@@ -708,6 +708,30 @@ let l = List<i32>();    // capacity is DEFAULT_CAPACITY
 
 A call through a [function reference](#function-references) passes every argument: the reference's `fn(...)` type carries no defaults.
 
+#### Overloading
+
+A function name can be declared multiple times with different parameter lists, differing in types or in count. Methods overload the same way:
+
+```
+fn Decimal::add(&self, d: const &Decimal) -> Decimal { ... }
+fn Decimal::add(&self, n: i64) -> Decimal { ... }
+fn Decimal::add(&self, f: f64) -> Decimal { ... }
+```
+
+Each call picks the overload its argument types select. An exact match wins. Otherwise the arguments must reach exactly one candidate through the implicit conversions calls already apply: widening, array decay, `opaque*`, `null`. No reachable candidate, or a tie between two, is a compile-time error.
+
+An untyped literal counts as its default type: `i32` for an integer literal, or `i64` when the value doesn't fit one. From there it converts like any other value:
+
+```
+dec.add(5);            // an i32, widened into the i64 overload
+dec.add(5000000000);   // doesn't fit an i32: exactly the i64 overload
+dec.add(other);        // a Decimal: exactly 'const &Decimal'
+```
+
+Signed and unsigned never mix: a `u8` argument widens into a `u64` candidate, never an `i64` one. A reference parameter (`&T`) needs its exact type, since it aliases the argument in place.
+
+The return type is not part of the signature, so two overloads differing only there conflict. `@extern`, `@symbol`, and `main` functions cannot overload: each names one fixed symbol. A bare reference to an overloaded name (`let g = f;`) is an error, since without arguments there is nothing to pick by.
+
 #### Generic functions
 
 Functions are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.

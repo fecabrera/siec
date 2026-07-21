@@ -117,6 +117,9 @@ class CodeGenerator:
         self.param_types: dict[str, list[str]] = {}
         # the symbols declared '@noreturn', whose bodies must not return
         self.noreturns: set[str] = set()
+        # each overloaded name's candidates: (signature key, symbol) pairs,
+        # in declaration order; calls pick among them by argument types
+        self.overloads: dict[str, list[tuple[tuple, str]]] = {}
         # same-named generic templates with other type-parameter counts
         self.generic_overloads: dict[str, list] = {}
 

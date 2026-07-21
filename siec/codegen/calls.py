@@ -9,6 +9,7 @@ from siec.codegen.generator import CodeGenerator, entry_alloca
 from siec.codegen.generics import instantiate_function, pick_generic_call
 from siec.codegen.methods import method_call, qualified_method
 from siec.codegen.inference import expr_sie_type
+from siec.codegen.overloads import pick_overload
 from siec.codegen.types import (
     fn_type_parts,
     is_const,
@@ -89,6 +90,9 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # the sugar form passes the receiver as the hidden first argument
     if receiver is not None:
         call = Call(call.name, [receiver, *call.args], call.type_args)
+
+    # an overloaded name resolves to the candidate its arguments pick
+    symbol = pick_overload(gen, symbol, call.args, scope)
 
     # a generic callee instantiates for this call's type arguments,
     # explicit, inferred, or driven by the expected result type; the

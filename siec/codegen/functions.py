@@ -8,6 +8,7 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.asm import emit_asm_function
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
+from siec.codegen.overloads import declare_overload, overload_symbol
 from siec.codegen.statements import emit_block
 from siec.codegen.types import is_reference, resolve_type, strip_const
 
@@ -131,6 +132,11 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
 
         symbol = gen.statics[key]
 
+    # a second function under one name with a different parameter list is
+    # an overload: it lives under a mangled sibling symbol, and calls pick
+    # among the name's set by their argument types
+    symbol = declare_overload(gen, fn, symbol)
+
     gen.return_types[symbol] = fn.return_type
     gen.param_types[symbol] = [p.type for p in fn.params]
 
@@ -198,8 +204,10 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         # the emitting file decides which statics its body's names resolve to
         gen.current_file = fn.file
 
-        # a declaration that already has blocks was defined elsewhere
-        func = gen.module.globals[gen.resolve_symbol(fn.name)]
+        # a declaration that already has blocks was defined elsewhere; an
+        # overloaded name's body belongs to its own signature's sibling
+        symbol = overload_symbol(gen, gen.resolve_symbol(fn.name), fn.params)
+        func = gen.module.globals[symbol]
         if func.blocks:
             raise TypeError(f"function {fn.name!r} is defined more than once")
 

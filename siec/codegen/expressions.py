@@ -200,9 +200,14 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return load
 
-        # a bare function name is a reference to that function
+        # a bare function name is a reference to that function; an
+        # overloaded one has no arguments to pick its candidate by
         func = gen.module.globals.get(symbol)
         if isinstance(func, ir.Function):
+            if len(gen.overloads.get(symbol, ())) > 1:
+                raise TypeError(f"ambiguous reference to overloaded "
+                                f"function {expr.name!r}")
+
             return func
 
         raise NameError(f"undefined variable {expr.name!r}")

@@ -157,6 +157,17 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                         call = Call(expr.name, [receiver, *expr.args],
                                     expr.type_args)
 
+        # an overloaded name's return type follows the candidate its
+        # arguments pick; a pick that fails resolves to no type yet, and
+        # the call site raises the real error
+        if symbol in gen.overloads:
+            from siec.codegen.overloads import pick_overload
+
+            try:
+                symbol = pick_overload(gen, symbol, call.args, scope)
+            except TypeError:
+                return None
+
         # a generic call's return type comes from its resolved arguments,
         # without instantiating; an unresolvable call has no type yet
         if gen.generic_functions.get(symbol) is not None:
