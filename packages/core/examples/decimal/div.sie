@@ -1,0 +1,27 @@
+import { stderr, fprintf, printf } from stdio;
+import { strlen } from string;
+import { Decimal } from decimal;
+import mpdecimal;
+
+fn main(args: const char*[]) -> i32 {
+    if (args.length != 3) {
+		fprintf(stderr, "sqrt: usage: %s x y\n", args[0]);
+		return 1;
+	}
+
+    let a = Decimal::from_str({args[1], strlen(args[1])});
+    defer a.destroy();
+
+    let b = Decimal::from_str({args[2], strlen(args[2])});
+    defer b.destroy();
+
+    let result = a.div(b);
+    defer result.destroy();
+
+    let str = result.to_string();
+    defer str.destroy();
+    
+    printf("%s\n", str.data);
+
+    return 0;
+}

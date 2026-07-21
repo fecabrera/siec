@@ -44,6 +44,48 @@ fn Decimal::set(&self, value: const char[]) {
     mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
 }
 
+fn Decimal::add(&self, d: const &Decimal) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_add(result.mpd, self.mpd, d.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::sub(&self, d: const &Decimal) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_sub(result.mpd, self.mpd, d.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::mul(&self, d: const &Decimal) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_mul(result.mpd, self.mpd, d.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::div(&self, d: const &Decimal) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_div(result.mpd, self.mpd, d.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::abs(&self) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_abs(result.mpd, self.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::floor(&self) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_floor(result.mpd, self.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::ceil(&self) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_ceil(result.mpd, self.mpd, self.ctx);
+    return result;
+}
+
 fn Decimal::sqrt(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sqrt(result.mpd, self.mpd, self.ctx);
