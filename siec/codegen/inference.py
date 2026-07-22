@@ -233,7 +233,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     # a cast produces its target type
     if isinstance(expr, Cast):
-        expr.type = expand_alias(gen, expr.type)
+        # the written spelling expands (and gates) once; the canonical
+        # result must not re-gate as if written here
+        if not getattr(expr, "expanded", False):
+            expr.type = expand_alias(gen, expr.type)
+            expr.expanded = True
+
         return expr.type
 
     # '@typeof' is a type id, a u64 like '@typeid'

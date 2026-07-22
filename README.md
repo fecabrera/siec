@@ -809,6 +809,21 @@ apply(identity, 40);               // T unified from apply's parameter type
 
 Qualified spellings work the same way: `util.identity<i32>` and a bare `util.identity` in a function-typed context both resolve through the module binding.
 
+#### Variadic functions
+
+A last parameter spelled `name...` is sugar for `name: Any[]`: each extra call argument wraps as an [Any](#any) and packs into the array, an empty one when none are given.
+
+```
+fn println(str: const char[], args...) {
+    // args: Any[]; args.length counts the extras
+}
+
+println("hello world");        // args.length = 0
+println("hello {}", "world");  // args.length = 1
+```
+
+The body dispatches on each element with [`@typeof`](#any), and passing an `Any[]` itself forwards it as-is instead of re-packing, so variadics delegate to one another. Methods take the sugar too. `@extern` functions keep C's bare `...`, which passes arguments the C way instead.
+
 #### Extern
 
 Functions can be decorated with `@extern` to indicate that they're going to be resolved at link time. Extern functions must follow C's ABI and can only use C-compatible types.
@@ -1425,7 +1440,7 @@ let arr: i32[];
 @typename(List<f64>);    // "List<f64>", a type spelling works directly
 ```
 
-Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type.
+Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type. Any expression works as the argument too, naming its static type without evaluating it — `@typename(args[i])`, `@typename(n + 1)` — so an [Any](#any) folds to `"Any"`, its runtime id being `@typeof`'s business.
 
 #### Typeid
 

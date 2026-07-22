@@ -959,14 +959,25 @@ def fnv1a(text: str) -> int:
     return value
 
 
-def typename_of(gen: CodeGenerator, name: str, scope: dict) -> str:
+def typename_of(gen: CodeGenerator, name, scope: dict) -> str:
     """
     The canonical type name '@typename' resolves: a scope variable's
-    declared type (a '&T' parameter naming its T), a global's, or the
-    written type expanded through its aliases.
+    declared type (a '&T' parameter naming its T), a global's, the
+    written type expanded through its aliases, or an expression's
+    static type.
     """
     from siec.codegen.aliases import expand_alias
+    from siec.codegen.inference import infer_type
     from siec.codegen.types import strip_reference
+
+    # an expression carries its static type; the operand never emits
+    if not isinstance(name, str):
+        source = infer_type(gen, name, scope)
+        if source is None:
+            raise TypeError("cannot take the type name: the expression "
+                            "has no type")
+
+        return strip_const(strip_reference(source))
 
     if name in scope:
         return strip_reference(scope[name].type)

@@ -146,15 +146,35 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.syntax == "@" and ts.peek().value == "asm":
         return parse_asm_tail(ts)
 
-    # '@typename(T)' is the compile-time name of a type, or of a
-    # variable's type, as a 'const char[]'; '@typeid(T)' the FNV-1a
-    # hash of that name
+    # '@typename(T)' is the compile-time name of a type, of a variable's
+    # type, or of any expression's, as a 'const char[]'; '@typeid(T)'
+    # the FNV-1a hash of that name
     if tok.syntax == "@" and ts.peek().value in ("typename", "typeid"):
         node = TypeName if ts.next().value == "typename" else TypeId
         ts.expect("sym", "(")
-        name = parse_type(ts)
+
+        # an expression's static type serves; a lone name stays a name
+        # (a variable or a type), and type spellings ('i32*') parse last
+        saved = ts.pos
+        target = None
+        try:
+            expr = parse_expression(ts)
+            if ts.peek().syntax == ")":
+                if isinstance(expr, Var):
+                    target = expr.name
+                    if expr.type_args is not None:
+                        target += f"<{','.join(expr.type_args)}>"
+                else:
+                    target = expr
+        except SyntaxError:
+            target = None
+
+        if target is None:
+            ts.pos = saved
+            target = parse_type(ts)
+
         ts.expect("sym", ")")
-        return parse_postfix(ts, node(name))
+        return parse_postfix(ts, node(target))
 
     # '@typeof(v)' is the type id an expression carries: an 'Any' reads
     # its own, anything else folds to its static type's '@typeid'

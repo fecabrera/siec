@@ -94,7 +94,11 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
     if strip_const(expr.type) == "Any":
         return emit_any_wrap(gen, builder, expr, scope)
 
-    expr.type = expand_alias(gen, expr.type)
+    # the written spelling expands (and gates) once; the canonical
+    # result must not re-gate as if written here
+    if not getattr(expr, "expanded", False):
+        expr.type = expand_alias(gen, expr.type)
+        expr.expanded = True
 
     operand_name = expr_sie_type(gen, expr.operand, scope)
 

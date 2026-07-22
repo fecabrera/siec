@@ -403,6 +403,10 @@ def accepts_arity(template, count: int) -> bool:
     while required and params[required - 1].default is not None:
         required -= 1
 
+    if template.variadic:
+        required = min(required, len(params) - 1)
+        return required <= count
+
     return required <= count and (count <= len(params) or template.var_arg)
 
 

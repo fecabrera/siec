@@ -141,6 +141,11 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     hidden = 1 if ret_lowering is not None and ret_lowering[0] == "indirect" else 0
     expected = len(func.function_type.args) - hidden
 
+    # a 'name...' variadic packs the call's extra arguments into its
+    # trailing Any[]; an explicit Any[] argument forwards as-is
+    if func.name in gen.variadics:
+        call = pack_variadic(gen, call, expected, scope)
+
     # trailing parameters with defaults are optional at the call
     defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))
     required = expected
@@ -205,6 +210,32 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         return result if as_address else builder.load(result)
 
     return result
+
+
+def pack_variadic(gen: CodeGenerator, call: Call, expected: int,
+                  scope: dict) -> Call:
+    """
+    Rewrite a call to an 'args...' function: the arguments past the
+    fixed ones wrap as Anys and pack into one Any[] literal - an empty
+    one when none are given. Passing an Any[] itself forwards it.
+    """
+    from siec.ast import ArrayLiteral, Cast
+    from siec.codegen.inference import infer_type
+    from siec.codegen.types import strip_reference
+
+    fixed = expected - 1
+    if len(call.args) < fixed:
+        return call
+
+    # exactly filled, the last already an Any[]: a forward, not a pack
+    if len(call.args) == expected:
+        last = infer_type(gen, call.args[-1], scope)
+        if last is not None and strip_const(strip_reference(last)) == "Any[]":
+            return call
+
+    extras = [Cast(arg, "Any") for arg in call.args[fixed:]]
+    return Call(call.name, [*call.args[:fixed], ArrayLiteral(extras)],
+                call.type_args)
 
 
 def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,

@@ -360,6 +360,7 @@ def parse_function(ts: TokenStream) -> Function:
     # '= default'; a trailing '...' marks varargs
     params = []
     var_arg = False
+    variadic = False
     while ts.peek().value != ")":
         if params:
             ts.expect("sym", ",")
@@ -392,6 +393,19 @@ def parse_function(ts: TokenStream) -> Function:
 
         param_line = ts.peek().line
         param_name = ts.expect("ident").value
+
+        # 'name...' is sugar for a trailing 'name: Any[]': extra call
+        # arguments pack into it, each wrapped as an Any
+        if ts.peek().value == "...":
+            if is_extern:
+                raise SyntaxError(f"line {param_line}: an '@extern' function "
+                                  "takes C varargs: a bare '...'")
+
+            ts.next()
+            params.append(Param(param_name, "Any[]"))
+            variadic = True
+            break
+
         ts.expect("sym", ":")
         param_type = parse_type(ts)
 
@@ -430,7 +444,8 @@ def parse_function(ts: TokenStream) -> Function:
         return Function(name, params, return_type, None, is_extern, var_arg,
                         is_inline, is_static, symbol, ts.next().value, clobbers,
                         noreturn, type_params=type_params, receiver=receiver,
-                        receiver_params=receiver_params, line=line)
+                        receiver_params=receiver_params,
+                        variadic=variadic, line=line)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
@@ -438,7 +453,8 @@ def parse_function(ts: TokenStream) -> Function:
         return Function(name, params, return_type, None, is_extern, var_arg,
                         is_inline, is_static, symbol, noreturn=noreturn,
                         type_params=type_params, receiver=receiver,
-                        receiver_params=receiver_params, line=line)
+                        receiver_params=receiver_params,
+                        variadic=variadic, line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -449,4 +465,5 @@ def parse_function(ts: TokenStream) -> Function:
     return Function(name, params, return_type, body, is_extern, var_arg,
                     is_inline, is_static, symbol, noreturn=noreturn,
                     type_params=type_params, receiver=receiver,
-                    receiver_params=receiver_params, line=line)
+                    receiver_params=receiver_params,
+                    variadic=variadic, line=line)

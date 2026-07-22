@@ -165,8 +165,19 @@ def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
            and defaults[required - 1] is not None):
         required -= 1
 
-    if len(args) < required or (len(args) > len(params) and not var_arg):
+    # an 'args...' candidate takes any extras; only its fixed
+    # parameters rank the fit, the pack coming after the pick
+    variadic = symbol in gen.variadics
+    if variadic:
+        required = min(required, len(params) - 1)
+
+    if len(args) < required or (len(args) > len(params)
+                                and not var_arg and not variadic):
         return None
+
+    if variadic:
+        fixed = len(params) - 1
+        args, arg_types, params = args[:fixed], arg_types[:fixed], params[:fixed]
 
     strength = {"exact": 0, "implicit": 1, "adopt": 2}
 

@@ -159,6 +159,10 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     if any(p.default is not None for p in fn.params):
         gen.param_defaults[symbol] = ([p.default for p in fn.params], fn.file)
 
+    # an 'args...' function packs its calls' extra arguments
+    if fn.variadic:
+        gen.variadics.add(symbol)
+
     # redeclarations are allowed as long as the signature matches
     existing = gen.module.globals.get(symbol)
     if existing is not None:

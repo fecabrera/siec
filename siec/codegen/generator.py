@@ -139,6 +139,10 @@ class CodeGenerator:
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
 
+        # symbols whose last parameter is the 'args...' Any[] sugar;
+        # their calls pack extra arguments into it
+        self.variadics: set[str] = set()
+
         # the registered structs by name, for type resolution and member access
         self.structs: dict[str, StructInfo] = {}
 
