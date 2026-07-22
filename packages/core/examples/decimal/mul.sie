@@ -8,13 +8,13 @@ fn main(args: const char*[]) -> i32 {
 		return 1;
 	}
 
-    let a = Decimal::from_str({args[1], strlen(args[1])});
+    let a = Decimal({args[1], strlen(args[1])});
     defer a.destroy();
 
-    let b = Decimal::from_str({args[2], strlen(args[2])});
+    let b = Decimal({args[2], strlen(args[2])});
     defer b.destroy();
 
-    let result = a.mul(b);
+    let result = a * b;
     defer result.destroy();
 
     let str = result.to_string();

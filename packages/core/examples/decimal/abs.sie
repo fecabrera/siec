@@ -8,7 +8,7 @@ fn main(args: const char*[]) -> i32 {
 		return 1;
 	}
 
-    let dec = Decimal::from_str({args[1], strlen(args[1])});
+    let dec = Decimal({args[1], strlen(args[1])});
     defer dec.destroy();
 
     let result = dec.abs();
