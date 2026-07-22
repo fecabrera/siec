@@ -22,6 +22,7 @@ from siec.ast import (
     MemberAssign,
     RefAssign,
     Return,
+    TypeOf,
     UnaryOp,
     While,
 )
@@ -644,6 +645,15 @@ def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict
     once, the first matching arm runs in a scope of its own, and control
     jumps past the case, with no fall-through.
     """
+    # matching on '@typeof' lets bare type names arm the case:
+    # 'when T:' means 'when @typeid(T):'
+    if isinstance(stmt.subject, TypeOf):
+        from siec.codegen.expressions import type_operand
+
+        for arm in stmt.arms:
+            arm.values = [type_operand(gen, value, scope)
+                          for value in arm.values]
+
     subject = emit_expression(gen, builder, stmt.subject, None, scope)
     if not isinstance(subject.type, (ir.IntType, ir.PointerType,
                                      ir.FloatType, ir.DoubleType)):

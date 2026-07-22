@@ -202,6 +202,16 @@ class TypeId:
 
 
 @dataclass
+class TypeOf:
+    """
+    A '@typeof(v)' expression: the type id an expression carries - the
+    'id' field of an 'Any' value at runtime, or its static type's
+    '@typeid' folded at compile time.
+    """
+    value: "Expr"
+
+
+@dataclass
 class UnaryOp:
     """
     A unary operation applying a prefix operator to one subexpression.

@@ -24,6 +24,7 @@ from siec.ast import (
     MethodCall,
     RefAssign,
     Return,
+    TypeId,
     UnaryOp,
     Var,
     When,
@@ -90,6 +91,24 @@ def parse_body(ts: TokenStream) -> list:
     return [parse_statement(ts)]
 
 
+def parse_arm_value(ts: TokenStream):
+    """
+    Parse one 'when' value: an expression normally, falling back to a
+    type spelling ('char[]', 'i32*') for a '@typeof' match, where the
+    spelling means the type's id.
+    """
+    saved = ts.pos
+    try:
+        expr = parse_expression(ts)
+        if ts.peek().syntax in (":", ","):
+            return expr
+    except SyntaxError:
+        pass
+
+    ts.pos = saved
+    return TypeId(parse_type(ts))
+
+
 def parse_arm(ts: TokenStream) -> list:
     """
     Parse one case arm's body: statements up to the next 'when', 'else',
@@ -148,10 +167,10 @@ def parse_statement(ts: TokenStream):
                 ts.next()
 
                 # one or more comma-separated values, any of which matches
-                values = [parse_expression(ts)]
+                values = [parse_arm_value(ts)]
                 while ts.peek().syntax == ",":
                     ts.next()
-                    values.append(parse_expression(ts))
+                    values.append(parse_arm_value(ts))
 
                 ts.expect("sym", ":")
                 arms.append(When(values, parse_arm(ts)))

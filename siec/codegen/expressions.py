@@ -31,6 +31,7 @@ from siec.ast import (
     TupleLiteral,
     TypeId,
     TypeName,
+    TypeOf,
     UnaryOp,
     Var,
 )
@@ -165,6 +166,25 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             return ir.Constant(expected_type, value)
 
         return ir.Constant(ir.IntType(64), value)
+
+    if isinstance(expr, TypeOf):
+        # '@typeof' of an 'Any' reads its runtime id; any other operand
+        # folds to its static type's id, the operand never evaluated
+        from siec.codegen.inference import infer_type
+        from siec.codegen.types import strip_reference
+
+        source = infer_type(gen, expr.value, scope)
+        if source is None:
+            raise TypeError("cannot take '@typeof': the expression "
+                            "has no type")
+
+        if strip_const(strip_reference(source)) == "Any":
+            return emit_expression(gen, builder, Member(expr.value, "id"),
+                                   expected_type, scope)
+
+        return emit_expression(gen, builder,
+                               TypeId(strip_const(strip_reference(source))),
+                               expected_type, scope)
 
     if isinstance(expr, AsmBlock):
         return emit_asm_block(gen, builder, expr, scope)
@@ -382,6 +402,13 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_ternary(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, BinaryOp):
+        # comparing '@typeof' against a bare type name means its id:
+        # '@typeof(v) == T' is '@typeof(v) == @typeid(T)'
+        if expr.op in ("==", "!=") and (isinstance(expr.left, TypeOf)
+                                        or isinstance(expr.right, TypeOf)):
+            expr.left = type_operand(gen, expr.left, scope)
+            expr.right = type_operand(gen, expr.right, scope)
+
         # a struct operand's operator is the method call it desugars to:
         # 'a + b' is 'a.add(b)', each overload picked by b's type
         if (rewritten := operator_call(gen, expr, scope)) is not None:
@@ -896,6 +923,29 @@ def emit_tuple(gen: CodeGenerator, builder: ir.IRBuilder, expr: TupleLiteral,
         value = builder.insert_value(value, filled, i, name=f"tuple.{i}")
 
     return value
+
+
+def type_operand(gen: CodeGenerator, expr: Expr, scope: dict) -> Expr:
+    """
+    Rewrite a bare type name compared against '@typeof' into its
+    '@typeid': a Var naming a type (and shadowed by no variable) means
+    the type's id. Anything else passes through untouched.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    if not isinstance(expr, Var) or expr.name in scope:
+        return expr
+
+    spelling = expr.name
+    if expr.type_args is not None:
+        spelling += f"<{','.join(expr.type_args)}>"
+
+    try:
+        resolve_type(expand_alias(gen, spelling), gen.structs)
+    except (TypeError, NameError):
+        return expr
+
+    return TypeId(spelling)
 
 
 def fnv1a(text: str) -> int:

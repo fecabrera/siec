@@ -25,6 +25,7 @@ from siec.ast import (
     TupleLiteral,
     TypeId,
     TypeName,
+    TypeOf,
     UnaryOp,
     Var,
 )
@@ -154,6 +155,15 @@ def parse_primary(ts: TokenStream) -> Expr:
         name = parse_type(ts)
         ts.expect("sym", ")")
         return parse_postfix(ts, node(name))
+
+    # '@typeof(v)' is the type id an expression carries: an 'Any' reads
+    # its own, anything else folds to its static type's '@typeid'
+    if tok.syntax == "@" and ts.peek().value == "typeof":
+        ts.next()
+        ts.expect("sym", "(")
+        value = parse_expression(ts)
+        ts.expect("sym", ")")
+        return parse_postfix(ts, TypeOf(value))
 
     # 'null' is the pointer literal
     if tok.kind == "kw" and tok.value == "null":
@@ -291,7 +301,7 @@ def parse_primary(ts: TokenStream) -> Expr:
         type_args = None
         if ts.peek().syntax == "<":
             type_args = parse_type_arguments(
-                ts, followers=("(", ";", ",", ")", "]", "}", "::"))
+                ts, followers=("(", ";", ",", ")", "]", "}", ":", "::"))
 
         # 'S<T>::method(...)' calls through the generic instance, the
         # type arguments joining the receiver type's name
@@ -519,7 +529,7 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
             type_args = None
             if ts.peek().syntax == "<":
                 type_args = parse_type_arguments(
-                    ts, followers=("(", ";", ",", ")", "]", "}"))
+                    ts, followers=("(", ";", ",", ")", "]", "}", ":"))
 
             # '<...>' landing on a terminator is a reference to the
             # dotted name's generic instance, not a call

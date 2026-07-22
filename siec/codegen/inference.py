@@ -29,6 +29,7 @@ from siec.ast import (
     TupleLiteral,
     TypeId,
     TypeName,
+    TypeOf,
     UnaryOp,
     Var,
 )
@@ -234,6 +235,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Cast):
         expr.type = expand_alias(gen, expr.type)
         return expr.type
+
+    # '@typeof' is a type id, a u64 like '@typeid'
+    if isinstance(expr, TypeOf):
+        return "u64"
 
     # an inline assembly block produces its declared '-> T'
     if isinstance(expr, AsmBlock):

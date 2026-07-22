@@ -401,6 +401,11 @@ fn __const_array_iterator<T>(self: const &T[]) -> ConstArrayIterator<T> {
     return it;
 }
 
+struct Any {
+    id: u64;
+    data: opaque*;
+}
+
 struct Enumerated<T> {
     index: u64;
     value: T;
@@ -529,7 +534,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
                               "ArrayIterator", "ConstArrayIterator",
                               "Enumerated", "EnumerateIterator", "__enumerate",
-                              "Tuple"))
+                              "Tuple", "Any"))
 
     # first pass: register the named declarations - aliases first so every
     # later type annotation expands through them, constants next so enum

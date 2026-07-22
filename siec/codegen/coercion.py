@@ -49,6 +49,37 @@ def emit_opaque_pointer(builder: ir.IRBuilder, value: ir.Value, target_type: ir.
     return None
 
 
+def emit_any_wrap(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast,
+                  scope: dict):
+    """
+    Emit 'v as Any': the value spills to a slot of the enclosing
+    function's frame, and the Any pairs its type's id with the slot's
+    address. Wrapping an Any again is the same value.
+    """
+    from siec.codegen.expressions import emit_expression, fnv1a
+    from siec.codegen.generator import entry_alloca
+    from siec.codegen.inference import infer_type
+
+    source = infer_type(gen, expr.operand, scope)
+    if source is None:
+        raise TypeError("cannot wrap in 'Any': the expression has no type")
+
+    source = strip_const(strip_reference(source))
+    value = emit_expression(gen, builder, expr.operand, None, scope)
+    if source == "Any":
+        return value
+
+    slot = entry_alloca(builder, value.type, "any.data")
+    builder.store(value, slot)
+
+    any_type = resolve_type("Any", gen.structs)
+    wrapped = ir.Constant(any_type, None)
+    wrapped = builder.insert_value(
+        wrapped, ir.Constant(ir.IntType(64), fnv1a(source)), 0, name="any.id")
+    return builder.insert_value(
+        wrapped, builder.bitcast(slot, any_type.elements[1]), 1, name="any.data")
+
+
 def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict):
     """
     Emit an explicit numeric cast, choosing the LLVM conversion the prefixes and widths call for.
@@ -59,9 +90,24 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
     # deferred import: coercion and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
 
+    # 'v as Any' wraps the value with its type's id, an 'Any<T>' pair
+    if strip_const(expr.type) == "Any":
+        return emit_any_wrap(gen, builder, expr, scope)
+
     expr.type = expand_alias(gen, expr.type)
 
     operand_name = expr_sie_type(gen, expr.operand, scope)
+
+    # 'a as T' on an Any reads its erased value back as T, unchecked:
+    # comparing '@typeof(a)' first is the caller's job
+    if (operand_name is not None
+            and strip_const(strip_reference(operand_name)) == "Any"):
+        value = emit_expression(gen, builder, expr.operand, None, scope)
+        data = builder.extract_value(value, 1, name="any.data")
+        typed = builder.bitcast(
+            data, ir.PointerType(resolve_type(expr.type, gen.structs)))
+        return builder.load(typed, name="any.value")
+
     if (is_const(operand_name) and not is_const(expr.type)
             and is_aliasing(strip_const(operand_name))):
         raise TypeError(f"cannot cast away 'const': {operand_name!r} to {expr.type!r}")

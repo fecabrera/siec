@@ -1446,6 +1446,46 @@ fn kind(id: u64) -> i32 {
 
 Being a compile-time constant, it works anywhere one is required: `@const` values, enum members, case arms, and array sizes.
 
+#### Any
+
+`Any` is a builtin struct erasing a value's type behind its id:
+
+```
+struct Any {
+    id: u64;      // the value's @typeid
+    data: opaque*;
+}
+```
+
+`v as Any` spills a copy of the value into the enclosing function's frame and pairs its address with its type's id. Since every `Any` is this one struct, an `Any[]` holds heterogeneous values, and a function over them is one function, never stamped per payload:
+
+```
+fn log(args: Any[]) {
+    foreach (arg : args) {
+        case (@typeof(arg)) {
+            when char[]: // ...
+            when String: // ...
+            else: // ...
+        }
+    }
+}
+
+log([1 as Any, "text" as Any, 2.5 as Any]);
+```
+
+`@typeof(x)` yields the type id an expression carries: an `Any` operand reads its runtime `id` field, and any other operand folds to its static type's `@typeid` at compile time (the operand is never evaluated). Comparing it against a bare type name means the type's id, in `==`/`!=` and in `when` arms, where non-identifier spellings (`char[]`, `i32*`) work too:
+
+```
+@typeof(arg) == @typeid(u64);
+@typeof(arg) == u64;             // the same, sugared
+case (@typeof(arg)) {
+    when u64: // ...
+    when char[]: // ...
+}
+```
+
+`a as T` reads the erased value back as `T`, unchecked: comparing `@typeof(a)` first is the caller's job. The pointed value lives in the frame of the function that wrapped it, so an `Any` outliving that frame dangles like any pointer to a local would; and wrapping erases the `const` contract, which the unwrapper chooses anew.
+
 ### Enums
 
 Enums are collections of constants. They are declared through the keyword `enum` followed by their name. Their members are declared by name, separated by commas.
