@@ -28,7 +28,7 @@ fn List<T>::destroy(&self) {
     free(self.data);
 }
 
-fn List<T>::as_array(&self) ->  T[] {
+fn List<T>::as_array(&self) -> T[] {
     return {self.data, self.length};
 }
 
