@@ -732,6 +732,26 @@ Signed and unsigned never mix: a `u8` argument widens into a `u64` candidate, ne
 
 The return type is not part of the signature, so two overloads differing only there conflict. `@extern`, `@symbol`, and `main` functions cannot overload: each names one fixed symbol. A bare reference to an overloaded name (`let g = f;`) is an error, since without arguments there is nothing to pick by.
 
+#### Operator overloading
+
+Binary operators on a struct operand are shorthand for method calls: `a + b` is `a.add(b)`, picking among `add`'s overloads by `b`'s type. The operators map to `add`, `sub`, `mul`, `div`, and `rem`, and compound assignment follows: `a += b` is `a = a.add(b)`.
+
+```
+let sum = dec + other;   // dec.add(other)
+let scaled = dec * 10;   // dec.mul(10): the i64 overload
+dec += 1;                // dec = dec.add(1)
+```
+
+The prelude declares an interface per operator: `Add<S, T>` requires `add(&self, value: T) -> S`, and `Sub`, `Mul`, `Div`, and `Rem` follow the same shape. Claiming one declares and enforces the contract, one claim per supported right-hand type:
+
+```
+struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64> {
+    // ...
+}
+```
+
+The shorthand itself is structural, like `foreach` and `iterator()`: any struct with the method takes the operator, claimed or not. The interfaces are there to declare the contract and to bound generics.
+
 #### Generic functions
 
 Functions are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.

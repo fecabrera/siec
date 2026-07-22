@@ -53,6 +53,28 @@ FLOAT_ARITHMETIC = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv", "%": "fr
 
 COMPARISONS = {"<", ">", "<=", ">=", "==", "!="}
 
+# the method a struct operand's binary operator desugars to: 'a + b' is
+# 'a.add(b)', the operator interfaces' ('Add<S, T>', ...) shorthand
+OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem"}
+
+
+def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> MethodCall | None:
+    """
+    Rewrite a binary operator over a struct operand into the method call
+    it means: 'a + b' is 'a.add(b)', each overload picked by b's type.
+    None for any other operand, whose operators keep their instructions.
+    """
+    method = OPERATOR_METHODS.get(expr.op)
+    if method is None:
+        return None
+
+    # enum-typed operands keep their integer arithmetic
+    name = strip_const(expr_sie_type(gen, expr.left, scope) or "")
+    if name not in gen.structs or name in gen.enums:
+        return None
+
+    return MethodCall(expr.left, method, [expr.right])
+
 
 def is_float(type_: ir.Type) -> bool:
     """
@@ -304,6 +326,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Ternary):
         return (expr_sie_type(gen, expr.then, scope)
                 or expr_sie_type(gen, expr.orelse, scope))
+
+    # a struct operand's binary operator types as the method call it
+    # desugars to: 'a + b' is 'a.add(b)'
+    if isinstance(expr, BinaryOp):
+        if (rewritten := operator_call(gen, expr, scope)) is not None:
+            return expr_sie_type(gen, rewritten, scope)
 
     return None
 

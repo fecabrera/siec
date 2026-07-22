@@ -12,7 +12,7 @@ import re
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.generics import split_generic, substitute
-from siec.codegen.types import strip_const
+from siec.codegen.types import strip_const, strip_reference
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -206,7 +206,10 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
 def check_action(gen: CodeGenerator, name: str, template_base: str,
                  spelling: str, method: str, action, mapping: dict) -> None:
     """
-    Check one required action against the struct's method of that name.
+    Check one required action against the struct's methods of that name:
+    any overload matching the substituted signature satisfies it. A '&T'
+    or 'const &T' parameter satisfies a required T - the reference only
+    marks how the same value passes.
     """
     from siec.codegen.methods import resolve_method
 
@@ -215,27 +218,37 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
         raise TypeError(f"struct {template_base!r} does not implement "
                         f"{spelling!r}: it is missing the method {method!r}")
 
-    # a still-generic method matches by existence; a concrete one by shape
-    have_params = gen.param_types.get(symbol)
-    if have_params is None:
-        return
+    def bare(param: str) -> str:
+        return strip_const(strip_reference(strip_const(param)))
 
     required = [expand_lax(gen, substitute(p.type, mapping))
                 for p in action.params[1:]]
-    if [strip_const(p) for p in have_params[1:]] != [strip_const(p) for p in required]:
-        raise TypeError(f"struct {template_base!r} does not implement "
-                        f"{spelling!r}: method {method!r} must take "
-                        f"({', '.join(required)})")
-
     required_ret = action.return_type and expand_lax(
         gen, substitute(action.return_type, mapping))
-    have_ret = gen.return_types.get(symbol)
-    if implements_or_equals(gen, have_ret, required_ret):
-        return
+
+    shape_matched = False
+    for candidate in [s for _, s in gen.overloads.get(symbol, ())] or [symbol]:
+        # a still-generic method matches by existence
+        have_params = gen.param_types.get(candidate)
+        if have_params is None:
+            return
+
+        if [bare(p) for p in have_params[1:]] != [bare(p) for p in required]:
+            continue
+
+        shape_matched = True
+        if implements_or_equals(gen, gen.return_types.get(candidate),
+                                required_ret):
+            return
+
+    if shape_matched:
+        raise TypeError(f"struct {template_base!r} does not implement "
+                        f"{spelling!r}: method {method!r} must return "
+                        f"{required_ret!r}")
 
     raise TypeError(f"struct {template_base!r} does not implement "
-                    f"{spelling!r}: method {method!r} must return "
-                    f"{required_ret!r}")
+                    f"{spelling!r}: method {method!r} must take "
+                    f"({', '.join(required)})")
 
 
 def implements_or_equals(gen: CodeGenerator, have: str | None,

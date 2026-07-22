@@ -214,7 +214,7 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
     reference parameter, the argument's own address, passed implicitly.
     """
     # deferred import: calls and expressions are mutually recursive
-    from siec.codegen.expressions import emit_lvalue
+    from siec.codegen.expressions import emit_expression, emit_lvalue
 
     if not is_reference(param_name):
         return emit_coerced(gen, builder, arg, param_name, scope)
@@ -237,8 +237,17 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
     try:
         return emit_lvalue(gen, builder, arg, scope)
     except TypeError:
-        raise TypeError(f"a {param_name!r} parameter needs an "
-                        "assignable argument") from None
+        # a literal has no storage to alias, and no declared type to
+        # spill at; a typed temporary (a call's result, an operator
+        # chain) spills to its own stack slot, referenced in place
+        if arg_name is None:
+            raise TypeError(f"a {param_name!r} parameter needs an "
+                            "assignable argument") from None
+
+        value = emit_expression(gen, builder, arg, None, scope)
+        slot = entry_alloca(builder, value.type, "ref.spill")
+        builder.store(value, slot)
+        return slot
 
 
 def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,

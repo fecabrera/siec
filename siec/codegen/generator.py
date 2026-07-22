@@ -310,7 +310,8 @@ class CodeGenerator:
 # builtin declarations every program starts from: 'Result<V, E>' holds a
 # value or an error behind its 'ok' tag, 'Result<E>' only the error, and
 # 'Ok'/'Error' construct them - usually inferred from the expected type;
-# 'Iterator<T>' and 'Iterable<T>' are the interfaces iteration speaks
+# 'Iterator<T>' and 'Iterable<T>' are the interfaces iteration speaks,
+# and 'Add<S, T>' and its siblings the ones the binary operators do
 PRELUDE = """
 interface Iterator<T>;
 
@@ -320,6 +321,28 @@ fn Iterator<T>::next(&self) -> &T;
 interface Iterable<T>;
 
 fn Iterable<T>::iterator(&self) -> Iterator<T>;
+
+// the operator interfaces: 'a + b' on a struct operand is the 'a.add(b)'
+// shorthand, and claiming 'Add<S, T>' declares that shorthand's contract
+interface Add<S, T>;
+
+fn Add<S, T>::add(&self, value: T) -> S;
+
+interface Sub<S, T>;
+
+fn Sub<S, T>::sub(&self, value: T) -> S;
+
+interface Mul<S, T>;
+
+fn Mul<S, T>::mul(&self, value: T) -> S;
+
+interface Div<S, T>;
+
+fn Div<S, T>::div(&self, value: T) -> S;
+
+interface Rem<S, T>;
+
+fn Rem<S, T>::rem(&self, value: T) -> S;
 
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];

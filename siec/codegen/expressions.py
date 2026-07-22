@@ -49,6 +49,7 @@ from siec.codegen.inference import (
     is_float,
     member_field,
     numeric_class,
+    operator_call,
     type_info,
 )
 from siec.codegen.types import (is_array_struct, is_reference, raw_array,
@@ -342,6 +343,13 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_ternary(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, BinaryOp):
+        # a struct operand's operator is the method call it desugars to:
+        # 'a + b' is 'a.add(b)', each overload picked by b's type
+        if (rewritten := operator_call(gen, expr, scope)) is not None:
+            from siec.codegen.methods import emit_method_call
+
+            return emit_method_call(gen, builder, rewritten, scope)
+
         # logical operators coerce each side to a bool on its own terms
         if expr.op in ("and", "or"):
             return emit_logical(gen, builder, expr, scope)
