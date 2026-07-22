@@ -13,10 +13,6 @@ htmlcov/
 *.egg-info/
 *.vsix
 
-examples/
-!examples/*.sie
-!examples/*/*.sie
-
 # OS
 .DS_Store
 
