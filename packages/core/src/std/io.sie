@@ -7,13 +7,90 @@ import { FILE, stdout, fwrite } from stdio;
  ******************************************/
 
 /**
+ * Format the given string with the given arguments.
+ *
+ * @param tmp The string to format into.
+ * @param str The string to format from.
+ * @param args The arguments to format with.
+ */
+@static
+fn format(tmp: &String, str: const char[], args...) {
+    let i: u64 = 0;
+
+    let modifier = String();
+    defer modifier.destroy();
+
+    let bracket_open = false;
+    let bracket_closed = false;
+    
+    foreach (c : str) {
+        case (c) {
+            when '{':
+            if (bracket_open) {
+                tmp.push(c);
+                bracket_open = false;
+                continue;
+            }
+
+            bracket_open = true;
+        when '}':
+            if (bracket_closed) {
+                tmp.push(c);
+                bracket_closed = false;
+                continue;
+            }
+
+            if (not bracket_open) {
+                bracket_closed = true;
+                continue;
+            }
+
+            bracket_open = false;
+
+            if (i < args.length) {
+                case (@typeof(args[i])) {
+                when char*:
+                    let arg = args[i] as char*;
+                    tmp.append(arg);
+                when char[]:
+                    let arg = args[i] as char[];
+                    tmp.append(arg);
+                when String:
+                    let arg = args[i] as String;
+                    tmp.append(arg.as_array());
+                else:
+                    tmp.append(@typename(args[i]));
+                }
+
+                i += 1;
+            }
+
+            modifier.reset();
+        else:
+            if (bracket_open) {
+                modifier.push(c);
+            } else {
+                tmp.push(c);
+            }
+        }
+    }
+    
+}
+
+/**
  * Print the given string to the given file pointer.
  *
  * @param fp The file pointer to print the string to.
  * @param str The string to print.
+ * @param args The arguments to print.
  */
-fn print(fp: FILE*, str: const char[]) {
-    fwrite(str.data, sizeof(char), str.length, fp); 
+fn print(fp: FILE*, str: const char[], args...) {
+    let tmp = String();
+    defer tmp.destroy();
+
+    format(tmp, str, args);
+
+    fwrite(tmp.data, sizeof(char), tmp.length, fp);
 }
 
 /**
@@ -21,10 +98,11 @@ fn print(fp: FILE*, str: const char[]) {
 *
 * @param fp The file pointer to print the string to.
 * @param str The string to print.
+* @param args The arguments to print.
 */
 @inline
-fn print(fp: FILE*, str: String) {
-    print(fp, str.as_array());
+fn print(fp: FILE*, str: String, args...) {
+    print(fp, str.as_array(), args);
 }
 
 /**
@@ -32,12 +110,16 @@ fn print(fp: FILE*, str: String) {
  *
  * @param fp The file pointer to print the string to.
  * @param str The string to print.
+ * @param args The arguments to print.
  */
-fn println(fp: FILE*, str: const char[]) {
-    let tmp = String(str);
+fn println(fp: FILE*, str: const char[], args...) {
+    let tmp = String();
     defer tmp.destroy();
+    
+    format(tmp, str, args);
     tmp.push('\n');
-    print(fp, tmp);
+    
+    fwrite(tmp.data, sizeof(char), tmp.length, fp);
 }
 
 /**
@@ -45,10 +127,11 @@ fn println(fp: FILE*, str: const char[]) {
 *
 * @param fp The file pointer to print the string to.
 * @param str The string to print.
+* @param args The arguments to print.
 */
 @inline
-fn println(fp: FILE*, str: String) {
-    println(fp, str.as_array());
+fn println(fp: FILE*, str: String, args...) {
+    println(fp, str.as_array(), args);
 }
 
 
@@ -60,38 +143,42 @@ fn println(fp: FILE*, str: String) {
  * Print the given string to stdout.
  *
  * @param str The string to print.
+ * @param args The arguments to print.
  */
 @inline
-fn print(str: const char[]) {
-    print(stdout, str);
+fn print(str: const char[], args...) {
+    print(stdout, str, args);
 }
 
 /**
  * Print the given string to stdout.
  *
  * @param str The string to print.
+ * @param args The arguments to print.
  */
 @inline
-fn print(str: String) {
-    print(stdout, str.as_array());
+fn print(str: String, args...) {
+    print(stdout, str.as_array(), args);
 }
 
 /**
  * Print the given string to stdout followed by a newline.
  *
  * @param str The string to print.
+ * @param args The arguments to print.
  */
 @inline
-fn println(str: const char[]) {
-    println(stdout, str);
+fn println(str: const char[], args...) {
+    println(stdout, str, args);
 }
 
 /**
  * Print the given string to stdout followed by a newline.
  *
  * @param str The string to print.
+ * @param args The arguments to print.
  */
 @inline
-fn println(str: String) {
-    println(stdout, str.as_array());
+fn println(str: String, args...) {
+    println(stdout, str.as_array(), args);
 }
