@@ -21,17 +21,22 @@ import { Package } from package;
 @const MAX_PATH_LEN = 1024;
 
 fn main(args: char*[]) -> i32 {
-    let path: char[MAX_PATH_LEN];
+    let path = String();
+    defer path.destroy();
 
     if (args.length > 1) {
-        snprintf(path, MAX_PATH_LEN, "%s/package.toml", args[1]);
+        path.append(args[1]);
+        path.append("/package.toml");
     } else {
-        snprintf(path, MAX_PATH_LEN, "package.toml");
+        path.append("package.toml");
     }
 
-    let fp = fopen(path, "r");
+    path.null_terminate();
+
+    let fp = fopen(path.as_array(), "r");
     if (fp == null) {
-        fprintf(stderr, "%s not found\n", path);
+        std.io.print(stderr, path);
+        std.io.println(stderr, " not found");
         return 1;
     }
     defer fclose(fp);
@@ -40,7 +45,8 @@ fn main(args: char*[]) -> i32 {
     defer toml_free(result);
 
     if (not result.ok) {
-        fprintf(stderr, "could not parse %s\n", path);
+        std.io.print(stderr, "could not parse ");
+        std.io.println(stderr, path);
         return 2;
     }
 
@@ -55,41 +61,41 @@ fn main(args: char*[]) -> i32 {
     
     // name@version
     std.io.print("package: ");
-    std.io.print(pkg.name.as_array());
+    std.io.print(pkg.name);
     std.io.print("@");
-    std.io.println(pkg.version.as_array());
+    std.io.println(pkg.version);
 
     // path
     std.io.print("path:    ");
-    std.io.println(pkg.path.as_array());
+    std.io.println(pkg.path);
 
-    let compile_cmd = String::from_array("python -m siec");
+    let compile_cmd = String("python -m siec");
 
     foreach (dep : pkg.dependencies) {
         compile_cmd.append(" -L packages/"); 
-        compile_cmd.append(dep.name.as_array());
+        compile_cmd.append(dep.name);
         compile_cmd.append("/src"); 
     }
 
     // l1, l2, ...    
     foreach (lib : pkg.libs) {
         compile_cmd.append(" -l ");
-        compile_cmd.append(lib.as_array());
+        compile_cmd.append(lib);
     }
     
     // inc1, inc2, ...
     foreach (inc : pkg.include) {
         compile_cmd.append(" ");
-        compile_cmd.append(pkg.path.as_array());
+        compile_cmd.append(pkg.path);
         compile_cmd.append("/");
-        compile_cmd.append(inc.as_array());
+        compile_cmd.append(inc);
         compile_cmd.append("*.sie");
     }
     
     compile_cmd.append(" -o dist/bin/");
-    compile_cmd.append(pkg.name.as_array());
+    compile_cmd.append(pkg.name);
 
-    std.io.println(compile_cmd.as_array());
+    std.io.println(compile_cmd);
     
     return 0;
 }

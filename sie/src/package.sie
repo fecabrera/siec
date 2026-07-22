@@ -16,13 +16,27 @@ struct Package {
     dependencies: List<Dependency>;
 }
 
-fn Package::init(&self, path: char[]) {
-    self.path = String::from_array(path);
+fn Package::init(&self) {
+    self.path = String();
     self.name = String();
     self.version = String();
-    self.dependencies = List<Dependency>(0);
-    self.include = List<String>(0);
-    self.libs = List<String>(0);
+    self.dependencies = List<Dependency>();
+    self.include = List<String>();
+    self.libs = List<String>();
+}
+
+fn Package::init(&self, path: const char[]) {
+    self.init();
+    self.path.append(path);
+}
+
+fn Package::init(&self, path: const char*) {
+    self.init();
+    self.path.append(path);
+}
+
+fn Package::init(&self, path: String) {
+    self.init(path.as_array());
 }
 
 fn Package::destroy(&self) {
@@ -69,7 +83,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
     if (include.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {include.arr.elem, include.arr.size as u64};
         foreach (el : elements) {
-            self.include.push(String::from_array({el.str.ptr, el.str.len as u64}));
+            self.include.push(String({el.str.ptr, el.str.len as u64}));
         }
     }
 
@@ -77,7 +91,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
     if (libs.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {libs.arr.elem, libs.arr.size as u64};
         foreach (el : elements) {
-            self.libs.push(String::from_array({el.str.ptr, el.str.len as u64}));
+            self.libs.push(String({el.str.ptr, el.str.len as u64}));
         }
     }
 
