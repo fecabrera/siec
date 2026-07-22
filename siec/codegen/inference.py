@@ -158,19 +158,23 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                                     expr.type_args)
 
         # an overloaded name's return type follows the candidate its
-        # arguments pick; a pick that fails resolves to no type yet, and
-        # the call site raises the real error
+        # arguments pick; a fit bypasses a generic template sharing the
+        # name, while a call no concrete candidate takes falls through
+        # to it, or has no type yet
+        picked = False
         if symbol in gen.overloads:
             from siec.codegen.overloads import pick_overload
 
             try:
                 symbol = pick_overload(gen, symbol, call.args, scope)
+                picked = True
             except TypeError:
-                return None
+                if gen.generic_functions.get(symbol) is None:
+                    return None
 
         # a generic call's return type comes from its resolved arguments,
         # without instantiating; an unresolvable call has no type yet
-        if gen.generic_functions.get(symbol) is not None:
+        if not picked and gen.generic_functions.get(symbol) is not None:
             from siec.codegen.generics import pick_generic_call, substitute
 
             try:

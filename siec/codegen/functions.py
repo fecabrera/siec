@@ -47,6 +47,15 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     declared with no return type, and its 'args: char*[]' form keeps the
     C-level (i32, char**) signature underneath.
     """
+    # a method declared through an alias ('String::init' for a
+    # 'List<char>' alias) joins its canonical receiver's name, so its
+    # overloads share one set with the struct's own methods
+    if fn.receiver is not None and "::" in fn.name:
+        canonical = strip_const(expand_alias(gen, fn.receiver))
+        if canonical != fn.receiver:
+            fn.name = f"{canonical}::{fn.name.partition('::')[2]}"
+            fn.receiver = canonical
+
     fn.return_type = expand_alias(gen, fn.return_type)
     for param in fn.params:
         param.type = expand_alias(gen, param.type)

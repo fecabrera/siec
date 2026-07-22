@@ -421,7 +421,15 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
     from siec.codegen.aliases import expand_alias
     from siec.codegen.functions import declare_function
 
-    type_args = [expand_alias(gen, arg) for arg in type_args]
+    # the arguments arrive expanded (an explicit spelling, resolved at the
+    # call) or as carried canonical names (inferred from the values), so
+    # no file's view gates this second pass
+    gen.ungated_types += 1
+    try:
+        type_args = [expand_alias(gen, arg) for arg in type_args]
+    finally:
+        gen.ungated_types -= 1
+
     for arg in type_args:
         if arg.startswith("const ") or arg.startswith("&"):
             raise TypeError(f"cannot instantiate {template.name!r} with "

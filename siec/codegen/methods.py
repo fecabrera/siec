@@ -27,6 +27,7 @@ def register_method(gen: CodeGenerator, fn) -> None:
     """
     from siec.codegen.functions import declare_function
     from siec.codegen.generics import register_generic_function
+    from siec.codegen.overloads import overload_key
 
     with source_location(line=fn.line, file=fn.file):
         if fn.receiver_params is not None:
@@ -34,11 +35,24 @@ def register_method(gen: CodeGenerator, fn) -> None:
                 raise TypeError(f"method {fn.name!r} needs a body: there is "
                                 "nothing to declare without one")
 
+            # a generic struct's method may overload like any other, its
+            # templates stamped together per struct instantiation; only
+            # one may take type parameters of its own (an interface
+            # parameter's synthetic ones included), since a generic
+            # template registers whole, with no set to pick among
             key = (fn.receiver, fn.name.partition("::")[2])
-            if key in gen.generic_methods:
+            templates = gen.generic_methods.setdefault(key, [])
+
+            if (fn.type_params is not None
+                    and any(t.type_params is not None for t in templates)):
+                raise TypeError(f"cannot overload method {fn.name!r} with "
+                                "more than one generic signature")
+
+            if any(overload_key(t.params) == overload_key(fn.params)
+                   for t in templates):
                 raise TypeError(f"method {fn.name!r} is declared more than once")
 
-            gen.generic_methods[key] = fn
+            templates.append(fn)
         elif fn.type_params is not None:
             register_generic_function(gen, fn)
         else:
@@ -76,22 +90,26 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
                 gen.ungated_types -= 1
 
     symbol = f"{base}::{method}"
-    if (symbol in gen.generic_functions
-            or isinstance(gen.module.globals.get(symbol), ir.Function)):
-        return symbol
 
-    # a generic struct's method instantiates with the struct's arguments
-    if (parts := split_generic(base)) is None:
+    # a generic struct's method instantiates with the struct's arguments;
+    # stamping comes first, so the templates join any overloads declared
+    # directly on the instantiated name (through an alias, say)
+    parts = split_generic(base)
+    templates = gen.generic_methods.get((parts[0], method)) if parts else None
+
+    if not templates or symbol in gen.instantiated_functions:
+        if (symbol in gen.generic_functions
+                or isinstance(gen.module.globals.get(symbol), ir.Function)):
+            return symbol
+
         return None
 
     struct_base, args = parts
-    template = gen.generic_methods.get((struct_base, method))
-    if template is None:
-        return None
+    gen.instantiated_functions.add(symbol)
 
-    if symbol not in gen.instantiated_functions:
-        gen.instantiated_functions.add(symbol)
-
+    # the method's overloads stamp together, joining one set under
+    # the instantiated symbol for calls to pick among
+    for template in templates:
         instance = copy.deepcopy(template)
         instance.name = symbol
         instance.receiver = instance.receiver_params = None
@@ -372,9 +390,35 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
         raise TypeError(f"a static 'init' cannot construct {type_name!r}: "
                         "the constructor passes the instance as its receiver")
 
-    if symbol in gen.generic_functions:
-        raise TypeError(f"a generic 'init' cannot construct {type_name!r}: "
-                        "call it explicitly")
+    # an overloaded 'init' resolves to the candidate the arguments pick,
+    # the instance's type standing in for the receiver they lack; a call
+    # no concrete candidate takes falls through to a generic template
+    picked = False
+    if symbol in gen.overloads:
+        from siec.codegen.overloads import pick_overload
+
+        try:
+            symbol = pick_overload(gen, symbol, call.args, scope,
+                                   receiver=type_name)
+            picked = True
+        except TypeError:
+            if gen.generic_functions.get(symbol) is None:
+                raise
+
+    # a generic 'init' (one taking an interface parameter, say)
+    # instantiates like any generic call, the fresh instance joining
+    # through a hidden scope name as its receiver
+    if not picked and symbol in gen.generic_functions:
+        from siec.codegen.calls import emit_call
+        from siec.codegen.generator import Variable
+
+        inner = dict(scope)
+        inner[".ctor.self"] = Variable(slot, type_name)
+        emit_call(gen, builder,
+                  Call(f"{type_name}::init", [Var(".ctor.self"), *call.args]),
+                  inner)
+
+        return slot if as_address else builder.load(slot)
 
     func = gen.module.globals[symbol]
     sie_params = gen.param_types[func.name]

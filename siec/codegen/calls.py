@@ -91,13 +91,22 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if receiver is not None:
         call = Call(call.name, [receiver, *call.args], call.type_args)
 
-    # an overloaded name resolves to the candidate its arguments pick
-    symbol = pick_overload(gen, symbol, call.args, scope)
+    # an overloaded name resolves to the candidate its arguments pick; a
+    # fit bypasses a generic template sharing the name, while a call no
+    # concrete candidate takes falls through to it
+    picked = False
+    if symbol in gen.overloads:
+        try:
+            symbol = pick_overload(gen, symbol, call.args, scope)
+            picked = True
+        except TypeError:
+            if gen.generic_functions.get(symbol) is None:
+                raise
 
     # a generic callee instantiates for this call's type arguments,
     # explicit, inferred, or driven by the expected result type; the
     # call's shape picks among arity overloads
-    if gen.generic_functions.get(symbol) is not None:
+    if not picked and gen.generic_functions.get(symbol) is not None:
         template, type_args = pick_generic_call(gen, symbol, call, scope,
                                                 expected)
         symbol = instantiate_function(gen, template, type_args)

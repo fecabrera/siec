@@ -7,13 +7,22 @@ An argument ranks at its declared Sie type, a literal at its default -
 an integer literal's 'i32', or 'i64' when it doesn't fit one.
 """
 
-from siec.ast import Function, IntLiteral, NullLiteral
+from siec.ast import (
+    AggregateLiteral,
+    ArrayLiteral,
+    FloatLiteral,
+    Function,
+    IntLiteral,
+    NullLiteral,
+    StrLiteral,
+)
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import (
     enum_backing,
     expr_sie_type,
     infer_type,
     numeric_class,
+    type_info,
 )
 from siec.codegen.types import (
     is_aliasing,
@@ -75,27 +84,37 @@ def declare_overload(gen: CodeGenerator, fn: Function, symbol: str) -> str:
     return sibling
 
 
-def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict) -> str:
+def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
+                  receiver: str | None = None) -> str:
     """
     Pick the overload a call's arguments select: a candidate every
     argument matches exactly beats one reached through conversions; no
     viable candidate, or a tie between converted ones, is an error.
+
+    A constructor passes its instance's type as 'receiver', standing in
+    for the receiver argument it has yet to build.
     """
     entry = gen.overloads.get(symbol)
-    if entry is None or len(entry) == 1:
+    if entry is None:
+        return symbol
+
+    # a lone candidate resolves as ever, unless a generic template shares
+    # the name and the arguments must decide between the two
+    if len(entry) == 1 and gen.generic_functions.get(symbol) is None:
         return symbol
 
     arg_types = [rank_type(gen, arg, scope) for arg in args]
+    if receiver is not None:
+        args = [None, *args]
+        arg_types = [receiver, *arg_types]
 
-    exact, converted = [], []
+    tiers = {"exact": [], "implicit": [], "adopt": []}
     for _, candidate in entry:
         fit = candidate_fit(gen, candidate, args, arg_types)
-        if fit == "exact":
-            exact.append(candidate)
-        elif fit is not None:
-            converted.append(candidate)
+        if fit is not None:
+            tiers[fit].append(candidate)
 
-    pool = exact or converted
+    pool = tiers["exact"] or tiers["implicit"] or tiers["adopt"]
     name = symbol.split(".static.")[0]
 
     if not pool:
@@ -113,9 +132,9 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict) -> s
 def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
                   arg_types: list) -> str | None:
     """
-    How a candidate's parameters take a call's arguments: 'exact' when
-    every one matches its parameter's type, 'implicit' when any needs a
-    conversion, None when one doesn't fit or the count is off.
+    How a candidate's parameters take a call's arguments: the weakest of
+    its per-argument fits - 'exact', 'implicit' conversion, or a
+    literal's 'adopt' - and None when one doesn't fit or the count is off.
     """
     params = gen.param_types.get(symbol, [])
 
@@ -132,14 +151,16 @@ def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
     if len(args) < required or (len(args) > len(params) and not var_arg):
         return None
 
+    strength = {"exact": 0, "implicit": 1, "adopt": 2}
+
     fit = "exact"
     for arg, arg_type, param in zip(args, arg_types, params):
         one = parameter_fit(gen, arg, arg_type, param)
         if one is None:
             return None
 
-        if one != "exact":
-            fit = "implicit"
+        if strength[one] > strength[fit]:
+            fit = one
 
     return fit
 
@@ -150,10 +171,10 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     How one argument fits a parameter: 'exact' on the very type,
     'implicit' through a conversion calls already apply - same-prefix
     widening, array decay, 'opaque*' adoption, a 'null' literal.
-    """
-    from siec.codegen.aliases import expand_alias
 
-    param = expand_alias(gen, param)
+    Declared parameter types are already canonical - declaration expanded
+    their aliases - so no view-gated expansion happens here.
+    """
     target = strip_const(param)
 
     # a reference parameter aliases its argument in place: exact type only
@@ -164,9 +185,24 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
         return ("exact" if strip_const(arg_type) == strip_const(strip_reference(target))
                 else None)
 
-    # an untypeable argument (an aggregate literal, say) adapts to any
-    # parameter, at the conversion tier
+    # an untypeable argument adapts to what its shape can fill: an
+    # aggregate literal a struct or array parameter with as many fields,
+    # an array literal an array or a pointer, anything else any parameter
     if arg_type is None:
+        if isinstance(arg, AggregateLiteral):
+            info = type_info(gen, target)
+            if info is None or info.fields is None:
+                return None
+
+            if arg.names is None and len(arg.elements) != len(info.fields):
+                return None
+
+            return "implicit"
+
+        if isinstance(arg, ArrayLiteral):
+            return ("implicit" if target.endswith("[]") or target.endswith("*")
+                    else None)
+
         return "implicit"
 
     source = strip_const(arg_type)
@@ -178,8 +214,12 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     if source == target:
         return "exact"
 
-    # 'null' adopts any pointer parameter
+    # 'null' adopts any pointer parameter, and a string literal fills a
+    # 'char[]' one as the fat value it already is, length included
     if isinstance(arg, NullLiteral) and target.endswith("*"):
+        return "implicit"
+
+    if isinstance(arg, StrLiteral) and target == "char[]":
         return "implicit"
 
     # any pointer or array decays to 'opaque*', an array to its element pointer
@@ -195,6 +235,13 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     if (from_class is not None and to_class is not None
             and from_class[0] == to_class[0] and from_class[1] <= to_class[1]):
         return "implicit"
+
+    # an untyped literal adopts any numeric parameter it emits into, the
+    # loosest fit: any candidate its default type reaches wins over it
+    if to_class is not None and (
+            isinstance(arg, IntLiteral)
+            or (isinstance(arg, FloatLiteral) and to_class[0] == "f")):
+        return "adopt"
 
     return None
 
