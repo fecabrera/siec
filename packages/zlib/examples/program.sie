@@ -1,7 +1,8 @@
 // example based on:
 // https://blog.jyotiprakash.org/file-compression-and-decompression-in-c-using-zlib
 
-import stdio;
+import std.io;
+import { stderr, fopen, fclose, fread, fwrite, ferror, feof, FILE } from stdio;
 import unistd;
 import zlib;
 
@@ -10,7 +11,7 @@ import zlib;
 @const CHUNK = 16384;
 
 fn main(argc: i32, argv: char**) -> i32 {
-    let fnc: fn (stdio.FILE*, stdio.FILE*);
+    let fnc: fn (FILE*, FILE*);
 
     while (true) {
         let opt = unistd.getopt(argc, argv, ":id");
@@ -22,41 +23,41 @@ fn main(argc: i32, argv: char**) -> i32 {
         when 'd':
             fnc = compress_file;
         else:
-            stdio.fprintf(stdio.stderr, "usage: %s [-i | -d] input output\n", argv[0]);
+            std.io.println(stderr, "usage: {} [-i | -d] input output", argv[0]);
             return 1;
         }
     }
 
     if (argc - unistd.optind != 2) {
-        stdio.fprintf(stdio.stderr, "usage: %s [-i | -d] input output\n", argv[0]);
+        std.io.println(stderr, "usage: {} [-i | -d] input output", argv[0]);
         return 1;
     }
 
     let input_path = argv[unistd.optind];
     let output_path = argv[unistd.optind + 1];
 
-    let input = stdio.fopen(input_path, "rb");
+    let input = fopen(input_path, "rb");
     if (input == null) {
-        stdio.fprintf(stdio.stderr, "could not open %s\n", input_path);
+        std.io.println(stderr, "could not open {}", input_path);
         return 1;
     }
 
-    defer stdio.fclose(input);
+    defer fclose(input);
     
-    let output = stdio.fopen(output_path, "wb");
+    let output = fopen(output_path, "wb");
     if (output == null) {
-        stdio.fprintf(stdio.stderr, "could not open %s\n", output_path);
+        std.io.println(stderr, "could not open {}", output_path);
         return 1;
     }
 
-    defer stdio.fclose(output);
+    defer fclose(output);
 
     fnc(input, output);
 
     return 0;
 }
 
-fn compress_file(src: stdio.FILE*, dst: stdio.FILE*) {
+fn compress_file(src: FILE*, dst: FILE*) {
     let flush: zlib.z_flush;
     let have: u64;
     let next_in: u8[CHUNK];
@@ -69,22 +70,22 @@ fn compress_file(src: stdio.FILE*, dst: stdio.FILE*) {
         
     let ret = zlib.deflateInit(&strm, zlib.z_level::Z_DEFAULT_COMPRESSION);
     if (ret != zlib.z_status::Z_OK) {
-        stdio.fprintf(stdio.stderr, "deflateInit() returned %d: %s\n", ret, strm.msg);
+        std.io.println(stderr, "deflateInit() returned {}: {}", ret, strm.msg);
         return;
     }
     
     defer zlib.deflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
-        strm.avail_in = stdio.fread(next_in, 1, CHUNK, src) as u32;
+        strm.avail_in = fread(next_in, 1, CHUNK, src) as u32;
 
-        let err = stdio.ferror(src);
+        let err = ferror(src);
         if (err) {
-            stdio.fprintf(stdio.stderr, "ferror() returned %d\n", err);
+            std.io.println(stderr, "ferror() returned {}", err);
             return;
         }
 
-        flush = stdio.feof(src) ? zlib.z_flush::Z_FINISH : zlib.z_flush::Z_NO_FLUSH;
+        flush = feof(src) ? zlib.z_flush::Z_FINISH : zlib.z_flush::Z_NO_FLUSH;
 
         strm.next_in = next_in;
 
@@ -95,13 +96,13 @@ fn compress_file(src: stdio.FILE*, dst: stdio.FILE*) {
             ret = zlib.deflate(&strm, flush);
             have = CHUNK as u64 - strm.avail_out;
 
-            let err = stdio.ferror(dst);
+            let err = ferror(dst);
             if (err) {
-                stdio.fprintf(stdio.stderr, "ferror() returned %d\n", err);
+                std.io.println(stderr, "ferror() returned {}", err);
                 return;
             }
             
-            if (stdio.fwrite(next_out, 1, have, dst) != have)
+            if (fwrite(next_out, 1, have, dst) != have)
                 return;
 
             if (strm.avail_out) break; // write done
@@ -111,7 +112,7 @@ fn compress_file(src: stdio.FILE*, dst: stdio.FILE*) {
     }
 }
 
-fn decompress_file(src: stdio.FILE*, dst: stdio.FILE*) {
+fn decompress_file(src: FILE*, dst: FILE*) {
     let have: u64;
     let next_in: u8[CHUNK];
     let next_out: u8[CHUNK];
@@ -123,18 +124,18 @@ fn decompress_file(src: stdio.FILE*, dst: stdio.FILE*) {
 
     let ret = zlib.inflateInit(&strm);
     if (ret != zlib.z_status::Z_OK) {
-        stdio.fprintf(stdio.stderr, "deflateInit() returned %d: %s\n", ret, strm.msg);
+        std.io.println(stderr, "deflateInit() returned {}: {}", ret, strm.msg);
         return;
     }
 
     defer zlib.inflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
-        strm.avail_in = stdio.fread(next_in, 1, CHUNK, src) as u32;
+        strm.avail_in = fread(next_in, 1, CHUNK, src) as u32;
 
-        let err = stdio.ferror(src);
+        let err = ferror(src);
         if (err) {
-            stdio.fprintf(stdio.stderr, "ferror() returned %d\n", err);
+            std.io.println(stderr, "ferror() returned {}", err);
             return;
         }
 
@@ -151,19 +152,19 @@ fn decompress_file(src: stdio.FILE*, dst: stdio.FILE*) {
             when zlib.z_status::Z_NEED_DICT,
                  zlib.z_status::Z_DATA_ERROR,
                  zlib.z_status::Z_MEM_ERROR:
-                 stdio.fprintf(stdio.stderr, "inflate() returned %d\n", ret);
+                 std.io.println(stderr, "inflate() returned {}", ret);
                  return;
             }
 
             have = CHUNK as u64 - strm.avail_out;
 
-            let err = stdio.ferror(dst);
+            let err = ferror(dst);
             if (err) {
-                stdio.fprintf(stdio.stderr, "ferror() returned %d\n", err);
+                std.io.println(stderr, "ferror() returned {}", err);
                 return;
             }
             
-            if (stdio.fwrite(next_out, 1, have, dst) != have)
+            if (fwrite(next_out, 1, have, dst) != have)
                 return;
 
             if (strm.avail_out) break; // write done

@@ -1,9 +1,10 @@
-import { stderr, fprintf, printf } from stdio;
+import std.io;
+import { stderr } from stdio;
 import { Decimal } from decimal;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length != 3) {
-		fprintf(stderr, "sub: usage: %s x y\n", args[0]);
+		std.io.println(stderr, "sub: usage: {} x y", args[0]);
 		return 1;
 	}
 
@@ -19,7 +20,7 @@ fn main(args: const char*[]) -> i32 {
     let str = result.to_string();
     defer str.destroy();
     
-    printf("%s\n", str.data);
+    std.io.println("{}", str);
 
     return 0;
 }

@@ -34,8 +34,7 @@ fn main(args: char*[]) -> i32 {
 
     let fp = fopen(path.as_array(), "r");
     if (fp == null) {
-        std.io.print(stderr, path);
-        std.io.println(stderr, " not found");
+        std.io.println(stderr, "{} not found", path);
         return 1;
     }
     defer fclose(fp);
@@ -44,8 +43,7 @@ fn main(args: char*[]) -> i32 {
     defer toml_free(result);
 
     if (not result.ok) {
-        std.io.print(stderr, "could not parse ");
-        std.io.println(stderr, path);
+        std.io.println(stderr, "could not parse {} ", path);
         return 2;
     }
 
@@ -54,19 +52,15 @@ fn main(args: char*[]) -> i32 {
 
     let res = pkg.parse(result);
     if (not res.ok) {
-        fprintf(stderr, "could not parse package: %d\n", res.error);
+        std.io.println(stderr, "could not parse package: {}", res.error);
         return 4;
     }
     
     // name@version
-    std.io.print("package: ");
-    std.io.print(pkg.name);
-    std.io.print("@");
-    std.io.println(pkg.version);
+    std.io.println("package: {}@{}", pkg.name, pkg.version);
 
     // path
-    std.io.print("path:    ");
-    std.io.println(pkg.path);
+    std.io.println("path:    {}", pkg.path);
 
     let compile_cmd = String("python -m siec");
 
