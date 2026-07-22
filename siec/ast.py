@@ -184,6 +184,15 @@ class SizeOf:
 
 
 @dataclass
+class TypeName:
+    """
+    A '@typename(T)' expression: the compile-time canonical name of a
+    type, or of a variable's type, as a 'const char[]'.
+    """
+    name: str
+
+
+@dataclass
 class UnaryOp:
     """
     A unary operation applying a prefix operator to one subexpression.

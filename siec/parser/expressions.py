@@ -23,6 +23,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    TypeName,
     UnaryOp,
     Var,
 )
@@ -142,6 +143,15 @@ def parse_primary(ts: TokenStream) -> Expr:
     # '@asm' opens an inline assembly block
     if tok.syntax == "@" and ts.peek().value == "asm":
         return parse_asm_tail(ts)
+
+    # '@typename(T)' is the compile-time name of a type, or of a
+    # variable's type, as a 'const char[]'
+    if tok.syntax == "@" and ts.peek().value == "typename":
+        ts.next()
+        ts.expect("sym", "(")
+        name = parse_type(ts)
+        ts.expect("sym", ")")
+        return parse_postfix(ts, TypeName(name))
 
     # 'null' is the pointer literal
     if tok.kind == "kw" and tok.value == "null":

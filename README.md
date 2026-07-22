@@ -1,6 +1,6 @@
 # sielang
 
-Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for programmers by implementing modern features from high-level languages like defer statements, generics and foreach loops while providing full low-level control.
+Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for programmers by implementing modern features like defer statements and features from higher-level languages like generics and foreach loops while still providing full low-level control.
 
 ## Hello world
 
@@ -1407,6 +1407,25 @@ Being a compile-time constant, `sizeof` also works anywhere one is required: `@c
 
 let buffer: u8[sizeof(i32) * 8];
 ```
+
+#### Typename
+
+`@typename` yields the canonical name of a type, or of a variable's declared type, as a `const char[]` baked in at compile time. Aliases expand, so the name is the one the compiler knows the type by:
+
+```
+let num: u64;
+@typename(num);          // "u64"
+
+let s: String;           // @type String = List<char>;
+@typename(s);            // "List<char>"
+
+let arr: i32[];
+@typename(arr);          // "i32[]"
+
+@typename(List<f64>);    // "List<f64>", a type spelling works directly
+```
+
+Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type.
 
 ### Enums
 

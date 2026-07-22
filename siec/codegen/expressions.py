@@ -29,6 +29,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    TypeName,
     UnaryOp,
     Var,
 )
@@ -148,6 +149,12 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             return ir.Constant(expected_type, size)
 
         return ir.Constant(ir.IntType(64), size)
+
+    if isinstance(expr, TypeName):
+        # '@typename' bakes the canonical name in as a string literal
+        return emit_expression(gen, builder,
+                               StrLiteral(typename_of(gen, expr.name, scope)),
+                               expected_type, scope)
 
     if isinstance(expr, AsmBlock):
         return emit_asm_block(gen, builder, expr, scope)
@@ -879,6 +886,28 @@ def emit_tuple(gen: CodeGenerator, builder: ir.IRBuilder, expr: TupleLiteral,
         value = builder.insert_value(value, filled, i, name=f"tuple.{i}")
 
     return value
+
+
+def typename_of(gen: CodeGenerator, name: str, scope: dict) -> str:
+    """
+    The canonical type name '@typename' resolves: a scope variable's
+    declared type (a '&T' parameter naming its T), a global's, or the
+    written type expanded through its aliases.
+    """
+    from siec.codegen.aliases import expand_alias
+    from siec.codegen.types import strip_reference
+
+    if name in scope:
+        return strip_reference(scope[name].type)
+
+    if (symbol := gen.resolve_symbol(name)) in gen.globals:
+        return gen.globals[symbol]
+
+    expanded = expand_alias(gen, name)
+
+    # naming nothing at all is an error, not a string
+    resolve_type(expanded, gen.structs)
+    return expanded
 
 
 def tuple_element(gen: CodeGenerator, expr: Index, scope: dict) -> tuple:

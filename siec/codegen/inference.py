@@ -27,6 +27,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    TypeName,
     UnaryOp,
     Var,
 )
@@ -350,6 +351,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a char literal is exactly a 'char'
     if isinstance(expr, CharLiteral):
         return "char"
+
+    # '@typename' is a baked-in string
+    if isinstance(expr, TypeName):
+        return "const char[]"
 
     # a tuple literal carries its elements' types, literals defaulting
     # like they do in any untyped context
