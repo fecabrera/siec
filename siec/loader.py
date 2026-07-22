@@ -210,9 +210,21 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
     for file in visible:
         visible[file] |= member_names.get(file, set()) | entry_names
 
+    # the unit's own files: the command-line sources and, textually, their
+    # includes; a file reached only through 'import' sits outside it, so
+    # separate compilation can leave its definitions to its own unit
+    unit_files = set()
+    stack = [str(source.resolve()) for source in sources]
+    while stack:
+        file = stack.pop()
+        if file not in unit_files:
+            unit_files.add(file)
+            stack.extend(include_targets.get(file, ()))
+
     merged = Program([], functions, structs, consts, enums, globals_, aliases, conds)
     merged.module_bindings = module_bindings
     merged.member_bindings = member_bindings
     merged.module_exports = module_exports
     merged.visible = visible
+    merged.unit_files = unit_files
     return merged

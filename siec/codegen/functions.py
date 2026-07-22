@@ -175,9 +175,14 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     if fn.is_static:
         func.linkage = "internal"
 
-    # an '@inline' function inlines into every caller, unconditionally
+    # an '@inline' function inlines into every caller, unconditionally;
+    # under separate compilation every unit that sees one defines it,
+    # C99-style, the duplicate definitions merging at link
     if fn.is_inline:
         func.attributes.add("alwaysinline")
+
+        if gen.unit_files is not None and not fn.is_static:
+            func.linkage = "linkonce_odr"
 
     # an '@noreturn' function never gives control back: calls to it end
     # their paths, and its own body must not return
@@ -205,6 +210,20 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
                 arg.add_attribute("byval")
 
     return func
+
+
+def link_once(gen: CodeGenerator, fn: Function) -> None:
+    """
+    Mark an instantiated function's definition 'linkonce_odr': under
+    separate compilation, every unit stamps the instances its own calls
+    use, so identical definitions from other units merge at link.
+    """
+    gen.current_file = fn.file
+    symbol = overload_symbol(gen, gen.resolve_symbol(fn.name), fn.params)
+    func = gen.module.globals[symbol]
+
+    if func.linkage != "internal":
+        func.linkage = "linkonce_odr"
 
 
 def emit_function(gen: CodeGenerator, fn: Function) -> None:

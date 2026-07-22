@@ -112,9 +112,13 @@ def main() -> int:
 
     # front end: sources and includes -> AST -> LLVM module, reporting the
     # first compile error in human-readable form instead of a traceback
+    # '-c' compiles one unit of a larger program: the sources and their
+    # includes define here, while an imported module only declares, its
+    # definitions coming from its own unit at link
     try:
         program = load_program(sources, include_paths)
-        module = codegen(program, str(sources[0]), opts.target, opts.debug)
+        module = codegen(program, str(sources[0]), opts.target, opts.debug,
+                         define_imports=not opts.compile_only)
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:
         print(format_error(str(sources[0]), error), file=sys.stderr)
         return 1

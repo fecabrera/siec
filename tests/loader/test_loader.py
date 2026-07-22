@@ -111,6 +111,22 @@ def test_load_searches_include_paths(tmp_path):
     assert [fn.name for fn in program.functions] == ["dep", "main"]
 
 
+def test_load_marks_the_unit_files(tmp_path):
+    """
+    The sources and their includes, transitively, form the unit; a file
+    reached only through 'import' sits outside it.
+    """
+    write(tmp_path / "mod.sie", "fn entry() {}")
+    write(tmp_path / "impl.sie", "fn impl() {}")
+    part = write(tmp_path / "part.sie", '@include("impl") fn part() {}')
+    main = write(tmp_path / "main.sie",
+                 '@include("part") import mod; fn main() {}')
+
+    program = load_program([main], [])
+    assert program.unit_files == {str(main.resolve()), str(part.resolve()),
+                                  str((tmp_path / "impl.sie").resolve())}
+
+
 def test_load_tags_declarations_with_their_source_file(tmp_path):
     """
     Each function and struct is tagged with the file it was parsed from.

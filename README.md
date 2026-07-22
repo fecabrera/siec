@@ -29,7 +29,7 @@ siec main.sie libfoo.a -o main
 ```
 
 - `-o <path>` names the output executable, `a.out` by default.
-- `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise.
+- `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise. The object defines the named sources and their includes; an imported module joins as declarations only, its definitions coming from its own `-c` object at link. See [Imports](#imports).
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
 - `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form, including executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
 - `-g` emits DWARF debug info, cc-style: every instruction maps to its source line, and every function, parameter, and variable is described with its type. A `-g` build debugs at source level in lldb or gdb: breakpoints by file and line, stepping, `bt` with Sie lines, and `frame variable` showing struct fields, arrays as their `{data, length}` pair, and unions. Debug at `-O0`, where nothing is reordered; on macOS, keep the `.o` the build leaves next to the executable, since the debugger reads the DWARF from it.
@@ -85,6 +85,16 @@ An imported module's members stay inside its namespace: they're reachable only t
 
 Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types *inferred* across the boundary (a call's return type, say) flow without their module's name in view.
 
+Imports carry across separate compilation. Under `-c`, an imported module's functions stay declarations: the unit calls them by [signature symbol](#overloading), and the module's own `-c` object defines them. Compile each module once, link the objects:
+
+```
+siec -c math/util.sie -o util.o
+siec -c main.sie -o main.o
+cc util.o main.o -o main
+```
+
+Three kinds of definition still land in every unit that uses them, because they must: a generic's instances stamp where their calls are, `@inline` bodies follow their callers, and an imported module's `@static`s stay per-unit, like C statics. The first two link as mergeable definitions, so the units' duplicates collapse into one at link. A whole-program build (no `-c`) is one unit: imports compile in, as ever.
+
 #### Include
 
 `@include("path")` pulls a specific `.sie` file directly into the current file, searching the include path:
@@ -95,7 +105,7 @@ Types scope the same way: a module's structs, enums, and aliases are reachable t
 
 The path resolves against, in order: the including file's own directory, any `-I` directories, the `lib/` directory beside each source, the working directory, and the `lib/` directory under it. The last two let a project compile from its root wherever its sources sit.
 
-Unlike `import`, an include copies the file's declarations as if they were written in place, without any namespacing.
+Unlike `import`, an include copies the file's declarations as if they were written in place, without any namespacing. That makes it C's `#include`: whatever the file holds compiles as part of the including unit, so under `-c` a file included by two units defines twice, colliding at link. Files meant for inclusion should hold declarations; definitions belong in modules.
 
 ### Variables
 

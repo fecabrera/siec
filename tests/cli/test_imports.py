@@ -1,5 +1,8 @@
 """Tests for 'import': module resolution and bindings."""
 
+import shutil
+import subprocess
+
 import pytest
 
 from tests.cli.test_cli import run_cli
@@ -448,3 +451,92 @@ def test_methods_resolve_on_carried_foreign_types(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 0
+
+
+def test_compile_only_leaves_imports_as_declarations(tmp_path, monkeypatch, capsys):
+    """
+    Under '-c' an imported module's functions stay declarations - its own
+    unit defines them - while an '@include'd file's define here, C-style,
+    and an imported '@inline' function defines in every unit that sees it.
+    """
+    mod = tmp_path / "math"
+    mod.mkdir()
+    (mod / "util.sie").write_text("""
+        fn add(x: i32, y: i32) -> i32 { return x + y; }
+        @inline fn twice(x: i32) -> i32 { return x * 2; }
+    """)
+    (tmp_path / "impl.sie").write_text("""
+        fn shared() -> i32 { return 2; }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        @include("impl")
+        import { add, twice } from math.util;
+
+        fn main() -> i32 { return add(twice(20), shared()); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "-c", "--emit-llvm") == 0
+
+    out = capsys.readouterr().out
+    assert 'declare i32 @"add(i32,i32)"' in out
+    assert 'define i32 @"shared()"' in out
+    assert 'define linkonce_odr i32 @"twice(i32)"' in out
+
+
+def test_whole_program_builds_define_imports(tmp_path, monkeypatch, capsys):
+    """
+    Without '-c' the build is the whole program: an imported module's
+    functions define into the one module, as ever.
+    """
+    mod = tmp_path / "math"
+    mod.mkdir()
+    (mod / "util.sie").write_text("""
+        fn add(x: i32, y: i32) -> i32 { return x + y; }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { add } from math.util;
+
+        fn main() -> i32 { return add(40, 2); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+    assert 'define i32 @"add(i32,i32)"' in capsys.readouterr().out
+
+
+@pytest.mark.skipif(shutil.which("cc") is None, reason="needs a C compiler")
+def test_separately_compiled_units_link_and_run(tmp_path, monkeypatch):
+    """
+    Each '-c' unit defines its own functions plus the generic instances
+    it stamps; the shared instances merge at link and the program runs.
+    """
+    (tmp_path / "box.sie").write_text("""
+        struct Box<T> { value: T; }
+
+        fn Box<T>::init(&self, value: T) { self.value = value; }
+        fn Box<T>::get(&self) -> T { return self.value; }
+    """)
+    (tmp_path / "part.sie").write_text("""
+        import { Box } from box;
+
+        fn part() -> i32 { let b = Box<i32>(20); return b.get(); }
+    """)
+    (tmp_path / "main.sie").write_text("""
+        import { Box } from box;
+
+        fn part() -> i32;
+
+        fn main() -> i32 { let b = Box<i32>(22); return b.get() + part(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, tmp_path / "part.sie", "-c", "-o", "part.o") == 0
+    assert run_cli(monkeypatch, tmp_path / "main.sie", "-c", "-o", "main.o") == 0
+
+    subprocess.run(["cc", "part.o", "main.o", "-o", "app"], check=True)
+    assert subprocess.run(["./app"]).returncode == 42

@@ -604,6 +604,7 @@ class Program:
     member_bindings: dict = field(default_factory=dict)  # (file, name) -> member name
     module_exports: dict = field(default_factory=dict)   # module file -> set of names
     visible: dict = field(default_factory=dict)          # file -> unqualified names in view
+    unit_files: set | None = None                        # the sources and their includes
 
 
 @dataclass

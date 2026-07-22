@@ -225,6 +225,11 @@ class CodeGenerator:
         self.visible: dict[str, set] = {}
         self.builtin_names: set = set()
 
+        # under separate compilation, the files whose definitions this
+        # unit owns - the sources and their includes; None (a whole-program
+        # build) defines every file's
+        self.unit_files: set | None = None
+
         # the source file whose function body is being emitted, deciding
         # which statics are in view
         self.current_file = ""
@@ -265,6 +270,16 @@ class CodeGenerator:
             return self.symbol_names.get(member, member)
 
         return None
+
+    def defines(self, file: str | None) -> bool:
+        """
+        Whether this unit defines a file's functions: every file's in a
+        whole-program build; the sources' and their includes' under
+        separate compilation, where an imported module's definitions
+        belong to its own unit and only its declarations join this one.
+        """
+        return (self.unit_files is None or file is None
+                or file in self.unit_files)
 
     def sees(self, name: str) -> bool:
         """
@@ -467,19 +482,24 @@ def parse_prelude() -> Program:
 
 
 def codegen(program: Program, module_name: str, target: str | None = None,
-            debug: bool = False) -> ir.Module:
+            debug: bool = False, define_imports: bool = True) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
 
     Under 'debug', DWARF metadata rides along: line locations on every
     instruction, and a description of each function and variable.
+
+    Without 'define_imports' - separate compilation - an imported module's
+    functions stay declarations, defined when the module compiles as its
+    own unit; only the sources and their includes define here.
     """
     from siec.codegen.aliases import register_aliases
     from siec.codegen.conditionals import resolve_conditionals
     from siec.codegen.constants import (register_builtin_constants,
                                         register_constants)
     from siec.codegen.enums import register_enums
-    from siec.codegen.functions import declare_function, emit_function
+    from siec.codegen.functions import (declare_function, emit_function,
+                                        link_once)
     from siec.codegen.generics import register_generic_function
     from siec.codegen.methods import register_method
     from siec.codegen.globals import register_globals
@@ -497,6 +517,9 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     gen.module_exports = program.module_exports
     gen.visible = program.visible
     gen.builtin_names = set(BUILTIN_CONSTANTS)
+
+    if not define_imports:
+        gen.unit_files = program.unit_files
 
     # the builtin prelude's declarations join every program, its names
     # in every file's view
@@ -547,10 +570,14 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     run_conformance(gen)
 
     # third pass: emit the bodies of the defined functions, an '@asm'
-    # function's assembly standing in for one
+    # function's assembly standing in for one; an imported file's emit
+    # only when this unit defines it - except its '@static's, which stay
+    # internal per unit like C's, and its '@inline's, which every unit
+    # defines so their bodies are there to inline, C99-style
     for fn in program.functions:
         if (fn.type_params is None and fn.receiver_params is None
-                and (fn.body is not None or fn.asm is not None)):
+                and (fn.body is not None or fn.asm is not None)
+                and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
             emit_function(gen, fn)
 
     # calls met while emitting queue their instantiations' bodies, each of
@@ -563,5 +590,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
             emit_function(gen, instance)
         finally:
             gen.ungated_types -= 1
+
+        # under separate compilation each unit stamps the instances it
+        # uses, so their duplicate definitions merge at link
+        if gen.unit_files is not None:
+            link_once(gen, instance)
 
     return gen.module
