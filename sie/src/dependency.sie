@@ -20,7 +20,15 @@ fn Dependency::setName(&self, name: const char[]) {
     self.name.append(name);
 }
 
+fn Dependency::setName(&self, name: String) {
+    self.setName(name.as_array());
+}
+
 fn Dependency::setVersion(&self, version: const char[]) {
     self.version.reset();
     self.version.append(version); 
+}
+
+fn Dependency::setVersion(&self, version: String) {
+    self.setVersion(version.as_array());
 }

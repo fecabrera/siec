@@ -27,12 +27,12 @@ fn Package::init(&self) {
 
 fn Package::init(&self, path: const char[]) {
     self.init();
-    self.path.append(path);
+    self.setPath(path);
 }
 
 fn Package::init(&self, path: const char*) {
     self.init();
-    self.path.append(path);
+    self.setPath(path);
 }
 
 fn Package::init(&self, path: String) {
@@ -121,12 +121,39 @@ fn Package::setPath(&self, path: const char[]) {
     self.path.append(path);
 }
 
+fn Package::setPath(&self, path: const char*) {
+    self.path.reset();
+    self.path.append(path);
+}
+
+fn Package::setPath(&self, path: String) {
+    self.setPath(path.as_array());
+}
+
 fn Package::setName(&self, name: const char[]) {
     self.name.reset();
     self.name.append(name);
 }
 
+fn Package::setName(&self, name: const char*) {
+    self.name.reset();
+    self.name.append(name);
+}
+
+fn Package::setName(&self, name: String) {
+    self.setName(name.as_array());
+}
+
 fn Package::setVersion(&self, version: const char[]) {
     self.version.reset();
     self.version.append(version);
+}
+
+fn Package::setVersion(&self, version: const char*) {
+    self.version.reset();
+    self.version.append(version);
+}
+
+fn Package::setVersion(&self, version: String) {
+    self.setVersion(version.as_array());
 }
