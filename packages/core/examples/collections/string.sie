@@ -1,0 +1,21 @@
+import std.io;
+import { String } from std;
+
+fn main() -> i32 {
+    let str1 = String();
+    defer str1.destroy();
+    str1.append("hello");
+    std.io.println(str1);
+    
+    let str2 = String(str1);
+    defer str2.destroy();
+    str2.push(' ');
+    str2.append("world");
+    std.io.println(str2);
+    
+    let str3 = String("hello world");
+    defer str3.destroy();
+    std.io.println(str3);
+
+    return 0;
+}
