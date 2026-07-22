@@ -49,7 +49,7 @@ fn main(args: char*[]) -> i32 {
         return 2;
     }
 
-    let pkg = Package({args[1], strlen(args[1])});
+    let pkg = Package(args[1]);
     defer pkg.destroy();
 
     let res = pkg.parse(result);

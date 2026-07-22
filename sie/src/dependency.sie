@@ -5,30 +5,76 @@ struct Dependency {
     version: String;
 }
 
+/**
+ * Initialize the Dependency.
+ */
 fn Dependency::init(&self) {
     self.name = String(0);
     self.version = String(0);
 }
 
+/**
+ * Destroy the Dependency.
+ */
 fn Dependency::destroy(&self) {
     self.name.destroy();
     self.version.destroy();
 }
 
+/**
+ * Set the name of the Dependency.
+ *
+ * @param name The name to set the Dependency to.
+ */
 fn Dependency::setName(&self, name: const char[]) {
     self.name.reset();
     self.name.append(name);
 }
 
+/**
+ * Set the name of the Dependency.
+ *
+ * @param name The name to set the Dependency to. The name is null terminated.
+ */
+fn Dependency::setName(&self, name: const char*) {
+    self.name.reset();
+    self.name.append(name); 
+}
+
+/**
+ * Set the name of the Dependency.
+ *
+ * @param name The name to set the Dependency to.
+ */
 fn Dependency::setName(&self, name: String) {
     self.setName(name.as_array());
 }
 
+/**
+ * Set the version of the Dependency.
+ *
+ * @param version The version to set the Dependency to.
+ */
 fn Dependency::setVersion(&self, version: const char[]) {
     self.version.reset();
     self.version.append(version); 
 }
 
+/**
+ * Set the version of the Dependency.
+ *
+ * @param version The version to set the Dependency to. The version is null terminated.
+ */
+fn Dependency::setVersion(&self, version: const char*) {
+    self.version.reset();
+    self.version.append(version); 
+}
+
+/**
+ * Set the version of the Dependency.
+ *
+ * @param version The version to set the Dependency to.
+ */
 fn Dependency::setVersion(&self, version: String) {
     self.setVersion(version.as_array());
 }
