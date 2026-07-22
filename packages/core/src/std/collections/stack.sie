@@ -8,12 +8,20 @@ struct Stack<T> {
     capacity: u64;
 }
 
+/**
+ * Initialize the Stack.
+ *
+ * @param capacity The capacity of the Stack.
+ */
 fn Stack<T>::init(&self, capacity: u64 = DEFAULT_STACK_CAPACITY) {
     self.data = malloc(capacity * sizeof(T)) as T*;
     self.top = 0;
     self.capacity = capacity;
 }
 
+/**
+ * Destroy the Stack.
+ */
 fn Stack<T>::destroy(&self) {
     free(self.data);
 
@@ -22,6 +30,11 @@ fn Stack<T>::destroy(&self) {
     self.capacity = 0;
 }
 
+/**
+ * Push the given value to the Stack.
+ *
+ * @param value The value to push to the Stack.
+ */
 fn Stack<T>::push(&self, value: T) {
     if (self.top == self.capacity)
         self.grow();
@@ -30,19 +43,37 @@ fn Stack<T>::push(&self, value: T) {
     self.top += 1;
 }
 
+/**
+ * Pop the last element from the Stack.
+ *
+ * @return The last element from the Stack.
+ */
 fn Stack<T>::pop(&self) -> T {
     self.top -= 1;
     return self.data[self.top];
 }
 
+/**
+ * Get the last element from the Stack.
+ *
+ * @return The last element from the Stack.
+ */
 fn Stack<T>::peek(const &self) -> &T {
     return self.data[self.top - 1];
 }
 
+/**
+ * Check if the Stack is empty.
+ *
+ * @return True if the Stack is empty, false otherwise.
+ */
 fn Stack<T>::is_empty(const &self) -> bool {
     return self.top == 0;
 }
 
+/**
+ * Grow the Stack.
+ */
 fn stack<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
     self.data = realloc(self.data, capacity * sizeof(T)) as T*;

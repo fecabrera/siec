@@ -16,11 +16,17 @@ struct QueueIterator<T>: Iterator<T> {
     current: QueueNode<T>*; // next node to yield
 }
 
+/**
+ * Initialize the Queue.
+ */
 fn Queue<T>::init(&self) {
     self.head = null;
     self.tail = null;
 }
 
+/**
+ * Destroy the Queue.
+ */
 fn Queue<T>::destroy(&self) {
     while (not self.is_empty())
         self.pop();
@@ -29,6 +35,11 @@ fn Queue<T>::destroy(&self) {
     self.tail = null;
 }
 
+/**
+ * Push the given value to the Queue.
+ *
+ * @param value The value to push to the Queue.
+ */
 fn Queue<T>::push(&self, value: T) {
     let node = malloc(sizeof(QueueNode<T>)) as QueueNode<T>*;
     *node = { value = value };
@@ -42,6 +53,11 @@ fn Queue<T>::push(&self, value: T) {
     self.tail = node;
 }
 
+/**
+ * Pop the last element from the Queue.
+ *
+ * @return The last element from the Queue.
+ */
 fn Queue<T>::pop(&self) -> T {
     let node = self.head;
     self.head = node->next;
@@ -55,22 +71,47 @@ fn Queue<T>::pop(&self) -> T {
     return value;
 }
 
+/**
+ * Get the last element from the Queue.
+ *
+ * @return The last element from the Queue.
+ */
 fn Queue<T>::peek(const &self) -> T {
     return self.head->value;
 }
 
+/**
+ * Check if the Queue is empty.
+ *
+ * @return True if the Queue is empty, false otherwise.
+ */
 fn Queue<T>::is_empty(const &self) -> bool {
     return self.head == null;
 }
 
+/**
+ * Get the iterator for the Queue.
+ *
+ * @return The iterator for the Queue.
+ */
 fn Queue<T>::iterator(&self) -> QueueIterator<T> {
     return { self.head };
 }
 
+/**
+ * Check if the QueueIterator has a next element.
+ *
+ * @return True if the QueueIterator has a next element, false otherwise.
+ */
 fn QueueIterator<T>::has_next(&self) -> bool {
     return self.current != null;
 }
 
+/**
+ * Get the next element from the QueueIterator.
+ *
+ * @return The next element from the QueueIterator.
+ */
 fn QueueIterator<T>::next(&self) -> &T {
     let current = self.current;
     self.current = self.current->next;

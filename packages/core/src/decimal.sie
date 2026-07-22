@@ -30,35 +30,66 @@ struct Decimal
     mpd: mpdecimal.mpd*;
 }
 
+/**
+ * Initialize the Decimal with the default context.
+ */
 fn Decimal::init(&self) {
     self.ctx = __get_default_context();
     self.mpd = mpdecimal.mpd_new(self.ctx);
 }
 
+/**
+ * Initialize the Decimal with the default context and the given value.
+ *
+ * @param value The value to initialize the Decimal with.
+ */
 fn Decimal::init(&self, value: i64) {
     self.init();
     self.set(value);
 }
 
+/**
+ * Initialize the Decimal with the default context and the given value.
+ *
+ * @param value The value to initialize the Decimal with.
+ */
 fn Decimal::init(&self, value: u64) {
     self.init();
     self.set(value);
 }
 
+/**
+ * Initialize the Decimal with the default context and the given value.
+ *
+ * @param value The value to initialize the Decimal with.
+ */
 fn Decimal::init(&self, value: const char[]) {
     self.init();
     self.set(value);
 }
 
+/**
+ * Initialize the Decimal with the default context and the given value.
+ *
+ * @param value The value to initialize the Decimal with.
+ */
 fn Decimal::init(&self, value: const char*) {
     self.init();
     self.set(value);
 }
 
+/**
+ * Destroy the Decimal.
+ */
 fn Decimal::destroy(&self) {
     mpdecimal.mpd_del(self.mpd);
 }
 
+/**
+ * Convert the Decimal to a string.
+ *
+ * @return The string representation of the Decimal.
+ */
 fn Decimal::to_string(&self) -> String {
     let ptr: char[];
     ptr.length = mpdecimal.mpd_to_sci_size(&ptr.data, self.mpd, 0) as u64;
@@ -66,168 +97,341 @@ fn Decimal::to_string(&self) -> String {
     return String(ptr);
 }
 
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
 fn Decimal::set(&self, value: i64) {
     mpdecimal.mpd_set_i64(self.mpd, value, self.ctx);
 }
 
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
 fn Decimal::set(&self, value: u64) {
     mpdecimal.mpd_set_u64(self.mpd, value, self.ctx);
 }
 
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
 fn Decimal::set(&self, value: const char[]) {
     mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
 }
 
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
 fn Decimal::set(&self, value: const char*) {
     mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
 }
 
+/**
+ * Add the value of the Decimal to the given Decimal.
+ *
+ * @param dec The Decimal to add to the current Decimal.
+ * @return The result of the addition.
+ */
 fn Decimal::add(&self, dec: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_add(result.mpd, self.mpd, dec.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Add the value of the Decimal to the given value.
+ *
+ * @param num The value to add to the current Decimal.
+ * @return The result of the addition.
+ */
 fn Decimal::add(&self, num: i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_add_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Add the value of the Decimal to the given value.
+ *
+ * @param num The value to add to the current Decimal.
+ * @return The result of the addition.
+ */
 fn Decimal::add(&self, num: u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_add_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Subtract the value of the Decimal from the given Decimal.
+ *
+ * @param dec The Decimal to subtract from the current Decimal.
+ * @return The result of the subtraction.
+ */
 fn Decimal::sub(&self, dec: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sub(result.mpd, self.mpd, dec.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Subtract the value of the Decimal from the given value.
+ *
+ * @param num The value to subtract from the current Decimal.
+ * @return The result of the subtraction.
+ */
 fn Decimal::sub(&self, num: i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sub_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Subtract the value of the Decimal from the given value.
+ *
+ * @param num The value to subtract from the current Decimal.
+ * @return The result of the subtraction.
+ */
 fn Decimal::sub(&self, num: u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sub_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Multiply the value of the Decimal by the given Decimal.
+ *
+ * @param dec The Decimal to multiply the current Decimal by.
+ * @return The result of the multiplication.
+ */
 fn Decimal::mul(&self, dec: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_mul(result.mpd, self.mpd, dec.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Multiply the value of the Decimal by the given value.
+ *
+ * @param num The value to multiply the current Decimal by.
+ * @return The result of the multiplication.
+ */
 fn Decimal::mul(&self, num: i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_mul_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Multiply the value of the Decimal by the given value.
+ *
+ * @param num The value to multiply the current Decimal by.
+ * @return The result of the multiplication.
+ */
 fn Decimal::mul(&self, num: u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_mul_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Divide the value of the Decimal by the given Decimal.
+ *
+ * @param dec The Decimal to divide the current Decimal by.
+ * @return The result of the division.
+ */
 fn Decimal::div(&self, dec: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_div(result.mpd, self.mpd, dec.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Divide the value of the Decimal by the given value.
+ *
+ * @param num The value to divide the current Decimal by.
+ * @return The result of the division.
+ */
 fn Decimal::div(&self, num: i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_div_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Divide the value of the Decimal by the given value.
+ *
+ * @param num The value to divide the current Decimal by.
+ * @return The result of the division.
+ */
 fn Decimal::div(&self, num: u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_div_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
+/**
+ * Check if the value of the Decimal is equal to the given Decimal.
+ *
+ * @param dec The Decimal to compare the current Decimal to.
+ * @return True if the value of the Decimal is equal to the given Decimal, false otherwise.
+ */
 fn Decimal::eq(&self, dec: const &Decimal) -> bool {
     return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) == 0;
 }
 
+/**
+ * Check if the value of the Decimal is greater than the given Decimal.
+ *
+ * @param dec The Decimal to compare the current Decimal to.
+ * @return True if the value of the Decimal is greater than the given Decimal, false otherwise.
+ */
 fn Decimal::gt(&self, dec: const &Decimal) -> bool {
     return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) > 0;
 }
 
+/**
+ * Check if the value of the Decimal is greater than or equal to the given Decimal.
+ *
+ * @param dec The Decimal to compare the current Decimal to.
+ * @return True if the value of the Decimal is greater than or equal to the given Decimal, false otherwise.
+ */
 fn Decimal::gte(&self, dec: const &Decimal) -> bool {
     return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) >= 0;
 }
 
+/**
+ * Check if the value of the Decimal is less than the given Decimal.
+ *
+ * @param dec The Decimal to compare the current Decimal to.
+ * @return True if the value of the Decimal is less than the given Decimal, false otherwise.
+ */
 fn Decimal::lt(&self, dec: const &Decimal) -> bool {
     return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) < 0;
 }
 
+/**
+ * Check if the value of the Decimal is less than or equal to the given Decimal.
+ *
+ * @param dec The Decimal to compare the current Decimal to.
+ * @return True if the value of the Decimal is less than or equal to the given Decimal, false otherwise.
+ */
 fn Decimal::lte(&self, dec: const &Decimal) -> bool {
     return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) <= 0;
 }
 
+/**
+ * Calculate the exponential of the value of the Decimal.
+ *
+ * @return The result of the exponential.
+ */
 fn Decimal::exp(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_exp(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Calculate the natural logarithm of the value of the Decimal.
+ *
+ * @return The result of the natural logarithm.
+ */
 fn Decimal::ln(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_ln(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Calculate the base 10 logarithm of the value of the Decimal.
+ *
+ * @return The result of the base 10 logarithm.
+ */
 fn Decimal::log(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_log10(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Calculate the power of the value of the Decimal by the given Decimal.
+ *
+ * @param exp The Decimal to raise the current Decimal to.
+ * @return The result of the power.
+ */
 fn Decimal::pow(&self, exp: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_pow(result.mpd, self.mpd, exp.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Calculate the square root of the value of the Decimal.
+ *
+ * @return The result of the square root.
+ */
 fn Decimal::sqrt(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sqrt(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Get the positive value of the Decimal.
+ *
+ * @return The positive value of the Decimal.
+ */
 fn Decimal::plus(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_plus(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Get the negative value of the Decimal.
+ *
+ * @return The negative value of the Decimal.
+ */
 fn Decimal::minus(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_minus(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Get the absolute value of the Decimal.
+ *
+ * @return The absolute value of the Decimal.
+ */
 fn Decimal::abs(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_abs(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Get the floor value of the Decimal.
+ *
+ * @return The floor value of the Decimal.
+ */
 fn Decimal::floor(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_floor(result.mpd, self.mpd, self.ctx);
     return result;
 }
 
+/**
+ * Get the ceiling value of the Decimal.
+ *
+ * @return The ceiling value of the Decimal.
+ */
 fn Decimal::ceil(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_ceil(result.mpd, self.mpd, self.ctx);

@@ -6,15 +6,33 @@ import { FILE, stdout, fwrite } from stdio;
  * FILE PRINT
  ******************************************/
 
+/**
+ * Print the given string to the given file pointer.
+ *
+ * @param fp The file pointer to print the string to.
+ * @param str The string to print.
+ */
 fn print(fp: FILE*, str: const char[]) {
     fwrite(str.data, sizeof(char), str.length, fp); 
 }
 
+/**
+* Print the given string to the given file pointer.
+*
+* @param fp The file pointer to print the string to.
+* @param str The string to print.
+*/
 @inline
 fn print(fp: FILE*, str: String) {
     print(fp, str.as_array());
 }
 
+/**
+ * Print the given string to the given file pointer followed by a newline.
+ *
+ * @param fp The file pointer to print the string to.
+ * @param str The string to print.
+ */
 fn println(fp: FILE*, str: const char[]) {
     let tmp = String(str);
     defer tmp.destroy();
@@ -22,6 +40,12 @@ fn println(fp: FILE*, str: const char[]) {
     print(fp, tmp);
 }
 
+/**
+* Print the given string to the given file pointer followed by a newline.
+*
+* @param fp The file pointer to print the string to.
+* @param str The string to print.
+*/
 @inline
 fn println(fp: FILE*, str: String) {
     println(fp, str.as_array());
@@ -32,21 +56,41 @@ fn println(fp: FILE*, str: String) {
  * STDOUT PRINT
  ******************************************/
 
+/**
+ * Print the given string to stdout.
+ *
+ * @param str The string to print.
+ */
 @inline
 fn print(str: const char[]) {
     print(stdout, str);
 }
 
+/**
+ * Print the given string to stdout.
+ *
+ * @param str The string to print.
+ */
 @inline
 fn print(str: String) {
     print(stdout, str.as_array());
 }
 
+/**
+ * Print the given string to stdout followed by a newline.
+ *
+ * @param str The string to print.
+ */
 @inline
 fn println(str: const char[]) {
     println(stdout, str);
 }
 
+/**
+ * Print the given string to stdout followed by a newline.
+ *
+ * @param str The string to print.
+ */
 @inline
 fn println(str: String) {
     println(stdout, str.as_array());

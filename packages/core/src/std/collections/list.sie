@@ -8,38 +8,75 @@ struct List<T>: Iterable<T> {
     capacity: u64;
 }
 
+/**
+ * Initialize the List.
+ *
+ * @param capacity The capacity of the List.
+ */
 fn List<T>::init(&self, capacity: u64 = DEFAULT_LIST_CAPACITY) {
     self.data = malloc(capacity * sizeof(T)) as T*;
     self.length = 0;
     self.capacity = capacity;
 }
 
+/**
+ * Initialize the List with the given array.
+ *
+ * @param arr The array to initialize the List with.
+ */
 fn List<T>::init(&self, arr: const T[]) {
     self.init();
     self.append(arr);
 }
 
+/**
+ * Initialize the List with the given iterable.
+ *
+ * @param arr The iterable to initialize the List with.
+ */
 fn List<T>::init(&self, arr: Iterable<T>) {
     self.init();
     self.append(arr);
 }
 
+/**
+ * Destroy the List.
+ */
 fn List<T>::destroy(&self) {
     free(self.data);
 }
 
+/**
+ * Get the List as an array.
+ *
+ * @return The List as an array.
+ */
 fn List<T>::as_array(&self) -> T[] {
     return {self.data, self.length};
 }
 
+/**
+ * Reset the List.
+ */
 fn List<T>::reset(&self) {
     self.length = 0;
 }
 
+/**
+ * Get the element at the given index.
+ *
+ * @param index The index of the element to get.
+ * @return The element at the given index.
+ */
 fn List<T>::get(&self, index: u64) -> &T {
     return self.data[index];
 }
 
+/**
+ * Push the given element to the List.
+ *
+ * @param value The element to push to the List.
+ */
 fn List<T>::push(&self, value: const T) {
     if (self.length == self.capacity)
         self.grow();
@@ -48,33 +85,65 @@ fn List<T>::push(&self, value: const T) {
     self.length += 1;
 }
 
+/**
+ * Pop the last element from the List.
+ *
+ * @return The last element from the List.
+ */
 fn List<T>::pop(&self) -> T {
     self.length -= 1;
     return self.data[self.length];
 }
 
+/**
+ * Append the given array to the List.
+ *
+ * @param arr The array to append to the List.
+ * @param n The number of elements to append.
+ */
 fn List<T>::append(&self, arr: const T*, n: u64) {
     for (let i: u64 = 0; i < n; i += 1) {
         self.push(arr[i]);
     }
 }
 
+/**
+ * Append the given array to the List.
+ *
+ * @param arr The array to append to the List.
+ */
 fn List<T>::append(&self, arr: const T[]) {
     foreach (el : arr) {
         self.push(el);
     }
 }
 
+/**
+ * Append the given iterable to the List.
+ *
+ * @param arr The iterable to append to the List.
+ */
 fn List<T>::append(&self, arr: Iterable<T>) {
     foreach (el : arr) {
         self.push(el);
     }
 }
 
+/**
+ * Get the iterator for the List.
+ *
+ * @return The iterator for the List.
+ */
 fn List<T>::iterator(&self) -> ArrayIterator<T> {
     return ArrayIterator<T>(self.as_array());
 }
 
+/**
+ * Check if the List is equal to the given array.
+ *
+ * @param arr The array to check if the List is equal to.
+ * @return True if the List is equal to the given array, false otherwise.
+ */
 fn List<T>::equals(&self, arr: const T[]) -> bool {
     if (self.length != arr.length)
         return false;
@@ -87,6 +156,9 @@ fn List<T>::equals(&self, arr: const T[]) -> bool {
     return true;
 }
 
+/**
+ * Grow the List.
+ */
 fn List<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
     self.data = realloc(self.data, capacity * sizeof(T)) as T*;
