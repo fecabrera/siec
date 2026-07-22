@@ -143,6 +143,11 @@ class CodeGenerator:
         # their calls pack extra arguments into it
         self.variadics: set[str] = set()
 
+        # every type name wrapped 'as Any', by id: the runtime
+        # '@typename' table, emitted once emission has seen every wrap
+        self.any_names: dict[int, str] = {}
+        self.typename_fn = None
+
         # the registered structs by name, for type resolution and member access
         self.structs: dict[str, StructInfo] = {}
 
@@ -605,5 +610,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         # uses, so their duplicate definitions merge at link
         if gen.unit_files is not None:
             link_once(gen, instance)
+
+    # every wrap has been seen: the runtime '@typename' table can build
+    from siec.codegen.expressions import finish_typename_table
+
+    finish_typename_table(gen)
 
     return gen.module

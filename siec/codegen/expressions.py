@@ -57,7 +57,7 @@ from siec.codegen.inference import (
     type_info,
 )
 from siec.codegen.types import (is_array_struct, is_reference, raw_array,
-                                resolve_type, strip_const)
+                                resolve_type, strip_const, strip_reference)
 
 
 def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
@@ -153,7 +153,28 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return ir.Constant(ir.IntType(64), size)
 
     if isinstance(expr, TypeName):
-        # '@typename' bakes the canonical name in as a string literal
+        # '@typename' of an 'Any' looks its wrapped name up at runtime,
+        # by the id; anything else bakes the name in as a string literal
+        target = expr.name
+        if (isinstance(target, str) and target in scope
+                and strip_const(strip_reference(scope[target].type)) == "Any"):
+            target = Var(target)
+
+        if not isinstance(target, str):
+            from siec.codegen.inference import infer_type
+
+            source = infer_type(gen, target, scope)
+            if source and strip_const(strip_reference(source)) == "Any":
+                ident = emit_expression(gen, builder, Member(target, "id"),
+                                        ir.IntType(64), scope)
+                value = builder.call(typename_table(gen), [ident])
+
+                # a 'char*' context takes the data pointer alone
+                if isinstance(expected_type, ir.PointerType):
+                    return builder.extract_value(value, 0, name="typename.data")
+
+                return value
+
         return emit_expression(gen, builder,
                                StrLiteral(typename_of(gen, expr.name, scope)),
                                expected_type, scope)
@@ -171,7 +192,6 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # '@typeof' of an 'Any' reads its runtime id; any other operand
         # folds to its static type's id, the operand never evaluated
         from siec.codegen.inference import infer_type
-        from siec.codegen.types import strip_reference
 
         source = infer_type(gen, expr.value, scope)
         if source is None:
@@ -948,6 +968,52 @@ def type_operand(gen: CodeGenerator, expr: Expr, scope: dict) -> Expr:
     return TypeId(spelling)
 
 
+def typename_table(gen: CodeGenerator):
+    """
+    The runtime 'id -> name' lookup function '@typename' calls on an
+    Any: declared on first use, its body built once every wrap site has
+    been seen.
+    """
+    if gen.typename_fn is None:
+        fn_type = ir.FunctionType(resolve_type("char[]", gen.structs),
+                                  [ir.IntType(64)])
+        gen.typename_fn = ir.Function(gen.module, fn_type, "sie.typename")
+        gen.typename_fn.linkage = "private"
+
+    return gen.typename_fn
+
+
+def finish_typename_table(gen: CodeGenerator) -> None:
+    """
+    Build the '@typename' lookup's body: a switch over every id wrapped
+    anywhere in the program, an unknown id answering "?".
+    """
+    func = gen.typename_fn
+    if func is None:
+        return
+
+    builder = ir.IRBuilder(func.append_basic_block("entry"))
+
+    def answer(block, text):
+        builder.position_at_end(block)
+        data = emit_string(gen, builder, text)
+        value = ir.Constant(resolve_type("char[]", gen.structs), None)
+        value = builder.insert_value(value, data, 0)
+        value = builder.insert_value(
+            value, ir.Constant(ir.IntType(64), len(text.encode())), 1)
+        builder.ret(value)
+
+    default = func.append_basic_block("unknown")
+    switch = builder.switch(func.args[0], default)
+
+    for ident, name in gen.any_names.items():
+        block = func.append_basic_block(f"id.{ident}")
+        switch.add_case(ir.Constant(ir.IntType(64), ident), block)
+        answer(block, name)
+
+    answer(default, "?")
+
+
 def fnv1a(text: str) -> int:
     """
     The 64-bit FNV-1a hash of a string, '@typeid's identity function.
@@ -968,7 +1034,6 @@ def typename_of(gen: CodeGenerator, name, scope: dict) -> str:
     """
     from siec.codegen.aliases import expand_alias
     from siec.codegen.inference import infer_type
-    from siec.codegen.types import strip_reference
 
     # an expression carries its static type; the operand never emits
     if not isinstance(name, str):

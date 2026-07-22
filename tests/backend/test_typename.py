@@ -55,8 +55,9 @@ def test_typename_bakes_canonical_names(run):
 
 def test_typename_takes_expressions(run):
     """
-    '@typename'/'@typeid' of an expression name its static type: an
-    indexed element, an arithmetic result, an Any folding to 'Any'.
+    '@typename'/'@typeid' of an expression name its static type; an Any
+    operand instead looks its wrapped name up at runtime, an unknown id
+    answering '?'.
     """
     source = """
     fn same(a: const char[], b: const char[]) -> bool {
@@ -67,6 +68,10 @@ def test_typename_takes_expressions(run):
         return true;
     }
 
+    fn name_of(args: Any[], index: u64) -> const char[] {
+        return @typename(args[index]);
+    }
+
     fn main() -> i32 {
         let nums: f64[] = [1.5, 2.5];
         if (not same(@typename(nums[0]), "f64")) { return 1; }
@@ -75,8 +80,14 @@ def test_typename_takes_expressions(run):
         if (not same(@typename(n + 1), "i32")) { return 2; }
         if (@typeid(n + 1) != @typeid(i32)) { return 3; }
 
-        let args: Any[] = [n as Any];
-        if (not same(@typename(args[0]), "Any")) { return 4; }
+        // Anys answer with the wrapped type's name at runtime
+        let args: Any[] = [n as Any, 2.5 as Any];
+        if (not same(name_of(args, 0), "i32")) { return 4; }
+        if (not same(name_of(args, 1), "f64")) { return 5; }
+
+        let fake: Any;                     // an id nothing ever wrapped
+        fake.id = 12345;
+        if (not same(@typename(fake), "?")) { return 6; }
         return 0;
     }
     """

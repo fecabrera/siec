@@ -72,6 +72,10 @@ def emit_any_wrap(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast,
     slot = entry_alloca(builder, value.type, "any.data")
     builder.store(value, slot)
 
+    # the wrap site knows the name its id stands for: the runtime
+    # '@typename' table serves it back
+    gen.any_names[fnv1a(source)] = source
+
     any_type = resolve_type("Any", gen.structs)
     wrapped = ir.Constant(any_type, None)
     wrapped = builder.insert_value(

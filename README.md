@@ -1440,7 +1440,9 @@ let arr: i32[];
 @typename(List<f64>);    // "List<f64>", a type spelling works directly
 ```
 
-Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type. Any expression works as the argument too, naming its static type without evaluating it — `@typename(args[i])`, `@typename(n + 1)` — so an [Any](#any) folds to `"Any"`, its runtime id being `@typeof`'s business.
+Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type. Any expression works as the argument too, naming its static type without evaluating it: `@typename(args[i])`, `@typename(n + 1)`.
+
+An [Any](#any) operand is the one runtime case: it answers with the wrapped type's name, looked up by its id in a table of every type the program wraps, an unknown id answering `"?"`. Under [separate compilation](#imports) each unit's table holds its own wraps, so an Any crossing `-c` units may answer `"?"` in a unit that never wraps its type.
 
 #### Typeid
 
