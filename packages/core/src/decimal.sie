@@ -13,7 +13,19 @@ import { String } from std;
     return &__default_ctx;
 }
 
-struct Decimal {
+struct Decimal
+    : Add<Decimal, Decimal>,
+      Add<Decimal, i64>,
+      Add<Decimal, u64>,
+      Sub<Decimal, Decimal>,
+      Sub<Decimal, i64>,
+      Sub<Decimal, u64>,
+      Mul<Decimal, Decimal>,
+      Mul<Decimal, i64>,
+      Mul<Decimal, u64>,
+      Div<Decimal, Decimal>,
+      Div<Decimal, i64>,
+      Div<Decimal, u64> {
     ctx: mpdecimal.mpd_context*;
     mpd: mpdecimal.mpd*;
 }
@@ -85,15 +97,51 @@ fn Decimal::sub(&self, dec: const &Decimal) -> Decimal {
     return result;
 }
 
+fn Decimal::sub(&self, num: i64) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_sub_i64(result.mpd, self.mpd, num, self.ctx);
+    return result;
+}
+
+fn Decimal::sub(&self, num: u64) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_sub_u64(result.mpd, self.mpd, num, self.ctx);
+    return result;
+}
+
 fn Decimal::mul(&self, dec: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_mul(result.mpd, self.mpd, dec.mpd, self.ctx);
     return result;
 }
 
+fn Decimal::mul(&self, num: i64) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_mul_i64(result.mpd, self.mpd, num, self.ctx);
+    return result;
+}
+
+fn Decimal::mul(&self, num: u64) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_mul_u64(result.mpd, self.mpd, num, self.ctx);
+    return result;
+}
+
 fn Decimal::div(&self, dec: const &Decimal) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_div(result.mpd, self.mpd, dec.mpd, self.ctx);
+    return result;
+}
+
+fn Decimal::div(&self, num: i64) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_div_i64(result.mpd, self.mpd, num, self.ctx);
+    return result;
+}
+
+fn Decimal::div(&self, num: u64) -> Decimal {
+    let result = Decimal();
+    mpdecimal.mpd_div_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
 }
 
@@ -135,9 +183,9 @@ fn Decimal::log(&self) -> Decimal {
     return result;
 }
 
-fn Decimal::pow(&self) -> Decimal {
+fn Decimal::pow(&self, exp: const &Decimal) -> Decimal {
     let result = Decimal();
-    mpdecimal.mpd_pow(result.mpd, self.mpd, self.ctx);
+    mpdecimal.mpd_pow(result.mpd, self.mpd, exp.mpd, self.ctx);
     return result;
 }
 
