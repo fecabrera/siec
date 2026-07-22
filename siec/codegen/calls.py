@@ -103,6 +103,10 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
             if gen.generic_functions.get(symbol) is None:
                 raise
 
+    # a stamped overload's body waits for its first picked call
+    if (instance := gen.deferred_overloads.pop(symbol, None)) is not None:
+        gen.pending_functions.append(instance)
+
     # a generic callee instantiates for this call's type arguments,
     # explicit, inferred, or driven by the expected result type; the
     # call's shape picks among arity overloads

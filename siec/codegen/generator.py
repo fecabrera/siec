@@ -120,6 +120,10 @@ class CodeGenerator:
         # each overloaded name's candidates: (signature key, symbol) pairs,
         # in declaration order; calls pick among them by argument types
         self.overloads: dict[str, list[tuple[tuple, str]]] = {}
+        # a generic struct's stamped overload bodies, waiting for a call
+        # to pick them: a candidate that fits only some element types
+        # stays a bodiless declaration everywhere else
+        self.deferred_overloads: dict[str, object] = {}
         # same-named generic templates with other type-parameter counts
         self.generic_overloads: dict[str, list] = {}
 

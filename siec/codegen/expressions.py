@@ -379,6 +379,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if is_float(left.type):
             return builder.fcmp_ordered(expr.op, left, right)
 
+        # only scalars and pointers compare; structs and arrays do not
+        if not isinstance(left.type, (ir.IntType, ir.PointerType)):
+            raise TypeError(f"cannot apply {expr.op!r} to a value of type "
+                            f"{expr_sie_type(gen, expr.left, scope) or left.type}")
+
         compare = builder.icmp_unsigned if unsigned else builder.icmp_signed
         return compare(expr.op, left, right)
 
@@ -479,6 +484,12 @@ def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict
 
     if is_float(value.type):
         return builder.fcmp_ordered("!=", value, ir.Constant(value.type, 0))
+
+    # only scalars compare against zero; a struct or array has no truth
+    if not isinstance(value.type, ir.IntType):
+        raise TypeError(f"cannot test a value of type "
+                        f"{expr_sie_type(gen, expr, scope) or value.type} "
+                        "for truth")
 
     if value.type != ir.IntType(1):
         value = builder.icmp_signed("!=", value, ir.Constant(value.type, 0))

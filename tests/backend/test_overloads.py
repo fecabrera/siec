@@ -421,6 +421,36 @@ def test_generic_struct_method_repeated_signature_is_an_error(compile_source):
         """)
 
 
+def test_unpicked_overload_bodies_never_emit(run):
+    """
+    A stamped overload fitting only some element types (walking a
+    terminator, say) stays a bodiless declaration where no call picks it.
+    """
+    source = """
+    struct Pair { x: i32; }
+
+    struct Box<T> { count: u64; }
+
+    fn Box<T>::put(&self, v: T) {
+        self.count += 1;
+    }
+
+    fn Box<T>::put(&self, arr: const T*) {
+        for (let i: u64 = 0; arr[i]; i += 1) {
+            self.put(arr[i]);
+        }
+    }
+
+    fn main() -> i32 {
+        let b: Box<Pair> = {0};
+        let p: Pair = {1};
+        b.put(p);   // the value overload; the pointer walk never emits
+        return b.count as i32 + 41;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_forward_declared_overloads_define_later(run):
     """
     Each forward declaration pairs with the definition sharing its

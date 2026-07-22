@@ -116,7 +116,7 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         substitute_types(instance, dict(zip(template.receiver_params, args)))
 
         # a still-generic method waits for its own arguments; a concrete
-        # one declares and queues like any instantiation - either way its
+        # one declares like any instantiation - either way its
         # substituted types mix files' names, so no view gates them
         if instance.type_params is not None:
             gen.generic_functions[symbol] = instance
@@ -125,11 +125,17 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
             gen.ungated_types += 1
             try:
-                declare_function(gen, instance)
+                func = declare_function(gen, instance)
             finally:
                 gen.ungated_types -= 1
 
-            gen.pending_functions.append(instance)
+            # a lone signature's body queues at once; overloads wait for
+            # a call to pick them, so a candidate fitting only some
+            # element types never emits unpicked
+            if len(templates) == 1:
+                gen.pending_functions.append(instance)
+            else:
+                gen.deferred_overloads[func.name] = instance
 
     return symbol
 
@@ -404,6 +410,10 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
         except TypeError:
             if gen.generic_functions.get(symbol) is None:
                 raise
+
+    # a stamped overload's body waits for its first picked call
+    if (instance := gen.deferred_overloads.pop(symbol, None)) is not None:
+        gen.pending_functions.append(instance)
 
     # a generic 'init' (one taking an interface parameter, say)
     # instantiates like any generic call, the fresh instance joining

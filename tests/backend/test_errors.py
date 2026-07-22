@@ -198,3 +198,36 @@ def test_unterminated_string_literal(compile_source):
     """
     with pytest.raises(SyntaxError, match="unterminated string"):
         compile_source('fn main() -> i32 { puts("oops); return 0; }')
+
+
+def test_struct_condition_is_an_error(compile_source):
+    """
+    Only scalars and pointers have truth; a struct or array condition is
+    rejected instead of emitting an impossible comparison.
+    """
+    with pytest.raises(TypeError, match="cannot test a value of type"):
+        compile_source("""
+        struct P { x: i32; }
+
+        fn main() -> i32 {
+            let p: P = {1};
+            if (p) { return 1; }
+            return 0;
+        }
+        """)
+
+
+def test_struct_comparison_is_an_error(compile_source):
+    """
+    Structs and arrays take no comparison operators.
+    """
+    with pytest.raises(TypeError, match="cannot apply '=='"):
+        compile_source("""
+        struct P { x: i32; }
+
+        fn main() -> i32 {
+            let a: P = {1};
+            let b: P = {1};
+            return a == b ? 1 : 0;
+        }
+        """)
