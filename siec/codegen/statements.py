@@ -17,6 +17,7 @@ from siec.ast import (
     Index,
     IndexAssign,
     Let,
+    LetTuple,
     Member,
     MemberAssign,
     RefAssign,
@@ -207,6 +208,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
             if (default := default_value(gen, builder, type_name)) is not None:
                 volatile_store(gen, builder.store(default, slot))
+    elif isinstance(stmt, LetTuple):
+        emit_let_tuple(gen, builder, stmt, scope)
     elif isinstance(stmt, Assign):
         # store the value into the variable's existing stack slot, typed by
         # the slot; a global's slot is its module-level storage, if this
@@ -460,6 +463,53 @@ def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: di
         builder.branch(cond_block)
 
     builder.position_at_end(end_block)
+
+
+def emit_let_tuple(gen: CodeGenerator, builder: ir.IRBuilder, stmt: LetTuple,
+                   scope: dict) -> None:
+    """
+    Emit 'let (a, b) = pair;': the tuple emits once and each name binds
+    a fresh local holding its element - a copy, the binder's own, like
+    any scalar copy. Nested patterns recurse into nested tuples.
+    """
+    from siec.codegen.expressions import emit_expression
+    from siec.codegen.generics import split_generic
+
+    value_type = strip_reference(infer_type(gen, stmt.value, scope) or "")
+    if not strip_const(value_type).startswith("Tuple<"):
+        raise TypeError(f"cannot destructure a {value_type or '?'!r} value: "
+                        "it is not a tuple")
+
+    value = emit_expression(gen, builder, stmt.value, None, scope)
+
+    def bind(pattern: list, value, type_name: str) -> None:
+        args = split_generic(strip_const(type_name))[1]
+        if len(pattern) != len(args):
+            take = len(args)
+            raise TypeError(f"the pattern binds {len(pattern)} "
+                            f"name{'s' if len(pattern) != 1 else ''}; "
+                            f"{strip_const(type_name)!r} has {take} "
+                            f"element{'s' if take != 1 else ''}")
+
+        for i, sub in enumerate(pattern):
+            element = builder.extract_value(value, i)
+            if isinstance(sub, list):
+                if not strip_const(args[i]).startswith("Tuple<"):
+                    raise TypeError(f"cannot destructure a {args[i]!r} "
+                                    "element: it is not a tuple")
+
+                bind(sub, element, args[i])
+                continue
+
+            slot = entry_alloca(builder, element.type, sub)
+            builder.store(element, slot)
+            scope[sub] = Variable(slot, args[i])
+
+            if gen.debug is not None:
+                gen.debug.declare_variable(builder, slot, sub, args[i],
+                                           stmt.line)
+
+    bind(stmt.pattern, value, value_type)
 
 
 def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,

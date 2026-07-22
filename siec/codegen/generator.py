@@ -528,7 +528,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
                               "ArrayIterator", "ConstArrayIterator",
-                              "Enumerated", "EnumerateIterator", "__enumerate"))
+                              "Enumerated", "EnumerateIterator", "__enumerate",
+                              "Tuple"))
 
     # first pass: register the named declarations - aliases first so every
     # later type annotation expands through them, constants next so enum

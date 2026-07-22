@@ -149,6 +149,14 @@ class ArrayLiteral:
 
 
 @dataclass
+class TupleLiteral:
+    """
+    A tuple literal '(a, b, ...)', building a 'Tuple<A, B, ...>' value.
+    """
+    elements: list
+
+
+@dataclass
 class Cast:
     """
     An explicit conversion of an expression to a named type: 'expr as T'.
@@ -258,6 +266,18 @@ class Let:
     name: str
     type: str | None
     value: Expr | None
+    line: int = _line()
+
+
+@dataclass
+class LetTuple:
+    """
+    A destructuring declaration, 'let (a, b) = pair;': each name binds
+    the matching tuple element. Patterns nest as lists: '(a, (b, c))'
+    is ['a', ['b', 'c']].
+    """
+    pattern: list
+    value: Expr
     line: int = _line()
 
 

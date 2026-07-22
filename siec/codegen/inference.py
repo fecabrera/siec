@@ -26,6 +26,7 @@ from siec.ast import (
     Slice,
     StrLiteral,
     Ternary,
+    TupleLiteral,
     UnaryOp,
     Var,
 )
@@ -250,8 +251,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         base_name = expr_sie_type(gen, expr.base, scope)
 
-        # a raw array's 'length' is its compile-time element count
+        # a raw array's 'length' is its compile-time element count, and
+        # a tuple's is its arity
         if raw_array(strip_const(base_name)) is not None and expr.field == "length":
+            return "u64"
+
+        if strip_const(base_name or "").startswith("Tuple<") and expr.field == "length":
             return "u64"
         info = type_info(gen, base_name)
         if info is None:
@@ -264,13 +269,33 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         return field_type
 
     # indexing yields the element type, one '[]' or '*' shorter; an aliasing
-    # element keeps a const base's contract
+    # element keeps a const base's contract; a tuple's element follows its
+    # constant index
     if isinstance(expr, Index):
         base = expr_sie_type(gen, expr.base, scope)
         if base is None:
             return None
 
         stripped = strip_const(base)
+        if stripped.startswith("Tuple<"):
+            from siec.codegen.enums import evaluate
+            from siec.codegen.generics import split_generic
+
+            args = split_generic(stripped)[1]
+            try:
+                index = evaluate(gen, expr.index)
+            except (TypeError, NameError):
+                return None
+
+            if not 0 <= index < len(args):
+                return None
+
+            element = args[index]
+            if is_const(base) and is_aliasing(element):
+                return f"const {element}"
+
+            return element
+
         if (raw := raw_array(stripped)) is not None and not raw[2]:
             element = raw[0]
         else:
@@ -325,6 +350,15 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a char literal is exactly a 'char'
     if isinstance(expr, CharLiteral):
         return "char"
+
+    # a tuple literal carries its elements' types, literals defaulting
+    # like they do in any untyped context
+    if isinstance(expr, TupleLiteral):
+        elements = [infer_type(gen, element, scope) for element in expr.elements]
+        if not all(elements):
+            return None
+
+        return expand_alias(gen, f"Tuple<{','.join(elements)}>", checked=False)
 
     # a ternary carries its arms' type; either arm may pin it down
     if isinstance(expr, Ternary):

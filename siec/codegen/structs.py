@@ -22,6 +22,11 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
         with source_location(line=struct.line, file=struct.file):
             gen.current_file = struct.file
 
+            # 'Tuple' is builtin and variadic; no declaration can take it
+            if struct.name == "Tuple":
+                raise TypeError("'Tuple' is a builtin type: declarations "
+                                "cannot take its name")
+
             # an interface is all requirement: it registers its shape
             # and stamps no storage
             if struct.is_interface:

@@ -11,6 +11,7 @@ from siec.ast import (
     Expr,
     Member,
     MethodCall,
+    TupleLiteral,
     Var,
 )
 from siec.codegen.aliases import expand_alias
@@ -216,6 +217,12 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # a block expression coerces each emitted value to the target instead
     if isinstance(expr, BlockExpr):
         return emit_block_expr(gen, builder, expr, target_type, scope, target_name)
+
+    # a tuple literal coerces each element to the target's element type
+    if isinstance(expr, TupleLiteral) and target_name is not None:
+        from siec.codegen.expressions import emit_tuple
+
+        return emit_tuple(gen, builder, expr, scope, target_name)
 
     # an array literal coerces each element to the array's declared element type
     if isinstance(expr, ArrayLiteral):

@@ -28,6 +28,7 @@ from siec.ast import (
     Slice,
     StrLiteral,
     Ternary,
+    TupleLiteral,
     UnaryOp,
     Var,
 )
@@ -160,6 +161,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, ArrayLiteral):
         return emit_array(gen, builder, expr, expected_type, scope)
 
+    if isinstance(expr, TupleLiteral):
+        return emit_tuple(gen, builder, expr, scope)
+
     if isinstance(expr, Var):
         # variables load their current value from their stack slot; a
         # '@volatile' struct's loads are never elided or reordered
@@ -224,6 +228,12 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_method_call(gen, builder, expr, scope)
 
     if isinstance(expr, Index):
+        # a tuple's element reads by its constant index
+        if strip_const(expr_sie_type(gen, expr.base, scope) or "").startswith("Tuple<"):
+            _, index, _ = tuple_element(gen, expr, scope)
+            base = emit_expression(gen, builder, expr.base, None, scope)
+            return builder.extract_value(base, index, name=f"tuple.{index}")
+
         # a raw array's elements read through the base's address, or a
         # stack spill when it has none (a call's result, say)
         if is_raw(gen, expr.base, scope):
@@ -273,7 +283,8 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         hoist_member(gen, expr, scope)
 
         # a raw array's 'length' is its compile-time element count,
-        # adopting an integer context like a literal
+        # adopting an integer context like a literal; a tuple's is its
+        # arity, read-only the same way
         base_name = strip_const(expr_sie_type(gen, expr.base, scope))
         if raw_array(base_name) is not None and expr.field == "length":
             size = int(raw_array(base_name)[1])
@@ -281,6 +292,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                 return ir.Constant(expected_type, size)
 
             return ir.Constant(ir.IntType(64), size)
+
+        if (base_name or "").startswith("Tuple<") and expr.field == "length":
+            from siec.codegen.generics import split_generic
+
+            arity = len(split_generic(base_name)[1])
+            if isinstance(expected_type, ir.IntType):
+                return ir.Constant(expected_type, arity)
+
+            return ir.Constant(ir.IntType(64), arity)
 
         # a union field reads through the union's address, reinterpreted
         info = type_info(gen, expr_sie_type(gen, expr.base, scope))
@@ -448,6 +468,15 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
                                   ir.Constant(ir.IntType(32), index)], name=expr.field)
 
     if isinstance(expr, Index):
+        # a tuple's element sits inline: its constant index slots into
+        # the base's address
+        if strip_const(expr_sie_type(gen, expr.base, scope) or "").startswith("Tuple<"):
+            _, index, _ = tuple_element(gen, expr, scope)
+            base = emit_lvalue(gen, builder, expr.base, scope)
+            return builder.gep(base, [ir.Constant(ir.IntType(32), 0),
+                                      ir.Constant(ir.IntType(32), index)],
+                               name=f"tuple.{index}")
+
         # a raw array's elements sit inline: index into the base's address
         if is_raw(gen, expr.base, scope):
             base = emit_lvalue(gen, builder, expr.base, scope)
@@ -811,6 +840,69 @@ def default_value(gen: CodeGenerator, builder: ir.IRBuilder, type_name: str | No
             any_default = True
 
     return value if any_default else None
+
+
+def emit_tuple(gen: CodeGenerator, builder: ir.IRBuilder, expr: TupleLiteral,
+               scope: dict, target_name: str | None = None):
+    """
+    Emit a tuple literal '(a, b, ...)': a 'Tuple<A, B, ...>' value, its
+    element types from the target when one is given, inferred from the
+    elements otherwise.
+    """
+    from siec.codegen.aliases import expand_alias
+    from siec.codegen.generics import split_generic
+    from siec.codegen.inference import infer_type
+
+    if target_name is not None:
+        base, args = split_generic(strip_const(target_name)) or (None, [])
+        if base != "Tuple":
+            raise TypeError(f"a tuple literal needs a Tuple target, "
+                            f"not {target_name!r}")
+
+        if len(args) != len(expr.elements):
+            take = len(args)
+            raise TypeError(f"tuple literal has {len(expr.elements)} "
+                            f"element{'s' if len(expr.elements) != 1 else ''}; "
+                            f"{strip_const(target_name)!r} takes {take}")
+    else:
+        args = [infer_type(gen, element, scope) for element in expr.elements]
+        if not all(args):
+            raise TypeError("cannot infer a tuple element's type: "
+                            "annotate the tuple")
+
+    canonical = expand_alias(gen, f"Tuple<{','.join(args)}>", checked=False)
+    args = split_generic(canonical)[1]
+
+    value = ir.Constant(resolve_type(canonical, gen.structs), None)
+    for i, element in enumerate(expr.elements):
+        filled = emit_coerced(gen, builder, element, args[i], scope)
+        value = builder.insert_value(value, filled, i, name=f"tuple.{i}")
+
+    return value
+
+
+def tuple_element(gen: CodeGenerator, expr: Index, scope: dict) -> tuple:
+    """
+    Resolve a tuple index: the base's canonical type, the constant
+    element index, and the element type names.
+    """
+    from siec.codegen.enums import evaluate
+    from siec.codegen.generics import split_generic
+
+    base_name = strip_const(expr_sie_type(gen, expr.base, scope))
+    args = split_generic(base_name)[1]
+
+    try:
+        index = evaluate(gen, expr.index)
+    except (TypeError, NameError):
+        raise TypeError("a tuple index must be a compile-time "
+                        "constant") from None
+
+    if not 0 <= index < len(args):
+        raise TypeError(f"tuple index {index} is out of range "
+                        f"for {base_name!r}")
+
+    return base_name, index, args
 
 
 def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,

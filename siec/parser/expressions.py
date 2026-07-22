@@ -22,6 +22,7 @@ from siec.ast import (
     Slice,
     StrLiteral,
     Ternary,
+    TupleLiteral,
     UnaryOp,
     Var,
 )
@@ -149,6 +150,21 @@ def parse_primary(ts: TokenStream) -> Expr:
     # '(' groups a full subexpression
     if tok.syntax == "(":
         expr = parse_expression(ts)
+
+        # a ',' turns the grouping into a tuple literal '(a, b, ...)';
+        # a trailing comma spells the single-element tuple, '(a,)'
+        if ts.peek().syntax == ",":
+            elements = [expr]
+            while ts.peek().syntax == ",":
+                ts.next()
+                if ts.peek().syntax == ")":
+                    break
+
+                elements.append(parse_expression(ts))
+
+            ts.expect("sym", ")")
+            return parse_postfix(ts, TupleLiteral(elements))
+
         ts.expect("sym", ")")
         return parse_postfix(ts, expr)
 

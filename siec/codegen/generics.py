@@ -109,6 +109,34 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
         return None
 
     base, args = parts
+
+    # 'Tuple<A, B, ...>' is builtin and variadic: each arity synthesizes
+    # its own struct, elements indexed 't[0]', 't[1]', ...
+    if base == "Tuple":
+        args = [expand_alias(gen, arg, seen) for arg in args]
+        if not args or not all(args):
+            raise TypeError("a Tuple needs its element types: 'Tuple<A, B, ...>'")
+
+        for arg in args:
+            if arg.startswith("const ") or arg.startswith("&"):
+                raise TypeError(f"cannot instantiate 'Tuple' with {arg!r}: "
+                                "the argument carries a modifier")
+
+        canonical = f"Tuple<{','.join(args)}>"
+        if canonical not in gen.structs:
+            ident = gen.module.context.get_identified_type(canonical)
+            fields = [Field(str(i), arg) for i, arg in enumerate(args)]
+            gen.structs[canonical] = StructInfo(ident, fields)
+
+            gen.ungated_types += 1
+            try:
+                ident.set_body(*[resolve_type(f.type, gen.structs)
+                                 for f in fields])
+            finally:
+                gen.ungated_types -= 1
+
+        return canonical
+
     alias = gen.generic_aliases.get(base)
     template = gen.generic_structs.get(base)
 

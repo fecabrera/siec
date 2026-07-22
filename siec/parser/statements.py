@@ -18,6 +18,7 @@ from siec.ast import (
     IndexAssign,
     IntLiteral,
     Let,
+    LetTuple,
     Member,
     MemberAssign,
     MethodCall,
@@ -33,6 +34,35 @@ from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
 COMPOUND = {"+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "&=", "|=", "^="}
+
+
+def parse_pattern(ts: TokenStream) -> list:
+    """
+    Parse a destructuring pattern: '(' names or nested patterns,
+    comma-separated, ')'. A trailing comma may close the list.
+    """
+    ts.expect("sym", "(")
+
+    pattern = []
+    while ts.peek().syntax != ")":
+        if pattern:
+            ts.expect("sym", ",")
+
+            if ts.peek().syntax == ")":
+                break
+
+        if ts.peek().syntax == "(":
+            pattern.append(parse_pattern(ts))
+        else:
+            pattern.append(ts.expect("ident").value)
+
+    ts.expect("sym", ")")
+
+    if not pattern:
+        raise SyntaxError(f"line {ts.peek().line}: an empty destructuring "
+                          "pattern binds nothing")
+
+    return pattern
 
 
 def parse_block(ts: TokenStream) -> list:
@@ -188,6 +218,20 @@ def parse_statement(ts: TokenStream):
     # may be omitted when an initializer follows to infer it from
     if tok.kind == "kw" and tok.value == "let":
         ts.next()
+
+        # 'let (a, b) = <expr>;' destructures a tuple, each name binding
+        # its element; patterns nest, and the types come from the tuple
+        if ts.peek().syntax == "(":
+            pattern = parse_pattern(ts)
+
+            if ts.peek().syntax == ":":
+                raise SyntaxError(f"line {line}: a destructuring takes its "
+                                  "types from the tuple; drop the annotation")
+
+            ts.expect("sym", "=")
+            value = parse_expression(ts)
+            ts.expect("sym", ";")
+            return LetTuple(pattern, value, line=line)
 
         name = ts.expect("ident").value
 

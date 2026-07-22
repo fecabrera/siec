@@ -1,6 +1,6 @@
 # sielang
 
-Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for programmers while providing full low-level control.
+Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for programmers by implementing modern features from high-level languages like defer statements, generics and foreach loops while providing full low-level control.
 
 ## Hello world
 
@@ -1560,6 +1560,33 @@ let lst: List<i32>; // lst is a variable that holds a value of type List<i32>
 ```
 
 Each argument list stamps out one concrete struct at compile time, shared by every use spelling the same arguments; arguments may be any concrete type, including other instantiations (`Box<Box<i32>>`), and a field may name its own instantiation through a pointer (`next: Node<T>*`). A modifier-carrying argument (`const T`, `&T`) is rejected: substituted into a derived position like `T*`, the modifier would silently move where it applies.
+
+#### Tuples
+
+`Tuple<A, B, ...>` is builtin and variadic: each arity is a struct of its element types, built by a parenthesized literal or declared like any type:
+
+```
+let t: Tuple<i32, f64>;
+let p = (1, 2.5, "three");   // Tuple<i32, f64, char*>, inferred
+let q: Tuple<u8, i64> = (7, 9);
+let one = (42,);             // the single-element spelling
+```
+
+Elements read and write through `t[<n>]`, where the index is a compile-time constant expression inside the arity, and `.length` reads the arity, also a constant. Tuples pass and return by value, sit in fields, and nest (`((1, 2), 3)`); the name `Tuple` is reserved.
+
+```
+let x = p[0];
+p[1] = 3.5;
+p.length;    // 3
+```
+
+A `let` over a parenthesized pattern destructures: each name binds the matching element as a fresh local copy, the pattern's arity must match the tuple's, and patterns nest. The types come from the tuple, so the pattern takes no annotation:
+
+```
+let (lo, hi) = minmax(9, 3);
+let ((a, b), c) = ((10, 20), 30);
+let (only,) = (42,);
+```
 
 ### Unions
 
