@@ -1,7 +1,7 @@
 #!/bin/bash
 SIEC="${SIEC:-pipenv run python -m siec}"
 SIE_FLAGS="${SIE_FLAGS:-}"
-SIE_INCLUDES=("packages/libc/src" "packages/posix/src" "packages/tomlc17/src" "packages/core/src" "packages/mpdecimal/src", "packages/zlib/src")
+SIE_INCLUDES=("packages/libc/src" "packages/posix/src" "packages/tomlc17/src" "packages/core/src" "packages/mpdecimal/src" "packages/zlib/src")
 SIE_LIB_DIRS=("$(brew --prefix)/lib")
 SIE_LINK_LIBS=("mpdec" "z")
 SIE_LIB_OBJS=("dist/libtomlc17.a")
