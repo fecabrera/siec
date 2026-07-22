@@ -1,6 +1,6 @@
 # sielang
 
-Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for programmers by implementing modern features like defer statements and features from higher-level languages like generics and foreach loops while still providing full low-level control.
+Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for system programming by implementing modern features like defer statements and error handling via tagged unions, plus features from higher-level languages like generics, typed variadics, Any and foreach loops; all while still providing full low-level control of the hardware.
 
 ## Hello world
 
