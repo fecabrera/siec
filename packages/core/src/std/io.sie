@@ -1,13 +1,53 @@
 import { String } from collections;
 import { FILE, stdout, fwrite } from stdio;
 
-fn print(str: const char[], fp: FILE* = stdout) {
-    fwrite(str.data, sizeof(char), str.length, fp);
+
+/******************************************
+ * FILE PRINT
+ ******************************************/
+
+fn print(fp: FILE*, str: const char[]) {
+    fwrite(str.data, sizeof(char), str.length, fp); 
 }
 
-fn println(str: const char[], fp: FILE* = stdout) {
-    let tmp = String::from_array(str);
+@inline
+fn print(fp: FILE*, str: String) {
+    print(fp, str.as_array());
+}
+
+fn println(fp: FILE*, str: const char[]) {
+    let tmp = String(str);
     defer tmp.destroy();
     tmp.push('\n');
-    print(tmp.as_array(), fp);
+    print(fp, tmp);
+}
+
+@inline
+fn println(fp: FILE*, str: String) {
+    println(fp, str.as_array());
+}
+
+
+/******************************************
+ * STDOUT PRINT
+ ******************************************/
+
+@inline
+fn print(str: const char[]) {
+    print(stdout, str);
+}
+
+@inline
+fn print(str: String) {
+    print(stdout, str.as_array());
+}
+
+@inline
+fn println(str: const char[]) {
+    println(stdout, str);
+}
+
+@inline
+fn println(str: String) {
+    println(stdout, str.as_array());
 }

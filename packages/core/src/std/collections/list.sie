@@ -14,17 +14,21 @@ fn List<T>::init(&self, capacity: u64 = DEFAULT_LIST_CAPACITY) {
     self.capacity = capacity;
 }
 
+fn List<T>::init(&self, arr: const T[]) {
+    self.init();
+    self.append(arr);
+}
+
+fn List<T>::init(&self, arr: Iterable<T>) {
+    self.init();
+    self.append(arr);
+}
+
 fn List<T>::destroy(&self) {
     free(self.data);
 }
 
-fn List<T>::from_array(arr: const T[]) -> List<T> {
-    let lst = List<T>(arr.length);
-    lst.append(arr);
-    return lst;
-}
-
-fn List<T>::as_array(&self) -> T[] {
+fn List<T>::as_array(&self) ->  T[] {
     return {self.data, self.length};
 }
 
@@ -36,7 +40,7 @@ fn List<T>::get(&self, index: u64) -> &T {
     return self.data[index];
 }
 
-fn List<T>::push(&self, value: T) {
+fn List<T>::push(&self, value: const T) {
     if (self.length == self.capacity)
         self.grow();
 
@@ -44,7 +48,24 @@ fn List<T>::push(&self, value: T) {
     self.length += 1;
 }
 
+fn List<T>::pop(&self) -> T {
+    self.length -= 1;
+    return self.data[self.length];
+}
+
+fn List<T>::append(&self, arr: const T*, n: u64) {
+    for (let i: u64 = 0; i < n; i += 1) {
+        self.push(arr[i]);
+    }
+}
+
 fn List<T>::append(&self, arr: const T[]) {
+    foreach (el : arr) {
+        self.push(el);
+    }
+}
+
+fn List<T>::append(&self, arr: Iterable<T>) {
     foreach (el : arr) {
         self.push(el);
     }
@@ -57,7 +78,7 @@ fn List<T>::iterator(&self) -> ArrayIterator<T> {
 fn List<T>::equals(&self, arr: const T[]) -> bool {
     if (self.length != arr.length)
         return false;
-    
+
     for (let i: u64 = 0; i < arr.length; i += 1) {
         if (self.data[i] != arr[i])
             return false;
