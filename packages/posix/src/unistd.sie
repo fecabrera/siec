@@ -52,8 +52,8 @@
 @extern fn getpid() -> pid_t;
 @extern fn getppid() -> pid_t;
 
-@extern sleep(seconds: u32) -> u32;
-@extern usleep(usec: useconds_t) -> i32;
+@extern fn sleep(seconds: u32) -> u32;
+@extern fn usleep(usec: useconds_t) -> i32;
 
 @extern fn wait(wstatus: i32*) -> pid_t;
 @extern fn waitpid(pid: pid_t, wstatus: i32*, options: i32) -> pid_t;

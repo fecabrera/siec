@@ -6,7 +6,8 @@ import {
     mpd_set_string,
     mpd_sqrt,
     mpd_to_sci,
-    mpd_free
+    mpd_free,
+    mpd_context,
 } from mpdecimal;
 
 fn main(args: char*[]) -> i32 {

@@ -10,7 +10,7 @@ import zlib;
 @const CHUNK = 16384;
 
 fn main(argc: i32, argv: char**) -> i32 {
-    let fnc: fn (FILE*, FILE*);
+    let fnc: fn (stdio.FILE*, stdio.FILE*);
 
     while (true) {
         let opt = unistd.getopt(argc, argv, ":id");
@@ -56,19 +56,19 @@ fn main(argc: i32, argv: char**) -> i32 {
     return 0;
 }
 
-fn compress_file(src: FILE*, dst: FILE*) {
-    let flush: z_flush;
+fn compress_file(src: stdio.FILE*, dst: stdio.FILE*) {
+    let flush: zlib.z_flush;
     let have: u64;
     let next_in: u8[CHUNK];
     let next_out: u8[CHUNK];
-    let strm: z_stream = {
+    let strm: zlib.z_stream = {
         zalloc = null,
         zfree = null,
         opaque = null,
     };
         
-    let ret = zlib.deflateInit(&strm, z_level::Z_DEFAULT_COMPRESSION);
-    if (ret != z_status::Z_OK) {
+    let ret = zlib.deflateInit(&strm, zlib.z_level::Z_DEFAULT_COMPRESSION);
+    if (ret != zlib.z_status::Z_OK) {
         stdio.fprintf(stdio.stderr, "deflateInit() returned %d: %s\n", ret, strm.msg);
         return;
     }
@@ -84,7 +84,7 @@ fn compress_file(src: FILE*, dst: FILE*) {
             return;
         }
 
-        flush = stdio.feof(src) ? z_flush::Z_FINISH : z_flush::Z_NO_FLUSH;
+        flush = stdio.feof(src) ? zlib.z_flush::Z_FINISH : zlib.z_flush::Z_NO_FLUSH;
 
         strm.next_in = next_in;
 
@@ -107,22 +107,22 @@ fn compress_file(src: FILE*, dst: FILE*) {
             if (strm.avail_out) break; // write done
         }
 
-        if (flush == z_flush::Z_FINISH) break; // all done
+        if (flush == zlib.z_flush::Z_FINISH) break; // all done
     }
 }
 
-fn decompress_file(src: FILE*, dst: FILE*) {
+fn decompress_file(src: stdio.FILE*, dst: stdio.FILE*) {
     let have: u64;
     let next_in: u8[CHUNK];
     let next_out: u8[CHUNK];
-    let strm: z_stream = {
+    let strm: zlib.z_stream = {
         zalloc = null,
         zfree = null,
         opaque = null,
     };
 
     let ret = zlib.inflateInit(&strm);
-    if (ret != z_status::Z_OK) {
+    if (ret != zlib.z_status::Z_OK) {
         stdio.fprintf(stdio.stderr, "deflateInit() returned %d: %s\n", ret, strm.msg);
         return;
     }
@@ -145,12 +145,12 @@ fn decompress_file(src: FILE*, dst: FILE*) {
             strm.avail_out = CHUNK;
             strm.next_out = next_out;
 
-            ret = zlib.inflate(&strm, z_flush::Z_NO_FLUSH);
+            ret = zlib.inflate(&strm, zlib.z_flush::Z_NO_FLUSH);
 
             case (ret) {
-            when z_status::Z_NEED_DICT,
-                 z_status::Z_DATA_ERROR,
-                 z_status::Z_MEM_ERROR:
+            when zlib.z_status::Z_NEED_DICT,
+                 zlib.z_status::Z_DATA_ERROR,
+                 zlib.z_status::Z_MEM_ERROR:
                  stdio.fprintf(stdio.stderr, "inflate() returned %d\n", ret);
                  return;
             }
@@ -169,6 +169,6 @@ fn decompress_file(src: FILE*, dst: FILE*) {
             if (strm.avail_out) break; // write done
         }
         
-        if (ret == z_status::Z_STREAM_END) break; // all done
+        if (ret == zlib.z_status::Z_STREAM_END) break; // all done
     }
 }
