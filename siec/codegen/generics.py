@@ -451,6 +451,10 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
         instance.type_params = None
         substitute_types(instance, dict(zip(template.type_params, type_args)))
 
+        # the canonical instance name is already unique per signature:
+        # it stays the module symbol, unmangled, like an '@symbol' pick
+        instance.symbol = symbol
+
         # the instance's signature mixes files' names; no view gates it
         gen.ungated_types += 1
         try:

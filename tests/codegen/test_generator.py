@@ -61,4 +61,4 @@ def test_codegen_merges_forward_declaration_and_definition():
     source = "fn f() -> i32; fn f() -> i32 { return 1; }"
     module = codegen(program(source), "m")
     assert str(module).count("f") >= 1
-    assert module.get_global("f").blocks
+    assert module.get_global("f()").blocks

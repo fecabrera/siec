@@ -141,6 +141,11 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
 
         symbol = gen.statics[key]
 
+    # one name cannot be both a function and a global, whatever symbol
+    # the function's signature mangles to below
+    if symbol in gen.globals:
+        raise TypeError(f"{fn.name!r} is declared as both a function and a global")
+
     # a second function under one name with a different parameter list is
     # an overload: it lives under a mangled sibling symbol, and calls pick
     # among the name's set by their argument types

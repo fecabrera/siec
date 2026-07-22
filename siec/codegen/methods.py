@@ -98,7 +98,7 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     templates = gen.generic_methods.get((parts[0], method)) if parts else None
 
     if not templates or symbol in gen.instantiated_functions:
-        if (symbol in gen.generic_functions
+        if (symbol in gen.generic_functions or symbol in gen.overloads
                 or isinstance(gen.module.globals.get(symbol), ir.Function)):
             return symbol
 
@@ -145,11 +145,14 @@ def takes_receiver(gen: CodeGenerator, symbol: str) -> bool:
     Whether a resolved method's first parameter is its receiver; a static
     method has none, and its calls pass no instance.
     """
+    from siec.codegen.overloads import overload_candidates
+
     base = symbol.partition("::")[0]
     if (template := gen.generic_functions.get(symbol)) is not None:
         first = template.params[0].type if template.params else None
     else:
-        params = gen.param_types.get(symbol, ())
+        # any candidate answers: overloads share their receiver-ness
+        params = gen.param_types.get(overload_candidates(gen, symbol)[0], ())
         first = params[0] if params else None
 
     if first is None:
@@ -176,7 +179,7 @@ def qualified_method(gen: CodeGenerator, name: str) -> str | None:
     """
     from siec.codegen.aliases import expand_alias
 
-    if (name in gen.generic_functions
+    if (name in gen.generic_functions or name in gen.overloads
             or isinstance(gen.module.globals.get(name), ir.Function)):
         return name
 
@@ -200,7 +203,7 @@ def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | Non
 
     # a declared 'enumerate' - the user's - wins over the builtin
     symbol = gen.resolve_symbol("enumerate")
-    if (symbol in gen.generic_functions
+    if (symbol in gen.generic_functions or symbol in gen.overloads
             or isinstance(gen.module.globals.get(symbol), ir.Function)):
         return None
 
@@ -223,8 +226,11 @@ def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | Non
         raise TypeError(f"cannot enumerate a {source!r} value: it is "
                         "neither an Iterable nor an Iterator")
 
+    from siec.codegen.overloads import overload_candidates
+
     next_ = resolve_method(gen, it_type, "next")
-    next_ret = gen.return_types.get(next_) if next_ is not None else None
+    next_ret = (gen.return_types.get(overload_candidates(gen, next_)[0])
+                if next_ is not None else None)
     if not is_reference(next_ret):
         raise TypeError(f"cannot enumerate: type {it_type!r} has no "
                         "'next' returning a reference")
@@ -260,7 +266,12 @@ def method_reference(gen: CodeGenerator, expr) -> ir.Function | None:
         raise TypeError(f"ambiguous reference to overloaded method "
                         f"'{expr.enum}::{expr.member}'")
 
-    func = gen.module.globals.get(symbol) if symbol is not None else None
+    if symbol is None:
+        return None
+
+    from siec.codegen.overloads import overload_candidates
+
+    func = gen.module.globals.get(overload_candidates(gen, symbol)[0])
     return func if isinstance(func, ir.Function) else None
 
 
@@ -274,7 +285,13 @@ def method_reference_type(gen: CodeGenerator, expr) -> str | None:
     except (NameError, TypeError):
         return None
 
-    if symbol is None or symbol not in gen.param_types:
+    if symbol is None:
+        return None
+
+    from siec.codegen.overloads import overload_candidates
+
+    symbol = overload_candidates(gen, symbol)[0]
+    if symbol not in gen.param_types:
         return None
 
     params = ",".join(gen.param_types[symbol])

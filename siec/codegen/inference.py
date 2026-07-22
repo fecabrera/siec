@@ -117,9 +117,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if symbol in gen.globals:
             return gen.globals[symbol]
 
-        if symbol in gen.param_types:
-            params = ",".join(gen.param_types[symbol])
-            ret = gen.return_types.get(symbol)
+        from siec.codegen.overloads import overload_candidates
+
+        candidate = overload_candidates(gen, symbol)[0]
+        if candidate in gen.param_types:
+            params = ",".join(gen.param_types[candidate])
+            ret = gen.return_types.get(candidate)
             return f"fn({params})" + (f"->{ret}" if ret else "")
 
         return None
@@ -170,7 +173,8 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
             # a dotted callee may be a method on its receiver chain, its
             # receiver joining the arguments for inference
-            if symbol is None or symbol not in gen.return_types:
+            if symbol is None or (symbol not in gen.return_types
+                                  and symbol not in gen.overloads):
                 from siec.codegen.methods import method_call
 
                 if "." in expr.name and (found := method_call(gen, expr, scope)):
@@ -481,6 +485,7 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
 
         symbol = gen.resolve_symbol(expr.name)
         if not gen.sees(expr.name) or (symbol not in gen.return_types
+                                       and symbol not in gen.overloads
                                        and symbol not in gen.globals
                                        and symbol not in gen.generic_functions):
             return NameError(f"undefined function {expr.name!r}")
@@ -502,6 +507,7 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
 
         if not gen.sees(expr.name) or (expr.name not in gen.constants
                                        and symbol not in gen.globals
+                                       and symbol not in gen.overloads
                                        and symbol not in gen.param_types):
             return NameError(f"undefined variable {expr.name!r}")
 

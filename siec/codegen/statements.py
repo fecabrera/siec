@@ -339,9 +339,11 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         flush_defers(gen, builder, gen.defer_frames[depth:])
         builder.branch(break_block if isinstance(stmt, Break) else continue_block)
     elif isinstance(stmt, Return):
+        from siec.codegen.overloads import display_name
+
         # an '@noreturn' function promises to never give control back
         if builder.function.name in gen.noreturns:
-            name = builder.function.name.split(".static.")[0]
+            name = display_name(builder.function.name)
             raise TypeError(f"'@noreturn' function {name!r} cannot return")
 
         # a deferred statement runs on the way out of a scope; returning
@@ -366,7 +368,7 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             ret_type = gen.return_types[builder.function.name]
             if ret_type is None and isinstance(
                     builder.function.function_type.return_type, ir.VoidType):
-                name = builder.function.name.split(".static.")[0]
+                name = display_name(builder.function.name)
                 raise TypeError(f"function {name!r} has no return type and "
                                 "cannot return a value")
 
@@ -507,8 +509,11 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
         raise TypeError(f"cannot iterate: type {it_type!r} has no "
                         f"{'has_next' if has_next is None else 'next'!r} method")
 
-    # 'v' aliases storage, so the elements must come as references
-    next_ret = gen.return_types.get(next_)
+    # 'v' aliases storage, so the elements must come as references; any
+    # overload set's first candidate answers for the signature
+    from siec.codegen.overloads import overload_candidates
+
+    next_ret = gen.return_types.get(overload_candidates(gen, next_)[0])
     if not is_reference(next_ret):
         raise TypeError(f"'foreach' needs {it_type!r}'s 'next' to return "
                         "a reference '&T'")

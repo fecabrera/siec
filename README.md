@@ -732,6 +732,8 @@ Signed and unsigned never mix: a `u8` argument widens into a `u64` candidate, ne
 
 The return type is not part of the signature, so two overloads differing only there conflict. `@extern`, `@symbol`, and `main` functions cannot overload: each names one fixed symbol. A bare reference to an overloaded name (`let g = f;`) is an error, since without arguments there is nothing to pick by.
 
+A function's module symbol carries its parameter types: `pick(i64)`, `List<char>::init(&List<char>,u64)`. Separately compiled units therefore name every signature alike, whatever their declaration order; only `@extern`, `@symbol`, and `main` keep their unmangled C symbols.
+
 #### Operator overloading
 
 Binary operators on a struct operand are shorthand for method calls: `a + b` is `a.add(b)`, picking among `add`'s overloads by `b`'s type. The operators map to `add`, `sub`, `mul`, `div`, and `rem`, and compound assignment follows: `a += b` is `a = a.add(b)`.

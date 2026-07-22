@@ -33,6 +33,14 @@ from siec.codegen.types import (
 )
 
 
+def display_name(symbol: str) -> str:
+    """
+    The Sie name behind a module symbol, for error messages: the
+    signature and any static mangling stripped.
+    """
+    return symbol.partition("(")[0].split(".static.")[0]
+
+
 def overload_key(params) -> tuple:
     """
     The signature identity of a parameter list: its types behind 'const',
@@ -44,7 +52,7 @@ def overload_key(params) -> tuple:
 def overload_symbol(gen: CodeGenerator, symbol: str, params) -> str:
     """
     The module symbol a function's own signature lives under: its sibling
-    in the name's overload set, or the symbol itself when never overloaded.
+    in the name's overload set, or the symbol itself when never entered.
     """
     for key, sibling in gen.overloads.get(symbol, ()):
         if key == overload_key(params):
@@ -53,33 +61,42 @@ def overload_symbol(gen: CodeGenerator, symbol: str, params) -> str:
     return symbol
 
 
+def overload_candidates(gen: CodeGenerator, symbol: str) -> list[str]:
+    """
+    The module symbols a Sie name's functions live under: its overload
+    set's, in declaration order, or the symbol itself for a fixed name
+    ('@extern', '@symbol', 'main', a generic instance).
+    """
+    entry = gen.overloads.get(symbol)
+    return [sibling for _, sibling in entry] if entry else [symbol]
+
+
 def declare_overload(gen: CodeGenerator, fn: Function, symbol: str) -> str:
     """
     Enter a declaration into its name's overload set: a matching signature
-    is a redeclaration reusing its symbol, and a new one takes a mangled
-    sibling. '@extern' functions and 'main' name one fixed symbol, and an
-    '@symbol' function picks its own, so none of them overload.
+    is a redeclaration reusing its symbol, and a new one takes a symbol
+    mangled from its parameter types - 'f(i64)' - so separately compiled
+    units name each signature alike, whatever their declaration order.
+    '@extern' functions and 'main' name one fixed symbol, and an
+    '@symbol' function picks its own, so none of them overload or mangle.
     """
     key = overload_key(fn.params)
-    fixed = fn.is_extern or fn.symbol is not None or fn.name == "main"
 
-    entry = gen.overloads.get(symbol)
-    if entry is None:
-        if not fixed:
-            gen.overloads[symbol] = [(key, symbol)]
+    if fn.is_extern or fn.symbol is not None or fn.name == "main":
+        entry = gen.overloads.get(symbol)
+        if entry is not None and all(known != key for known, _ in entry):
+            what = "'@extern'" if fn.is_extern else (
+                "'main'" if fn.name == "main" else "'@symbol'")
+            raise TypeError(f"cannot overload {what} function {fn.name!r}")
 
         return symbol
 
+    entry = gen.overloads.setdefault(symbol, [])
     for known, sibling in entry:
         if known == key:
             return sibling
 
-    if fixed:
-        what = "'@extern'" if fn.is_extern else (
-            "'main'" if fn.name == "main" else "'@symbol'")
-        raise TypeError(f"cannot overload {what} function {fn.name!r}")
-
-    sibling = f"{symbol}.overload.{len(entry)}"
+    sibling = f"{symbol}({','.join(key)})"
     entry.append((key, sibling))
     return sibling
 
@@ -101,7 +118,7 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
     # a lone candidate resolves as ever, unless a generic template shares
     # the name and the arguments must decide between the two
     if len(entry) == 1 and gen.generic_functions.get(symbol) is None:
-        return symbol
+        return entry[0][1]
 
     arg_types = [rank_type(gen, arg, scope) for arg in args]
     if receiver is not None:
@@ -115,7 +132,7 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
             tiers[fit].append(candidate)
 
     pool = tiers["exact"] or tiers["implicit"] or tiers["adopt"]
-    name = symbol.split(".static.")[0]
+    name = display_name(symbol)
 
     if not pool:
         shown = ", ".join(t or "?" for t in arg_types)

@@ -451,6 +451,53 @@ def test_unpicked_overload_bodies_never_emit(run):
     assert run(source).returncode == 42
 
 
+def test_symbols_mangle_by_signature(compile_source):
+    """
+    Every function's symbol carries its parameter types - 'f(i64)' - so
+    separately compiled units name each signature alike; 'main' keeps
+    its C symbol.
+    """
+    module = str(compile_source("""
+    fn f(n: i64) -> i32 { return 1; }
+    fn f(x: f64) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let n: i64 = 0;
+        return f(n) + f(0.5);
+    }
+    """))
+    assert '@"f(i64)"' in module
+    assert '@"f(f64)"' in module
+    assert '@"main"' in module
+
+
+def test_symbols_are_declaration_order_independent(compile_source):
+    """
+    Reordering declarations moves no overload to another symbol.
+    """
+    import re
+
+    first = """
+    fn f(n: i64) -> i32 { return 1; }
+    fn f(x: f64) -> i32 { return 2; }
+    """
+    second = """
+    fn f(x: f64) -> i32 { return 2; }
+    fn f(n: i64) -> i32 { return 1; }
+    """
+    main = """
+    fn main() -> i32 {
+        let n: i64 = 0;
+        return f(n) + f(0.5);
+    }
+    """
+
+    def symbols(source):
+        return set(re.findall(r'@"f\([^"]*\)"', str(compile_source(source))))
+
+    assert symbols(first + main) == symbols(second + main)
+
+
 def test_forward_declared_overloads_define_later(run):
     """
     Each forward declaration pairs with the definition sharing its
