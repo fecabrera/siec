@@ -1,5 +1,5 @@
 import std.io;
-import { String } from std;
+import { String } from std.collections;
 
 fn main() -> i32 {
     let str1 = String();

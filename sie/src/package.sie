@@ -1,4 +1,4 @@
-import { String, List } from std;
+import { String, List } from std.collections;
 import { printf } from stdio;
 import { toml_get, toml_datum, toml_type, toml_result } from tomlc17;
 import { Dependency } from dependency;

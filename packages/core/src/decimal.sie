@@ -1,6 +1,6 @@
 import stdio;
 import mpdecimal;
-import { String } from std;
+import { String } from std.collections;
 
 @static let __default_ctx: mpdecimal.mpd_context;
 @static let __default_ctx_ready: bool = false;
