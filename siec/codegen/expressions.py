@@ -29,6 +29,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    TypeId,
     TypeName,
     UnaryOp,
     Var,
@@ -155,6 +156,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_expression(gen, builder,
                                StrLiteral(typename_of(gen, expr.name, scope)),
                                expected_type, scope)
+
+    if isinstance(expr, TypeId):
+        # '@typeid' is the name's hash, adopting an integer context like
+        # a literal and defaulting to u64
+        value = fnv1a(typename_of(gen, expr.name, scope))
+        if isinstance(expected_type, ir.IntType) and expected_type.width >= 64:
+            return ir.Constant(expected_type, value)
+
+        return ir.Constant(ir.IntType(64), value)
 
     if isinstance(expr, AsmBlock):
         return emit_asm_block(gen, builder, expr, scope)
@@ -884,6 +894,17 @@ def emit_tuple(gen: CodeGenerator, builder: ir.IRBuilder, expr: TupleLiteral,
     for i, element in enumerate(expr.elements):
         filled = emit_coerced(gen, builder, element, args[i], scope)
         value = builder.insert_value(value, filled, i, name=f"tuple.{i}")
+
+    return value
+
+
+def fnv1a(text: str) -> int:
+    """
+    The 64-bit FNV-1a hash of a string, '@typeid's identity function.
+    """
+    value = 0xcbf29ce484222325
+    for byte in text.encode():
+        value = ((value ^ byte) * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
 
     return value
 

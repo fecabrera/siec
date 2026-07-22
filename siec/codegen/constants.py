@@ -13,6 +13,7 @@ from siec.ast import (
     NullLiteral,
     Program,
     SizeOf,
+    TypeId,
     StrLiteral,
     UnaryOp,
     Var,
@@ -128,9 +129,9 @@ def check_constant(gen: CodeGenerator, expr: Expr, chain: list[str]) -> None:
     if isinstance(expr, EnumMember):
         return
 
-    # a size is computed at compile time; its name resolves where the
-    # constant is used
-    if isinstance(expr, SizeOf):
+    # a size is computed at compile time, and a '@typeid' hash likewise;
+    # their names resolve where the constant is used
+    if isinstance(expr, (SizeOf, TypeId)):
         return
 
     if isinstance(expr, Var):

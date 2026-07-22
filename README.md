@@ -1427,6 +1427,25 @@ let arr: i32[];
 
 Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type.
 
+#### Typeid
+
+`@typeid` yields the 64-bit FNV-1a hash of the same canonical name, a compile-time `u64` identity for the type. Aliases share their target's id, distinct types get distinct ids, and generics substitute before hashing, so `@typeid(T)` identifies each instance's concrete type:
+
+```
+@typeid(u64);                        // the hash of "u64"
+@typeid(s) == @typeid(List<char>);   // true for s: String
+
+fn kind(id: u64) -> i32 {
+    case (id) {
+        when @typeid(u64): return 1;
+        when @typeid(List<char>): return 2;
+        else: return 0;
+    }
+}
+```
+
+Being a compile-time constant, it works anywhere one is required: `@const` values, enum members, case arms, and array sizes.
+
 ### Enums
 
 Enums are collections of constants. They are declared through the keyword `enum` followed by their name. Their members are declared by name, separated by commas.

@@ -23,6 +23,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    TypeId,
     TypeName,
     UnaryOp,
     Var,
@@ -145,13 +146,14 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_asm_tail(ts)
 
     # '@typename(T)' is the compile-time name of a type, or of a
-    # variable's type, as a 'const char[]'
-    if tok.syntax == "@" and ts.peek().value == "typename":
-        ts.next()
+    # variable's type, as a 'const char[]'; '@typeid(T)' the FNV-1a
+    # hash of that name
+    if tok.syntax == "@" and ts.peek().value in ("typename", "typeid"):
+        node = TypeName if ts.next().value == "typename" else TypeId
         ts.expect("sym", "(")
         name = parse_type(ts)
         ts.expect("sym", ")")
-        return parse_postfix(ts, TypeName(name))
+        return parse_postfix(ts, node(name))
 
     # 'null' is the pointer literal
     if tok.kind == "kw" and tok.value == "null":

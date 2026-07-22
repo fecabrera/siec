@@ -1,7 +1,7 @@
 """Registration and evaluation of enum declarations."""
 
 from siec.ast import (BinaryOp, BoolLiteral, CharLiteral, EnumMember, IntLiteral,
-                      Program, SizeOf, UnaryOp, Var)
+                      Program, SizeOf, TypeId, UnaryOp, Var)
 from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.sizes import size_of
@@ -144,9 +144,16 @@ def evaluate(gen: CodeGenerator, expr) -> int:
         return member_value(gen, expr)
 
     # a sizeof is a compile-time byte count; only type names resolve here,
-    # constant contexts having no variables in scope
+    # constant contexts having no variables in scope; a '@typeid' hashes
+    # the same way
     if isinstance(expr, SizeOf):
         return size_of(gen, expr.name)
+
+    if isinstance(expr, TypeId):
+        # deferred import: expressions and enums are mutually recursive
+        from siec.codegen.expressions import fnv1a, typename_of
+
+        return fnv1a(typename_of(gen, expr.name, {}))
 
     if isinstance(expr, Var):
         const = gen.constants.get(expr.name)

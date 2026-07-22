@@ -193,6 +193,15 @@ class TypeName:
 
 
 @dataclass
+class TypeId:
+    """
+    A '@typeid(T)' expression: the FNV-1a hash of the compile-time
+    canonical name of a type, or of a variable's type.
+    """
+    name: str
+
+
+@dataclass
 class UnaryOp:
     """
     A unary operation applying a prefix operator to one subexpression.

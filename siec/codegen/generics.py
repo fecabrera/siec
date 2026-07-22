@@ -10,7 +10,7 @@ import copy
 import re
 from dataclasses import fields as dataclass_fields, is_dataclass
 
-from siec.ast import Call, Field, SizeOf, TypeName
+from siec.ast import Call, Field, SizeOf, TypeId, TypeName
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import (
@@ -282,7 +282,8 @@ def substitute_types(node, mapping: dict) -> None:
 
         if isinstance(value, str):
             if (field.name in ("type", "return_type")
-                    or (isinstance(node, (SizeOf, TypeName)) and field.name == "name")):
+                    or (isinstance(node, (SizeOf, TypeId, TypeName))
+                        and field.name == "name")):
                 setattr(node, field.name, substitute(value, mapping))
         elif field.name == "type_args" and value is not None:
             setattr(node, field.name, [substitute(v, mapping) for v in value])

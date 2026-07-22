@@ -27,6 +27,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    TypeId,
     TypeName,
     UnaryOp,
     Var,
@@ -428,8 +429,9 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, BoolLiteral):
         return "bool"
 
-    # a size is a byte count, defaulting to u64 like it does in any context
-    if isinstance(expr, SizeOf):
+    # a size is a byte count, defaulting to u64 like it does in any
+    # context, and a '@typeid' hash types the same way
+    if isinstance(expr, (SizeOf, TypeId)):
         return "u64"
 
     # a bare 'null' is an opaque pointer until a context types it
