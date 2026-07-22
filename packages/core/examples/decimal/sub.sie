@@ -1,17 +1,16 @@
 import { stderr, fprintf, printf } from stdio;
-import { strlen } from string;
 import { Decimal } from decimal;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length != 3) {
-		fprintf(stderr, "sqrt: usage: %s x y\n", args[0]);
+		fprintf(stderr, "sub: usage: %s x y\n", args[0]);
 		return 1;
 	}
 
-    let a = Decimal({args[1], strlen(args[1])});
+    let a = Decimal(args[1]);
     defer a.destroy();
 
-    let b = Decimal({args[2], strlen(args[2])});
+    let b = Decimal(args[2]);
     defer b.destroy();
 
     let result = a - b;
