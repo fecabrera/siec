@@ -1,0 +1,86 @@
+import unistd;
+import errno;
+import { errno } from errno;
+import { strlen } from string;
+
+enum FileMode: i32 {
+    None        = 0,
+    Read        = 1,
+    Write       = 2,
+    ReadWrite   = FileMode::Read | FileMode::Write,
+    Append      = 4,
+    Create      = 8,
+}
+
+enum FileError {
+    SystemError,
+    InvalidMode,
+    NotFound,
+    PermissionError,
+    AlreadyOpen,
+    AlreadyClosed,
+}
+
+struct File {
+    fd: i32 = -1;
+    mode: FileMode = FileMode::None;
+    path: const char[];
+    open: bool = false;
+}
+
+fn File::init(&self, path: const char[], mode: FileMode) {
+    self = { path = path, mode = mode };
+}
+
+fn File::init(&self, path: const char*, mode: FileMode) {
+    self = { path = {path, strlen(path)}, mode = mode };
+}
+
+fn File::destroy(&self) {
+    if (self.open) {
+        self.close();
+    }
+}
+
+fn File::open(&self) -> Result<FileError> {
+    if (self.open) return Error(FileError::AlreadyOpen);
+    if (self.mode == FileMode::None) return Error(FileError::InvalidMode);
+    
+    let mode: i32 = 0;
+    
+    if (self.mode & FileMode::ReadWrite) mode = unistd.O_RDWR;
+    else if (self.mode & FileMode::Read) mode = unistd.O_RDONLY;
+    else if (self.mode & FileMode::Write) mode = unistd.O_WRONLY;
+
+    if (self.mode & FileMode::Append) mode |= unistd.O_APPEND;
+    if (self.mode & FileMode::Create) mode |= unistd.O_CREAT;
+
+    let fd = unistd.open(self.path, mode);
+    if (fd < 0) {
+        let errsv = errno();
+        case (errsv) {
+        when errno.ENOENT:
+            return Error(FileError::NotFound);
+        when errno.EACCES:
+            return Error(FileError::PermissionError);
+        }
+        return Error(FileError::SystemError);
+    }
+    
+    self.fd = fd;
+    self.open = true;
+
+    return Ok();
+}
+
+fn File::close(&self) -> Result<FileError> {
+    if (not self.open) return Error(FileError::AlreadyClosed);
+    
+    let res = unistd.close(self.fd);
+    if (res < 0) return Error(FileError::SystemError);
+
+    self.fd = -1;
+    self.open = false;
+
+    return Ok();
+}
