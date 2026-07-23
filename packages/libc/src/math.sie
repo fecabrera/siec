@@ -1,6 +1,5 @@
-// Bindings for the C <math.h> double-precision functions. mcc's only floating
-// type is f64 (C double), so the float/long-double variants (sinf, sinl,
-// ...) are omitted. Link with -lm (the driver does this automatically).
+// Bindings for the C <math.h> double-precision functions.
+// Link with -lm
 
 /***************************************
  * Trigonometric
