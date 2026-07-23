@@ -1,0 +1,34 @@
+import unistd;
+import errno;
+import { errno } from errno;
+import { IOWritable, IOError } from _ifaces;
+
+@static let __stdout: Stdout;
+@macro stdout = __stdout;
+
+struct Stdout: IOWritable {}
+
+fn Stdout::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
+    if (buf.length < count) return Error(IOError::InvalidBuffer);
+
+    let res = unistd.write(unistd.STDOUT_FILENO, buf, count);
+    if (res < 0) {
+        let errsv = errno();
+        case (errsv) {
+        when errno.EACCES:
+            return Error(IOError::PermissionDenied);
+        when errno.EINVAL:
+            return Error(IOError::InvalidBuffer);
+        when errno.EBADF:
+            return Error(IOError::NotOpen);
+        else:
+            return Error(IOError::SystemError);
+        }
+    }
+    
+    return Ok(res);
+}
+
+fn Stdout::write(&self, buf: const &u8[]) -> Result<i64, IOError> {
+    return self.write(buf, buf.length);
+}

@@ -1,0 +1,17 @@
+enum IOError {
+    SystemError,
+    NotOpen,
+    PermissionDenied,
+    InvalidBuffer,
+    InvalidOffset,
+}
+
+interface IOReadable {
+    fn read(&self, buf: &u8[], count: u64) -> Result<i64, IOError>;
+    fn read(&self, buf: &u8[]) -> Result<i64, IOError>;
+}
+
+interface IOWritable {
+    fn write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError>;
+    fn write(&self, buf: const &u8[]) -> Result<i64, IOError>;
+}

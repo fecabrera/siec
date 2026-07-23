@@ -1,0 +1,34 @@
+import unistd;
+import errno;
+import { errno } from errno;
+import { IOReadable, IOError } from _ifaces;
+
+@static let __stdin: Stdin;
+@macro stdin = __stdin;
+
+struct Stdin: IOReadable {}
+
+fn Stdin::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
+    if (buf.length < count) return Error(IOError::InvalidBuffer);
+
+    let res = unistd.read(unistd.STDIN_FILENO, buf, count);
+    if (res < 0) {
+        let errsv = errno();
+        case (errsv) {
+        when errno.EACCES:
+            return Error(IOError::PermissionDenied);
+        when errno.EINVAL:
+            return Error(IOError::InvalidBuffer);
+        when errno.EBADF:
+            return Error(IOError::NotOpen);
+        else:
+            return Error(IOError::SystemError);
+        }
+    }
+    
+    return Ok(res);
+}
+
+fn Stdin::read(&self, buf: &u8[]) -> Result<i64, IOError> {
+    return self.read(buf, buf.length);
+}

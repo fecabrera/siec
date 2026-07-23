@@ -2,6 +2,7 @@ import unistd;
 import errno;
 import { errno } from errno;
 import { strlen } from string;
+import { IOReadable, IOWritable, IOError } from std.io;
 
 enum FileMode: i32 {
     None        = 0,
@@ -25,21 +26,13 @@ enum CloseError {
     AlreadyClosed,
 }
 
-enum IOError {
-    SystemError,
-    NotOpen,
-    PermissionDenied,
-    InvalidBuffer,
-    InvalidOffset,
-}
-
 enum SeekOrigin {
     Start,
     Current,
     End,
 }
 
-struct File {
+struct File: IOReadable, IOWritable {
     fd: i32 = -1;
     mode: FileMode = FileMode::None;
     path: const char[];
@@ -146,7 +139,9 @@ fn File::close(&self) -> Result<CloseError> {
  */
 fn File::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
     if (not self.open) return Error(IOError::NotOpen);
-    
+    if (not self.mode & FileMode::Read) return Error(IOError::PermissionDenied);
+    if (buf.length < count) return Error(IOError::InvalidBuffer);
+
     let res = unistd.read(self.fd, buf, count);
     if (res < 0) {
         let errsv = errno();
@@ -156,6 +151,8 @@ fn File::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
         when errno.EINVAL:
             return Error(IOError::InvalidBuffer);
         when errno.EBADF:
+            self.fd = -1;
+            self.open = false;
             return Error(IOError::NotOpen);
         else:
             return Error(IOError::SystemError);
@@ -165,13 +162,16 @@ fn File::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
     return Ok(res);
 }
 
+@inline
 fn File::read(&self, buf: &u8[]) -> Result<i64, IOError> {
     return self.read(buf, buf.length);
 }
 
 fn File::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
     if (not self.open) return Error(IOError::NotOpen);
-    
+    if (not self.mode & FileMode::Write) return Error(IOError::PermissionDenied);
+    if (buf.length < count) return Error(IOError::InvalidBuffer);
+
     let res = unistd.write(self.fd, buf, count);
     if (res < 0) {
         let errsv = errno();
@@ -181,8 +181,11 @@ fn File::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
         when errno.EACCES:
             return Error(IOError::PermissionDenied);
         when errno.EBADF:
+            self.fd = -1;
+            self.open = false;
             return Error(IOError::NotOpen);
         else:
+            self.open = false;
             return Error(IOError::SystemError);
         }
     }
@@ -190,6 +193,10 @@ fn File::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
     return Ok(res);
 }
 
+@inline
+fn File::write(&self, buf: const &u8[]) -> Result<i64, IOError> {
+    return self.write(buf, buf.length);
+}
 
 fn File::seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
     if (not self.open) return Error(IOError::NotOpen);
@@ -201,6 +208,8 @@ fn File::seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
         when errno.EINVAL:
             return Error(IOError::InvalidOffset);
         when errno.EBADF:
+            self.fd = -1;
+            self.open = false;
             return Error(IOError::NotOpen);
         else:
             return Error(IOError::SystemError);

@@ -1,3 +1,3 @@
-@include("hashing/crc32")
-@include("hashing/fnv1a")
-@include("hashing/splitmix64")
+@include("_hashing/_crc32")
+@include("_hashing/_fnv1a")
+@include("_hashing/_splitmix64")

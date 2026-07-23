@@ -1,4 +1,4 @@
-@include("collections/list")
-@include("collections/string")
-@include("collections/stack")
-@include("collections/queue")
+@include("_collections/_list")
+@include("_collections/_string")
+@include("_collections/_stack")
+@include("_collections/_queue")

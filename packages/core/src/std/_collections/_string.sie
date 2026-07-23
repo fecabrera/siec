@@ -1,6 +1,6 @@
-import list;
+import _list;
 
-@type String = list.List<char>;
+@type String = _list.List<char>;
 
 /**
  * Initialize the String with the given array.
@@ -9,9 +9,7 @@ import list;
  */
 fn String::init(&self, arr: const char*) {
     self.init();
-    for (let i: u64 = 0; arr[i]; i += 1) {
-        self.push(arr[i]);
-    }
+    self.append(arr);
 }
 
 /**
@@ -46,4 +44,13 @@ fn String::equals(&self, arr: const char*) -> bool {
 fn String::null_terminate(&self) {
     self.push('\0');
     self.pop();
+}
+
+/**
+ * Convert the String to a byte array.
+ *
+ * @return The byte array.
+ */
+fn String::as_bytes(&self) -> u8[] {
+    return {self.data as u8*, self.length};
 }
