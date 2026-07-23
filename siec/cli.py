@@ -116,7 +116,7 @@ def main() -> int:
     # includes define here, while an imported module only declares, its
     # definitions coming from its own unit at link
     try:
-        program = load_program(sources, include_paths)
+        program = load_program(sources, include_paths, opts.target)
         module = codegen(program, str(sources[0]), opts.target, opts.debug,
                          define_imports=not opts.compile_only)
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:

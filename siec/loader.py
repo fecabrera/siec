@@ -2,9 +2,74 @@
 
 from pathlib import Path
 
-from siec.ast import Program
+from siec.ast import (BinaryOp, BoolLiteral, CharLiteral, CondBlock,
+                      IntLiteral, Program, UnaryOp, Var)
 from siec.lexer import lex
 from siec.parser import parse
+
+
+def holds_includes(cond: CondBlock) -> bool:
+    """
+    Whether an '@if' block reaches an '@include' in any of its branches,
+    nested blocks included.
+    """
+    def search(branch: Program) -> bool:
+        return bool(branch.includes) or any(holds_includes(c) for c in branch.conds)
+
+    return search(cond.then) or (cond.orelse is not None and search(cond.orelse))
+
+
+def evaluate_directive(expr, lookup, chain=()) -> int:
+    """
+    Evaluate the condition of an '@if' that guards an '@include'.
+
+    The choice happens at load time, before the program assembles, so only
+    literals, operators, the target constants, and '@const' values already
+    in view can appear; enum members and 'sizeof' need the whole program
+    and cannot.
+    """
+    # deferred import: the ops table lives with the codegen evaluator
+    from siec.codegen.enums import BINARY_OPS
+
+    if isinstance(expr, IntLiteral):
+        return expr.value
+
+    if isinstance(expr, BoolLiteral):
+        return int(expr.value)
+
+    if isinstance(expr, CharLiteral):
+        return expr.value.encode()[0]
+
+    if isinstance(expr, Var):
+        if expr.name in chain:
+            cycle = " -> ".join([*chain, expr.name])
+            raise TypeError(f"constant cycle: {cycle}")
+
+        value = lookup(expr.name)
+        if value is None:
+            raise TypeError(f"{expr.name!r} is not a constant in view here; "
+                            "a condition guarding an '@include' evaluates "
+                            "before the program assembles, so only the "
+                            "target constants and '@const' values already "
+                            "loaded can appear")
+
+        return evaluate_directive(value, lookup, (*chain, expr.name))
+
+    if isinstance(expr, UnaryOp) and expr.op in ("-", "~", "not"):
+        value = evaluate_directive(expr.operand, lookup, chain)
+        if expr.op == "not":
+            return int(not value)
+
+        return -value if expr.op == "-" else ~value
+
+    if isinstance(expr, BinaryOp) and expr.op in BINARY_OPS:
+        return BINARY_OPS[expr.op](evaluate_directive(expr.left, lookup, chain),
+                                   evaluate_directive(expr.right, lookup, chain))
+
+    raise TypeError("a condition guarding an '@include' evaluates before "
+                    "the program assembles, so only literals, operators, "
+                    "the target constants, and '@const' values already "
+                    "loaded can appear")
 
 
 def resolve_include(path: str, includer_dir: Path, include_paths: list[Path]) -> Path:
@@ -38,9 +103,13 @@ def resolve_module(path: str, importer_dir: Path, include_paths: list[Path]) -> 
     raise FileNotFoundError(f"cannot resolve import {path!r}")
 
 
-def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
+def load_program(sources: list[Path], include_paths: list[Path],
+                 target: str | None = None) -> Program:
     """
     Parse source files and their includes (recursively) into a single merged Program.
+
+    The target triple decides conditional includes; the host's when none
+    is given, matching codegen.
     """
     functions = []
     structs = []
@@ -117,6 +186,25 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
             if cond.orelse is not None:
                 tag(cond.orelse, file)
 
+    builtin_values = {}
+
+    def target_constant(name: str) -> int | None:
+        # the target constants, computed on first use exactly as codegen
+        # defines them: the OS and architecture families plus 'TARGET_OS'
+        # and 'TARGET_ARCH' matching the compilation target
+        if not builtin_values:
+            from llvmlite import binding
+
+            from siec.codegen.constants import (TARGET_CONSTANTS, target_arch,
+                                                target_os)
+
+            triple = target or binding.get_default_triple()
+            builtin_values.update(TARGET_CONSTANTS)
+            builtin_values["TARGET_OS"] = builtin_values[target_os(triple)]
+            builtin_values["TARGET_ARCH"] = builtin_values[target_arch(triple)]
+
+        return builtin_values.get(name)
+
     def load(file: Path) -> None:
         # visit each file once, keyed by absolute path; this also breaks include cycles
         file = file.resolve()
@@ -140,17 +228,63 @@ def load_program(sources: list[Path], include_paths: list[Path]) -> Program:
 
         # load includes depth-first so included declarations precede their
         # includers; a failing one blames the file that wrote it
-        for inc in program.includes:
+        def pull(inc):
             try:
-                target = resolve_include(inc.path, file.parent, include_paths)
+                found = resolve_include(inc.path, file.parent, include_paths)
             except FileNotFoundError:
                 error = FileNotFoundError(f"line {inc.line}: cannot resolve "
                                           f"include {inc.path!r}")
                 error.sie_file = str(file)
                 raise error from None
 
-            load(target)
-            include_targets.setdefault(str(file), []).append(str(target.resolve()))
+            load(found)
+            include_targets.setdefault(str(file), []).append(str(found.resolve()))
+
+        for inc in program.includes:
+            pull(inc)
+
+        # a conditional include loads only when its '@if' arm is chosen;
+        # the condition evaluates now, against the target constants and
+        # the '@const' values in view: this file's, its includes', and
+        # earlier chosen arms'
+        branch_consts = []
+
+        def lookup(name):
+            builtin = target_constant(name)
+            if builtin is not None:
+                return IntLiteral(builtin)
+
+            for const in (*program.consts, *branch_consts, *consts):
+                if const.name == name:
+                    return const.value
+
+            return None
+
+        def follow(cond_blocks):
+            for cond in cond_blocks:
+                # an '@if' with no include in reach keeps its choice for
+                # codegen, where the full constant language is in play
+                if not holds_includes(cond):
+                    continue
+
+                try:
+                    chosen = evaluate_directive(cond.condition, lookup)
+                except TypeError as error:
+                    error = TypeError(f"line {cond.line}: {error}")
+                    error.sie_file = str(file)
+                    raise error from None
+
+                branch = cond.then if chosen else cond.orelse
+                if branch is None:
+                    continue
+
+                branch_consts.extend(branch.consts)
+                for inc in branch.includes:
+                    pull(inc)
+
+                follow(branch.conds)
+
+        follow(program.conds)
 
         # load imports and record what each one binds in this file; a
         # failing one blames the file that wrote it

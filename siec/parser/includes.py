@@ -14,4 +14,9 @@ def parse_include(ts: TokenStream) -> Include:
     ts.expect("sym", "(")
     path = ts.expect("str").value
     ts.expect("sym", ")")
+
+    # a trailing ';' is fine, statement-style
+    if ts.peek().syntax == ";":
+        ts.next()
+
     return Include(path, line=line)

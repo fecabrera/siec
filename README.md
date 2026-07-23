@@ -107,6 +107,8 @@ The path resolves against, in order: the including file's own directory, any `-I
 
 Unlike `import`, an include copies the file's declarations as if they were written in place, without any namespacing. That makes it C's `#include`: whatever the file holds compiles as part of the including unit, so under `-c` a file included by two units defines twice, colliding at link. Files meant for inclusion should hold declarations; definitions belong in modules.
 
+A trailing `;` after the directive is fine, and an include may sit inside an `@if` to vary by platform ([conditional includes](#conditional-compilation)).
+
 ### Variables
 
 Variables are values in memory that can be declared through the `let` keyword:
@@ -220,7 +222,19 @@ The condition is a constant expression: literals, `@const` names, enum members, 
 }
 ```
 
-A branch may hold any top-level declaration (functions, structs, enums, globals, constants, type aliases) including further `@if` blocks, and a constant declared in a chosen branch is visible to the conditions after it. The one exception is `@include`, which joins the program before any condition can be evaluated and so cannot be conditional.
+A branch may hold any top-level declaration (functions, structs, enums, globals, constants, type aliases) including further `@if` blocks, and a constant declared in a chosen branch is visible to the conditions after it.
+
+An `@include` may also sit in a branch: only the chosen arm's files load, and an unchosen arm's include is never even resolved, so its file need not exist on this platform, C-header-style:
+
+```
+@if (TARGET_OS == OS_DARWIN) {
+    @include("darwin/_errno");
+} @else @if (TARGET_OS == OS_LINUX) {
+    @include("linux/_errno");
+}
+```
+
+Because includes decide what the program *is*, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
 
 ### Arithmetic
 

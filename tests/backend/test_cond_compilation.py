@@ -134,14 +134,17 @@ def test_non_constant_condition_is_an_error(compile_source):
         """)
 
 
-def test_conditional_include_is_an_error(compile_source):
+def test_conditional_include_parses():
     """
-    '@include' joins the program before conditions evaluate, so it cannot
-    sit inside an '@if'.
+    An '@include' may sit inside an '@if': the loader evaluates the
+    condition and loads only the chosen arm's files (tests/loader).
     """
-    with pytest.raises(SyntaxError, match="'@include' cannot be conditional"):
-        compile_source("""
-            @if (true) {
-                @include("libc/stdio")
-            }
-        """)
+    from siec.lexer import lex
+    from siec.parser import parse
+
+    program = parse(lex("""
+        @if (true) {
+            @include("libc/stdio");
+        }
+    """))
+    assert program.conds[0].then.includes[0].path == "libc/stdio"

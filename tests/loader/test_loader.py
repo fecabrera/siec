@@ -151,3 +151,107 @@ def test_load_tags_a_parse_error_with_its_file(tmp_path):
     with pytest.raises(SyntaxError) as info:
         load_program([main], [tmp_path / "lib"])
     assert info.value.sie_file == str(dep.resolve())
+
+
+def test_conditional_include_loads_the_chosen_arm(tmp_path):
+    """
+    An '@include' inside an '@if' loads only when its arm is chosen,
+    decided at load time against the target triple.
+    """
+    write(tmp_path / "on_darwin.sie", "fn on_darwin() {}")
+    write(tmp_path / "on_linux.sie", "fn on_linux() {}")
+    main = write(tmp_path / "main.sie", """
+        @if (TARGET_OS == OS_DARWIN) {
+            @include("on_darwin");
+        } @else @if (TARGET_OS == OS_LINUX) {
+            @include("on_linux");
+        }
+        fn main() {}
+    """)
+
+    program = load_program([main], [], "arm64-apple-darwin")
+    assert [fn.name for fn in program.functions] == ["on_darwin", "main"]
+
+    program = load_program([main], [], "x86_64-unknown-linux-gnu")
+    assert [fn.name for fn in program.functions] == ["on_linux", "main"]
+
+
+def test_conditional_include_never_resolves_the_unchosen_arm(tmp_path):
+    """
+    The unchosen arm's include is never resolved, so its file need not
+    even exist, C-header-style.
+    """
+    write(tmp_path / "here.sie", "fn here() {}")
+    main = write(tmp_path / "main.sie", """
+        @if (TARGET_OS == OS_DARWIN) {
+            @include("here");
+        } @else {
+            @include("nowhere/gone");
+        }
+        fn main() {}
+    """)
+
+    program = load_program([main], [], "arm64-apple-darwin")
+    assert [fn.name for fn in program.functions] == ["here", "main"]
+
+
+def test_conditional_include_sees_loaded_constants(tmp_path):
+    """
+    The condition may use '@const' values from the file itself and from
+    files already included, and nested '@if's follow the chosen arms.
+    """
+    write(tmp_path / "config.sie", "@const WITH_EXTRAS = true;")
+    write(tmp_path / "extras.sie", "fn extras() {}")
+    write(tmp_path / "deep.sie", "fn deep() {}")
+    main = write(tmp_path / "main.sie", """
+        @include("config");
+        @const DEPTH = 2;
+
+        @if (WITH_EXTRAS and DEPTH > 1) {
+            @include("extras");
+            @if (DEPTH == 2) {
+                @include("deep");
+            }
+        }
+        fn main() {}
+    """)
+
+    program = load_program([main], [])
+    assert [fn.name for fn in program.functions] == ["extras", "deep", "main"]
+
+
+def test_conditional_include_condition_must_be_loadable(tmp_path):
+    """
+    A condition guarding an '@include' evaluates before the program
+    assembles: a name that is not a loaded constant is an error naming
+    the file and line.
+    """
+    write(tmp_path / "dep.sie", "fn dep() {}")
+    main = write(tmp_path / "main.sie", """
+        @if (MYSTERY == 1) {
+            @include("dep");
+        }
+        fn main() {}
+    """)
+
+    with pytest.raises(TypeError, match="'MYSTERY' is not a constant in view") as info:
+        load_program([main], [])
+    assert info.value.sie_file == str(main.resolve())
+
+
+def test_conditional_include_joins_the_unit(tmp_path):
+    """
+    A conditionally included file is part of the unit and its names come
+    into the includer's view, like any include.
+    """
+    write(tmp_path / "picked.sie", "fn picked() -> i32 { return 3; }")
+    main = write(tmp_path / "main.sie", """
+        @if (true) {
+            @include("picked");
+        }
+        fn main() -> i32 { return picked(); }
+    """)
+
+    program = load_program([main], [])
+    assert str((tmp_path / "picked.sie").resolve()) in program.unit_files
+    assert "picked" in program.visible[str(main.resolve())]

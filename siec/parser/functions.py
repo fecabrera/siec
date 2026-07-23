@@ -43,12 +43,8 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             break
 
         if ts.peek().value == "@" and ts.peek(1).value == "include":
-            # an include joins the program before any condition can be
-            # evaluated, so a conditional one would mislead
-            if not top_level:
-                raise SyntaxError(f"line {ts.peek().line}: an '@include' "
-                                  "cannot be conditional")
-
+            # a conditional include is fine: the loader evaluates the
+            # condition and loads only the chosen branch's files
             program.includes.append(parse_include(ts))
         elif ts.peek().value == "import":
             # like an include, an import joins the program before any
