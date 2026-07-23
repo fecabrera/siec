@@ -1,0 +1,34 @@
+import std.io;
+import { File, FileMode, FileError } from std.fs;
+import { stderr } from stdio;
+
+fn main(args: char*[]) -> i32 {
+    if (args.length != 2) {
+        std.io.println(stderr, "usage: {} file", args[0]);
+        return 1;
+    }
+    
+    let file = File(args[1], FileMode::Read);
+    defer file.destroy();
+    
+    let res = file.open();
+    if (not res.ok) {
+        case (res.error) {
+        when FileError::SystemError:
+            std.io.println(stderr, "System error");
+        when FileError::InvalidMode:
+            std.io.println(stderr, "Invalid mode {}", file.mode);
+        when FileError::NotFound:
+            std.io.println(stderr, "File \"{}\" does not exist", args[1]);
+        when FileError::PermissionError:
+            std.io.println(stderr, "Cannot open \"{}\"", args[1]);
+        when FileError::AlreadyOpen:
+            std.io.println(stderr, "File \"{}\" is already open", args[1]);
+        }
+        return 1;
+    }
+
+    std.io.println("Successfully opened: {}", args[1]);
+    
+    return 0;
+}
