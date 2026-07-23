@@ -46,22 +46,15 @@ siec main.sie --run arg1 arg2
 
 ### Editor support
 
-`sie-lsp` is a language server over the compiler's own front end: it
-compiles the open buffers on each edit - each file as its own unit, the
-way `-c` does - and serves the errors as diagnostics, plus the document
-outline. It installs with the compiler:
+`sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, hover, and go-to-definition. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.
+
+The server installs next to the compiler:
 
 ```
 pip install -e '.[lsp]'
 ```
 
-The `editors/` directory connects it: `editors/vscode/sie` is a VSCode
-extension with syntax highlighting and the client (see its README), and
-`editors/helix/languages.toml` is the block to merge into a Helix
-config. Any LSP-speaking editor works the same way: run `sie-lsp` over
-stdio for `.sie` files. Extra include directories (the compiler's `-I`)
-pass through the initialization options as `includePaths`; a
-workspace's `packages/*/src` trees are found on their own.
+The `editors/` directory connects it to editors: `editors/vscode/sie` is a VSCode extension holding the syntax highlighting and the client (see its README), and `editors/helix/languages.toml` is a block to merge into a Helix configuration. Any editor that speaks LSP works the same way: run `sie-lsp` over stdio for `.sie` files. Extra include directories pass through the initialization options as `includePaths`, like the compiler's `-I`; a workspace's `packages/*/src` trees are found on their own.
 
 ## The language
 

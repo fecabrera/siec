@@ -6,7 +6,8 @@ Syntax highlighting for the Sie programming language: keywords, decorators
 enum members, methods, and `@asm` bodies.
 
 With the `sie-lsp` language server it also serves diagnostics as you
-type and the document outline, compiled by the real compiler front end.
+type, the document outline, hover, and go-to-definition, compiled and
+typed by the real compiler front end.
 
 ## Install
 

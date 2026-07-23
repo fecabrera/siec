@@ -2,8 +2,9 @@
 #
 # Merge this into your Helix `languages.toml` (~/.config/helix/). It gives
 # file-type detection, comment toggling (`gc`), auto-indent, bracket/quote
-# auto-pairs, and the sie-lsp language server: diagnostics as you type and
-# the document outline (`<space>s`).
+# auto-pairs, and the sie-lsp language server: diagnostics as you type,
+# the document outline (`<space>s`), hover (`<space>k`), and
+# go-to-definition (`gd`).
 #
 # `sie-lsp` comes with the compiler: `pip install -e '.[lsp]'`. Point the
 # command at an absolute path when it isn't on Helix's PATH. Extra include
