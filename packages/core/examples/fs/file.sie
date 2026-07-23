@@ -15,7 +15,7 @@ fn main(args: char*[]) -> i32 {
     if (not open_res.ok) {
         case (open_res.error) {
         when OpenError::SystemError:
-            std.io.println(stderr, "System error");
+            std.io.println(stderr, "{}: System error", args[1]);
         when OpenError::AlreadyOpen:
             std.io.println(stderr, "{}: Already open", args[1]);
         when OpenError::InvalidMode:
@@ -34,9 +34,9 @@ fn main(args: char*[]) -> i32 {
     if (not close_res.ok) {
         case (close_res.error) {
         when CloseError::SystemError:
-            std.io.println(stderr, "System error");
+            std.io.println(stderr, "{}: System error", args[1]);
         when CloseError::AlreadyClosed:
-            std.io.println(stderr, "\"{}\" is already closed", args[1]);
+            std.io.println(stderr, "{}: Already closed", args[1]);
         }
     }
 
