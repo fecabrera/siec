@@ -1,6 +1,5 @@
-import { String } from std.collections;
 import std.io;
-import stdio;
+import { String } from std.collections;
 import {
     stderr,
     fopen,
