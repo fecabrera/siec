@@ -2,22 +2,15 @@ import { String } from std.collections;
 import std.io;
 import stdio;
 import {
-    snprintf,
     stderr,
-    fprintf,
     fopen,
     fclose,
 } from stdio;
-import { strlen } from string;
 import {
-    toml_get,
     toml_parse_file,
     toml_free,
-    toml_type,
 } from tomlc17;
 import { Package } from package;
-
-@const MAX_PATH_LEN = 1024;
 
 fn main(args: char*[]) -> i32 {
     let path = String();
