@@ -1,7 +1,7 @@
+import { format } from std;
 import { String } from std.collections;
 import { stdin } from _stdin;
 import { stdout } from _stdout;
-import { format } from _format;
 import { IOWritable } from _ifaces;
 
 
@@ -20,7 +20,7 @@ fn print(stream: &IOWritable, str: const char[], args...) {
     let tmp = format(str, args);
     defer tmp.destroy();
 
-    stream.write(tmp.as_bytes(), tmp.length);
+    stream.write(tmp.as_bytes());
 }
 
 /**
@@ -47,8 +47,7 @@ fn println(stream: &IOWritable, str: const char[], args...) {
     defer tmp.destroy();
     
     tmp.push('\n');
-    
-    stream.write(tmp.as_bytes(), tmp.length);
+    stream.write(tmp.as_bytes());
 }
 
 /**

@@ -1,5 +1,4 @@
 @include("_io/_print")
-@include("_io/_format")
 @include("_io/_ifaces")
 @include("_io/_stdin")
 @include("_io/_stdout")
