@@ -104,11 +104,16 @@ def register_action(gen: CodeGenerator, fn) -> None:
                             f"parameter{'s' if declared != 1 else ''}, "
                             f"its action spells {given}")
 
+        # a name may overload, each signature its own requirement;
+        # respelling one is the error it always was
         key = (fn.receiver, fn.name.partition("::")[2])
-        if key in gen.interface_actions:
+        signature = [p.type for p in fn.params[1:]]
+        overloads = gen.interface_actions.setdefault(key, [])
+        if any([p.type for p in other.params[1:]] == signature
+               for other in overloads):
             raise TypeError(f"action {fn.name!r} is declared more than once")
 
-        gen.interface_actions[key] = fn
+        overloads.append(fn)
 
 
 def canonical_interface(gen: CodeGenerator, spelling: str) -> str:
@@ -195,12 +200,13 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                                     f"{required_type!r}, not {field.type!r}")
 
             # every action, resolvable as a method with the right signature
-            for (action_iface, method), action in list(gen.interface_actions.items()):
+            for (action_iface, method), actions in list(gen.interface_actions.items()):
                 if action_iface != base:
                     continue
 
-                check_action(gen, name, template_base, spelling, method,
-                             action, mapping)
+                for action in actions:
+                    check_action(gen, name, template_base, spelling, method,
+                                 action, mapping)
 
 
 def check_action(gen: CodeGenerator, name: str, template_base: str,

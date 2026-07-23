@@ -65,7 +65,12 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.globals.append(parse_global(ts))
         elif ts.peek().value in ("struct", "union", "interface") or (
                 ts.peek().value == "@" and ts.peek(1).value in ("packed", "align", "volatile")):
-            program.structs.append(parse_struct(ts))
+            struct = parse_struct(ts)
+            program.structs.append(struct)
+
+            # an interface body's actions are the top-level declarations
+            # they spell
+            program.functions.extend(struct.actions)
         elif ts.peek().value == "enum":
             program.enums.append(parse_enum(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "type":
@@ -276,10 +281,14 @@ def placeholders(ts: TokenStream) -> list[str] | None:
     return names
 
 
-def parse_function(ts: TokenStream) -> Function:
+def parse_function(ts: TokenStream, receiver: str | None = None,
+                   receiver_params: list | None = None) -> Function:
     """
     Parse a function declaration or definition, including decorators
     ('@extern', '@inline', '@static') and varargs.
+
+    A receiver given by the caller declares a method of it: an interface
+    body's 'fn m(...)' spells the 'fn I::m(...)' it means.
     """
     line = ts.peek().line
 
@@ -336,8 +345,11 @@ def parse_function(ts: TokenStream) -> Function:
 
     # 'S::m' declares a method: the name canonicalizes to 'S::m', the
     # receiver rides along, and its own '<X, Y>' may follow the method name
-    receiver = receiver_params = type_params = None
-    if ts.peek().syntax == "::":
+    type_params = None
+    if receiver is not None:
+        name = f"{receiver}::{name}"
+        type_params = params_list
+    elif ts.peek().syntax == "::":
         ts.next()
         receiver, receiver_params = name, params_list
         name = f"{receiver}::{ts.expect('ident').value}"

@@ -348,3 +348,134 @@ def test_interface_misuse_is_rejected(compile_source):
         fn Named::greet(self: &Named) -> i32 { return 1; }
         fn main() -> i32 { return 0; }
         """)
+
+
+def test_interface_body_declares_actions(run):
+    """
+    An interface's actions may sit in its body: each 'fn' signature
+    spells the 'fn I::m(...)' it means, '&self' naming the interface.
+    """
+    source = """
+    interface Doubler {
+        scale: i32;
+        fn double(&self, v: i32) -> i32;
+    }
+
+    struct Two: Doubler { scale: i32; }
+    fn Two::double(&self, v: i32) -> i32 { return v * self.scale; }
+
+    fn apply(d: Doubler, v: i32) -> i32 { return d.double(v); }
+
+    fn main() -> i32 {
+        let two: Two;
+        two.scale = 2;
+        return apply(two, 21) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_interface_body_actions_overload(run):
+    """
+    A body may declare a name more than once, each signature its own
+    requirement, satisfied by the implementer's matching overloads.
+    """
+    source = """
+    interface Reader {
+        fn read(&self, buf: &u8[], count: u64) -> i64;
+        fn read(&self, buf: &u8[]) -> i64;
+    }
+
+    struct Mem: Reader { fill: u8; }
+
+    fn Mem::read(&self, buf: &u8[], count: u64) -> i64 {
+        for (let i: u64 = 0; i < count; i += 1) { buf[i] = self.fill; }
+        return count as i64;
+    }
+
+    fn Mem::read(&self, buf: &u8[]) -> i64 {
+        return self.read(buf, buf.length);
+    }
+
+    fn drain(src: Reader, buf: &u8[]) -> i64 { return src.read(buf); }
+
+    fn main() -> i32 {
+        let m: Mem;
+        m.fill = 7;
+
+        let backing: u8[4];
+        if (drain(m, backing) != 4) { return 1; }
+        return backing[3] as i32 - 7;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_interface_body_requires_every_overload(compile_source):
+    """
+    An implementer missing one of an overloaded action's signatures does
+    not conform.
+    """
+    with pytest.raises(TypeError, match="does not implement 'Reader'"):
+        compile_source("""
+        interface Reader {
+            fn read(&self, buf: &u8[], count: u64) -> i64;
+            fn read(&self, buf: &u8[]) -> i64;
+        }
+
+        struct Mem: Reader { fill: u8; }
+        fn Mem::read(&self, buf: &u8[]) -> i64 { return 0; }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_generic_interface_body(run):
+    """
+    A generic interface's body speaks its type parameters, '&self'
+    carrying them.
+    """
+    source = """
+    interface Producer<T> {
+        fn produce(&self) -> T;
+    }
+
+    struct Five: Producer<i64> {}
+    fn Five::produce(&self) -> i64 { return 5; }
+
+    fn take(p: Producer<i64>) -> i64 { return p.produce(); }
+
+    fn main() -> i32 {
+        let five: Five;
+        return (take(five) - 5) as i32;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_struct_body_rejects_methods(compile_source):
+    """
+    Only interfaces declare actions in their bodies; a struct's methods
+    are declared outside it.
+    """
+    with pytest.raises(SyntaxError, match="declared outside its body"):
+        compile_source("""
+        struct S {
+            fn get(&self) -> i32;
+        }
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_interface_body_rejects_respelled_actions(compile_source):
+    """
+    The same signature twice is a redeclaration, not an overload.
+    """
+    with pytest.raises(TypeError, match="declared more than once"):
+        compile_source("""
+        interface Reader {
+            fn read(&self, buf: &u8[]) -> i64;
+            fn read(&self, buf: &u8[]) -> i64;
+        }
+        fn main() -> i32 { return 0; }
+        """)

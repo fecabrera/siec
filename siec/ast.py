@@ -541,6 +541,7 @@ class Struct:
     params: list[str] | None = None  # 'struct S<T, U>': generic type parameters
     is_interface: bool = False  # 'interface I': an abstract type, no storage
     interfaces: list[str] | None = None  # 'struct S: I, J': what it implements
+    actions: list = field(default_factory=list)  # an interface body's 'fn' signatures
     line: int = _line()
     file: str = _file()
 

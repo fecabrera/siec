@@ -96,7 +96,22 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     # 'name: type [= default];' fields until the closing brace
     fields = []
+    actions = []
     while ts.peek().value != "}":
+        # an interface declares its actions in its body: each 'fn'
+        # signature spells the 'fn I::m(...)' it means
+        if ts.peek().value == "fn":
+            if not is_interface:
+                raise SyntaxError(f"line {ts.peek().line}: a struct's methods "
+                                  "are declared outside its body, "
+                                  "'fn S::m(...)'")
+
+            # deferred import: functions and structs are mutually recursive
+            from siec.parser.functions import parse_function
+
+            actions.append(parse_function(ts, name, params))
+            continue
+
         # an unnamed 'struct { ... }' or 'union { ... }' member hoists its
         # fields into this type, C-style; '#n' names its own slot
         if ts.peek().value in ("struct", "union") and ts.peek(1).syntax == "{":
@@ -126,4 +141,4 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     return Struct(name, fields, packed, align, volatile, is_union,
                   params=params, is_interface=is_interface,
-                  interfaces=interfaces, line=line)
+                  interfaces=interfaces, actions=actions, line=line)
