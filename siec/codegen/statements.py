@@ -6,6 +6,7 @@ from siec.ast import (
     Assign,
     Block,
     Break,
+    Call,
     Case,
     Continue,
     Defer,
@@ -24,12 +25,14 @@ from siec.ast import (
     Return,
     TypeOf,
     UnaryOp,
+    Var,
     While,
 )
 from siec.codegen.aliases import expand_alias
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.enums import evaluate_size
 from siec.codegen.errors import source_location
+from siec.codegen.macros import emit_macro_assignment, macro_place
 from siec.codegen.expressions import (
     emit_bool,
     emit_expression,
@@ -212,6 +215,14 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     elif isinstance(stmt, LetTuple):
         emit_let_tuple(gen, builder, stmt, scope)
     elif isinstance(stmt, Assign):
+        # an object-like macro's name assigns through its expansion,
+        # 'errno = EINVAL;'-style; a scope variable shadows it
+        if not stmt.qualified and (place := macro_place(gen, Var(stmt.name), scope)):
+            name, expansion = place
+            emit_macro_assignment(gen, builder, name, expansion, stmt.value,
+                                  stmt.line, scope)
+            return
+
         # store the value into the variable's existing stack slot, typed by
         # the slot; a global's slot is its module-level storage, if this
         # file sees it
@@ -245,6 +256,15 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                                        line=stmt.line), scope)
             return
 
+        # a macro base expands first: 'origin.x = v' writes the member of
+        # the place the expansion names
+        if (place := macro_place(gen, stmt.base, scope)) is not None:
+            name, expansion = place
+            emit_macro_assignment(gen, builder, name,
+                                  Member(expansion, stmt.field), stmt.value,
+                                  stmt.line, scope)
+            return
+
         field_type = member_field(gen, member, scope)[1]
         if is_const(field_type):
             raise TypeError(f"cannot assign to const field {stmt.field!r}")
@@ -255,6 +275,14 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if volatile_chain(gen, member, scope):
             make_volatile(store)
     elif isinstance(stmt, RefAssign):
+        # a function-like macro's call expands first: 'at(a, i) = v'
+        # writes the place the expansion names
+        if (place := macro_place(gen, stmt.target, scope)) is not None:
+            name, expansion = place
+            emit_macro_assignment(gen, builder, name, expansion, stmt.value,
+                                  stmt.line, scope)
+            return
+
         # store through the reference the call returns, typed by the
         # referenced value
         target_type = expr_sie_type(gen, stmt.target, scope)
@@ -265,6 +293,15 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         volatile_store(gen, builder.store(
             emit_coerced(gen, builder, stmt.value, target_type, scope), slot))
     elif isinstance(stmt, IndexAssign):
+        # a macro base expands first: 'row[i] = v' writes the element of
+        # the place the expansion names
+        if (place := macro_place(gen, stmt.base, scope)) is not None:
+            name, expansion = place
+            emit_macro_assignment(gen, builder, name,
+                                  Index(expansion, stmt.index), stmt.value,
+                                  stmt.line, scope)
+            return
+
         # store the value into the element's slot, typed by the element; a
         # write into a '@volatile' struct is a volatile one
         reject_const_base(gen, scope, stmt.base)
@@ -396,6 +433,17 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             flush_defers(gen, builder, gen.defer_frames)
             builder.ret(value)
     elif isinstance(stmt, ExprStmt):
+        # a statement calling a macro splices its block in place; one
+        # without an 'emit' has no value to discard, and is fine here
+        if isinstance(stmt.expr, Call) and stmt.expr.name in gen.macros:
+            from siec.codegen.macros import macro_expansion, macro_view
+
+            expansion = macro_expansion(gen, stmt.expr)
+            if isinstance(expansion, Block):
+                with macro_view(gen, stmt.expr.name):
+                    emit_block(gen, builder, expansion.body, dict(scope))
+                return
+
         value = emit_expression(gen, builder, stmt.expr, None, scope)
 
         # a statement calling an '@noreturn' function ends its path: the

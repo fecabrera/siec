@@ -19,6 +19,8 @@ def resolve_conditionals(gen: CodeGenerator, program: Program) -> None:
     """
     for cond in program.conds:
         with source_location(line=cond.line, file=cond.file):
+            # the condition's names resolve in its own file's view
+            gen.current_file = cond.file
             branch = cond.then if evaluate(gen, cond.condition) else cond.orelse
 
         if branch is None:

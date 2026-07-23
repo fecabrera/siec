@@ -201,6 +201,9 @@ class CodeGenerator:
         # the registered '@const' declarations by name, substituted at their uses
         self.constants: dict = {}
 
+        # the registered '@const' macros by name, expanded at their calls
+        self.macros: dict = {}
+
         # the registered enums by name, their members evaluated to integers
         self.enums: dict[str, EnumInfo] = {}
 
@@ -234,6 +237,14 @@ class CodeGenerator:
         self.visible: dict[str, set] = {}
         self.builtin_names: set = set()
 
+        # the loader's finer-grained view, resolving WHICH declaration a
+        # name in view means when modules collide: each file with its
+        # includes, each member import's module, and the entry sources;
+        # all empty for a bare program, which is one namespace
+        self.include_closure: dict[str, set] = {}
+        self.member_targets: dict[tuple[str, str], tuple] = {}
+        self.entry_files: list = []
+
         # under separate compilation, the files whose definitions this
         # unit owns - the sources and their includes; None (a whole-program
         # build) defines every file's
@@ -261,6 +272,15 @@ class CodeGenerator:
         bindings: the longest bound prefix claims the chain, its last name
         being the member; None when no prefix is bound.
         """
+        found = self.resolve_member(names)
+        return found[0] if found is not None else None
+
+    def resolve_member(self, names: list[str]) -> tuple[str, str] | None:
+        """
+        Like resolve_qualified, but paired with the module file the
+        chain reached, for lookups that must know WHICH module's
+        declaration a member names.
+        """
         for split in range(len(names) - 1, 0, -1):
             prefix = ".".join(names[:split])
             target = self.module_bindings.get((self.current_file, prefix))
@@ -276,7 +296,7 @@ class CodeGenerator:
             if exports is not None and member not in exports:
                 raise TypeError(f"module {prefix!r} has no member {member!r}")
 
-            return self.symbol_names.get(member, member)
+            return self.symbol_names.get(member, member), target
 
         return None
 
@@ -528,8 +548,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     gen.module_bindings = program.module_bindings
     gen.member_bindings = program.member_bindings
+    gen.member_targets = program.member_targets
     gen.module_exports = program.module_exports
     gen.visible = program.visible
+    gen.include_closure = program.include_closure
+    gen.entry_files = program.entry_files
     gen.builtin_names = set(BUILTIN_CONSTANTS)
 
     if not define_imports:

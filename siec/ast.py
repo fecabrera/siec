@@ -588,10 +588,18 @@ class Const:
     """
     An '@const' declaration: a named compile-time constant expression,
     substituted at its uses, with an optional type annotation.
+
+    With 'is_macro', an '@macro' instead: an expression or block
+    substituted at each use, parameters standing for the argument
+    expressions. 'params' of None marks an object-like macro, expanding
+    on its bare name; a list, function-like, expanding on its call.
     """
     name: str
     type: str | None
-    value: Expr
+    value: Expr | None
+    params: list[str] | None = None
+    body: list | None = None
+    is_macro: bool = False
     line: int = _line()
     file: str = _file()
 
@@ -651,8 +659,11 @@ class Program:
     # 'import's bound, and what each module offers
     module_bindings: dict = field(default_factory=dict)  # (file, prefix) -> module file
     member_bindings: dict = field(default_factory=dict)  # (file, name) -> member name
+    member_targets: dict = field(default_factory=dict)   # (file, name) -> (module file, member)
     module_exports: dict = field(default_factory=dict)   # module file -> set of names
     visible: dict = field(default_factory=dict)          # file -> unqualified names in view
+    include_closure: dict = field(default_factory=dict)  # file -> itself and its includes
+    entry_files: list = field(default_factory=list)      # the command-line sources
     unit_files: set | None = None                        # the sources and their includes
 
 

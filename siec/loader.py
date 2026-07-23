@@ -122,6 +122,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
     module_bindings = {}
     member_bindings = {}
+    member_targets = {}   # (file, binding) -> (module file, member name)
     exported = {}         # file -> its own exportable names
     declared_names = {}   # file -> every name it declares, statics included
     include_targets = {}  # file -> the files it includes
@@ -255,7 +256,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
                 return IntLiteral(builtin)
 
             for const in (*program.consts, *branch_consts, *consts):
-                if const.name == name:
+                if const.name == name and not const.is_macro:
                     return const.value
 
             return None
@@ -305,6 +306,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
                 pending_members.append((str(file), imp, target))
                 for name, binding in imp.members:
                     member_bindings[(str(file), binding)] = name
+                    member_targets[(str(file), binding)] = (target, name)
                     member_names.setdefault(str(file), set()).add(binding)
             else:
                 module_bindings[(str(file), imp.alias or imp.path)] = target
@@ -355,10 +357,34 @@ def load_program(sources: list[Path], include_paths: list[Path],
             unit_files.add(file)
             stack.extend(include_targets.get(file, ()))
 
+    # each file with itself and its includes, transitively: the files
+    # whose declarations it uses as its own
+    include_closure = {}
+
+    def close(file: str, active: frozenset) -> set:
+        if file in include_closure:
+            return include_closure[file]
+
+        if file in active:
+            return {file}
+
+        files = {file}
+        for target in include_targets.get(file, ()):
+            files |= close(target, active | {file})
+
+        include_closure[file] = files
+        return files
+
+    for file in declared_names:
+        close(file, frozenset())
+
     merged = Program([], functions, structs, consts, enums, globals_, aliases, conds)
     merged.module_bindings = module_bindings
     merged.member_bindings = member_bindings
+    merged.member_targets = member_targets
     merged.module_exports = module_exports
     merged.visible = visible
+    merged.include_closure = include_closure
+    merged.entry_files = [str(source.resolve()) for source in sources]
     merged.unit_files = unit_files
     return merged

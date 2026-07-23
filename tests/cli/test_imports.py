@@ -540,3 +540,73 @@ def test_separately_compiled_units_link_and_run(tmp_path, monkeypatch):
 
     subprocess.run(["cc", "part.o", "main.o", "-o", "app"], check=True)
     assert subprocess.run(["./app"]).returncode == 42
+
+
+def test_modules_keep_their_own_constants(tmp_path, monkeypatch):
+    """
+    Two modules may each declare the same '@const' name - stdio and
+    unistd both keep a SEEK_SET - resolved by each user's view: its own
+    module's qualified, a member import's unqualified.
+    """
+    (tmp_path / "stdio.sie").write_text("@const SEEK_SET = 10;\n")
+    (tmp_path / "unistd.sie").write_text("""
+        @const SEEK_SET = 20;
+
+        fn own() -> i32 {
+            return SEEK_SET;    // its own file's, 20
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import stdio;
+        import unistd;
+        import { SEEK_SET } from stdio;
+        import { own } from unistd;
+
+        fn main() -> i32 {
+            if (stdio.SEEK_SET != 10) { return 1; }
+            if (unistd.SEEK_SET != 20) { return 2; }
+            if (SEEK_SET != 10) { return 3; }     // the member import's
+            if (own() != 20) { return 4; }
+            return 0;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0
+
+
+def test_macro_names_resolve_in_their_own_module(tmp_path, monkeypatch):
+    """
+    An imported macro's expansion resolves its names where the macro was
+    written: 'errno'-style, the location function stays the module's
+    private business.
+    """
+    (tmp_path / "err.sie").write_text("""
+        @static let slot: i32 = 0;
+
+        fn location() -> i32* {
+            return &slot;
+        }
+
+        @macro errno = *location();
+
+        fn set_errno(value: i32) {
+            *location() = value;
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { errno, set_errno } from err;
+
+        fn main() -> i32 {
+            set_errno(42);
+            let seen = errno;      // bare object-like use, inferred i32
+            return seen - 42;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0

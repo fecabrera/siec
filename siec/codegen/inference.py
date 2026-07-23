@@ -9,6 +9,8 @@ from llvmlite import ir
 from siec.ast import (
     AsmBlock,
     BinaryOp,
+    Block,
+    BlockExpr,
     BoolLiteral,
     Call,
     Cast,
@@ -111,10 +113,16 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         # a constant carries its annotation; unannotated, it adapts like
         # its value expression written in place
-        const = gen.constants.get(expr.name)
+        from siec.codegen.constants import find_constant
+
+        const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
         if const is not None:
             return const.type if const.type is not None else expr_sie_type(
                 gen, const.value, scope)
+
+        # a bare object-like macro reads as its expansion, C's 'errno'-style
+        if expr.name in gen.macros and gen.macros[expr.name].params is None:
+            return expr_sie_type(gen, Call(expr.name, []), scope)
 
         # a global carries its declared type
         symbol = gen.resolve_symbol(expr.name)
@@ -146,6 +154,22 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         return expr_sie_type(gen, Call(symbol, args, expr.type_args), scope)
 
     if isinstance(expr, Call):
+        # a macro call types as its expansion: the substituted expression,
+        # or a block's 'emit' value, resolved in the macro's file's view
+        if expr.name in gen.macros:
+            from siec.codegen.macros import first_emit, macro_expansion, macro_view
+
+            expansion = macro_expansion(gen, expr)
+            if isinstance(expansion, Block):
+                return None
+
+            with macro_view(gen, expr.name):
+                if isinstance(expansion, BlockExpr):
+                    return expr_sie_type(gen, first_emit(expansion.body).value,
+                                         scope)
+
+                return expr_sie_type(gen, expansion, scope)
+
         # a call through a function reference yields the reference's return
         # type, a '&T' return reading as the T it aliases
         if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
@@ -426,6 +450,25 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         return declared
 
+    # a macro use infers as its expansion, literal defaults included;
+    # a bare object-like macro reads as its call
+    if (isinstance(expr, Var) and expr.name in gen.macros
+            and gen.macros[expr.name].params is None):
+        expr = Call(expr.name, [])
+
+    if isinstance(expr, Call) and expr.name in gen.macros:
+        from siec.codegen.macros import first_emit, macro_expansion, macro_view
+
+        expansion = macro_expansion(gen, expr)
+        if isinstance(expansion, Block):
+            return None
+
+        with macro_view(gen, expr.name):
+            if isinstance(expansion, BlockExpr):
+                return infer_type(gen, first_emit(expansion.body).value, scope)
+
+            return infer_type(gen, expansion, scope)
+
     # literals default like they do in any untyped context
     if isinstance(expr, IntLiteral):
         return "i32"
@@ -490,6 +533,14 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
             return TypeError(f"receiver has no method {expr.method!r}")
 
         return TypeError(f"method {expr.method!r} returns no value")
+
+    if isinstance(expr, Call) and expr.name in gen.macros:
+        if gen.macros[expr.name].body is not None:
+            return TypeError(f"macro {expr.name!r} does not 'emit' a value")
+
+        from siec.codegen.macros import macro_expansion
+
+        return untyped_reason(gen, macro_expansion(gen, expr), scope)
 
     if isinstance(expr, Call) and expr.name not in scope:
         def generic_reason(symbol):
@@ -582,8 +633,15 @@ def fold_qualified(gen: CodeGenerator, expr: Expr, scope: dict):
     names.append(node.name)
     names.reverse()
 
-    symbol = gen.resolve_qualified(names)
-    return Var(symbol, qualified=True) if symbol is not None else None
+    found = gen.resolve_member(names)
+    if found is None:
+        return None
+
+    # the module the chain reached rides along, resolving WHICH module's
+    # constant the member names when several share it
+    var = Var(found[0], qualified=True)
+    var.module_file = found[1]
+    return var
 
 
 def enum_backing(gen: CodeGenerator, name: str | None) -> str | None:

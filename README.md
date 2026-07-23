@@ -152,14 +152,7 @@ Constants are compile-time constant expressions declared through `@const`. Unlik
 @const name = <value>; // type inferred
 ```
 
-`@const` also declares compile-time macros, taking parameters between `(...)`. A call to `name` substitutes it with the block, `emit` optional since the macro doesn't have to produce a value:
-
-```
-@const name(param1, param2) {
-    // ...
-    emit <expr>; // optional
-}
-```
+Each module keeps its own constants: two modules may both declare a `SEEK_SET`, like stdio and unistd do. A use resolves to the nearest declaration its file's view reaches: the file's own (or an include's) first, then a member import's, then the compilation unit's. Two equally near declarations are ambiguous and rejected; the qualified spelling names one module's.
 
 #### Target constants
 
@@ -187,6 +180,48 @@ case (TARGET_OS) {
 ```
 
 They behave like any other `@const` (usable in constant expressions, case arms, and array sizes), except that redeclaring one is an error.
+
+### Macros
+
+Macros are compile-time substitutions declared through `@macro`, similar to a type-checked version of C's `#define`. One without a parameter list is object-like and expands wherever its bare name appears; one with a list expands at each call, the argument expressions standing in for the parameters:
+
+```
+@macro name = <expr>;                 // a bare `name` expands
+@macro name(param1, param2) = <expr>; // `name(a, b)` expands
+```
+
+This is enough for C's `errno`, an expression reading a per-thread location at every use:
+
+```
+@macro errno = *errno_location();
+
+let e = errno; // reads through the call
+```
+
+Either kind may hold a [block](#blocks) instead of an expression, producing the use's value through `emit`. Without one the macro yields no value and stands only as a statement, its block spliced in place:
+
+```
+@macro name(param1, param2) {
+    // ...
+    emit <expr>; // optional
+}
+```
+
+Substitution passes expressions, not values, the way C's does: an argument named twice in the body evaluates twice, and a parameter the body assigns to writes through the caller's argument, which must then be assignable (a variable, member, or element):
+
+```
+@macro swap(a, b) {
+    let t = a;
+    a = b;
+    b = t;
+}
+
+swap(p.x, p.y); // writes through the members
+```
+
+A macro whose expansion is an assignable place takes assignments the same way: `errno = EINVAL;` stores through `*errno_location()`, compound operators and the place's members or elements included. One whose expansion is no lvalue is rejected.
+
+Unlike C's, the expansion is checked: a value macro's type follows from what it emits (each `emit` coercing to a typed context's target), a call must pass an argument per parameter, a macro expanding into itself is an error, and the block's locals stay scoped to the expansion. The names a macro's body uses resolve where the macro was written, so an imported `errno` reaches its module's private `errno_location`; the argument expressions are spliced in as written, so they should hold to the caller's own scope.
 
 ### Conditional compilation
 
@@ -224,7 +259,7 @@ The condition is a constant expression: literals, `@const` names, enum members, 
 
 A branch may hold any top-level declaration (functions, structs, enums, globals, constants, type aliases) including further `@if` blocks, and a constant declared in a chosen branch is visible to the conditions after it.
 
-An `@include` may also sit in a branch: only the chosen arm's files load, and an unchosen arm's include is never even resolved, so its file need not exist on this platform, C-header-style:
+An `@include` may also sit in a branch: only the chosen arm's files load, and an unchosen arm's include is never resolved, so its file need not exist on this platform, C-header-style:
 
 ```
 @if (TARGET_OS == OS_DARWIN) {
@@ -941,7 +976,7 @@ Functions can be decorated with `@noreturn` to declare that they never give cont
 }
 ```
 
-A statement calling an `@noreturn` function ends its path, so it satisfies a required return the same way a `return` would — in a whole function or a single branch:
+A statement calling an `@noreturn` function ends its path, so it satisfies a required return the same way a `return` would, in a whole function or a single branch:
 
 ```
 fn checked(x: i32) -> i32 {

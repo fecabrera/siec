@@ -2,7 +2,7 @@
 
 from llvmlite import ir
 
-from siec.ast import Call, Expr
+from siec.ast import Block, BlockExpr, Call, Expr
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
@@ -14,6 +14,7 @@ from siec.codegen.types import (
     fn_type_parts,
     is_const,
     is_reference,
+    resolve_type,
     strip_const,
     strip_reference,
 )
@@ -34,6 +35,28 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # a typed context (a coercion target) may drive a generic callee's
     # type arguments; captured before any receiver rewrite drops it
     expected = getattr(call, "expected_type", None)
+
+    # a macro call expands in place instead of resolving a function; in
+    # an untyped context its 'emit' value types the block
+    if call.name in gen.macros:
+        from siec.codegen.expressions import emit_block_expr, emit_expression
+        from siec.codegen.inference import infer_type
+        from siec.codegen.macros import macro_expansion, macro_view
+
+        expansion = macro_expansion(gen, call)
+        if isinstance(expansion, Block):
+            raise TypeError(f"macro {call.name!r} does not 'emit' a value")
+
+        with macro_view(gen, call.name):
+            if isinstance(expansion, BlockExpr):
+                emitted = infer_type(gen, call, scope)
+                target = (resolve_type(emitted, gen.structs)
+                          if emitted is not None else None)
+                return emit_block_expr(gen, builder, expansion, target, scope,
+                                       emitted)
+
+            # an expression macro substitutes its expression in place
+            return emit_expression(gen, builder, expansion, None, scope)
 
     # the builtin 'enumerate(x)' resolves to its '__enumerate' instance
     if call.name == "enumerate":

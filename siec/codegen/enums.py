@@ -156,7 +156,9 @@ def evaluate(gen: CodeGenerator, expr) -> int:
         return fnv1a(typename_of(gen, expr.name, {}))
 
     if isinstance(expr, Var):
-        const = gen.constants.get(expr.name)
+        from siec.codegen.constants import find_constant
+
+        const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
         if const is None:
             raise TypeError(f"{expr.name!r} is not a compile-time constant")
 

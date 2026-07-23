@@ -9,7 +9,7 @@ from siec.ast import (
     Program,
     TypeAlias,
 )
-from siec.parser.constants import parse_const
+from siec.parser.constants import parse_const, parse_macro
 from siec.parser.enums import parse_enum
 from siec.parser.expressions import parse_clobbers, parse_expression
 from siec.parser.includes import parse_include
@@ -58,6 +58,8 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.conds.append(parse_cond(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "const":
             program.consts.append(parse_const(ts))
+        elif ts.peek().value == "@" and ts.peek(1).value == "macro":
+            program.consts.append(parse_macro(ts))
         elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static", "symbol")
               and declares_global(ts)):
             program.globals.append(parse_global(ts))

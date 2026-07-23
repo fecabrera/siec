@@ -5,6 +5,7 @@ from llvmlite import ir
 from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
+    Block,
     BlockExpr,
     Call,
     Cast,
@@ -233,6 +234,30 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         emit_block_expr,
         emit_expression,
     )
+
+    # a macro use is its expansion: an object-like one's bare name reads
+    # as a call; an expression substitutes and coerces in place, and a
+    # block's each 'emit' coerces to the target below
+    if (isinstance(expr, Var) and expr.name in gen.macros
+            and gen.macros[expr.name].params is None):
+        expr = Call(expr.name, [])
+
+    if isinstance(expr, Call) and expr.name in gen.macros:
+        from siec.codegen.macros import macro_expansion, macro_view
+
+        expansion = macro_expansion(gen, expr)
+        if isinstance(expansion, Block):
+            raise TypeError(f"macro {expr.name!r} does not 'emit' a value")
+
+        with macro_view(gen, expr.name):
+            if isinstance(expansion, BlockExpr):
+                stripped = strip_const(target_name)
+                target = (resolve_type(stripped, gen.structs)
+                          if stripped is not None else None)
+                return emit_block_expr(gen, builder, expansion, target, scope,
+                                       stripped)
+
+            return emit_coerced(gen, builder, expansion, target_name, scope)
 
     # the target may drive a generic callee's type arguments where its
     # own cannot: 'let r: Result<i32, u8> = Ok(5);' binds E from the target
