@@ -691,3 +691,90 @@ def test_symbol_bindings_stay_in_their_module(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 0
+
+
+def test_imported_names_are_not_reexported(tmp_path, monkeypatch, capsys):
+    """
+    A module offers only its own declarations: what it imports stays the
+    imported module's, unreachable through the middleman qualified.
+    """
+    (tmp_path / "a.sie").write_text("""
+        struct S { x: i32; }
+        fn func() -> i32 { return 1; }
+    """)
+    (tmp_path / "b.sie").write_text("import a;\n")
+    src = tmp_path / "c.sie"
+    src.write_text("""
+        import b;
+
+        fn main() -> i32 { return b.func(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "module 'b' has no member 'func'" in capsys.readouterr().err
+
+
+def test_imported_types_are_not_reexported(tmp_path, monkeypatch, capsys):
+    """
+    Types follow the same rule: an imported struct does not reach through
+    the importing module's name.
+    """
+    (tmp_path / "a.sie").write_text("struct S { x: i32; }\n")
+    (tmp_path / "b.sie").write_text("import a;\n")
+    src = tmp_path / "c.sie"
+    src.write_text("""
+        import b;
+
+        fn main() -> i32 {
+            let var: b.S;
+            return var.x;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "module 'b' has no member 'S'" in capsys.readouterr().err
+
+
+def test_member_imports_do_not_reach_through_imports(tmp_path, monkeypatch, capsys):
+    """
+    'import { f } from b;' fails when b only imports f's module itself.
+    """
+    (tmp_path / "a.sie").write_text("fn func() -> i32 { return 1; }\n")
+    (tmp_path / "b.sie").write_text("import a;\n")
+    src = tmp_path / "c.sie"
+    src.write_text("""
+        import { func } from b;
+
+        fn main() -> i32 { return func(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "module 'b' has no member 'func'" in capsys.readouterr().err
+
+
+def test_included_names_reexport_through_imports(tmp_path, monkeypatch):
+    """
+    '@include' is textual, so an including module re-offers what it
+    pulled in: the include is the way to compose a module's surface.
+    """
+    (tmp_path / "a.sie").write_text("""
+        struct S { x: i32; }
+        fn func() -> i32 { return 40; }
+    """)
+    (tmp_path / "b.sie").write_text('@include("a")\n')
+    src = tmp_path / "c.sie"
+    src.write_text("""
+        import b;
+
+        fn main() -> i32 {
+            let var: b.S;
+            var.x = 2;
+            return b.func() + var.x;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

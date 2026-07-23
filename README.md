@@ -91,7 +91,7 @@ import module.submodule as sub;
 
 Every file is a module: `import a.b` names the file `a/b.sie`, searched for in the importing file's directory first, then the working directory, and finally the include path. Each file loads once however many times it's imported, so import cycles are fine.
 
-A module offers every one of its top-level declarations except its `@static` ones, which stay its own; importing a name it doesn't offer is an error. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
+A module offers every one of its top-level declarations except its `@static` ones, which stay its own; importing a name it doesn't offer is an error. What it imports is not re-offered: when `b` imports `a`, `b.func` does not name `a`'s function, and `import { func } from b` fails the same way. Only `@include` composes a module's surface, being textual: an including module offers what it pulled in as its own. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
 
 An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
 
