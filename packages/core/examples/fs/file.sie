@@ -1,5 +1,5 @@
 import std.io;
-import { File, FileMode, FileError } from std.fs;
+import { File, FileMode, FileOpenError, FileCloseError } from std.fs;
 import { stderr } from stdio;
 
 fn main(args: char*[]) -> i32 {
@@ -11,24 +11,36 @@ fn main(args: char*[]) -> i32 {
     let file = File(args[1], FileMode::Read);
     defer file.destroy();
     
-    let res = file.open();
-    if (not res.ok) {
-        case (res.error) {
-        when FileError::SystemError:
+    let open_res = file.open();
+    if (not open_res.ok) {
+        case (open_res.error) {
+        when FileOpenError::SystemError:
             std.io.println(stderr, "System error");
-        when FileError::InvalidMode:
+        when FileOpenError::InvalidMode:
             std.io.println(stderr, "Invalid mode {}", file.mode);
-        when FileError::NotFound:
-            std.io.println(stderr, "File \"{}\" does not exist", args[1]);
-        when FileError::PermissionError:
+        when FileOpenError::NotFound:
+            std.io.println(stderr, "\"{}\" does not exist", args[1]);
+        when FileOpenError::PermissionError:
             std.io.println(stderr, "Cannot open \"{}\"", args[1]);
-        when FileError::AlreadyOpen:
-            std.io.println(stderr, "File \"{}\" is already open", args[1]);
+        when FileOpenError::AlreadyOpen:
+            std.io.println(stderr, "\"{}\" is already open", args[1]);
         }
         return 1;
     }
-
-    std.io.println("Successfully opened: {}", args[1]);
     
+    std.io.println("Opened \"{}\"", args[1]);
+    
+    let close_res = file.close();
+    if (not close_res.ok) {
+        case (close_res.error) {
+        when FileCloseError::SystemError:
+            std.io.println(stderr, "System error");
+        when FileCloseError::AlreadyClosed:
+            std.io.println(stderr, "\"{}\" is already closed", args[1]);
+        }
+    }
+
+    std.io.println("Closed \"{}\"", args[1]);
+
     return 0;
 }

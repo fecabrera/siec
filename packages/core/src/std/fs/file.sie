@@ -12,12 +12,16 @@ enum FileMode: i32 {
     Create      = 8,
 }
 
-enum FileError {
+enum FileOpenError {
     SystemError,
+    AlreadyOpen,
     InvalidMode,
     NotFound,
     PermissionError,
-    AlreadyOpen,
+}
+
+enum FileCloseError {
+    SystemError,
     AlreadyClosed,
 }
 
@@ -42,9 +46,9 @@ fn File::destroy(&self) {
     }
 }
 
-fn File::open(&self) -> Result<FileError> {
-    if (self.open) return Error(FileError::AlreadyOpen);
-    if (self.mode == FileMode::None) return Error(FileError::InvalidMode);
+fn File::open(&self) -> Result<FileOpenError> {
+    if (self.open) return Error(FileOpenError::AlreadyOpen);
+    if (self.mode == FileMode::None) return Error(FileOpenError::InvalidMode);
     
     let mode: i32 = 0;
     
@@ -60,11 +64,11 @@ fn File::open(&self) -> Result<FileError> {
         let errsv = errno();
         case (errsv) {
         when errno.ENOENT:
-            return Error(FileError::NotFound);
+            return Error(FileOpenError::NotFound);
         when errno.EACCES:
-            return Error(FileError::PermissionError);
+            return Error(FileOpenError::PermissionError);
         }
-        return Error(FileError::SystemError);
+        return Error(FileOpenError::SystemError);
     }
     
     self.fd = fd;
@@ -73,11 +77,11 @@ fn File::open(&self) -> Result<FileError> {
     return Ok();
 }
 
-fn File::close(&self) -> Result<FileError> {
-    if (not self.open) return Error(FileError::AlreadyClosed);
+fn File::close(&self) -> Result<FileCloseError> {
+    if (not self.open) return Error(FileCloseError::AlreadyClosed);
     
     let res = unistd.close(self.fd);
-    if (res < 0) return Error(FileError::SystemError);
+    if (res < 0) return Error(FileCloseError::SystemError);
 
     self.fd = -1;
     self.open = false;
