@@ -5,12 +5,33 @@ Syntax highlighting for the Sie programming language: keywords, decorators
 `Ok`, `Error`, the iteration interfaces), strings with escapes, numbers,
 enum members, methods, and `@asm` bodies.
 
+With the `sie-lsp` language server it also serves diagnostics as you
+type and the document outline, compiled by the real compiler front end.
+
 ## Install
 
-Copy or link this folder into VS Code's extension directory and reload:
+Install the server next to the compiler:
 
 ```
+pip install -e '.[lsp]'
+```
+
+Then install the client's one dependency, and copy or link this folder
+into VS Code's extension directory:
+
+```
+npm install
 ln -s "$(pwd)" ~/.vscode/extensions/sie-lang
 ```
 
-Files ending in `.sie` then highlight automatically.
+Reload VS Code and open a `.sie` file. (Packaging a `.vsix` with
+`vsce package` works too, once `npm install` has run.)
+
+## Settings
+
+- `sie.serverPath` — command that launches the server (default
+  `sie-lsp`); point it at an absolute path (a virtualenv's, say) when
+  it isn't on VS Code's PATH.
+- `sie.includePaths` — extra include directories for analysis, like the
+  compiler's `-I`. A workspace's `packages/*/src` trees are found on
+  their own.

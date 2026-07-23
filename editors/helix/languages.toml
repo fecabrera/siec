@@ -1,0 +1,26 @@
+# Helix language configuration for Sie (.sie files).
+#
+# Merge this into your Helix `languages.toml` (~/.config/helix/). It gives
+# file-type detection, comment toggling (`gc`), auto-indent, bracket/quote
+# auto-pairs, and the sie-lsp language server: diagnostics as you type and
+# the document outline (`<space>s`).
+#
+# `sie-lsp` comes with the compiler: `pip install -e '.[lsp]'`. Point the
+# command at an absolute path when it isn't on Helix's PATH. Extra include
+# directories (the compiler's -I) go in `config.includePaths`; a
+# workspace's `packages/*/src` trees are found on their own.
+
+[language-server.sie-lsp]
+command = "sie-lsp"
+config = { includePaths = [] }
+
+[[language]]
+name = "sie"
+scope = "source.sie"
+injection-regex = "sie"
+file-types = ["sie"]
+comment-tokens = ["//"]
+block-comment-tokens = { start = "/*", end = "*/" }
+indent = { tab-width = 4, unit = "    " }
+auto-pairs = { "(" = ")", "{" = "}", "[" = "]", '"' = '"', "'" = "'" }
+language-servers = ["sie-lsp"]

@@ -1,11 +1,11 @@
 {
     "name": "sie-lang",
     "displayName": "Sie Language",
-    "description": "Syntax highlighting for the Sie programming language",
+    "description": "Sie language support: syntax highlighting and the sie-lsp language server",
     "version": "0.1.0",
     "publisher": "sielang",
     "engines": {
-        "vscode": "^1.60.0"
+        "vscode": "^1.82.0"
     },
     "categories": [
         "Programming Languages"
@@ -30,6 +30,31 @@
                 "scopeName": "source.sie",
                 "path": "./syntaxes/sie.tmLanguage.json"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "Sie",
+            "properties": {
+                "sie.serverPath": {
+                    "type": "string",
+                    "default": "sie-lsp",
+                    "description": "Command that launches the Sie language server."
+                },
+                "sie.includePaths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "description": "Extra include directories for analysis, like the compiler's -I."
+                }
+            }
+        }
+    },
+    "main": "./extension.js",
+    "activationEvents": [
+        "onLanguage:sie"
+    ],
+    "dependencies": {
+        "vscode-languageclient": "^9.0.1"
     }
 }

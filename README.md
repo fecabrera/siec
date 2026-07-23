@@ -44,6 +44,25 @@ siec main.sie libfoo.a -o main
 siec main.sie --run arg1 arg2
 ```
 
+### Editor support
+
+`sie-lsp` is a language server over the compiler's own front end: it
+compiles the open buffers on each edit - each file as its own unit, the
+way `-c` does - and serves the errors as diagnostics, plus the document
+outline. It installs with the compiler:
+
+```
+pip install -e '.[lsp]'
+```
+
+The `editors/` directory connects it: `editors/vscode/sie` is a VSCode
+extension with syntax highlighting and the client (see its README), and
+`editors/helix/languages.toml` is the block to merge into a Helix
+config. Any LSP-speaking editor works the same way: run `sie-lsp` over
+stdio for `.sie` files. Extra include directories (the compiler's `-I`)
+pass through the initialization options as `includePaths`; a
+workspace's `packages/*/src` trees are found on their own.
+
 ## The language
 
 ### Imports
