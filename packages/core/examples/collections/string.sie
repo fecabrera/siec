@@ -2,20 +2,45 @@ import std.io;
 import { String } from std.collections;
 
 fn main() -> i32 {
+    // create an empty string
     let str1 = String();
     defer str1.destroy();
+
+    // append a string literal
     str1.append("hello");
+
+    // print str1
     std.io.println(str1);
     
+    // create a string from another
     let str2 = String(str1);
     defer str2.destroy();
+    
+    // push a character literal
     str2.push(' ');
+    
+    // append a string literal
     str2.append("world");
+    
+    // print str2
     std.io.println(str2);
     
+    // create a string from a literal
     let str3 = String("hello world");
     defer str3.destroy();
+    
+    // print str3
     std.io.println(str3);
+
+    // create an empty string
+    let str4 = String();
+    defer str4.destroy();
+
+    // append a string
+    str4.append(str3);
+
+    // print str4
+    std.io.println(str4);
 
     return 0;
 }
