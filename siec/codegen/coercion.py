@@ -152,6 +152,13 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
                 and strip_const(operand_name) == "opaque*"):
             return builder.bitcast(value, target_type)
 
+        # any pointer casts to any other explicitly, C-style: the 'as'
+        # is the reinterpretation
+        if (isinstance(target_type, ir.PointerType)
+                and strip_const(operand_name or "").endswith("*")
+                and isinstance(value.type, ir.PointerType)):
+            return builder.bitcast(value, target_type)
+
         # 'i8[]'/'u8[]' and 'char[]' cast into each other, the length
         # adjusting for the null terminator a char[] excludes; the
         # underlying pointer is assumed null-terminated

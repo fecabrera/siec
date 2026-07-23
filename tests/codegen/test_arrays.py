@@ -478,9 +478,9 @@ def test_opaque_casts_to_a_typed_pointer(env):
     assert value.type == ir.PointerType(ir.IntType(32))
 
 
-def test_typed_pointer_does_not_cast_to_another_typed_pointer(env):
+def test_typed_pointer_casts_to_another_typed_pointer(env):
     """
-    Casting between two typed pointers is still rejected; only 'opaque*' converts.
+    An explicit 'as' reinterprets one typed pointer as another, C-style.
     """
     from siec.ast import Cast
     from siec.codegen.coercion import emit_cast
@@ -489,5 +489,5 @@ def test_typed_pointer_does_not_cast_to_another_typed_pointer(env):
     slot = builder.alloca(ir.PointerType(ir.IntType(32)), name="p")
     scope = {"p": Variable(slot, "i32*")}
 
-    with pytest.raises(TypeError, match="cannot cast"):
-        emit_cast(gen, builder, Cast(Var("p"), "i64*"), scope)
+    value = emit_cast(gen, builder, Cast(Var("p"), "i64*"), scope)
+    assert value.type == ir.PointerType(ir.IntType(64))

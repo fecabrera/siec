@@ -111,3 +111,41 @@ def test_non_numeric_casts_are_errors(compile_source, decl):
     """
     with pytest.raises(TypeError, match="cannot cast"):
         compile_source(f"fn main() -> i32 {{ {decl} return 0; }}")
+
+
+def test_pointer_casts_between_pointer_types(run):
+    """
+    An explicit 'as' reinterprets any pointer as any other, C-style:
+    'char*' to 'u8*', a struct pointer to bytes, and back.
+    """
+    source = """
+    struct Pair { a: u8; b: u8; }
+
+    fn main() -> i32 {
+        let text: char[] = "*";           // '*' is byte 42
+        let bytes: u8* = text.data as u8*;
+        if (bytes[0] != 42) { return 1; }
+
+        let p: Pair = { 40, 2 };
+        let raw = &p as Pair* as u8*;
+        if (raw[0] + raw[1] != 42) { return 2; }
+
+        let back = raw as Pair*;
+        return (back[0].a + back[0].b) as i32 - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_pointer_casts_keep_const(compile_source):
+    """
+    A pointer cast cannot shed a 'const' contract.
+    """
+    with pytest.raises(TypeError, match="cannot cast away 'const'"):
+        compile_source("""
+        fn main() -> i32 {
+            let text: const char[] = "hi";
+            let bytes: u8* = text.data as u8*;
+            return 0;
+        }
+        """)

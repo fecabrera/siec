@@ -1090,6 +1090,8 @@ The reverse direction never happens implicitly: an `opaque*` only becomes a type
 let values: i32* = malloc(12) as i32*;
 ```
 
+An explicit `as` also reinterprets any typed pointer as any other, C-style: `text.data as u8*` reads a `char*`'s bytes. Only the spelling converts; a `const` contract stays put, so casting one away is rejected.
+
 Signed and unsigned values cannot be mixed in the same operation: comparing or combining an `i32` with a `u32` is a compile-time error. Integer literals adapt to either side.
 
 ```
