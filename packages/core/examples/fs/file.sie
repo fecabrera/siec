@@ -16,14 +16,14 @@ fn main(args: char*[]) -> i32 {
         case (open_res.error) {
         when FileOpenError::SystemError:
             std.io.println(stderr, "System error");
-        when FileOpenError::InvalidMode:
-            std.io.println(stderr, "Invalid mode {}", file.mode);
-        when FileOpenError::NotFound:
-            std.io.println(stderr, "\"{}\" does not exist", args[1]);
-        when FileOpenError::PermissionError:
-            std.io.println(stderr, "Cannot open \"{}\"", args[1]);
         when FileOpenError::AlreadyOpen:
-            std.io.println(stderr, "\"{}\" is already open", args[1]);
+            std.io.println(stderr, "{}: Already open", args[1]);
+        when FileOpenError::InvalidMode:
+            std.io.println(stderr, "{}: Invalid mode", args[1]);
+        when FileOpenError::NotFound:
+            std.io.println(stderr, "{}: Not found", args[1]);
+        when FileOpenError::PermissionDenied:
+            std.io.println(stderr, "{}: Permission denied", args[1]);
         }
         return 1;
     }

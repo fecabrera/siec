@@ -17,7 +17,7 @@ enum FileOpenError {
     AlreadyOpen,
     InvalidMode,
     NotFound,
-    PermissionError,
+    PermissionDenied,
 }
 
 enum FileCloseError {
@@ -66,7 +66,7 @@ fn File::open(&self) -> Result<FileOpenError> {
         when errno.ENOENT:
             return Error(FileOpenError::NotFound);
         when errno.EACCES:
-            return Error(FileOpenError::PermissionError);
+            return Error(FileOpenError::PermissionDenied);
         }
         return Error(FileOpenError::SystemError);
     }
