@@ -610,3 +610,53 @@ def test_macro_names_resolve_in_their_own_module(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 0
+
+
+def test_conformance_checks_in_the_interface_view(tmp_path, monkeypatch):
+    """
+    Conformance expands an action's types without the user's view in the
+    way: an interface behind 'std.io'-style includes may speak an enum
+    the entry file never imports.
+    """
+    std = tmp_path / "std"
+    std.mkdir()
+    (std / "_ifaces.sie").write_text("""
+        enum IOError { SystemError, NotOpen, }
+
+        interface Reader {
+            fn read(&self, buf: &u8[]) -> Result<i64, IOError>;
+        }
+    """)
+    (std / "io.sie").write_text('@include("_ifaces");\n')
+    (std / "fs.sie").write_text("""
+        import { Reader, IOError } from std.io;
+
+        struct File: Reader { fill: u8; }
+
+        fn File::read(&self, buf: &u8[]) -> Result<i64, IOError> {
+            buf[0] = self.fill;
+            return Ok(1 as i64);
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { File } from std.fs;
+
+        // registers after everything else, leaving this file's view (no
+        // IOError in it) as the one conformance would wrongly gate by
+        struct Wrapper { f: File; }
+
+        fn main() -> i32 {
+            let w: Wrapper;
+            w.f.fill = 9;
+
+            let buf: u8[2];
+            let r = w.f.read(buf);
+            if (not r.ok) { return 1; }
+            return buf[0] as i32 - 9;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0

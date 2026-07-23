@@ -155,7 +155,9 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
     params = alias.params if alias is not None else template.params
     kind = "type alias" if alias is not None else "struct"
 
-    args = [expand_alias(gen, arg, seen) for arg in args]
+    # an unchecked expansion stays unchecked into its arguments: the
+    # caller vouched for the spelling as a whole
+    args = [expand_alias(gen, arg, seen, checked) for arg in args]
     if len(args) != len(params):
         take = len(params)
         raise TypeError(f"generic {kind} {base!r} takes {take} type "
