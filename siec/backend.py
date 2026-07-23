@@ -1,6 +1,7 @@
 """Native code emission, linking, and JIT execution."""
 
 import ctypes
+import ctypes.util
 import subprocess
 import sys
 from pathlib import Path
@@ -8,7 +9,8 @@ from pathlib import Path
 from llvmlite import binding, ir
 
 
-def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None) -> tuple:
+def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None,
+                   jit: bool = False) -> tuple:
     """
     Verify an LLVM module against its target - the host, or the triple
     given - returning the target machine and the module round-tripped
@@ -16,6 +18,10 @@ def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None) -
 
     An optimization level above 0 runs LLVM's standard pass pipeline over
     the module, cc-style: -O1 through -O3.
+
+    Ahead-of-time output is position-independent small-code-model code, as
+    'cc' expects when linking a PIE; the JIT keeps LLVM's JIT defaults,
+    whose large code model tolerates objects landing anywhere in memory.
     """
     # register the host as the compilation target; a cross target needs
     # every backend registered, not just the host's; the asm parser
@@ -31,7 +37,11 @@ def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None) -
     else:
         machine = binding.Target.from_default_triple()
 
-    target_machine = machine.create_target_machine(opt=opt)
+    if jit:
+        target_machine = machine.create_target_machine(opt=opt)
+    else:
+        target_machine = machine.create_target_machine(opt=opt, reloc="pic",
+                                                       codemodel="small")
     module.triple = target_machine.triple
 
     # round-trip the IR through the LLVM binding and verify it
@@ -96,6 +106,11 @@ def load_library(name: str, lib_dirs: list[str]) -> None:
     # left for the dynamic loader to search its default paths
     candidates = [str(path) for d in lib_dirs if (path := Path(d) / filename).is_file()]
 
+    # the unversioned name can be a linker script (glibc's libm.so, say),
+    # which the dynamic loader rejects; find_library knows the sonamed file
+    if (found := ctypes.util.find_library(name)) is not None:
+        candidates.append(found)
+
     for candidate in [*candidates, filename]:
         try:
             binding.load_library_permanently(candidate)
@@ -150,7 +165,7 @@ def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
     Extra object files are loaded into the engine, and '-l' libraries into
     the process, their symbols resolvable from the program like any linked code.
     """
-    target_machine, llvm_module = prepare_module(module, opt)
+    target_machine, llvm_module = prepare_module(module, opt, jit=True)
 
     for name in libs:
         load_library(name, lib_dirs)
