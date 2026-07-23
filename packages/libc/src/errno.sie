@@ -14,15 +14,7 @@
     @extern @symbol("__errno_location") fn errno_location() -> i32*;
 }
 
-@inline
-fn errno() -> i32 {
-    return *errno_location();   // libc guarantees the location exists
-}
-
-@inline
-fn set_errno(value: i32) {
-    *errno_location() = value;
-}
+@macro errno = *errno_location();   // libc guarantees the location exists
 
 /***************************************
  * Error codes
