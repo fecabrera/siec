@@ -1,5 +1,5 @@
 import std.io;
-import { Decimal } from decimal;
+import { Decimal } from std.decimal;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length != 2) {
