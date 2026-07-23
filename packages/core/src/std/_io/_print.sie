@@ -1,82 +1,13 @@
 import { String } from std.collections;
 import { stdin } from _stdin;
 import { stdout } from _stdout;
+import { format } from _format;
 import { IOWritable } from _ifaces;
 
 
 /******************************************
  * FILE PRINT
  ******************************************/
-
-/**
- * Format the given string with the given arguments.
- *
- * @param tmp The string to format into.
- * @param str The string to format from.
- * @param args The arguments to format with.
- */
-@static
-fn format(tmp: &String, str: const char[], args...) {
-    let i: u64 = 0;
-
-    let modifier = String();
-    defer modifier.destroy();
-
-    let bracket_open = false;
-    let bracket_closed = false;
-    
-    foreach (c : str) {
-        case (c) {
-            when '{':
-            if (bracket_open) {
-                tmp.push(c);
-                bracket_open = false;
-                continue;
-            }
-
-            bracket_open = true;
-        when '}':
-            if (bracket_closed) {
-                tmp.push(c);
-                bracket_closed = false;
-                continue;
-            }
-
-            if (not bracket_open) {
-                bracket_closed = true;
-                continue;
-            }
-
-            bracket_open = false;
-
-            if (i < args.length) {
-                case (@typeof(args[i])) {
-                when char*:
-                    let arg = args[i] as char*;
-                    tmp.append(arg);
-                when char[]:
-                    let arg = args[i] as char[];
-                    tmp.append(arg);
-                when String:
-                    let arg = args[i] as String;
-                    tmp.append(arg.as_array());
-                else:
-                    tmp.append(@typename(args[i]));
-                }
-
-                i += 1;
-            }
-
-            modifier.reset();
-        else:
-            if (bracket_open) {
-                modifier.push(c);
-            } else {
-                tmp.push(c);
-            }
-        }
-    }
-}
 
 /**
  * Print the given string to the given file pointer.
@@ -86,10 +17,8 @@ fn format(tmp: &String, str: const char[], args...) {
  * @param args The arguments to print.
  */
 fn print(stream: &IOWritable, str: const char[], args...) {
-    let tmp = String();
+    let tmp = format(str, args);
     defer tmp.destroy();
-
-    format(tmp, str, args);
 
     stream.write(tmp.as_bytes(), tmp.length);
 }
@@ -114,10 +43,9 @@ fn print(stream: &IOWritable, str: String, args...) {
  * @param args The arguments to print.
  */
 fn println(stream: &IOWritable, str: const char[], args...) {
-    let tmp = String();
+    let tmp = format(str, args);
     defer tmp.destroy();
     
-    format(tmp, str, args);
     tmp.push('\n');
     
     stream.write(tmp.as_bytes(), tmp.length);
