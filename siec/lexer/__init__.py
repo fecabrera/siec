@@ -59,8 +59,11 @@ def lex(source: str) -> list[Token]:
         if rule is None:
             raise SyntaxError(f"line {cursor.line}: unexpected character {cursor.current()!r}")
 
+        start = cursor.pos
         token = rule.parse(cursor)
         if token is not None:
+            # the token's column: its offset into the line it starts on
+            token.col = start - cursor.source.rfind("\n", 0, start) - 1
             tokens.append(token)
 
             if (token.kind == "ident" and token.value == "asm"

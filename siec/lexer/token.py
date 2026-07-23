@@ -1,6 +1,6 @@
 """The token type and the language's lexical vocabularies."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "foreach",
             "case", "when", "break", "continue", "emit", "defer", "and", "or",
@@ -24,10 +24,15 @@ ESCAPES = {
 class Token:
     """
     A lexical unit of source code with its kind, text, and line number.
+
+    The column is where the token starts on its line, 0-based; it rides
+    along for tooling (the language server), outside equality so tests
+    can compare tokens without pinning positions.
     """
     kind: str  # 'kw', 'ident', 'int', 'str', 'sym', 'eof'
     value: str
     line: int
+    col: int = field(default=0, compare=False, repr=False)
 
     @property
     def syntax(self) -> str | None:

@@ -25,14 +25,14 @@ def parse_enum(ts: TokenStream) -> Enum:
 
     members = []
     while ts.peek().syntax != "}":
-        member = ts.expect("ident").value
+        named = ts.expect("ident")
 
         value = None
         if ts.peek().syntax == "=":
             ts.next()
             value = parse_expression(ts)
 
-        members.append(Variant(member, value))
+        members.append(Variant(named.value, value, line=named.line))
 
         # a comma follows every member but, optionally, the last
         if ts.peek().syntax != "}":

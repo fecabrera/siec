@@ -143,3 +143,175 @@ def test_search_paths_finds_package_trees(tmp_path):
         str(tmp_path),
         str(tmp_path / "lib"),
     ]
+
+
+def unit(tmp_path, text, name="main.sie"):
+    """
+    Compile a source file as a unit for inspection.
+    """
+    from siec.lsp import compile_unit
+
+    src = write(tmp_path / name, text)
+    return compile_unit(src, []), src
+
+
+def probe(analysis, src, line, col):
+    """
+    Inspect the written file at a 0-based position.
+    """
+    from siec.lsp import inspect
+
+    return inspect(analysis, src.read_text(), line, col)
+
+
+def test_inspect_types_a_local_variable(tmp_path):
+    """
+    Hovering a local shows its inferred type and sites its 'let'.
+    """
+    analysis, src = unit(tmp_path, """\
+fn main() -> i32 {
+    let count = 41;
+    return count + 1;
+}
+""")
+
+    finding = probe(analysis, src, 2, 11)
+    assert finding.text == "count: i32"
+    assert finding.targets == [(str(src.resolve()), 2)]
+
+
+def test_inspect_shows_a_functions_overloads(tmp_path):
+    """
+    Hovering a function name lists every overload's signature and
+    targets each declaration.
+    """
+    analysis, src = unit(tmp_path, """\
+fn pick(n: i64) -> i64 { return n; }
+fn pick(f: f64) -> f64 { return f; }
+
+fn main() -> i32 {
+    return pick(2) as i32;
+}
+""")
+
+    finding = probe(analysis, src, 4, 11)
+    assert finding.text == ("fn pick(n: i64) -> i64\n"
+                            "fn pick(f: f64) -> f64")
+    assert finding.targets == [(str(src.resolve()), 1), (str(src.resolve()), 2)]
+
+
+def test_inspect_resolves_a_method_through_its_receiver(tmp_path):
+    """
+    Hovering a method call resolves the receiver's inferred type and
+    shows the generic template's signature, sited at the template.
+    """
+    analysis, src = unit(tmp_path, """\
+struct Box<T> { value: T; }
+
+fn Box<T>::get(&self) -> T { return self.value; }
+
+fn main() -> i32 {
+    let b: Box<i32>;
+    return b.get();
+}
+""")
+
+    finding = probe(analysis, src, 6, 13)
+    assert finding.text == "fn Box<T>::get(&Box<T>) -> T"
+    assert finding.targets == [(str(src.resolve()), 3)]
+
+
+def test_inspect_types_a_field_through_the_chain(tmp_path):
+    """
+    Hovering a field types it through the receiver chain and sites its
+    line in the struct's declaration.
+    """
+    analysis, src = unit(tmp_path, """\
+struct Point {
+    x: i32;
+    y: i32;
+}
+
+fn main() -> i32 {
+    let p: Point;
+    return p.y;
+}
+""")
+
+    finding = probe(analysis, src, 7, 13)
+    assert finding.text == "y: i32"
+    assert finding.targets == [(str(src.resolve()), 3)]
+
+
+def test_inspect_resolves_an_enum_member(tmp_path):
+    """
+    Hovering 'E::M' shows the member's value and sites its line.
+    """
+    analysis, src = unit(tmp_path, """\
+enum Color {
+    RED,
+    BLUE = 7,
+}
+
+fn main() -> i32 {
+    return Color::BLUE as i32;
+}
+""")
+
+    finding = probe(analysis, src, 6, 18)
+    assert finding.text == "Color::BLUE = 7"
+    assert finding.targets == [(str(src.resolve()), 3)]
+
+
+def test_inspect_resolves_a_module_member(tmp_path):
+    """
+    Hovering a qualified module member resolves through the binding to
+    the module's declaration.
+    """
+    write(tmp_path / "util.sie", """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+""")
+
+    analysis, src = unit(tmp_path, """\
+import util;
+
+fn main() -> i32 {
+    return util.add(40, 2);
+}
+""")
+
+    finding = probe(analysis, src, 3, 16)
+    assert finding.text == "fn add(x: i32, y: i32) -> i32"
+    assert finding.targets == [(str((tmp_path / "util.sie").resolve()), 1)]
+
+
+def test_inspect_shows_a_struct_declaration(tmp_path):
+    """
+    Hovering a type name renders the struct with its fields.
+    """
+    analysis, src = unit(tmp_path, """\
+struct Point { x: i32; y: i32; }
+
+fn main() -> i32 {
+    let p: Point;
+    return p.x;
+}
+""")
+
+    finding = probe(analysis, src, 3, 11)
+    assert finding.text == "struct Point {\n    x: i32;\n    y: i32;\n}"
+    assert finding.targets == [(str(src.resolve()), 1)]
+
+
+def test_inspect_misses_off_any_name(tmp_path):
+    """
+    Positions on literals, operators, or blanks resolve to nothing.
+    """
+    analysis, src = unit(tmp_path, """\
+fn main() -> i32 {
+    return 40 + 2;
+}
+""")
+
+    assert probe(analysis, src, 1, 12) is None
+    assert probe(analysis, src, 0, 0) is None

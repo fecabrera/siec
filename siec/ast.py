@@ -522,6 +522,7 @@ class Field:
     name: str
     type: str
     default: object | None = None
+    line: int = _line()
 
 
 @dataclass
@@ -569,6 +570,7 @@ class Variant:
     """
     name: str
     value: Expr | None = None
+    line: int = _line()
 
 
 @dataclass

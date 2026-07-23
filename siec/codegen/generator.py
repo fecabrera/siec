@@ -527,7 +527,8 @@ def parse_prelude() -> Program:
 
 
 def codegen(program: Program, module_name: str, target: str | None = None,
-            debug: bool = False, define_imports: bool = True) -> ir.Module:
+            debug: bool = False, define_imports: bool = True,
+            gen: "CodeGenerator | None" = None) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
 
@@ -537,6 +538,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     Without 'define_imports' - separate compilation - an imported module's
     functions stay declarations, defined when the module compiles as its
     own unit; only the sources and their includes define here.
+
+    A caller may pass its own generator to emit into: its tables hold
+    everything the program declared afterwards - however far emission
+    got - which is what the language server reads.
     """
     from siec.codegen.aliases import register_aliases
     from siec.codegen.conditionals import resolve_conditionals
@@ -552,7 +557,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     from siec.codegen.constants import BUILTIN_CONSTANTS
 
-    gen = CodeGenerator(module_name, target)
+    gen = gen or CodeGenerator(module_name, target)
     if debug:
         from siec.codegen.debug import DebugInfo
         gen.debug = DebugInfo(gen, module_name)
