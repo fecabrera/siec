@@ -44,7 +44,6 @@
 @const EPROTONOSUPPORT = 43;        /* Protocol not supported */
 @const ESOCKTNOSUPPORT = 44;        /* Socket type not supported */
 @const ENOTSUP = 45;                /* Operation not supported */
-@const EOPNOTSUPP = ENOTSUP;        /* Operation not supported on socket */
 @const EPFNOSUPPORT = 46;           /* Protocol family not supported */
 @const EAFNOSUPPORT = 47;           /* Address family not supported by protocol family */
 @const EADDRINUSE = 48;             /* Address already in use */
