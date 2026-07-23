@@ -11,6 +11,7 @@ from siec.ast import (
     AsmBlock,
     ArrayLiteral,
     BinaryOp,
+    Block,
     BlockExpr,
     BoolLiteral,
     Call,
@@ -495,6 +496,18 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
     Emit the address of an assignable expression: a variable, a struct/array
     field, a pointer-indexed element, or a dereferenced pointer.
     """
+    # a macro use is the place its expansion names, in the macro's view
+    from siec.codegen.macros import macro_place, macro_view
+
+    if (place := macro_place(gen, expr, scope)) is not None:
+        name, expansion = place
+        if isinstance(expansion, (Block, BlockExpr)):
+            raise TypeError(f"macro {name!r} does not expand to an "
+                            "assignable place")
+
+        with macro_view(gen, name):
+            return emit_lvalue(gen, builder, expansion, scope)
+
     if isinstance(expr, Var):
         if expr.name in scope:
             return scope[expr.name].slot

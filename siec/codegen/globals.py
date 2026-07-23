@@ -45,6 +45,7 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
                     raise TypeError(f"conflicting '@symbol' names for global {glob.name!r}")
 
                 gen.symbol_names[glob.name] = symbol = glob.symbol
+                gen.symbol_files[glob.name] = glob.file
 
             if symbol in gen.globals or symbol in gen.module.globals:
                 raise TypeError(f"global {glob.name!r} is declared more than once")

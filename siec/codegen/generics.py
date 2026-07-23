@@ -253,16 +253,31 @@ def register_generic_function(gen: CodeGenerator, fn) -> None:
 
         primary = gen.generic_functions.get(fn.name)
         if primary is not None:
+            # a same-named template joins as an overload: another
+            # type-parameter count, or the same count over a different
+            # parameter list; respelling both is a redeclaration
             overloads = gen.generic_overloads.setdefault(fn.name, [])
-            arities = {len(t.type_params) for t in (primary, *overloads)}
-            if len(fn.type_params) in arities:
-                raise TypeError(f"function {fn.name!r} is declared more "
-                                "than once")
+            for other in (primary, *overloads):
+                if (len(other.type_params) == len(fn.type_params)
+                        and template_key(other) == template_key(fn)):
+                    raise TypeError(f"function {fn.name!r} is declared more "
+                                    "than once")
 
             overloads.append(fn)
             return
 
         gen.generic_functions[fn.name] = fn
+
+
+def template_key(template) -> tuple:
+    """
+    The signature identity of a template's parameter list: its types
+    behind 'const', the type parameters normalized to their positions so
+    'f<T>(v: T)' and 'f<U>(v: U)' spell the same shape.
+    """
+    mapping = {p: f"#{i}" for i, p in enumerate(template.type_params)}
+    return tuple(substitute(strip_const(p.type), mapping)
+                 for p in template.params)
 
 
 def substitute_types(node, mapping: dict) -> None:
@@ -425,6 +440,7 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
                   if t is not None]
 
     failure = None
+    resolved = []
     for template in candidates:
         if (call.type_args is not None
                 and len(call.type_args) != len(template.type_params)):
@@ -434,10 +450,32 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
             continue
 
         try:
-            return template, resolve_generic_call(gen, template, call, scope,
-                                                  expected)
+            resolved.append((template, resolve_generic_call(gen, template,
+                                                            call, scope,
+                                                            expected)))
         except TypeError as error:
             failure = failure or error
+
+    if len(resolved) == 1:
+        return resolved[0]
+
+    # several resolve: a typed context picks the templates whose returns
+    # produce it, then the arguments' concrete types rank the substituted
+    # signatures like any overload; a tie, or no ranked fit at all,
+    # keeps declaration order
+    if resolved:
+        if expected is not None:
+            matching = [entry for entry in resolved
+                        if returns_expected(gen, *entry, expected)]
+            resolved = matching or resolved
+
+        strength = {"exact": 0, "implicit": 1, "adopt": 2}
+        ranked = [(strength[fit], entry) for entry in resolved
+                  if (fit := generic_fit(gen, *entry, call, scope)) is not None]
+        if ranked:
+            return min(ranked, key=lambda pair: pair[0])[1]
+
+        return resolved[0]
 
     if failure is not None:
         raise failure
@@ -445,6 +483,68 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
     # nothing fit the call's shape: report against the primary template
     return candidates[0], resolve_generic_call(gen, candidates[0], call,
                                                scope, expected)
+
+
+def returns_expected(gen: CodeGenerator, template, type_args: list,
+                     expected: str) -> bool:
+    """
+    Whether a template's substituted return produces the context's
+    expected type.
+    """
+    # deferred import: aliases and generics are mutually recursive
+    from siec.codegen.aliases import expand_alias
+
+    if template.return_type is None:
+        return False
+
+    spelled = substitute(template.return_type,
+                         dict(zip(template.type_params, type_args)))
+
+    # the substituted spellings mix files' names; no view gates them
+    gen.ungated_types += 1
+    try:
+        return (strip_const(expand_alias(gen, spelled))
+                == strip_const(expand_alias(gen, expected)))
+    finally:
+        gen.ungated_types -= 1
+
+
+def generic_fit(gen: CodeGenerator, template, type_args: list, call,
+                scope: dict) -> str | None:
+    """
+    How a template's substituted parameters take a call's arguments,
+    ranked like a concrete overload's fits; None when one cannot. An
+    'args...' pack and trailing defaults rank by the fixed prefix.
+    """
+    # deferred imports: aliases and overloads both lean on generics
+    from siec.codegen.aliases import expand_alias
+    from siec.codegen.overloads import parameter_fit, rank_type
+
+    mapping = dict(zip(template.type_params, type_args))
+    params = [substitute(p.type, mapping) for p in template.params]
+    if template.variadic:
+        params = params[:-1]
+
+    args = list(call.args)[:len(params)]
+    params = params[:len(args)]
+
+    # the substituted spellings mix files' names; no view gates them
+    gen.ungated_types += 1
+    try:
+        strength = {"exact": 0, "implicit": 1, "adopt": 2}
+        fit = "exact"
+        for arg, param in zip(args, params):
+            one = parameter_fit(gen, arg, rank_type(gen, arg, scope),
+                                expand_alias(gen, param))
+            if one is None:
+                return None
+
+            if strength[one] > strength[fit]:
+                fit = one
+
+        return fit
+    finally:
+        gen.ungated_types -= 1
 
 
 def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
@@ -478,6 +578,17 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
                           dict(zip(template.type_params, type_args)))
 
     symbol = f"{template.name}<{','.join(type_args)}>"
+
+    # same-count sibling templates would share the spelling: the declared
+    # parameter list joins the symbol to keep each instance its own, the
+    # same in every unit since it comes from the template's source
+    siblings = (gen.generic_functions.get(template.name),
+                *gen.generic_overloads.get(template.name, ()))
+    if any(other is not None and other is not template
+           and len(other.type_params) == len(template.type_params)
+           for other in siblings):
+        symbol = f"{symbol}({','.join(template_key(template))})"
+
     if symbol not in gen.instantiated_functions:
         gen.instantiated_functions.add(symbol)
 

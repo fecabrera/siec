@@ -479,3 +479,30 @@ def test_interface_body_rejects_respelled_actions(compile_source):
         }
         fn main() -> i32 { return 0; }
         """)
+
+
+def test_interface_functions_overload_on_value_params(run):
+    """
+    Two functions may share a name and an interface-typed parameter,
+    their other parameters telling the calls apart - print's shape.
+    """
+    source = """
+    interface Out {
+        fn put(&self, v: i32);
+    }
+
+    struct Acc: Out { total: i32; }
+    fn Acc::put(&self, v: i32) { self.total += v; }
+
+    fn send(out: &Out, v: i32) { out.put(v); }
+    fn send(out: &Out, v: const char[]) { out.put(v.length as i32); }
+
+    fn main() -> i32 {
+        let acc: Acc;
+        acc.total = 0;
+        send(acc, 40);
+        send(acc, "ab");
+        return acc.total - 42;
+    }
+    """
+    assert run(source).returncode == 0

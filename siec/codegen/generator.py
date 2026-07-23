@@ -216,8 +216,10 @@ class CodeGenerator:
         self.statics: dict[tuple[str, str], str] = {}
 
         # '@symbol' functions by Sie name, mapped to their chosen module
-        # symbols, visible everywhere
+        # symbols, visible everywhere; the declaring file rides along so
+        # a qualified member only maps through its own module's binding
         self.symbol_names: dict[str, str] = {}
+        self.symbol_files: dict[str, str] = {}
 
         # per '@extern' symbol: how each struct parameter travels to C,
         # aligned with the parameters (None marks a direct one), and how a
@@ -296,7 +298,16 @@ class CodeGenerator:
             if exports is not None and member not in exports:
                 raise TypeError(f"module {prefix!r} has no member {member!r}")
 
-            return self.symbol_names.get(member, member), target
+            # a '@symbol' mapping applies only when its declaration is the
+            # module's own: another module's same-named binding (libc's
+            # 'stderr', say) must not hijack this member
+            symbol = self.symbol_names.get(member, member)
+            if symbol != member:
+                origin = self.symbol_files.get(member)
+                if origin not in self.include_closure.get(target, {target}):
+                    symbol = member
+
+            return symbol, target
 
         return None
 

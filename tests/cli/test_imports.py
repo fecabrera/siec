@@ -660,3 +660,34 @@ def test_conformance_checks_in_the_interface_view(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 0
+
+
+def test_symbol_bindings_stay_in_their_module(tmp_path, monkeypatch):
+    """
+    A qualified member maps through '@symbol' only when its own module
+    declared it: libc-style 'stderr' in one module must not hijack
+    another module's 'stderr'.
+    """
+    (tmp_path / "libc.sie").write_text("""
+        @extern @symbol("write") fn c_write(fd: i32, buf: const char*,
+                                            count: u64) -> i64;
+        @static let __fd: i32 = 2;
+        @macro stderr = __fd;
+    """)
+    (tmp_path / "streams.sie").write_text("""
+        @static let __stderr: i64 = 7;
+        @macro stderr = __stderr;
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import streams;
+
+        fn main() -> i32 {
+            let v = streams.stderr;    // streams' own, not libc's
+            return (v - 7) as i32;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0

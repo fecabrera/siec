@@ -323,3 +323,25 @@ def test_macro_assignment_needs_a_place(compile_source):
         @macro seven = 7;
         fn main() -> i32 { seven = 1; return 0; }
         """)
+
+
+def test_object_macro_passes_by_reference(run):
+    """
+    A macro place binds to a '&T' parameter: the callee aliases the
+    expansion's storage, stdout-style.
+    """
+    source = """
+    @static let __out: i32 = 0;
+    @macro out = __out;
+
+    fn bump(v: &i32) {
+        v = v + 1;
+    }
+
+    fn main() -> i32 {
+        bump(out);
+        bump(out);
+        return __out - 2;
+    }
+    """
+    assert run(source).returncode == 0

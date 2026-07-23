@@ -127,6 +127,7 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
             raise TypeError(f"conflicting '@symbol' names for function {fn.name!r}")
 
         gen.symbol_names[fn.name] = symbol = fn.symbol
+        gen.symbol_files[fn.name] = fn.file
 
     # a '@static' function is local to its file: it lives under a mangled
     # module symbol its own file resolves to, so other files neither see it
