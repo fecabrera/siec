@@ -32,17 +32,12 @@ def display_path(path: str) -> str:
     return relative if len(relative) < len(path) else path
 
 
-def format_error(source_name: str, error: Exception) -> str:
+def error_parts(error: Exception) -> tuple[str | None, int | None, str]:
     """
-    Render a compile error as '<source> at line <n>: <message>' when a line is known.
-
-    The source names the file the error came from - an included file when the
-    error carries one - falling back to the command-line source otherwise.
+    Split a compile error into its file, line, and bare message; either of
+    the first two is None when the error doesn't carry it.
     """
     message = str(error)
-
-    # errors from an included file carry their own source; others use the main one
-    source = display_path(file) if (file := getattr(error, "sie_file", None)) else source_name
 
     # codegen errors carry the line as an attribute; lexer and parser errors
     # embed a 'line <n>:' prefix in their message instead
@@ -50,7 +45,22 @@ def format_error(source_name: str, error: Exception) -> str:
     if line is None:
         match = re.match(r"line (\d+): (.*)", message, re.DOTALL)
         if match:
-            line, message = match.group(1), match.group(2)
+            line, message = int(match.group(1)), match.group(2)
+
+    return getattr(error, "sie_file", None), line, message
+
+
+def format_error(source_name: str, error: Exception) -> str:
+    """
+    Render a compile error as '<source> at line <n>: <message>' when a line is known.
+
+    The source names the file the error came from - an included file when the
+    error carries one - falling back to the command-line source otherwise.
+    """
+    file, line, message = error_parts(error)
+
+    # errors from an included file carry their own source; others use the main one
+    source = display_path(file) if file else source_name
 
     if line is not None:
         return f"{source} at line {line}: {message}"

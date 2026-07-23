@@ -104,12 +104,16 @@ def resolve_module(path: str, importer_dir: Path, include_paths: list[Path]) -> 
 
 
 def load_program(sources: list[Path], include_paths: list[Path],
-                 target: str | None = None) -> Program:
+                 target: str | None = None,
+                 overlays: dict[str, str] | None = None) -> Program:
     """
     Parse source files and their includes (recursively) into a single merged Program.
 
     The target triple decides conditional includes; the host's when none
     is given, matching codegen.
+
+    An overlay maps a file's resolved path to text that stands in for its
+    on-disk contents: an editor's unsaved buffer, for a language server.
     """
     functions = []
     structs = []
@@ -214,9 +218,11 @@ def load_program(sources: list[Path], include_paths: list[Path],
         
         visited.add(file)
 
-        # parse the file, tagging any lexer or parser error with its source
+        # parse the file - its overlay text standing in when one is given -
+        # tagging any lexer or parser error with its source
+        text = overlays.get(str(file)) if overlays else None
         try:
-            program = parse(lex(file.read_text()))
+            program = parse(lex(text if text is not None else file.read_text()))
         except (SyntaxError, TypeError, NameError) as error:
             if getattr(error, "sie_file", None) is None:
                 error.sie_file = str(file)

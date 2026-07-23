@@ -26,9 +26,11 @@ Repository = "https://github.com/fecabrera/siec"
 
 [project.scripts]
 siec = "siec.cli:main"
+sie-lsp = "siec.lsp:main"
 
 [project.optional-dependencies]
 dev = ["pytest", "coverage"]
+lsp = ["pygls>=2"]
 
 [tool.setuptools.packages.find]
 include = ["siec*"]

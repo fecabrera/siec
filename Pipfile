@@ -9,6 +9,7 @@ llvmlite = "*"
 [dev-packages]
 pytest = "*"
 coverage = "*"
+pygls = ">=2"
 
 [requires]
 python_version = "3.14"

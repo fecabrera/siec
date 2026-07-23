@@ -127,6 +127,16 @@ def test_load_marks_the_unit_files(tmp_path):
                                   str((tmp_path / "impl.sie").resolve())}
 
 
+def test_load_prefers_overlay_text(tmp_path):
+    """
+    An overlay's text stands in for the file's on-disk contents.
+    """
+    main = write(tmp_path / "main.sie", "fn stale() {}")
+    program = load_program([main], [],
+                           overlays={str(main.resolve()): "fn fresh() {}"})
+    assert [fn.name for fn in program.functions] == ["fresh"]
+
+
 def test_load_tags_declarations_with_their_source_file(tmp_path):
     """
     Each function and struct is tagged with the file it was parsed from.
