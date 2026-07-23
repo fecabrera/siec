@@ -1,10 +1,9 @@
 import std.io;
-import { stderr } from stdio;
 import { Decimal } from decimal;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length != 3) {
-		std.io.println(stderr, "mul: usage: {} x y", args[0]);
+		std.io.println(std.io.stderr, "mul: usage: {} x y", args[0]);
 		return 1;
 	}
 

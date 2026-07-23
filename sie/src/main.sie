@@ -1,7 +1,6 @@
 import std.io;
 import { String } from std.collections;
 import {
-    stderr,
     fopen,
     fclose,
 } from stdio;
@@ -26,7 +25,7 @@ fn main(args: char*[]) -> i32 {
 
     let fp = fopen(path.as_array(), "r");
     if (fp == null) {
-        std.io.println(stderr, "{} not found", path);
+        std.io.println(std.io.stderr, "{} not found", path);
         return 1;
     }
     defer fclose(fp);
@@ -35,7 +34,7 @@ fn main(args: char*[]) -> i32 {
     defer toml_free(result);
 
     if (not result.ok) {
-        std.io.println(stderr, "could not parse {} ", path);
+        std.io.println(std.io.stderr, "could not parse {} ", path);
         return 2;
     }
 
@@ -44,7 +43,7 @@ fn main(args: char*[]) -> i32 {
 
     let res = pkg.parse(result);
     if (not res.ok) {
-        std.io.println(stderr, "could not parse package: {}", res.error);
+        std.io.println(std.io.stderr, "could not parse package: {}", res.error);
         return 4;
     }
     

@@ -1,5 +1,4 @@
 import std.io;
-import { stderr } from stdio;
 import {
     mpd_init,
     mpd_new,
@@ -13,7 +12,7 @@ import {
 
 fn main(args: char*[]) -> i32 {
     if (args.length != 3) {
-		std.io.println(stderr, "div: usage: {} x y", args[0]);
+		std.io.println(std.io.stderr, "div: usage: {} x y", args[0]);
 		return 1;
 	}
 
