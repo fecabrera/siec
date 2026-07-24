@@ -2,7 +2,12 @@ import { malloc, realloc, free } from stdlib;
 
 @const DEFAULT_LIST_CAPACITY = 2;
 
-struct List<T>: Iterable<T> {
+struct List<T>:
+    Iterable<T>,
+    Add<List<T>, List<T>>,
+    Add<List<T>, T[]>,
+    Eq<List<T>>,
+    Eq<T[]> {
     data: T* = null;
     length: u64;
     capacity: u64;
@@ -96,6 +101,30 @@ fn List<T>::pop(&self) -> T {
 }
 
 /**
+ * Add the given List to the List.
+ *
+ * @param lst The List to add to the List.
+ * @return A new List with the given List added.
+ */
+fn List<T>::add(&self, lst: const &List<T>) -> List<T> {
+    let result = List<T>(self);
+    result.append(lst);
+    return result;
+}
+
+/**
+ * Add the given array to the List.
+ *
+ * @param arr The array to add to the List.
+ * @return A new List with the given array added.
+ */
+fn List<T>::add(&self, arr: const T[]) -> List<T> {
+    let result = List<T>(self);
+    result.append(arr);
+    return result;
+}
+
+/**
  * Append the given array to the List.
  *
  * @param arr The array to append to the List.
@@ -139,12 +168,30 @@ fn List<T>::iterator(&self) -> ArrayIterator<T> {
 }
 
 /**
+ * Check if the List is equal to the given List.
+ *
+ * @param lst The List to check if the List is equal to.
+ * @return True if the List is equal to the given List, false otherwise.
+ */
+ fn List<T>::eq(&self, lst: const &List<T>) -> bool {
+    if (self.length != lst.length)
+        return false;
+
+    for (let i: u64 = 0; i < lst.length; i += 1) {
+        if (self.data[i] != lst.data[i])
+            return false;
+    }
+
+    return true;
+}
+
+/**
  * Check if the List is equal to the given array.
  *
  * @param arr The array to check if the List is equal to.
  * @return True if the List is equal to the given array, false otherwise.
  */
-fn List<T>::equals(&self, arr: const T[]) -> bool {
+fn List<T>::eq(&self, arr: const T[]) -> bool {
     if (self.length != arr.length)
         return false;
 

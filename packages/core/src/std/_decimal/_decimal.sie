@@ -24,7 +24,8 @@ struct Decimal
       Mul<Decimal, u64>,
       Div<Decimal, Decimal>,
       Div<Decimal, i64>,
-      Div<Decimal, u64> {
+      Div<Decimal, u64>,
+      Eq<Decimal> {
     ctx: mpdecimal.mpd_context*;
     mpd: mpdecimal.mpd*;
 }

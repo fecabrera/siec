@@ -24,12 +24,12 @@ fn String::append(&self, arr: const char*) {
 }
 
 /**
- * Check if the String is equal to the given array.
+ * Check if the String is equal to the given null-terminated pointer.
  *
- * @param arr The array to check if the String is equal to.
+ * @param arr The char pointer to check if the String is equal to.
  * @return True if the String is equal to the given array, false otherwise.
  */
-fn String::equals(&self, arr: const char*) -> bool {
+fn String::eq(&self, arr: const char*) -> bool {
     for (let i: u64 = 0; i < self.length; i += 1) {
         if (arr[i] == 0 or self.data[i] != arr[i])
             return false;
