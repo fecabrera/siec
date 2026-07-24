@@ -7,9 +7,9 @@
 # go-to-definition (`gd`).
 #
 # `sie-lsp` comes with the compiler: `pip install -e '.[lsp]'`. Point the
-# command at an absolute path when it isn't on Helix's PATH. Extra include
-# directories (the compiler's -I) go in `config.includePaths`; a
-# workspace's `packages/*/src` trees are found on their own.
+# command at an absolute path when it isn't on Helix's PATH. The include
+# path comes from the project's package.toml ([package] include); extra
+# directories (the compiler's -I) go in `config.includePaths`.
 
 [language-server.sie-lsp]
 command = "sie-lsp"
