@@ -15,6 +15,9 @@ fn main() -> i32 {
     // create a string from another
     let str2 = String(str1);
     defer str2.destroy();
+
+    // print the result of the equality check
+    std.io.println("str1 == str2: {}", str1 == str2);
     
     // push a character literal
     str2.push(' ');
@@ -24,6 +27,9 @@ fn main() -> i32 {
     
     // print str2
     std.io.println(str2);
+
+    // print the result of the equality check
+    std.io.println("str1 == str2: {}", str1 == str2);
     
     // create a string from a literal
     let str3 = String("hello world");
@@ -41,6 +47,13 @@ fn main() -> i32 {
 
     // print str4
     std.io.println(str4);
+
+    // create a string from adding another string and a string literal
+    let str5 = str1 + " world";
+    defer str5.destroy();
+
+    // print str5
+    std.io.println(str5);
 
     return 0;
 }
