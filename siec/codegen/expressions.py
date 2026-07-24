@@ -437,11 +437,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             expr.right = type_operand(gen, expr.right, scope)
 
         # a struct operand's operator is the method call it desugars to:
-        # 'a + b' is 'a.add(b)', each overload picked by b's type
+        # 'a + b' is 'a.add(b)', each overload picked by b's type, and
+        # 'a != b' the negated 'not a.eq(b)'
         if (rewritten := operator_call(gen, expr, scope)) is not None:
-            from siec.codegen.methods import emit_method_call
-
-            return emit_method_call(gen, builder, rewritten, scope)
+            return emit_expression(gen, builder, rewritten, expected_type, scope)
 
         # logical operators coerce each side to a bool on its own terms
         if expr.op in ("and", "or"):

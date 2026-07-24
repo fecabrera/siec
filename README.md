@@ -815,10 +815,17 @@ let scaled = dec * 10;   // dec.mul(10): the i64 overload
 dec += 1;                // dec = dec.add(1)
 ```
 
-The prelude declares an interface per operator: `Add<S, T>` requires `add(&self, value: T) -> S`, and `Sub`, `Mul`, `Div`, and `Rem` follow the same shape. Claiming one declares and enforces the contract, one claim per supported right-hand type:
+Equality desugars the same way: `a == b` on a struct operand is `a.eq(b)`, and `a != b` is its negation, `not a.eq(b)`. There is no `ne` method to write, and the ordering operators do not desugar: structs take no `<`.
 
 ```
-struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64> {
+if (dec == other) { ... }   // dec.eq(other)
+if (dec != 1) { ... }       // not dec.eq(1): the i64 overload
+```
+
+The prelude declares an interface per operator: `Add<S, T>` requires `add(&self, value: T) -> S`, and `Sub`, `Mul`, `Div`, and `Rem` follow the same shape; `Eq<T>` requires `eq(&self, value: T) -> bool`. Claiming one declares and enforces the contract, one claim per supported right-hand type:
+
+```
+struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64>, Eq<Decimal> {
     // ...
 }
 ```

@@ -61,14 +61,16 @@ COMPARISONS = {"<", ">", "<=", ">=", "==", "!="}
 
 # the method a struct operand's binary operator desugars to: 'a + b' is
 # 'a.add(b)', the operator interfaces' ('Add<S, T>', ...) shorthand
-OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem"}
+OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem",
+                    "==": "eq", "!=": "eq"}
 
 
-def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> MethodCall | None:
+def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | None:
     """
     Rewrite a binary operator over a struct operand into the method call
-    it means: 'a + b' is 'a.add(b)', each overload picked by b's type.
-    None for any other operand, whose operators keep their instructions.
+    it means: 'a + b' is 'a.add(b)', each overload picked by b's type,
+    and 'a != b' is equality negated, 'not a.eq(b)'. None for any other
+    operand, whose operators keep their instructions.
     """
     method = OPERATOR_METHODS.get(expr.op)
     if method is None:
@@ -79,7 +81,11 @@ def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> MethodCa
     if name not in gen.structs or name in gen.enums:
         return None
 
-    return MethodCall(expr.left, method, [expr.right])
+    call = MethodCall(expr.left, method, [expr.right])
+    if expr.op == "!=":
+        return UnaryOp("not", call)
+
+    return call
 
 
 def is_float(type_: ir.Type) -> bool:

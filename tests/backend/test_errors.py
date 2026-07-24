@@ -217,11 +217,28 @@ def test_struct_condition_is_an_error(compile_source):
         """)
 
 
-def test_struct_comparison_is_an_error(compile_source):
+def test_struct_ordering_is_an_error(compile_source):
     """
-    Structs and arrays take no comparison operators.
+    Structs take no ordering operators; only '==' and '!=' desugar,
+    through an 'eq' method.
     """
-    with pytest.raises(TypeError, match="cannot apply '=='"):
+    with pytest.raises(TypeError, match="cannot apply '<'"):
+        compile_source("""
+        struct P { x: i32; }
+
+        fn main() -> i32 {
+            let a: P = {1};
+            let b: P = {1};
+            return a < b ? 1 : 0;
+        }
+        """)
+
+
+def test_struct_equality_needs_an_eq_method(compile_source):
+    """
+    '==' on a struct without an 'eq' method names the missing method.
+    """
+    with pytest.raises(TypeError, match="type P has no method 'eq'"):
         compile_source("""
         struct P { x: i32; }
 

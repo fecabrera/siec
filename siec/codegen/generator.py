@@ -399,6 +399,12 @@ interface Rem<S, T>;
 
 fn Rem<S, T>::rem(&self, value: T) -> S;
 
+// equality: 'a == b' on a struct operand is the 'a.eq(b)' shorthand,
+// and 'a != b' its negation; claiming 'Eq<T>' declares the contract
+interface Eq<T>;
+
+fn Eq<T>::eq(&self, value: T) -> bool;
+
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];
     index: u64;

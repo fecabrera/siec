@@ -186,3 +186,105 @@ def test_claim_checks_the_return_type(compile_source):
 
         fn main() -> i32 { return 0; }
         """)
+
+
+EQUAL = """
+struct Pair : Eq<Pair>, Eq<i64> {
+    a: i64;
+    b: i64;
+}
+
+fn Pair::eq(&self, o: const &Pair) -> bool {
+    return self.a == o.a and self.b == o.b;
+}
+
+fn Pair::eq(&self, n: i64) -> bool {
+    return self.a == n and self.b == n;
+}
+"""
+
+
+def test_equality_desugars_to_eq(run):
+    """
+    '==' on a struct operand calls 'a.eq(b)'.
+    """
+    source = EQUAL + """
+    fn main() -> i32 {
+        let x: Pair = {1, 2};
+        let y: Pair = {1, 2};
+        let z: Pair = {3, 4};
+        return (x == y and not (x == z)) ? 42 : 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_inequality_negates_eq(run):
+    """
+    'a != b' is equality's negation: 'not a.eq(b)'.
+    """
+    source = EQUAL + """
+    fn main() -> i32 {
+        let x: Pair = {1, 2};
+        let y: Pair = {1, 2};
+        let z: Pair = {3, 4};
+        return (x != z and not (x != y)) ? 42 : 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_equality_picks_among_overloads(run):
+    """
+    The right operand's type picks 'eq's overload, literals widening in.
+    """
+    source = EQUAL + """
+    fn main() -> i32 {
+        let x: Pair = {7, 7};
+        let y: Pair = {7, 8};
+        return (x == 7 and y != 7) ? 42 : 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_equality_types_as_bool_in_conditions(run):
+    """
+    The desugared comparison is a bool wherever one is expected.
+    """
+    source = EQUAL + """
+    fn main() -> i32 {
+        let x: Pair = {1, 1};
+        let same = x == 1;
+        if (same) { return 42; }
+        return 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_enum_equality_stays_native(run):
+    """
+    Enum operands keep their integer comparison; nothing desugars.
+    """
+    source = """
+    enum Color { RED, BLUE }
+
+    fn main() -> i32 {
+        let c = Color::RED;
+        return (c == Color::RED and c != Color::BLUE) ? 42 : 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_eq_conformance_is_checked(compile_source):
+    """
+    Claiming Eq<T> without the 'eq' method is a conformance error.
+    """
+    with pytest.raises(TypeError, match="eq"):
+        compile_source("""
+        struct P : Eq<P> { x: i32; }
+
+        fn main() -> i32 { return 0; }
+        """)
