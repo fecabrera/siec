@@ -73,16 +73,57 @@ class Symbol:
     line: int
 
 
-def search_paths(root: Path | None, extra: list[str]) -> list[Path]:
+def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
     """
-    The include path for analysis: the configured directories first, then
-    the workspace's 'packages/*/src' trees when it has them, and the root
-    itself with its 'lib/', mirroring the compiler's own search.
+    Include paths from the project's 'package.toml' files: the nearest
+    one walking up from the edited file, then the workspace root's, each
+    contributing its '[package] include' entries relative to itself.
     """
-    paths = [Path(p) for p in extra]
+    import tomllib
+
+    paths: list[Path] = []
+    read: set[Path] = set()
+
+    def take(base: Path) -> None:
+        toml = base / "package.toml"
+        if not toml.is_file() or toml in read:
+            return
+
+        read.add(toml)
+        try:
+            data = tomllib.loads(toml.read_text())
+        except (OSError, tomllib.TOMLDecodeError):
+            return
+
+        for entry in data.get("package", {}).get("include") or ():
+            paths.append((base / entry).resolve())
+
+    if file_dir is not None:
+        for base in (file_dir, *file_dir.parents):
+            if (base / "package.toml").is_file():
+                take(base)
+                break
+
+            if root is not None and base == root:
+                break
 
     if root is not None:
-        paths.extend(sorted(root.glob("packages/*/src")))
+        take(root)
+
+    return paths
+
+
+def search_paths(root: Path | None, extra: list[str],
+                 file_dir: Path | None = None) -> list[Path]:
+    """
+    The include path for analysis: the configured directories first, the
+    project's 'package.toml' entries next, and the workspace root with
+    its 'lib/', mirroring the compiler's own search.
+    """
+    paths = [Path(p) for p in extra]
+    paths.extend(config_paths(file_dir, root))
+
+    if root is not None:
         paths.extend((root, root / "lib"))
 
     return paths
@@ -672,7 +713,7 @@ def create_server():
              "variable": types.SymbolKind.Variable,
              "alias": types.SymbolKind.Class}
 
-    include_paths: list[Path] = []
+    workspace = {"root": None, "extra": []}
     outlines: dict[str, list[Symbol]] = {}
     analyses: dict[str, Analysis] = {}
     pending: dict[str, asyncio.Task] = {}
@@ -706,7 +747,10 @@ def create_server():
         overlays = {str(document_path(d.uri)): d.source
                     for d in server.workspace.text_documents.values()}
 
-        analysis = compile_unit(path, include_paths, overlays)
+        # the include path recomputes per edit: 'package.toml' changes
+        # and new packages apply without a restart
+        paths = search_paths(workspace["root"], workspace["extra"], path.parent)
+        analysis = compile_unit(path, paths, overlays)
         if analysis.program is not None:
             analyses[uri] = analysis
 
@@ -733,12 +777,11 @@ def create_server():
 
     @server.feature(types.INITIALIZE)
     def initialize(params: types.InitializeParams) -> None:
-        root = None
         if params.root_uri is not None:
-            root = Path(to_fs_path(params.root_uri))
+            workspace["root"] = Path(to_fs_path(params.root_uri))
 
-        extra = (params.initialization_options or {}).get("includePaths", [])
-        include_paths.extend(search_paths(root, extra))
+        options = params.initialization_options or {}
+        workspace["extra"] = options.get("includePaths", [])
 
     @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
     def did_open(params: types.DidOpenTextDocumentParams) -> None:

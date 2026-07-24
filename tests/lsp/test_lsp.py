@@ -127,19 +127,38 @@ def test_outline_returns_none_when_the_text_does_not_parse():
     assert outline("fn broken( {") is None
 
 
-def test_search_paths_finds_package_trees(tmp_path):
+def test_search_paths_read_the_project_config(tmp_path):
     """
-    A workspace's 'packages/*/src' directories join the include path,
-    after any configured ones, with the root and its 'lib/' closing.
+    'package.toml' configures the include path: the workspace root's
+    '[package] include' entries join after any explicit ones, with the
+    root and its 'lib/' closing.
     """
+    write(tmp_path / "package.toml",
+          '[package]\ninclude = ["packages/core/src", "packages/libc/src"]\n')
     (tmp_path / "packages" / "core" / "src").mkdir(parents=True)
-    (tmp_path / "packages" / "libc" / "src").mkdir(parents=True)
 
     paths = search_paths(tmp_path, ["/explicit"])
     assert [str(p) for p in paths] == [
         "/explicit",
-        str(tmp_path / "packages" / "core" / "src"),
-        str(tmp_path / "packages" / "libc" / "src"),
+        str((tmp_path / "packages" / "core" / "src").resolve()),
+        str((tmp_path / "packages" / "libc" / "src").resolve()),
+        str(tmp_path),
+        str(tmp_path / "lib"),
+    ]
+
+
+def test_search_paths_prefer_the_nearest_config(tmp_path):
+    """
+    The nearest 'package.toml' walking up from the edited file
+    contributes first, the workspace root's after.
+    """
+    write(tmp_path / "package.toml", '[package]\ninclude = ["packages"]\n')
+    write(tmp_path / "sie" / "package.toml", '[package]\ninclude = ["src"]\n')
+
+    paths = search_paths(tmp_path, [], tmp_path / "sie" / "src")
+    assert [str(p) for p in paths] == [
+        str((tmp_path / "sie" / "src").resolve()),
+        str((tmp_path / "packages").resolve()),
         str(tmp_path),
         str(tmp_path / "lib"),
     ]

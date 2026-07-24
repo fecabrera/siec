@@ -18,6 +18,8 @@ from siec.ast import (
     UnaryOp,
     Var,
 )
+from contextlib import contextmanager
+
 from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
@@ -134,6 +136,23 @@ def register_constants(gen: CodeGenerator, program: Program) -> None:
     from siec.codegen.macros import check_macro_cycles
 
     check_macro_cycles(gen)
+
+
+@contextmanager
+def constant_view(gen: CodeGenerator, const):
+    """
+    Resolve names under the constant's declaring file's view: its value
+    expression's own references live where it was written, so a module's
+    constant may build on its siblings wherever it is used.
+    """
+    previous = gen.current_file
+    if const.file:
+        gen.current_file = const.file
+
+    try:
+        yield
+    finally:
+        gen.current_file = previous
 
 
 def find_constant(gen: CodeGenerator, name: str, file: str | None = None):

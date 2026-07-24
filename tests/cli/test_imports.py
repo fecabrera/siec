@@ -778,3 +778,27 @@ def test_included_names_reexport_through_imports(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_module_constants_build_on_their_siblings(tmp_path, monkeypatch):
+    """
+    A constant's value resolves in its declaring file's view: a module's
+    constant may reference its siblings wherever it is used.
+    """
+    (tmp_path / "flags.sie").write_text("""
+        @const A = 1 << 1;
+        @const B = 1 << 3;
+        @const ALL = A | B;
+        @const DEFAULT = ALL;
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { DEFAULT } from flags;
+
+        fn main() -> i32 {
+            return DEFAULT * 4 + 2;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

@@ -54,7 +54,7 @@ The server installs next to the compiler:
 pip install -e '.[lsp]'
 ```
 
-The `editors/` directory connects it to editors: `editors/vscode/sie` is a VSCode extension holding the syntax highlighting and the client (see its README), and `editors/helix/languages.toml` is a block to merge into a Helix configuration. Any editor that speaks LSP works the same way: run `sie-lsp` over stdio for `.sie` files. Extra include directories pass through the initialization options as `includePaths`, like the compiler's `-I`; a workspace's `packages/*/src` trees are found on their own.
+The `editors/` directory connects it to editors: `editors/vscode/sie` is a VSCode extension holding the syntax highlighting and the client (see its README), and `editors/helix/languages.toml` is a block to merge into a Helix configuration. Any editor that speaks LSP works the same way: run `sie-lsp` over stdio for `.sie` files. The include path comes from the project's `package.toml`: the `[package] include` entries of the nearest one above the edited file and the workspace root's, reread on each edit. Editor-side extras pass through the initialization options as `includePaths`, like the compiler's `-I`.
 
 ## The language
 

@@ -251,14 +251,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
         # a constant substitutes its value expression in place, coerced to
         # its annotated type when it has one, adapting like a literal otherwise
-        from siec.codegen.constants import find_constant
+        from siec.codegen.constants import constant_view, find_constant
 
         const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
         if const is not None:
-            if const.type is not None:
-                return emit_coerced(gen, builder, const.value, const.type, scope)
+            with constant_view(gen, const):
+                if const.type is not None:
+                    return emit_coerced(gen, builder, const.value, const.type, scope)
 
-            return emit_expression(gen, builder, const.value, expected_type, scope)
+                return emit_expression(gen, builder, const.value, expected_type, scope)
 
         # a bare object-like macro expands in place, C's 'errno'-style
         if expr.name in gen.macros and gen.macros[expr.name].params is None:

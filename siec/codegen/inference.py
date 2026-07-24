@@ -139,12 +139,15 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         # a constant carries its annotation; unannotated, it adapts like
         # its value expression written in place
-        from siec.codegen.constants import find_constant
+        from siec.codegen.constants import constant_view, find_constant
 
         const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
         if const is not None:
-            return const.type if const.type is not None else expr_sie_type(
-                gen, const.value, scope)
+            if const.type is not None:
+                return const.type
+
+            with constant_view(gen, const):
+                return expr_sie_type(gen, const.value, scope)
 
         # a bare object-like macro reads as its expansion, C's 'errno'-style
         if expr.name in gen.macros and gen.macros[expr.name].params is None:

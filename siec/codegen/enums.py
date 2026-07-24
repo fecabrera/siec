@@ -156,13 +156,14 @@ def evaluate(gen: CodeGenerator, expr) -> int:
         return fnv1a(typename_of(gen, expr.name, {}))
 
     if isinstance(expr, Var):
-        from siec.codegen.constants import find_constant
+        from siec.codegen.constants import constant_view, find_constant
 
         const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
         if const is None:
             raise TypeError(f"{expr.name!r} is not a compile-time constant")
 
-        return evaluate(gen, const.value)
+        with constant_view(gen, const):
+            return evaluate(gen, const.value)
 
     if isinstance(expr, UnaryOp) and expr.op in ("-", "~", "not"):
         value = evaluate(gen, expr.operand)
