@@ -44,6 +44,9 @@ fn format(str: const char[], args...) -> String {
 
             if (i < args.length) {
                 case (@typeof(args[i])) {
+                when bool:
+                    let arg = args[i] as bool;
+                    result.append(arg ? "true": "false");
                 when char*:
                     let arg = args[i] as char*;
                     result.append(arg);
