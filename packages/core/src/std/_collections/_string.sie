@@ -2,6 +2,11 @@ import _list;
 
 @type String = _list.List<char>;
 
+@extend String:
+    Add<String, char*>,
+    Add<String, char>,
+    Eq<char*>;
+
 /**
  * Initialize the String with the given array.
  *
@@ -13,14 +18,15 @@ fn String::init(&self, arr: const char*) {
 }
 
 /**
- * Append the given array to the String.
+ * Add the given null-terminated array to the String.
  *
- * @param arr The array to append to the String.
+ * @param arr The array to add to the String.
+ * @return The resulting String.
  */
-fn String::append(&self, arr: const char*) {
-    for (let i: u64 = 0; arr[i]; i += 1) {
-        self.push(arr[i]);
-    }
+fn String::add(&self, arr: const char*) -> String {
+    let result = String(self);
+    result.append(arr);
+    return result;
 }
 
 /**
@@ -36,6 +42,17 @@ fn String::eq(&self, arr: const char*) -> bool {
     }
 
     return arr[self.length] == 0;
+}
+
+/**
+ * Append the given array to the String.
+ *
+ * @param arr The array to append to the String.
+ */
+fn String::append(&self, arr: const char*) {
+    for (let i: u64 = 0; arr[i]; i += 1) {
+        self.push(arr[i]);
+    }
 }
 
 /**
