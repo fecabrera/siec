@@ -1,0 +1,8 @@
+import { abort } from stdlib;
+import { println } from std.io;
+import { String } from std.collections;
+
+fn panic(msg: const Iterable<T>[], args...) {
+    println(stderr, msg, args);
+    abort();
+}

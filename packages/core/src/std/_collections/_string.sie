@@ -71,3 +71,12 @@ fn String::null_terminate(&self) {
 fn String::as_bytes(&self) -> u8[] {
     return {self.data as u8*, self.length};
 }
+
+/**
+ * Convert the String to a byte array.
+ *
+ * @return The byte array.
+ */
+ fn String::as_const_bytes(const &self) -> const u8[] {
+    return {self.data as const u8*, self.length};
+}

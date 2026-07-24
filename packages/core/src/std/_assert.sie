@@ -1,0 +1,7 @@
+import { panic } from _panic;
+
+fn assert(cond: bool, msg: const char[], args...) {
+    if (not cond) {
+        panic(msg, args);
+    }
+}

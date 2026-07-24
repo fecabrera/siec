@@ -16,6 +16,10 @@ struct QueueIterator<T>: Iterator<T> {
     current: QueueNode<T>*; // next node to yield
 }
 
+struct ConstQueueIterator<T>: ConstIterator<T> {
+    current: const QueueNode<T>*; // next node to yield
+}
+
 /**
  * Initialize the Queue.
  */
@@ -99,6 +103,15 @@ fn Queue<T>::iterator(&self) -> QueueIterator<T> {
 }
 
 /**
+ * Get the const iterator for the Queue.
+ *
+ * @return The const iterator for the Queue.
+ */
+fn Queue<T>::const_iterator(const &self) -> ConstQueueIterator<T> {
+    return { self.head };
+}
+
+/**
  * Check if the QueueIterator has a next element.
  *
  * @return True if the QueueIterator has a next element, false otherwise.
@@ -113,6 +126,26 @@ fn QueueIterator<T>::has_next(&self) -> bool {
  * @return The next element from the QueueIterator.
  */
 fn QueueIterator<T>::next(&self) -> &T {
+    let current = self.current;
+    self.current = self.current->next;
+    return current->value;
+}
+
+/**
+ * Check if the ConstQueueIterator has a next element.
+ *
+ * @return True if the ConstQueueIterator has a next element, false otherwise.
+ */
+fn ConstQueueIterator<T>::has_next(const &self) -> bool {
+    return self.current != null;
+}
+
+/**
+ * Get the next element from the ConstQueueIterator.
+ *
+ * @return The next element from the ConstQueueIterator.
+ */
+fn ConstQueueIterator<T>::next(&self) -> const &T {
     let current = self.current;
     self.current = self.current->next;
     return current->value;

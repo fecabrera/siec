@@ -16,23 +16,11 @@ import { IOWritable } from _ifaces;
  * @param str The string to print.
  * @param args The arguments to print.
  */
-fn print(stream: &IOWritable, str: const char[], args...) {
+fn print(stream: &IOWritable, str: const Iterable<char>, args...) {
     let tmp = format(str, args);
     defer tmp.destroy();
 
-    stream.write(tmp.as_bytes());
-}
-
-/**
-* Print the given string to the given file pointer.
-*
-* @param fp The file pointer to print the string to.
-* @param str The string to print.
-* @param args The arguments to print.
-*/
-@inline
-fn print(stream: &IOWritable, str: String, args...) {
-    print(stream, str.as_bytes(), args);
+    stream.write(tmp.as_const_bytes());
 }
 
 /**
@@ -42,24 +30,12 @@ fn print(stream: &IOWritable, str: String, args...) {
  * @param str The string to print.
  * @param args The arguments to print.
  */
-fn println(stream: &IOWritable, str: const char[], args...) {
+fn println(stream: &IOWritable, str: const &Iterable[], args...) {
     let tmp = format(str, args);
     defer tmp.destroy();
     
     tmp.push('\n');
-    stream.write(tmp.as_bytes());
-}
-
-/**
-* Print the given string to the given file pointer followed by a newline.
-*
-* @param fp The file pointer to print the string to.
-* @param str The string to print.
-* @param args The arguments to print.
-*/
-@inline
-fn println(stream: &IOWritable, str: String, args...) {
-    println(stream, str.as_bytes(), args);
+    stream.write(tmp.as_const_bytes());
 }
 
 
@@ -74,39 +50,17 @@ fn println(stream: &IOWritable, str: String, args...) {
  * @param args The arguments to print.
  */
 @inline
-fn print(str: const char[], args...) {
+fn print(str: const &Iterable<char>, args...) {
     print(stdout, str, args);
 }
 
 /**
- * Print the given string to stdout.
- *
- * @param str The string to print.
- * @param args The arguments to print.
- */
-@inline
-fn print(str: String, args...) {
-    print(stdout, str.as_bytes(), args);
-}
-
-/**
  * Print the given string to stdout followed by a newline.
  *
  * @param str The string to print.
  * @param args The arguments to print.
  */
 @inline
-fn println(str: const char[], args...) {
+fn println(str: const &Iterable<char>, args...) {
     println(stdout, str, args);
-}
-
-/**
- * Print the given string to stdout followed by a newline.
- *
- * @param str The string to print.
- * @param args The arguments to print.
- */
-@inline
-fn println(str: String, args...) {
-    println(stdout, str.as_bytes(), args);
 }

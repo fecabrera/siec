@@ -7,7 +7,7 @@ import { String } from std.collections;
  * @param args The arguments to format with.
  * @return The formatted string.
  */
-fn format(str: const char[], args...) -> String {
+fn format(str: const &Iterable<char>, args...) -> String {
     let result = String();
 
     let i: u64 = 0;

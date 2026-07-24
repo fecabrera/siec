@@ -62,6 +62,15 @@ fn List<T>::as_array(&self) -> T[] {
 }
 
 /**
+ * Get the List as an array.
+ *
+ * @return The List as an array.
+ */
+fn List<T>::as_const_array(const &self) -> const T[] {
+    return {self.data, self.length};
+}
+
+/**
  * Reset the List.
  */
 fn List<T>::reset(&self) {
@@ -178,6 +187,16 @@ fn List<T>::append(&self, arr: Iterable<T>) {
  */
 fn List<T>::iterator(&self) -> ArrayIterator<T> {
     return ArrayIterator<T>(self.as_array());
+}
+
+/**
+ * Get the const iterator for the List.
+ *
+ * @return The const iterator for the List.
+ */
+fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+    let it: ConstArrayIterator<T> = { self.as_const_array(), 0 };
+    return it;
 }
 
 /**
