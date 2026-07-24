@@ -288,3 +288,59 @@ def test_eq_conformance_is_checked(compile_source):
 
         fn main() -> i32 { return 0; }
         """)
+
+
+ORDERED = """
+struct Version : Ord<Version>, Ord<i64> {
+    major: i64;
+}
+
+fn Version::cmp(&self, o: const &Version) -> i32 {
+    return (self.major - o.major) as i32;
+}
+
+fn Version::cmp(&self, n: i64) -> i32 {
+    return (self.major - n) as i32;
+}
+"""
+
+
+def test_orderings_desugar_to_cmp(run):
+    """
+    '<', '>', '<=', and '>=' each compare 'cmp's sign against zero.
+    """
+    source = ORDERED + """
+    fn main() -> i32 {
+        let a: Version = {1};
+        let b: Version = {2};
+        let c: Version = {2};
+        return (a < b and b > a and b <= c and c >= b
+                and not (b < a) and not (a >= b)) ? 42 : 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_orderings_pick_among_cmp_overloads(run):
+    """
+    The right operand's type picks 'cmp's overload, literals widening in.
+    """
+    source = ORDERED + """
+    fn main() -> i32 {
+        let a: Version = {5};
+        return (a < 7 and a > 3 and a >= 5 and a <= 5) ? 42 : 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_ord_conformance_is_checked(compile_source):
+    """
+    Claiming Ord<T> without the 'cmp' method is a conformance error.
+    """
+    with pytest.raises(TypeError, match="cmp"):
+        compile_source("""
+        struct P : Ord<P> { x: i32; }
+
+        fn main() -> i32 { return 0; }
+        """)

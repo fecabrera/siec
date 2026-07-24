@@ -62,14 +62,16 @@ COMPARISONS = {"<", ">", "<=", ">=", "==", "!="}
 # the method a struct operand's binary operator desugars to: 'a + b' is
 # 'a.add(b)', the operator interfaces' ('Add<S, T>', ...) shorthand
 OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem",
-                    "==": "eq", "!=": "eq"}
+                    "==": "eq", "!=": "eq",
+                    "<": "cmp", ">": "cmp", "<=": "cmp", ">=": "cmp"}
 
 
 def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | None:
     """
     Rewrite a binary operator over a struct operand into the method call
     it means: 'a + b' is 'a.add(b)', each overload picked by b's type,
-    and 'a != b' is equality negated, 'not a.eq(b)'. None for any other
+    'a != b' is equality negated, 'not a.eq(b)', and an ordering
+    compares 'cmp's sign, 'a < b' as 'a.cmp(b) < 0'. None for any other
     operand, whose operators keep their instructions.
     """
     method = OPERATOR_METHODS.get(expr.op)
@@ -84,6 +86,9 @@ def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | N
     call = MethodCall(expr.left, method, [expr.right])
     if expr.op == "!=":
         return UnaryOp("not", call)
+
+    if method == "cmp":
+        return BinaryOp(expr.op, call, IntLiteral(0))
 
     return call
 

@@ -405,6 +405,12 @@ interface Eq<T>;
 
 fn Eq<T>::eq(&self, value: T) -> bool;
 
+// ordering: one 'cmp' serves '<', '>', '<=', and '>=', each comparing
+// its sign: 'a < b' is 'a.cmp(b) < 0'; claiming 'Ord<T>' declares it
+interface Ord<T>;
+
+fn Ord<T>::cmp(&self, value: T) -> i32;
+
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];
     index: u64;

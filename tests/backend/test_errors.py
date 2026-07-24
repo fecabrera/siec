@@ -217,12 +217,11 @@ def test_struct_condition_is_an_error(compile_source):
         """)
 
 
-def test_struct_ordering_is_an_error(compile_source):
+def test_struct_ordering_needs_a_cmp_method(compile_source):
     """
-    Structs take no ordering operators; only '==' and '!=' desugar,
-    through an 'eq' method.
+    '<' on a struct without a 'cmp' method names the missing method.
     """
-    with pytest.raises(TypeError, match="cannot apply '<'"):
+    with pytest.raises(TypeError, match="type P has no method 'cmp'"):
         compile_source("""
         struct P { x: i32; }
 
