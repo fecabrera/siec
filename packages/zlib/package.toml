@@ -1,4 +1,5 @@
 [package]
 name = "zlib"
 version = "1.0.0"
+source = ["src/"]
 libs = ["z"]

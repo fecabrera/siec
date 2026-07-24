@@ -1,0 +1,15 @@
+# Project configuration: the include path the language server (and the
+# sie tool) resolve imports through, mirroring build.sh's -I list.
+
+[package]
+name = "siec"
+version = "0.1.0"
+include = [
+    "packages/libc/src",
+    "packages/posix/src",
+    "packages/tomlc17/src",
+    "packages/core/src",
+    "packages/mpdecimal/src",
+    "packages/zlib/src",
+    "packages/libcurl/src",
+]

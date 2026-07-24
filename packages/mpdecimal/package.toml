@@ -2,7 +2,7 @@
 name = "mpdecimal"
 version = "1.0.0"
 libs = ["mpdec"]
-include = ["src/"]
+source = ["src/"]
 
 [dependencies]
 libc = "~1"

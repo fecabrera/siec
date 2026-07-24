@@ -1,6 +1,7 @@
 [package]
 name = "tomlc17"
 version = "1.0.0"
+source = ["src/"]
 libs = ["tomlc17"]
 
 [dependencies]
