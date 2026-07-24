@@ -437,6 +437,13 @@ fn __array_iterator<T>(self: &T[]) -> ArrayIterator<T> {
     return ArrayIterator<T>(self);
 }
 
+// an array is an iterable of its element, by definition
+fn T[]::iterator(&self) -> ArrayIterator<T> {
+    return ArrayIterator<T>(self);
+}
+
+@extend T[]: Iterable<T>;
+
 struct ConstArrayIterator<T> {
     arr: const T[];
     index: u64;
@@ -594,6 +601,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     prelude = parse_prelude()
     program.structs = [*prelude.structs, *program.structs]
     program.functions = [*prelude.functions, *program.functions]
+    program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
                               "ArrayIterator", "ConstArrayIterator",
                               "Enumerated", "EnumerateIterator", "__enumerate",

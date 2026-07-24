@@ -63,6 +63,13 @@ def adapt_interface_params(gen: CodeGenerator, fn) -> None:
         for param in fn.params[start:]:
             while (found := find_interface_spelling(gen, param.type)) is not None:
                 spelling, begin, end = found
+
+                # 'Iterable<T>[]' constrains the whole array argument:
+                # the brackets fold into the placeholder, so the array
+                # type binds and checks against the interface itself
+                if param.type[end:end + 2] == "[]":
+                    end += 2
+
                 placeholder = f"__I{len(constraints)}"
                 param.type = param.type[:begin] + placeholder + param.type[end:]
                 constraints[placeholder] = spelling
@@ -304,22 +311,58 @@ def expand_lax(gen: CodeGenerator, name: str | None) -> str | None:
 def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     """
     Whether a concrete type implements an interface: by its declared
-    claim, or, for a 'T[]' array, the builtin 'Iterable<T>' and the
-    family's '@extend' claims with its element substituted in.
+    claim, or, for a 'T[]' array, the family's '@extend' claims with its
+    element substituted in. A free placeholder in the requirement -
+    'Iterable<T>' with no T bound - matches any claim that spells it.
     """
     concrete = strip_const(concrete)
-    if required in gen.implements.get(concrete, set()):
+    claims = set(gen.implements.get(concrete, set()))
+
+    if concrete.endswith("[]"):
+        elem = concrete[:-2]
+        claims.update(canonical_interface(gen, substitute(s, {param: elem}))
+                      for param, s in gen.array_claims)
+
+    if required in claims:
         return True
 
-    if not concrete.endswith("[]"):
+    return any(unify_spelling(gen, required, claim) for claim in claims)
+
+
+def unify_spelling(gen: CodeGenerator, required: str, provided: str) -> bool:
+    """
+    Whether a required interface spelling matches a provided claim, its
+    free placeholder names binding to whatever the claim spells there:
+    'Iterable<T>' takes a claimed 'Iterable<char>' with T as char.
+    """
+    if required == provided:
+        return True
+
+    req, have = split_generic(required), split_generic(provided)
+    if req is None or have is None:
+        # a bare free name takes the whole provided spelling
+        return required is not None and not is_type_name(gen, required)
+
+    if req[0] != have[0] or len(req[1]) != len(have[1]):
         return False
 
-    elem = concrete[:-2]
-    if required == f"Iterable<{elem}>":
-        return True
+    bindings = {}
+    for arg, spelled in zip(req[1], have[1]):
+        arg = substitute(arg, bindings)
+        if arg == spelled:
+            continue
 
-    return any(canonical_interface(gen, substitute(s, {param: elem})) == required
-               for param, s in gen.array_claims)
+        if split_generic(arg) is not None:
+            if not unify_spelling(gen, arg, spelled):
+                return False
+            continue
+
+        if is_type_name(gen, arg):
+            return False
+
+        bindings[arg] = spelled
+
+    return True
 
 
 def register_extends(gen: CodeGenerator, program) -> None:

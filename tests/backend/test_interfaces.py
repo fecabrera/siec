@@ -506,3 +506,58 @@ def test_interface_functions_overload_on_value_params(run):
     }
     """
     assert run(source).returncode == 0
+
+
+def test_arrays_are_iterable_by_definition(run):
+    """
+    'T[]' implements 'Iterable<T>' through the prelude's family claim:
+    an array passes where the interface is expected, answers
+    '.iterator()' itself, and 'Iterable<T>[]' binds the whole array,
+    its free T unifying with the element.
+    """
+    source = """
+    fn total(values: const Iterable<i32>) -> i32 {
+        let sum = 0;
+        foreach (v : values) {
+            sum += v;
+        }
+        return sum;
+    }
+
+    fn count(values: const Iterable<T>[]) -> u64 {
+        return values.length;
+    }
+
+    fn main() -> i32 {
+        let arr: i32[] = [13, 12, 14];
+
+        let it = arr.iterator();
+        let first = 0;
+        if (it.has_next()) {
+            first = it.next();
+        }
+
+        return total(arr) + first as i32 + count(arr) as i32 - 55;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_failed_constraint_names_the_whole_argument(compile_source):
+    """
+    A constraint failure blames the argument as passed - the array, not
+    the element the placeholder sat next to.
+    """
+    with pytest.raises(TypeError, match="type 'P' does not implement "
+                                        "interface 'Iterable<char>'"):
+        compile_source("""
+        struct P { x: i32; }
+
+        fn takes(it: const Iterable<char>) -> u64 { return 0; }
+
+        fn main() -> i32 {
+            let p: P;
+            takes(p);
+            return 0;
+        }
+        """)
