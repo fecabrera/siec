@@ -311,6 +311,12 @@ def test_concrete_overload_beside_an_interface_one(run):
         return it;
     }
 
+    fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+        let empty: T[] = [];
+        let it: ConstArrayIterator<T> = {empty, 0};
+        return it;
+    }
+
     fn List<T>::append(&self, arr: const T*, n: u64) {
         for (let i: u64 = 0; i < n; i += 1) {
             self.total += arr[i] as i64;
@@ -363,6 +369,12 @@ def test_constructor_picks_among_init_overloads(run):
     fn Box<T>::iterator(&self) -> BoxIter<T> {
         let empty: T[] = [];
         let it: BoxIter<T> = {empty, 0};
+        return it;
+    }
+
+    fn Box<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+        let empty: T[] = [];
+        let it: ConstArrayIterator<T> = {empty, 0};
         return it;
     }
 

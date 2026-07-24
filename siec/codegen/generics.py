@@ -451,9 +451,25 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
             continue
 
         try:
-            resolved.append((template, resolve_generic_call(gen, template,
-                                                            call, scope,
-                                                            expected)))
+            type_args = resolve_generic_call(gen, template, call, scope,
+                                             expected)
+
+            # a template whose constraints reject the bound arguments is
+            # not a candidate; its sibling may still take the call
+            if template.constraints:
+                from siec.codegen.aliases import expand_alias
+                from siec.codegen.interfaces import check_constraints
+
+                gen.ungated_types += 1
+                try:
+                    expanded = [expand_alias(gen, arg) for arg in type_args]
+                finally:
+                    gen.ungated_types -= 1
+
+                check_constraints(gen, template,
+                                  dict(zip(template.type_params, expanded)))
+
+            resolved.append((template, type_args))
         except TypeError as error:
             failure = failure or error
 

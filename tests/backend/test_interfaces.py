@@ -179,6 +179,11 @@ def test_builtin_iterable_interface(run):
         return StepIter<T>({self.data, self.length});
     }
 
+    fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        return it;
+    }
+
     fn total(coll: Iterable<i32>) -> i32 {
         let it = coll.iterator();
         let sum = 0;

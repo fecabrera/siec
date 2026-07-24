@@ -376,9 +376,19 @@ interface Iterator<T>;
 fn Iterator<T>::has_next(&self) -> bool;
 fn Iterator<T>::next(&self) -> &T;
 
+// a const iteration hands out const references: the iterator itself
+// advances, the collection stays untouched
+interface ConstIterator<T>;
+
+fn ConstIterator<T>::has_next(&self) -> bool;
+fn ConstIterator<T>::next(&self) -> const &T;
+
+// an Iterable iterates both ways: 'iterator()' serves a mutable value,
+// 'const_iterator()' a const one, and 'foreach' picks by the source
 interface Iterable<T>;
 
 fn Iterable<T>::iterator(&self) -> Iterator<T>;
+fn Iterable<T>::const_iterator(const &self) -> ConstIterator<T>;
 
 // the operator interfaces: 'a + b' on a struct operand is the 'a.add(b)'
 // shorthand, and claiming 'Add<S, T>' declares that shorthand's contract
@@ -433,18 +443,7 @@ fn ArrayIterator<T>::next(&self) -> &T {
     return self.arr[self.index - 1];
 }
 
-fn __array_iterator<T>(self: &T[]) -> ArrayIterator<T> {
-    return ArrayIterator<T>(self);
-}
-
-// an array is an iterable of its element, by definition
-fn T[]::iterator(&self) -> ArrayIterator<T> {
-    return ArrayIterator<T>(self);
-}
-
-@extend T[]: Iterable<T>;
-
-struct ConstArrayIterator<T> {
+struct ConstArrayIterator<T>: ConstIterator<T> {
     arr: const T[];
     index: u64;
 }
@@ -458,10 +457,17 @@ fn ConstArrayIterator<T>::next(&self) -> const &T {
     return self.arr[self.index - 1];
 }
 
-fn __const_array_iterator<T>(self: const &T[]) -> ConstArrayIterator<T> {
+// an array is an iterable of its element, by definition
+fn T[]::iterator(&self) -> ArrayIterator<T> {
+    return ArrayIterator<T>(self);
+}
+
+fn T[]::const_iterator(const &self) -> ConstArrayIterator<T> {
     let it: ConstArrayIterator<T> = { self, 0 };
     return it;
 }
+
+@extend T[]: Iterable<T>;
 
 struct Any {
     id: u64;
@@ -603,6 +609,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
+                              "ConstIterator",
                               "ArrayIterator", "ConstArrayIterator",
                               "Enumerated", "EnumerateIterator", "__enumerate",
                               "Tuple", "Any"))

@@ -571,7 +571,7 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     """
     from siec.ast import Call, MethodCall, Var
     from siec.codegen.calls import emit_call
-    from siec.codegen.methods import resolve_method
+    from siec.codegen.methods import iteration_getter, resolve_method
     from siec.codegen.types import resolve_type
 
     source_type = expr_sie_type(gen, stmt.iterable, scope)
@@ -582,10 +582,11 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     loop_scope = dict(scope)
     it_name = "__foreach_it"
 
-    # an Iterable hands out its iterator; a value that already is an
-    # iterator iterates itself, from a copy of its state
-    if resolve_method(gen, source, "iterator") is not None:
-        getter = MethodCall(stmt.iterable, "iterator", [], None)
+    # an Iterable hands out its iterator - a const source its
+    # const_iterator; a value that already is an iterator iterates
+    # itself, from a copy of its state
+    if (getter_name := iteration_getter(gen, source)) is not None:
+        getter = MethodCall(stmt.iterable, getter_name, [], None)
         it_type = expr_sie_type(gen, getter, scope)
         it_value = emit_expression(gen, builder, getter, None, scope)
     elif resolve_method(gen, source, "has_next") is not None:

@@ -17,6 +17,10 @@ def test_foreach_walks_iterables(run):
     fn List<T>::iterator(&self) -> ArrayIterator<T> {
         return ArrayIterator<T>({self.data, self.length});
     }
+    fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        return it;
+    }
 
     fn main() -> i32 {
         let nums: i32[] = [10, 12, 20];
@@ -123,3 +127,52 @@ def test_foreach_rejects_non_iterables(compile_source):
             return 0;
         }
         """)
+
+
+def test_foreach_picks_the_const_iterator_for_const_sources(run):
+    """
+    Iterating a mutable value goes through 'iterator()', a const one
+    through 'const_iterator()': the mutable getter's side effect counts
+    its walks, and the const walk leaves it untouched.
+    """
+    source = """
+    struct Bag<T>: Iterable<T> {
+        data: T*;
+        length: u64;
+        mutable_walks: i64;
+    }
+
+    fn Bag<T>::iterator(&self) -> ArrayIterator<T> {
+        self.mutable_walks += 1;
+        return ArrayIterator<T>({self.data, self.length});
+    }
+
+    fn Bag<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        return it;
+    }
+
+    fn scan(bag: const &Bag<i32>) -> i32 {
+        let sum = 0;
+        foreach (v : bag) {
+            sum += v;
+        }
+        return sum;
+    }
+
+    fn main() -> i32 {
+        let nums: i32[] = [20, 22];
+        let bag: Bag<i32> = { nums.data, nums.length, 0 };
+
+        let direct = 0;
+        foreach (v : bag) {
+            direct += v;
+        }
+        if (direct != 42) { return 1; }
+
+        if (scan(bag) != 42) { return 2; }
+
+        return (bag.mutable_walks as i32) - 1;
+    }
+    """
+    assert run(source).returncode == 0

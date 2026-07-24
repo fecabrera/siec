@@ -17,6 +17,10 @@ def test_enumerate_pairs_indices_with_values(run):
     fn List<T>::iterator(&self) -> ArrayIterator<T> {
         return ArrayIterator<T>({self.data, self.length});
     }
+    fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        return it;
+    }
 
     fn main() -> i32 {
         let nums: i32[] = [10, 12, 20];
@@ -69,6 +73,10 @@ def test_enumerate_carried_foreign_types(tmp_path, monkeypatch):
         struct List<T>: Iterable<T> { data: T*; length: u64; }
         fn List<T>::iterator(&self) -> ArrayIterator<T> {
             return ArrayIterator<T>({self.data, self.length});
+        }
+        fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
+            let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+            return it;
         }
     """)
 

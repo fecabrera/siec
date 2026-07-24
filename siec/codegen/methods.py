@@ -73,26 +73,6 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     if not base:
         return None
 
-    # a 'T[]' array answers 'iterator()' itself, through the builtin
-    # ArrayIterator<T>: that is how arrays implement Iterable<T>; a
-    # 'const T[]' iterates through ConstArrayIterator<T>, its elements
-    # referenced 'const &T'
-    if base.endswith("[]") and method == "iterator":
-        from siec.codegen.generics import instantiate_function
-        from siec.codegen.types import is_const
-
-        helper = ("__const_array_iterator"
-                  if is_const(strip_reference(receiver_type))
-                  else "__array_iterator")
-        template = gen.generic_functions.get(helper)
-        if template is not None:
-            # the element is a carried canonical name; no view gates it
-            gen.ungated_types += 1
-            try:
-                return instantiate_function(gen, template, [base[:-2]])
-            finally:
-                gen.ungated_types -= 1
-
     symbol = f"{base}::{method}"
 
     # a generic struct's method instantiates with the struct's arguments;
@@ -196,6 +176,21 @@ def qualified_method(gen: CodeGenerator, name: str) -> str | None:
     return resolve_method(gen, expand_alias(gen, base), method)
 
 
+def iteration_getter(gen: CodeGenerator, source: str) -> str | None:
+    """
+    The method 'foreach' or 'enumerate' asks its source for: a const
+    value iterates through 'const_iterator', a mutable one through
+    'iterator', falling back to 'const_iterator' when that is all the
+    type offers.
+    """
+    from siec.codegen.types import is_const
+
+    wants = (["const_iterator"] if is_const(source)
+             else ["iterator", "const_iterator"])
+    return next((method for method in wants
+                 if resolve_method(gen, source, method) is not None), None)
+
+
 def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | None:
     """
     Rewrite the builtin 'enumerate(x)' into its '__enumerate<I, T>' call:
@@ -226,8 +221,8 @@ def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | Non
         raise TypeError("cannot enumerate: the expression has no type")
 
     # an Iterable hands out its iterator; an iterator enumerates itself
-    if resolve_method(gen, source, "iterator") is not None:
-        arg = MethodCall(arg, "iterator", [], None)
+    if (getter := iteration_getter(gen, source)) is not None:
+        arg = MethodCall(arg, getter, [], None)
         it_type = expr_sie_type(gen, arg, scope)
     elif resolve_method(gen, strip_const(source), "has_next") is not None:
         it_type = strip_const(source)

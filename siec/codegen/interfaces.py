@@ -333,15 +333,21 @@ def unify_spelling(gen: CodeGenerator, required: str, provided: str) -> bool:
     """
     Whether a required interface spelling matches a provided claim, its
     free placeholder names binding to whatever the claim spells there:
-    'Iterable<T>' takes a claimed 'Iterable<char>' with T as char.
+    'Iterable<T>' takes a claimed 'Iterable<char>' with T as char. A
+    known type or interface name is never free - it matches only itself.
     """
     if required == provided:
         return True
 
     req, have = split_generic(required), split_generic(provided)
     if req is None or have is None:
+        # a bare interface spelling takes any instantiation of itself
+        if (required in gen.interfaces and have is not None
+                and have[0] == required):
+            return True
+
         # a bare free name takes the whole provided spelling
-        return required is not None and not is_type_name(gen, required)
+        return required is not None and free_name(gen, required)
 
     if req[0] != have[0] or len(req[1]) != len(have[1]):
         return False
@@ -357,12 +363,21 @@ def unify_spelling(gen: CodeGenerator, required: str, provided: str) -> bool:
                 return False
             continue
 
-        if is_type_name(gen, arg):
+        if not free_name(gen, arg):
             return False
 
         bindings[arg] = spelled
 
     return True
+
+
+def free_name(gen: CodeGenerator, spelling: str) -> bool:
+    """
+    Whether a spelling is a free placeholder name: a bare identifier
+    naming no known type and no interface.
+    """
+    return (spelling.isidentifier() and not is_type_name(gen, spelling)
+            and spelling not in gen.interfaces)
 
 
 def register_extends(gen: CodeGenerator, program) -> None:
