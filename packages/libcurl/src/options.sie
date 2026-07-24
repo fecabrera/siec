@@ -1,0 +1,32 @@
+/* The options API (options.h): introspect the curl_easy_setopt options */
+
+@include("curl")
+
+enum curl_easytype {
+    LONG = 0,  /* long (a range of values) */
+    VALUES,    /*      (a defined set or bitmask) */
+    OFF_T,     /* curl_off_t (a range of values) */
+    OBJECT,    /* pointer (opaque*) */
+    STRING,    /*         (char* to null-terminated buffer) */
+    SLIST,     /*         (curl_slist*) */
+    CBPTR,     /*         (opaque* passed as-is to a callback) */
+    BLOB,      /* blob (curl_blob*) */
+    FUNCTION,  /* function pointer */
+}
+
+/* "alias" means it is provided for old programs to remain functional,
+   another name is preferred */
+@const CURLOT_FLAG_ALIAS = 1 << 0;
+
+/* The CURLOPTTYPE_* id ranges can still be used to figure out what type/size
+   to use for curl_easy_setopt for the given id */
+struct curl_easyoption {
+    name: const char*;
+    id: CURLoption;
+    type: curl_easytype;
+    flags: u32;
+}
+
+@extern fn curl_easy_option_by_name(name: const char*) -> curl_easyoption*;
+@extern fn curl_easy_option_by_id(id: CURLoption) -> curl_easyoption*;
+@extern fn curl_easy_option_next(prev: const curl_easyoption*) -> curl_easyoption*;

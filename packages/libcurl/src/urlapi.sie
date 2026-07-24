@@ -1,5 +1,7 @@
 /* The URL API (urlapi.h): parse, inspect and rebuild URLs */
 
+@include("curl")
+
 @type CURLU = opaque;
 
 enum CURLUcode {

@@ -1,0 +1,59 @@
+// fetch a URL and print the response headers:
+//   headers <url>
+
+import std.io;
+import curl;
+
+/* the body is not wanted; claim each chunk and drop it */
+fn on_data(data: char*, size: u64, nmemb: u64, userdata: opaque*) -> u64 {
+    return size * nmemb;
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length != 2) {
+        std.io.println(std.io.stderr, "usage: {} url", args[0]);
+        return 1;
+    }
+
+    curl.curl_global_init(curl.CURL_GLOBAL_DEFAULT);
+    defer curl.curl_global_cleanup();
+
+    let handle = curl.curl_easy_init();
+    if (handle == null) {
+        std.io.println(std.io.stderr, "{}: curl_easy_init failed", args[0]);
+        return 1;
+    }
+    defer curl.curl_easy_cleanup(handle);
+
+    curl.curl_easy_setopt(handle, curl.CURLoption::URL, args[1]);
+    curl.curl_easy_setopt(handle, curl.CURLoption::FOLLOWLOCATION, 1 as i64);
+    curl.curl_easy_setopt(handle, curl.CURLoption::WRITEFUNCTION, on_data);
+
+    let code = curl.curl_easy_perform(handle);
+    if (code != curl.CURLcode::CURLE_OK) {
+        std.io.println(std.io.stderr, "{}: {}", args[0],
+                       curl.curl_easy_strerror(code));
+        return 1;
+    }
+
+    // walk the headers of the last request in arrival order
+    let prev: curl.curl_header* = null;
+    while (true) {
+        let header = curl.curl_easy_nextheader(handle, curl.CURLH_HEADER as u32, -1, prev);
+        if (header == null) {
+            break;
+        }
+        std.io.println("{}: {}", header->name, header->value);
+        prev = header;
+    }
+
+    // a single header can also be picked out by name
+    let picked: curl.curl_header*;
+    let found = curl.curl_easy_header(handle, "content-type", 0 as u64,
+                                      curl.CURLH_HEADER as u32, -1, &picked);
+    if (found == curl.CURLHcode::CURLHE_OK) {
+        std.io.println("picked content-type: {}", picked->value);
+    }
+
+    return 0;
+}
