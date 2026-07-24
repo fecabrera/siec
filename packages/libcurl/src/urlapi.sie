@@ -1,0 +1,78 @@
+/* The URL API (urlapi.h): parse, inspect and rebuild URLs */
+
+@type CURLU = opaque;
+
+enum CURLUcode {
+    CURLUE_OK = 0,
+    CURLUE_BAD_HANDLE,          /* 1 */
+    CURLUE_BAD_PARTPOINTER,     /* 2 */
+    CURLUE_MALFORMED_INPUT,     /* 3 */
+    CURLUE_BAD_PORT_NUMBER,     /* 4 */
+    CURLUE_UNSUPPORTED_SCHEME,  /* 5 */
+    CURLUE_URLDECODE,           /* 6 */
+    CURLUE_OUT_OF_MEMORY,       /* 7 */
+    CURLUE_USER_NOT_ALLOWED,    /* 8 */
+    CURLUE_UNKNOWN_PART,        /* 9 */
+    CURLUE_NO_SCHEME,           /* 10 */
+    CURLUE_NO_USER,             /* 11 */
+    CURLUE_NO_PASSWORD,         /* 12 */
+    CURLUE_NO_OPTIONS,          /* 13 */
+    CURLUE_NO_HOST,             /* 14 */
+    CURLUE_NO_PORT,             /* 15 */
+    CURLUE_NO_QUERY,            /* 16 */
+    CURLUE_NO_FRAGMENT,         /* 17 */
+    CURLUE_NO_ZONEID,           /* 18 */
+    CURLUE_BAD_FILE_URL,        /* 19 */
+    CURLUE_BAD_FRAGMENT,        /* 20 */
+    CURLUE_BAD_HOSTNAME,        /* 21 */
+    CURLUE_BAD_IPV6,            /* 22 */
+    CURLUE_BAD_LOGIN,           /* 23 */
+    CURLUE_BAD_PASSWORD,        /* 24 */
+    CURLUE_BAD_PATH,            /* 25 */
+    CURLUE_BAD_QUERY,           /* 26 */
+    CURLUE_BAD_SCHEME,          /* 27 */
+    CURLUE_BAD_SLASHES,         /* 28 */
+    CURLUE_BAD_USER,            /* 29 */
+    CURLUE_LACKS_IDN,           /* 30 */
+    CURLUE_TOO_LARGE,           /* 31 */
+}
+
+enum CURLUPart {
+    URL = 0,
+    SCHEME,
+    USER,
+    PASSWORD,
+    OPTIONS,
+    HOST,
+    PORT,
+    PATH,
+    QUERY,
+    FRAGMENT,
+    ZONEID, /* added in 7.65.0 */
+}
+
+/* Flags for curl_url_get/curl_url_set, ORed together */
+@const CURLU_DEFAULT_PORT      = 1 << 0;  /* return default port number */
+@const CURLU_NO_DEFAULT_PORT   = 1 << 1;  /* act as if no port was set when it matches the scheme default */
+@const CURLU_DEFAULT_SCHEME    = 1 << 2;  /* return default scheme if missing */
+@const CURLU_NON_SUPPORT_SCHEME = 1 << 3; /* allow non-supported scheme */
+@const CURLU_PATH_AS_IS        = 1 << 4;  /* leave dot sequences */
+@const CURLU_DISALLOW_USER     = 1 << 5;  /* no user+password allowed */
+@const CURLU_URLDECODE         = 1 << 6;  /* URL decode on get */
+@const CURLU_URLENCODE         = 1 << 7;  /* URL encode on set */
+@const CURLU_APPENDQUERY       = 1 << 8;  /* append a form style part */
+@const CURLU_GUESS_SCHEME      = 1 << 9;  /* legacy curl-style guessing */
+@const CURLU_NO_AUTHORITY      = 1 << 10; /* allow empty authority when the scheme is unknown */
+@const CURLU_ALLOW_SPACE       = 1 << 11; /* allow spaces in the URL */
+@const CURLU_PUNYCODE          = 1 << 12; /* get the host name in punycode */
+@const CURLU_PUNY2IDN          = 1 << 13; /* punycode => IDN conversion */
+
+@extern fn curl_url() -> CURLU*;
+@extern fn curl_url_cleanup(handle: CURLU*);
+@extern fn curl_url_dup(input: const CURLU*) -> CURLU*;
+
+/* the part comes back malloced; free it with curl_free */
+@extern fn curl_url_get(handle: const CURLU*, what: CURLUPart, part: char**, flags: u32) -> CURLUcode;
+/* passing null as the part clears it */
+@extern fn curl_url_set(handle: CURLU*, what: CURLUPart, part: const char*, flags: u32) -> CURLUcode;
+@extern fn curl_url_strerror(code: CURLUcode) -> char*;

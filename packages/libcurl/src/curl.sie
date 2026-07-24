@@ -1092,3 +1092,5 @@ enum CURLINFO {
 
 @extern fn curl_version() -> char*;
 @extern fn curl_getdate(p: const char*, unused: const time_t*) -> time_t;
+
+@include("urlapi")

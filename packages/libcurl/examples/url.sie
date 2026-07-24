@@ -1,0 +1,47 @@
+// break a URL into its parts and print them:
+//   url <url>
+
+import std.io;
+import curl;
+
+/* fetch one part; absent parts (no query, no fragment) are simply skipped */
+fn part(handle: curl.CURLU*, name: char*, what: curl.CURLUPart, flags: u32) {
+    let value: char*;
+    let code = curl.curl_url_get(handle, what, &value, flags);
+    if (code == curl.CURLUcode::CURLUE_OK) {
+        std.io.println("{}: {}", name, value);
+        curl.curl_free(value as opaque*);
+    }
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length != 2) {
+        std.io.println(std.io.stderr, "usage: {} url", args[0]);
+        return 1;
+    }
+
+    let handle = curl.curl_url();
+    if (handle == null) {
+        std.io.println(std.io.stderr, "{}: curl_url failed", args[0]);
+        return 1;
+    }
+    defer curl.curl_url_cleanup(handle);
+
+    let code = curl.curl_url_set(handle, curl.CURLUPart::URL, args[1],
+                                 curl.CURLU_GUESS_SCHEME as u32);
+    if (code != curl.CURLUcode::CURLUE_OK) {
+        std.io.println(std.io.stderr, "{}: {}", args[0],
+                       curl.curl_url_strerror(code));
+        return 1;
+    }
+
+    part(handle, "scheme", curl.CURLUPart::SCHEME, 0 as u32);
+    part(handle, "user", curl.CURLUPart::USER, 0 as u32);
+    part(handle, "host", curl.CURLUPart::HOST, 0 as u32);
+    part(handle, "port", curl.CURLUPart::PORT, curl.CURLU_DEFAULT_PORT as u32);
+    part(handle, "path", curl.CURLUPart::PATH, 0 as u32);
+    part(handle, "query", curl.CURLUPart::QUERY, 0 as u32);
+    part(handle, "fragment", curl.CURLUPart::FRAGMENT, 0 as u32);
+
+    return 0;
+}
