@@ -1,0 +1,151 @@
+/* The multi API (multi.h): drive many transfers at once, pull-style */
+
+@include("curl")
+
+@type CURLM = opaque;
+
+enum CURLMcode {
+    CURLM_CALL_MULTI_PERFORM = -1, /* please call curl_multi_perform() or curl_multi_socket_action() soon */
+    CURLM_OK = 0,
+    CURLM_BAD_HANDLE = 1,          /* the passed-in handle is not a valid CURLM handle */
+    CURLM_BAD_EASY_HANDLE = 2,     /* an easy handle was not good/valid */
+    CURLM_OUT_OF_MEMORY = 3,
+    CURLM_INTERNAL_ERROR = 4,      /* this is a libcurl bug */
+    CURLM_BAD_SOCKET = 5,          /* the passed in socket argument did not match */
+    CURLM_UNKNOWN_OPTION = 6,      /* curl_multi_setopt() with unsupported option */
+    CURLM_ADDED_ALREADY = 7,       /* an easy handle already added to a multi handle
+                                      was attempted to get added again */
+    CURLM_RECURSIVE_API_CALL = 8,  /* an api function was called from inside a callback */
+    CURLM_WAKEUP_FAILURE = 9,      /* wakeup is unavailable or failed */
+    CURLM_BAD_FUNCTION_ARGUMENT = 10,
+    CURLM_ABORTED_BY_CALLBACK = 11,
+    CURLM_UNRECOVERABLE_POLL = 12,
+    CURLM_CALL_MULTI_SOCKET = CURLMcode::CURLM_CALL_MULTI_PERFORM,
+}
+
+/* Bitmask bits for CURLMoption::PIPELINING */
+@const CURLPIPE_NOTHING   = 0;
+@const CURLPIPE_HTTP1     = 1;
+@const CURLPIPE_MULTIPLEX = 2;
+
+enum CURLMSG {
+    NONE = 0,
+    DONE = 1, /* the easy handle has completed; 'result' holds the transfer's CURLcode */
+}
+
+struct CURLMsg {
+    msg: CURLMSG;      /* what this message means */
+    easy_handle: CURL*; /* the handle it concerns */
+    data: union {
+        whatever: opaque*; /* message-specific data */
+        result: CURLcode;  /* return code for the transfer */
+    };
+}
+
+/* Based on poll(2)'s structure and values; POLL* constants are not used
+   directly to cover platforms without poll() */
+@const CURL_WAIT_POLLIN  = 0x0001;
+@const CURL_WAIT_POLLPRI = 0x0002;
+@const CURL_WAIT_POLLOUT = 0x0004;
+
+struct curl_waitfd {
+    fd: curl_socket_t;
+    events: i16;
+    revents: i16;
+}
+
+@extern fn curl_multi_init() -> CURLM*;
+@extern fn curl_multi_add_handle(multi: CURLM*, curl: CURL*) -> CURLMcode;
+@extern fn curl_multi_remove_handle(multi: CURLM*, curl: CURL*) -> CURLMcode;
+
+/* the sets are C fd_set*; select-style usage predates curl_multi_poll */
+@extern fn curl_multi_fdset(multi: CURLM*, read_fd_set: opaque*, write_fd_set: opaque*, exc_fd_set: opaque*, max_fd: i32*) -> CURLMcode;
+
+@extern fn curl_multi_wait(multi: CURLM*, extra_fds: curl_waitfd*, extra_nfds: u32, timeout_ms: i32, ret: i32*) -> CURLMcode;
+@extern fn curl_multi_poll(multi: CURLM*, extra_fds: curl_waitfd*, extra_nfds: u32, timeout_ms: i32, ret: i32*) -> CURLMcode;
+@extern fn curl_multi_wakeup(multi: CURLM*) -> CURLMcode;
+@extern fn curl_multi_perform(multi: CURLM*, running_handles: i32*) -> CURLMcode;
+@extern fn curl_multi_cleanup(multi: CURLM*) -> CURLMcode;
+
+/* repeated calls drain the queue; null signals no more messages for now */
+@extern fn curl_multi_info_read(multi: CURLM*, msgs_in_queue: i32*) -> CURLMsg*;
+@extern fn curl_multi_strerror(code: CURLMcode) -> char*;
+
+/* the socket-action interface: the app watches the sockets itself and
+   reports what happened on which */
+@const CURL_POLL_NONE   = 0;
+@const CURL_POLL_IN     = 1;
+@const CURL_POLL_OUT    = 2;
+@const CURL_POLL_INOUT  = 3;
+@const CURL_POLL_REMOVE = 4;
+
+@const CURL_SOCKET_BAD     = -1;
+@const CURL_SOCKET_TIMEOUT = CURL_SOCKET_BAD;
+
+@const CURL_CSELECT_IN  = 0x01;
+@const CURL_CSELECT_OUT = 0x02;
+@const CURL_CSELECT_ERR = 0x04;
+
+@type curl_socket_callback = fn(CURL*, curl_socket_t, i32, opaque*, opaque*) -> i32;
+
+/* called whenever the maximum wait before the next curl_multi_socket_action()
+   or curl_multi_perform() changes; the callback should return zero */
+@type curl_multi_timer_callback = fn(CURLM*, i64, opaque*) -> i32;
+
+@extern fn curl_multi_socket_action(multi: CURLM*, s: curl_socket_t, ev_bitmask: i32, running_handles: i32*) -> CURLMcode;
+@extern fn curl_multi_timeout(multi: CURLM*, milliseconds: i64*) -> CURLMcode;
+
+enum CURLMoption {
+    /* the socket callback function pointer */
+    SOCKETFUNCTION = 20001,
+    /* the argument passed to the socket callback */
+    SOCKETDATA = 10002,
+    /* set to 1 to enable pipelining for this multi handle */
+    PIPELINING = 3,
+    /* the timer callback function pointer */
+    TIMERFUNCTION = 20004,
+    /* the argument passed to the timer callback */
+    TIMERDATA = 10005,
+    /* maximum number of entries in the connection cache */
+    MAXCONNECTS = 6,
+    /* maximum number of (pipelining) connections to one host */
+    MAX_HOST_CONNECTIONS = 7,
+    /* maximum number of requests in a pipeline */
+    MAX_PIPELINE_LENGTH = 8,
+    /* a connection with a content-length longer than this
+       will not be considered for pipelining */
+    CONTENT_LENGTH_PENALTY_SIZE = 30009,
+    /* a connection with a chunk length longer than this
+       will not be considered for pipelining */
+    CHUNK_LENGTH_PENALTY_SIZE = 30010,
+    /* a list of site names(+port) that are blocked from pipelining */
+    PIPELINING_SITE_BL = 10011,
+    /* a list of server types that are blocked from pipelining */
+    PIPELINING_SERVER_BL = 10012,
+    /* maximum number of open connections in total */
+    MAX_TOTAL_CONNECTIONS = 13,
+    /* the server push callback function pointer */
+    PUSHFUNCTION = 20014,
+    /* the argument passed to the server push callback */
+    PUSHDATA = 10015,
+    /* maximum number of concurrent streams to support on a connection */
+    MAX_CONCURRENT_STREAMS = 16,
+}
+
+@extern fn curl_multi_setopt(multi: CURLM*, option: CURLMoption, ...) -> CURLMcode;
+@extern fn curl_multi_assign(multi: CURLM*, sockfd: curl_socket_t, sockp: opaque*) -> CURLMcode;
+
+/* an allocated null-terminated array of the added handles; free with curl_free */
+@extern fn curl_multi_get_handles(multi: CURLM*) -> CURL**;
+
+/* server push: the callback approves or denies a stream pushed by the server */
+@const CURL_PUSH_OK       = 0;
+@const CURL_PUSH_DENY     = 1;
+@const CURL_PUSH_ERROROUT = 2; /* added in 7.72.0 */
+
+@type curl_pushheaders = opaque;
+
+@extern fn curl_pushheader_bynum(h: curl_pushheaders*, num: u64) -> char*;
+@extern fn curl_pushheader_byname(h: curl_pushheaders*, name: const char*) -> char*;
+
+@type curl_push_callback = fn(CURL*, CURL*, u64, curl_pushheaders*, opaque*) -> i32;

@@ -1,0 +1,93 @@
+// fetch several URLs concurrently and report the bytes each one delivered:
+//   multiget <url>...
+
+import std.io;
+import curl;
+
+/* each transfer counts its bytes into its own counter, passed via WRITEDATA */
+fn on_data(data: char*, size: u64, nmemb: u64, userdata: opaque*) -> u64 {
+    let total = size * nmemb;
+    let counter = userdata as u64*;
+    *counter += total;
+    return total;
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length < 2 or args.length > 17) {
+        std.io.println(std.io.stderr, "usage: {} url... (up to 16)", args[0]);
+        return 1;
+    }
+    let count = (args.length - 1) as i32;
+
+    curl.curl_global_init(curl.CURL_GLOBAL_DEFAULT);
+    defer curl.curl_global_cleanup();
+
+    let multi = curl.curl_multi_init();
+    if (multi == null) {
+        std.io.println(std.io.stderr, "{}: curl_multi_init failed", args[0]);
+        return 1;
+    }
+    defer curl.curl_multi_cleanup(multi);
+
+    let handles: curl.CURL*[16];
+    let received: u64[16];
+
+    for (let i = 0; i < count; i += 1) {
+        let handle = curl.curl_easy_init();
+        handles[i] = handle;
+        received[i] = 0;
+
+        curl.curl_easy_setopt(handle, curl.CURLoption::URL, args[i + 1]);
+        curl.curl_easy_setopt(handle, curl.CURLoption::FOLLOWLOCATION, 1 as i64);
+        curl.curl_easy_setopt(handle, curl.CURLoption::WRITEFUNCTION, on_data);
+        curl.curl_easy_setopt(handle, curl.CURLoption::WRITEDATA, &received[i] as opaque*);
+        curl.curl_multi_add_handle(multi, handle);
+    }
+
+    // drive all transfers until none is left running
+    let running: i32 = 1;
+    while (running > 0) {
+        let code = curl.curl_multi_perform(multi, &running);
+        if (code != curl.CURLMcode::CURLM_OK) {
+            std.io.println(std.io.stderr, "{}: {}", args[0],
+                           curl.curl_multi_strerror(code));
+            return 1;
+        }
+        if (running > 0) {
+            curl.curl_multi_poll(multi, null, 0 as u32, 1000, null);
+        }
+    }
+
+    // each finished transfer leaves a DONE message naming its handle
+    let failures = 0;
+    let queued: i32;
+    while (true) {
+        let message = curl.curl_multi_info_read(multi, &queued);
+        if (message == null) {
+            break;
+        }
+        if (message->msg != curl.CURLMSG::DONE) {
+            continue;
+        }
+
+        for (let i = 0; i < count; i += 1) {
+            if (handles[i] != message->easy_handle) {
+                continue;
+            }
+            if (message->data.result == curl.CURLcode::CURLE_OK) {
+                std.io.println("{}: {} bytes", args[i + 1], received[i]);
+            } else {
+                std.io.println("{}: {}", args[i + 1],
+                               curl.curl_easy_strerror(message->data.result));
+                failures += 1;
+            }
+        }
+    }
+
+    for (let i = 0; i < count; i += 1) {
+        curl.curl_multi_remove_handle(multi, handles[i]);
+        curl.curl_easy_cleanup(handles[i]);
+    }
+
+    return failures > 0 ? 1 : 0;
+}
