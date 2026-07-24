@@ -25,7 +25,8 @@ struct Decimal
       Div<Decimal, Decimal>,
       Div<Decimal, i64>,
       Div<Decimal, u64>,
-      Eq<Decimal> {
+      Eq<Decimal>,
+      Ord<Decimal> {
     ctx: mpdecimal.mpd_context*;
     mpd: mpdecimal.mpd*;
 }
@@ -278,13 +279,26 @@ fn Decimal::div(&self, num: u64) -> Decimal {
 }
 
 /**
+ * Compare the value of the Decimal to the given Decimal.
+ *
+ * @param dec The Decimal to compare the current Decimal to.
+ * @return The result of the comparison.
+ *         0 if the values are equal,
+ *         > 0 if the value of the Decimal is greater than the given Decimal,
+ *         < 0 if the value of the Decimal is less than the given Decimal.
+ */
+fn Decimal::cmp(&self, dec: const &Decimal) -> i32 {
+    return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx);
+}
+
+/**
  * Check if the value of the Decimal is equal to the given Decimal.
  *
  * @param dec The Decimal to compare the current Decimal to.
  * @return True if the value of the Decimal is equal to the given Decimal, false otherwise.
  */
 fn Decimal::eq(&self, dec: const &Decimal) -> bool {
-    return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) == 0;
+    return self.cmp(dec) == 0;
 }
 
 /**
@@ -294,7 +308,7 @@ fn Decimal::eq(&self, dec: const &Decimal) -> bool {
  * @return True if the value of the Decimal is greater than the given Decimal, false otherwise.
  */
 fn Decimal::gt(&self, dec: const &Decimal) -> bool {
-    return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) > 0;
+    return self.cmp(dec) > 0;
 }
 
 /**
@@ -304,7 +318,7 @@ fn Decimal::gt(&self, dec: const &Decimal) -> bool {
  * @return True if the value of the Decimal is greater than or equal to the given Decimal, false otherwise.
  */
 fn Decimal::gte(&self, dec: const &Decimal) -> bool {
-    return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) >= 0;
+    return self.cmp(dec) >= 0;
 }
 
 /**
@@ -314,7 +328,7 @@ fn Decimal::gte(&self, dec: const &Decimal) -> bool {
  * @return True if the value of the Decimal is less than the given Decimal, false otherwise.
  */
 fn Decimal::lt(&self, dec: const &Decimal) -> bool {
-    return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) < 0;
+    return self.cmp(dec) < 0;
 }
 
 /**
@@ -324,7 +338,7 @@ fn Decimal::lt(&self, dec: const &Decimal) -> bool {
  * @return True if the value of the Decimal is less than or equal to the given Decimal, false otherwise.
  */
 fn Decimal::lte(&self, dec: const &Decimal) -> bool {
-    return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx) <= 0;
+    return self.cmp(dec) <= 0;
 }
 
 /**
