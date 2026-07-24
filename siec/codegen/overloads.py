@@ -41,6 +41,27 @@ def display_name(symbol: str) -> str:
     return symbol.partition("(")[0].split(".static.")[0]
 
 
+def shown_signature(fn: Function) -> str:
+    """
+    A function's name with its parameter types, for error messages
+    naming one signature of an overloaded name: 'f(i64, char*)', a
+    variadic's pack shown as its '...'. An interface-typed parameter's
+    synthetic type parameter renders back as the interface it spells.
+    """
+    from siec.codegen.generics import substitute
+
+    mapping = {param: constraint
+               for param, constraint in (fn.constraints or {}).items()
+               if param.startswith("__")}
+
+    params = [substitute(p.type, mapping) if mapping else p.type
+              for p in fn.params]
+    if fn.variadic:
+        params[-1] = "..."
+
+    return f"{fn.name}({', '.join(params)})"
+
+
 def overload_key(params) -> tuple:
     """
     The signature identity of a parameter list: its types behind 'const',

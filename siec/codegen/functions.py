@@ -8,7 +8,11 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.asm import emit_asm_function
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
-from siec.codegen.overloads import declare_overload, overload_symbol
+from siec.codegen.overloads import (
+    declare_overload,
+    overload_symbol,
+    shown_signature,
+)
 from siec.codegen.statements import emit_block
 from siec.codegen.types import is_reference, resolve_type, strip_const
 
@@ -247,7 +251,8 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         symbol = overload_symbol(gen, gen.resolve_symbol(fn.name), fn.params)
         func = gen.module.globals[symbol]
         if func.blocks:
-            raise TypeError(f"function {fn.name!r} is defined more than once")
+            raise TypeError(f"function '{shown_signature(fn)}' "
+                            "is defined more than once")
 
         ret_type = func.function_type.return_type
         builder = ir.IRBuilder(func.append_basic_block("entry"))

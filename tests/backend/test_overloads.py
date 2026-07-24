@@ -177,12 +177,29 @@ def test_no_matching_overload_is_an_error(compile_source):
 def test_same_signature_twice_is_still_a_conflict(compile_source):
     """
     Overloading needs distinct parameter lists; repeating one is the same
-    redefinition error as ever.
+    redefinition error as ever, naming the colliding signature since the
+    name alone no longer identifies it.
     """
-    with pytest.raises(TypeError, match="defined more than once"):
+    with pytest.raises(TypeError, match=r"function 'f\(i32\)' is defined "
+                                        "more than once"):
         compile_source("""
         fn f(n: i32) -> i32 { return 1; }
         fn f(n: i32) -> i32 { return 2; }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_a_duplicate_signature_names_its_variadic_pack(compile_source):
+    """
+    A repeated variadic signature shows its pack as the '...' it was
+    declared with, not the 'Any[]' it sugars to.
+    """
+    with pytest.raises(TypeError, match=r"function 'f\(char\*, \.\.\.\)' is "
+                                        "defined more than once"):
+        compile_source("""
+        fn f(s: char*, args...) -> i32 { return 1; }
+        fn f(s: char*, args...) -> i32 { return 2; }
 
         fn main() -> i32 { return 0; }
         """)

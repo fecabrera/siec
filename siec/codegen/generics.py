@@ -260,8 +260,9 @@ def register_generic_function(gen: CodeGenerator, fn) -> None:
             for other in (primary, *overloads):
                 if (len(other.type_params) == len(fn.type_params)
                         and template_key(other) == template_key(fn)):
-                    raise TypeError(f"function {fn.name!r} is declared more "
-                                    "than once")
+                    from siec.codegen.overloads import shown_signature
+                    raise TypeError(f"function '{shown_signature(fn)}' "
+                                    "is declared more than once")
 
             overloads.append(fn)
             return

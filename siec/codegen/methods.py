@@ -27,7 +27,7 @@ def register_method(gen: CodeGenerator, fn) -> None:
     """
     from siec.codegen.functions import declare_function
     from siec.codegen.generics import register_generic_function
-    from siec.codegen.overloads import overload_key
+    from siec.codegen.overloads import overload_key, shown_signature
 
     with source_location(line=fn.line, file=fn.file):
         if fn.receiver_params is not None:
@@ -53,7 +53,8 @@ def register_method(gen: CodeGenerator, fn) -> None:
 
             if any(overload_key(t.params) == overload_key(fn.params)
                    for t in templates):
-                raise TypeError(f"method {fn.name!r} is declared more than once")
+                raise TypeError(f"method '{shown_signature(fn)}' "
+                                "is declared more than once")
 
             templates.append(fn)
         elif fn.type_params is not None:

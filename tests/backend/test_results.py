@@ -169,8 +169,8 @@ def test_result_cannot_be_redeclared(compile_source):
         fn main() -> i32 { return 0; }
         """)
 
-    with pytest.raises(TypeError, match="function 'Ok' is declared more "
-                                        "than once"):
+    with pytest.raises(TypeError, match=r"function 'Ok\(V\)' is declared "
+                                        "more than once"):
         compile_source("""
         fn Ok<V, E>(v: V) -> Result<V, E> { return Ok(v); }
         fn main() -> i32 { return 0; }
