@@ -1,0 +1,46 @@
+// fetch a URL and write the response body to stdout:
+//   get <url>
+
+import std.io;
+import curl;
+import unistd;
+
+/* libcurl hands the body over in chunks; write each one straight out */
+fn on_data(data: char*, size: u64, nmemb: u64, userdata: opaque*) -> u64 {
+    let total = size * nmemb;
+    unistd.write(1, data as opaque*, total);
+    return total;
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length != 2) {
+        std.io.println(std.io.stderr, "usage: {} url", args[0]);
+        return 1;
+    }
+
+    curl.curl_global_init(curl.CURL_GLOBAL_DEFAULT);
+    defer curl.curl_global_cleanup();
+
+    let handle = curl.curl_easy_init();
+    if (handle == null) {
+        std.io.println(std.io.stderr, "{}: curl_easy_init failed", args[0]);
+        return 1;
+    }
+    defer curl.curl_easy_cleanup(handle);
+
+    curl.curl_easy_setopt(handle, curl.CURLoption::URL, args[1]);
+    curl.curl_easy_setopt(handle, curl.CURLoption::FOLLOWLOCATION, 1 as i64);
+    curl.curl_easy_setopt(handle, curl.CURLoption::WRITEFUNCTION, on_data);
+
+    let code = curl.curl_easy_perform(handle);
+    if (code != curl.CURLcode::CURLE_OK) {
+        std.io.println(std.io.stderr, "{}: {}", args[0],
+                       curl.curl_easy_strerror(code));
+        return 1;
+    }
+
+    // an HTTP error page still transfers fine; the status decides
+    let status: i64;
+    curl.curl_easy_getinfo(handle, curl.CURLINFO::RESPONSE_CODE, &status);
+    return status >= 400 ? 1 : 0;
+}

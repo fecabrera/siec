@@ -1,0 +1,7 @@
+[package]
+name = "libcurl"
+version = "1.0.0"
+source = ["src/"]
+
+[dependencies]
+posix = "~1"

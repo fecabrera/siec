@@ -1,0 +1,7 @@
+@type sa_family_t = u8;
+
+struct sockaddr {
+    sa_len:     u8;             /* total length */
+    sa_family:  sa_family_t;    /* [XSI] address family */
+    sa_data:    @raw<char>[14]; /* [XSI] addr value */
+}
