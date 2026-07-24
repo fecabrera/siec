@@ -29,12 +29,13 @@ def test_int_literal_takes_the_expected_type(env):
     assert value.type == ir.IntType(64)
 
 
-def test_string_literal_becomes_a_char_pointer(env):
+def test_string_literal_becomes_a_char_pointer_in_a_pointer_context(env):
     """
-    A string literal is emitted as a char* value.
+    A string literal in an explicit pointer context is the bare char*.
     """
     gen, builder = env
-    value = emit_expression(gen, builder, StrLiteral("hi"), None, {})
+    value = emit_expression(gen, builder, StrLiteral("hi"),
+                            ir.PointerType(ir.IntType(8)), {})
     assert value.type == ir.PointerType(ir.IntType(8))
 
 

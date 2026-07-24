@@ -39,8 +39,11 @@ def register_method(gen: CodeGenerator, fn) -> None:
             # templates stamped together per struct instantiation; only
             # one may take type parameters of its own (an interface
             # parameter's synthetic ones included), since a generic
-            # template registers whole, with no set to pick among
-            key = (fn.receiver, fn.name.partition("::")[2])
+            # template registers whole, with no set to pick among; an
+            # array's ('T[]::m') registers under the one array family,
+            # whatever its element placeholder is called
+            base = "[]" if fn.receiver.endswith("[]") else fn.receiver
+            key = (base, fn.name.partition("::")[2])
             templates = gen.generic_methods.setdefault(key, [])
 
             if (fn.type_params is not None
@@ -93,8 +96,13 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
     # a generic struct's method instantiates with the struct's arguments;
     # stamping comes first, so the templates join any overloads declared
-    # directly on the instantiated name (through an alias, say)
+    # directly on the instantiated name (through an alias, say); an
+    # array receiver instantiates the 'T[]::m' templates, its element
+    # standing in for the placeholder
     parts = split_generic(base)
+    if parts is None and base.endswith("[]"):
+        parts = ("[]", [base[:-2]])
+
     templates = gen.generic_methods.get((parts[0], method)) if parts else None
 
     if not templates or symbol in gen.instantiated_functions:

@@ -451,3 +451,25 @@ def test_array_size_must_be_constant(compile_source):
         fn f() -> i32 { return 4; }
         fn main() -> i32 { let a: u8[f()]; return 0; }
         """)
+
+
+def test_string_literals_default_to_char_arrays(run):
+    """
+    A string literal is a 'char[]': it carries its length and indexes,
+    and still passes to an explicit 'char*' parameter, C-style.
+    """
+    source = """
+    fn first(p: const char*) -> char { return p[0]; }
+
+    fn main() -> i32 {
+        let s = "hello";
+        let p: char* = "world";
+
+        if (s.length == 5 and s[1] == 'e' and first("x") == 'x'
+                and p[0] == 'w') {
+            return 42;
+        }
+        return 1;
+    }
+    """
+    assert run(source).returncode == 42

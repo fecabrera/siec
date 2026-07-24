@@ -2,6 +2,7 @@
 
 from siec.ast import (
     CondBlock,
+    Extend,
     Function,
     Global,
     Import,
@@ -75,10 +76,34 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.enums.append(parse_enum(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "type":
             program.aliases.append(parse_alias(ts))
+        elif ts.peek().value == "@" and ts.peek(1).value == "extend":
+            program.extends.append(parse_extend(ts))
         else:
             program.functions.append(parse_function(ts))
 
     return program
+
+
+def parse_extend(ts: TokenStream) -> Extend:
+    """
+    Parse an '@extend Type: Iface, ...;' declaration: interface claims
+    added to an existing type. The type is a struct's name, an alias, or
+    an array pattern like 'T[]', its element name a placeholder.
+    """
+    line = ts.peek().line
+    ts.expect("sym", "@")
+    ts.expect("ident", "extend")
+
+    name = parse_type(ts)
+    ts.expect("sym", ":")
+
+    interfaces = [parse_type(ts)]
+    while ts.peek().syntax == ",":
+        ts.next()
+        interfaces.append(parse_type(ts))
+
+    ts.expect("sym", ";")
+    return Extend(name, interfaces, line=line)
 
 
 def parse_import(ts: TokenStream) -> Import:
@@ -349,6 +374,16 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     if receiver is not None:
         name = f"{receiver}::{name}"
         type_params = params_list
+    elif (params_list is None and ts.peek().syntax == "["
+            and ts.peek(1).syntax == "]" and ts.peek(2).syntax == "::"):
+        # 'T[]::m' declares a method of the arrays, the element name a
+        # placeholder: it stamps per element type, like a generic struct's
+        ts.next()
+        ts.next()
+        ts.next()
+        receiver, receiver_params = f"{name}[]", [name]
+        name = f"{receiver}::{ts.expect('ident').value}"
+        type_params = placeholders(ts)
     elif ts.peek().syntax == "::":
         ts.next()
         receiver, receiver_params = name, params_list
@@ -394,8 +429,9 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
             ts.next()  # the '&'
             ts.next()  # 'self'
 
+            # an array receiver already spells its element: '&T[]'
             expected = receiver
-            if receiver_params is not None:
+            if receiver_params is not None and not receiver.endswith("[]"):
                 expected += f"<{','.join(receiver_params)}>"
 
             params.append(Param("self", f"{prefix}&{expected}"))

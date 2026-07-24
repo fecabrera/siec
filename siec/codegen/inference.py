@@ -7,6 +7,7 @@ how does it classify - without emitting any IR.
 from llvmlite import ir
 
 from siec.ast import (
+    ArrayLiteral,
     AsmBlock,
     BinaryOp,
     Block,
@@ -78,9 +79,11 @@ def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | N
     if method is None:
         return None
 
-    # enum-typed operands keep their integer arithmetic
+    # enum-typed operands keep their integer arithmetic; arrays take the
+    # shorthand too, through their 'T[]::m' methods
     name = strip_const(expr_sie_type(gen, expr.left, scope) or "")
-    if name not in gen.structs or name in gen.enums:
+    if name in gen.enums or (name not in gen.structs
+                             and not name.endswith("[]")):
         return None
 
     call = MethodCall(expr.left, method, [expr.right])
@@ -104,6 +107,18 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     Infer the Sie type name of an expression; None when it has no fixed one.
     """
+    # a string or array literal is the fat array it builds; only an
+    # explicit pointer context takes it as a bare pointer instead
+    if isinstance(expr, StrLiteral):
+        return "char[]"
+
+    if isinstance(expr, ArrayLiteral):
+        if not expr.elements:
+            return None
+
+        element = infer_type(gen, expr.elements[0], scope)
+        return f"{element}[]" if element is not None else None
+
     # variables and calls carry their declared Sie type; a bare function
     # name carries the canonical fn type of its signature; a '&T'
     # reference parameter reads as the T it aliases
@@ -486,9 +501,6 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     if isinstance(expr, FloatLiteral):
         return "f64"
-
-    if isinstance(expr, StrLiteral):
-        return "char*"
 
     if isinstance(expr, BoolLiteral):
         return "bool"

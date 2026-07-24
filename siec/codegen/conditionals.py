@@ -34,3 +34,4 @@ def resolve_conditionals(gen: CodeGenerator, program: Program) -> None:
         program.structs.extend(branch.structs)
         program.enums.extend(branch.enums)
         program.globals.extend(branch.globals)
+        program.extends.extend(branch.extends)

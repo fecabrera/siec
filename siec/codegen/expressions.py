@@ -84,15 +84,20 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, StrLiteral):
         ptr = emit_string(gen, builder, expr.value)
 
-        # a string literal fills a 'char[]' context as the fat {char*, u64}
-        # value, its length excluding the null terminator
-        if is_array_struct(expected_type) and expected_type.elements[0] == ptr.type:
-            value = ir.Constant(expected_type, ir.Undefined)
-            value = builder.insert_value(value, ptr, 0)
-            return builder.insert_value(
-                value, ir.Constant(ir.IntType(64), len(expr.value.encode())), 1)
+        # a string literal is the fat 'char[]' value, its length excluding
+        # the null terminator; only an explicit pointer context takes the
+        # bare pointer instead, C-style
+        if isinstance(expected_type, ir.PointerType):
+            return ptr
 
-        return ptr
+        array_type = expected_type
+        if not (is_array_struct(array_type) and array_type.elements[0] == ptr.type):
+            array_type = resolve_type("char[]", gen.structs)
+
+        value = ir.Constant(array_type, ir.Undefined)
+        value = builder.insert_value(value, ptr, 0)
+        return builder.insert_value(
+            value, ir.Constant(ir.IntType(64), len(expr.value.encode())), 1)
 
     if isinstance(expr, BoolLiteral):
         # boolean literals are i1 constants, independent of the context type
@@ -1109,9 +1114,19 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
     with the same widening rules as any other typed context.
     """
     # the literal takes its element type from context: an 'i32[]' target's
-    # first field is a pointer to the element type it must build
+    # first field is a pointer to the element type it must build; an
+    # untyped context takes the 'T[]' its first element infers
     if not is_array_struct(expected_type):
-        raise TypeError(f"array literal needs an array type, not {expected_type}")
+        from siec.codegen.inference import infer_type
+
+        if element_name is None and expr.elements:
+            element_name = infer_type(gen, expr.elements[0], scope)
+
+        if element_name is None:
+            raise TypeError("array literal needs an array type, "
+                            f"not {expected_type}")
+
+        expected_type = resolve_type(f"{element_name}[]", gen.structs)
 
     element_type = expected_type.elements[0].pointee
 

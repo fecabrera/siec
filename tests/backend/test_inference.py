@@ -159,12 +159,26 @@ def test_inference_in_a_for_init(run):
     assert run(source).returncode == 6
 
 
+def test_array_literal_initializer_infers_its_array_type(run):
+    """
+    'let a = [1, 2, 3];' declares the 'i32[]' its elements infer.
+    """
+    source = """
+    fn main() -> i32 {
+        let a = [40, 2];
+        return (a[0] + a[1]) * (a.length as i32) / 2;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_unfixed_initializer_is_an_error(compile_source):
     """
-    An initializer with no fixed type (an array literal) demands an annotation.
+    An initializer with no fixed type (an empty array literal) demands an
+    annotation.
     """
     with pytest.raises(TypeError, match="cannot infer a type for 'a'"):
-        compile_source("fn main() -> i32 { let a = [1, 2, 3]; return 0; }")
+        compile_source("fn main() -> i32 { let a = []; return 0; }")
 
 
 def test_unknown_call_initializer_names_the_function(compile_source):

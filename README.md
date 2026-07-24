@@ -1257,6 +1257,8 @@ Arrays can be initialiazed with elements `a`, `b`, etc. enclosed by `[]` and sep
 let arr: i32[] = [1, 2, 3];
 ```
 
+An array literal is the `T[]` its elements infer, so the annotation may be dropped: `let arr = [1, 2, 3];` declares an `i32[]`. Only an explicit pointer context takes it as a bare pointer instead, the literal decaying to its data: `let ptr: i32* = [1, 2, 3];`. An empty literal has no element to infer from and needs its annotation.
+
 Elements can themselves be pointers or arrays, so an array literal can build an array of strings or an array of arrays.
 
 ```
@@ -1322,7 +1324,10 @@ String literals are arrays of type `char[]`. They can be initialized with charac
 
 ```
 let msg: char[] = "Hello";
+let inferred = "Hello";      // a char[] too
 ```
+
+A literal is a `char[]` everywhere: it carries its length, indexes, takes the [array methods](#array-methods), and the operator shorthands follow (`"a" + s`, `s == "a"`). Only an explicit `char*` context takes the bare pointer instead, C-style: `let p: char* = "Hello";`, or an `@extern` function's `char*` parameter.
 
 Just like any other array, they can initialized by a pair `{ptr, n}`:
 
@@ -1970,6 +1975,26 @@ fn S<A, B, ...>::method<X, Y, ...>(self: &S<A, B, ...>, x: X, y: Y, ...) {
 }
 ```
 
+#### Array methods
+
+Methods declare over the builtin arrays too: `fn T[]::m(...)` acts on every `T[]`, the element name a placeholder. Like a generic struct's methods, each element type stamps its own instance on first use, and same-named declarations overload:
+
+```
+fn T[]::count(&self, value: T) -> i32 {
+    let n = 0;
+    foreach (el : self) {
+        if (el == value)
+            n += 1;
+    }
+    return n;
+}
+
+let hits = ints.count(3);      // i32[]'s instance
+let ls = text.count('l');      // char[]'s
+```
+
+`&self` spells `self: &T[]`. The [operator shorthands](#operator-overloading) follow: an array with an `eq` method takes `==` and `!=`, one with `add` takes `+`, like any struct.
+
 ### Interfaces
 
 Sie has no inheritance: interfaces are its only mechanism for abstract typing. They define an abstract object: a set of fields and actions that any struct implementing them must provide. They're declared through the `interface` keyword followed by their name, fields spelled like a struct's and actions as `fn` signatures, `&self` naming the interface:
@@ -2040,6 +2065,32 @@ An interface with no requirements of its own may end in `;` without a body; outs
 interface Iterable<T>;
 
 fn Iterable<T>::iterator(self: &Iterable<T>) -> Iterator<T>;
+```
+
+#### Extending types
+
+`@extend Type: Iface, ...;` adds interface claims to an existing type, outside its declaration. Methods already declare anywhere, so this is the claiming half: together they extend a type's surface from another file, the claims checked like the declaration's own.
+
+```
+@extend String:
+    Add<String, char*>,
+    Add<String, char>,
+    Eq<char*>;
+
+fn String::add(&self, arr: const char*) -> String { ... }
+fn String::eq(&self, arr: const char*) -> bool { ... }
+```
+
+The extended name may be a struct's or an alias's. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
+
+Arrays extend two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. Either way an array then passes wherever the (substituted) interface is required, and the operator shorthands apply:
+
+```
+@extend T[]: Eq<T[]>;
+
+fn T[]::eq(&self, arr: const T[]) -> bool { ... }
+
+if (word == "hello") { ... }   // char[]'s eq
 ```
 
 #### The iteration interfaces

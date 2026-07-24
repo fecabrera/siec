@@ -286,7 +286,8 @@ def signature(fn: Function) -> str:
                 type_params.remove(param)
 
     name = fn.name
-    if fn.receiver_params and fn.receiver:
+    if (fn.receiver_params and fn.receiver
+            and not fn.receiver.endswith("[]")):
         name = (f"{fn.receiver}<{', '.join(fn.receiver_params)}>"
                 f"::{fn.name.partition('::')[2]}")
 
@@ -621,6 +622,8 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
              if kind == "function"]
     if (parts := split_generic(base)) is not None:
         nodes.extend(gen.generic_methods.get((parts[0], name), ()))
+    elif base.endswith("[]"):
+        nodes.extend(gen.generic_methods.get(("[]", name), ()))
 
     if not nodes and symbol is None:
         return None

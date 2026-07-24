@@ -135,6 +135,9 @@ class CodeGenerator:
         self.implements: dict[str, set] = {}
         self.pending_conformance: list = []
         self.conformance_ready = False
+        # the arrays' '@extend T[]' claims: (element placeholder,
+        # interface spelling) pairs, substituted per element on query
+        self.array_claims: list[tuple[str, str]] = []
         # per-symbol parameter defaults with the declaring file, whose
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
@@ -631,6 +634,13 @@ def codegen(program: Program, module_name: str, target: str | None = None,
             register_generic_function(gen, fn)
         else:
             declare_function(gen, fn)
+
+    # '@extend' claims join before conformance runs: a struct's queue
+    # like its declaration's own, a template's carry to its instances,
+    # and the arrays' check their 'T[]::m' templates
+    from siec.codegen.interfaces import register_extends
+
+    register_extends(gen, program)
 
     # every declaration is in: check each struct's interface claims
     run_conformance(gen)

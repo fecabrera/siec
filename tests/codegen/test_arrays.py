@@ -162,11 +162,24 @@ def test_array_literal_length_matches_element_count(env):
 
 def test_empty_array_literal_needs_an_array_type(env):
     """
-    An array literal used without an array-type context raises a TypeError.
+    An empty array literal has no element to infer from: without an
+    array-type context it raises a TypeError.
     """
     gen, builder = env
     with pytest.raises(TypeError, match="needs an array type"):
-        emit_expression(gen, builder, ArrayLiteral([IntLiteral(3)]), ir.IntType(32), {})
+        emit_expression(gen, builder, ArrayLiteral([]), ir.IntType(32), {})
+
+
+def test_array_literal_defaults_to_its_inferred_array(env):
+    """
+    Without an array context, a literal builds the 'T[]' its first
+    element infers: a fat {i32*, u64} value for integer elements.
+    """
+    gen, builder = env
+
+    value = emit_expression(gen, builder, ArrayLiteral([IntLiteral(3)]), None, {})
+    assert value.type.elements[0] == ir.PointerType(ir.IntType(32))
+    assert value.type.elements[1] == ir.IntType(64)
 
 
 def test_array_literal_decays_into_a_pointer_context(env):
@@ -197,14 +210,16 @@ def test_string_literal_fills_a_char_array(env):
     assert "i64 5, 1" in str(builder.function)
 
 
-def test_string_literal_stays_a_pointer_without_an_array_context(env):
+def test_string_literal_defaults_to_a_char_array(env):
     """
-    A string literal without a 'char[]' context still emits as a plain char*.
+    A string literal without a pointer context emits as the fat 'char[]'
+    value; only an explicit pointer context takes the bare char*.
     """
     gen, builder = env
 
     value = emit_expression(gen, builder, StrLiteral("hello"), None, {})
-    assert value.type == ir.PointerType(ir.IntType(8))
+    assert value.type.elements[0] == ir.PointerType(ir.IntType(8))
+    assert value.type.elements[1] == ir.IntType(64)
 
 
 def test_array_literal_of_strings_stores_pointers(env):

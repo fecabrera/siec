@@ -630,6 +630,19 @@ class Include:
 
 
 @dataclass
+class Extend:
+    """
+    An '@extend Type: Iface, ...;' declaration: interface claims added to
+    an existing type outside its declaration - a struct's, an alias's, or
+    the arrays' ('T[]', generic over the element).
+    """
+    name: str
+    interfaces: list[str]
+    line: int = _line()
+    file: str = _file()
+
+
+@dataclass
 class Import:
     """
     An 'import' of a module by its dotted path: 'import a.b;' binds the
@@ -657,6 +670,7 @@ class Program:
     aliases: list[TypeAlias] = field(default_factory=list)
     conds: list["CondBlock"] = field(default_factory=list)
     imports: list[Import] = field(default_factory=list)
+    extends: list["Extend"] = field(default_factory=list)
 
     # filled by the loader on the merged program: what each file's
     # 'import's bound, and what each module offers
