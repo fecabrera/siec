@@ -154,13 +154,114 @@ def test_array_extend_needs_the_template(compile_source):
         """)
 
 
-def test_extend_needs_a_struct(compile_source):
+def test_extend_needs_a_type(compile_source):
     """
-    Extending a name that isn't a struct's is an error.
+    Extending a name that names no type at all is an error.
     """
-    with pytest.raises(TypeError, match="does not name a struct"):
+    with pytest.raises(TypeError, match="cannot extend 'Nope': it does not "
+                                        "name a struct, an enum, or a "
+                                        "primitive"):
         compile_source("""
         @extend Nope: Eq<i32>;
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_extend_needs_a_body_to_extend(compile_source):
+    """
+    A bodiless struct has nothing to conform: only its pointer form is
+    usable, so extending it is refused.
+    """
+    with pytest.raises(TypeError, match="the struct has no body to extend"):
+        compile_source("""
+        struct Opaque;
+
+        @extend Opaque: Eq<i32>;
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_primitives_and_enums_extend(run):
+    """
+    A primitive, an enum, and an alias naming one all extend: their
+    'fn i64::m' methods satisfy the claim, and an interface parameter
+    takes them like any implementer.
+    """
+    source = """
+    interface Tag;
+
+    fn Tag::tag(const &self) -> i64;
+
+    enum Color { RED = 1, BLUE = 2 }
+
+    fn Color::tag(const &self) -> i64 { return (self as i64) * 10; }
+
+    @extend Color: Tag;
+
+    @type Num = i64;
+
+    fn i64::tag(const &self) -> i64 { return self * 100; }
+
+    @extend Num: Tag;
+
+    fn f64::tag(const &self) -> i64 { return self as i64; }
+
+    @extend f64: Tag;
+
+    fn read(v: const Tag) -> i64 { return v.tag(); }
+
+    fn main() -> i32 {
+        let c = Color::BLUE;
+        let n: i64 = 4;
+        let f: f64 = 3.5;
+
+        return (read(c) + read(n) + read(f)) as i32 - 423;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_extending_a_primitive_leaves_its_operators_alone(run):
+    """
+    A primitive's operators stay the machine's: claiming 'Eq<i64>' over
+    'i64' declares a callable 'eq' without '==' ever routing through it.
+    """
+    source = """
+    @extend i64: Eq<i64>;
+
+    fn i64::eq(const &self, other: i64) -> bool {
+        return false;              // never consulted by '=='
+    }
+
+    fn main() -> i32 {
+        let n: i64 = 4;
+
+        if (not (n == 4)) { return 1; }
+        if (n == 5) { return 2; }
+        if (n.eq(4)) { return 3; }  // the method is still callable
+
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_primitive_is_named_a_type_not_a_struct(compile_source):
+    """
+    A failed claim calls a primitive what it is, an alias following the
+    type it names.
+    """
+    with pytest.raises(TypeError, match="type 'Num' does not implement 'Tag'"):
+        compile_source("""
+        interface Tag;
+
+        fn Tag::tag(const &self) -> i64;
+
+        @type Num = i64;
+
+        @extend Num: Tag;
 
         fn main() -> i32 { return 0; }
         """)

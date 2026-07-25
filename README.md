@@ -499,7 +499,7 @@ Unlike other languages, there are no increment or decrement operators (`i++`, `i
 
 #### Foreach
 
-`foreach (v : iterable)` walks a collection's elements through [the iteration interfaces](#the-iteration-interfaces): the iterable hands out its iterator (`iterator()`, or itself when it already is one), and each pass binds `v` to the element `next()` references.
+`foreach (v : iterable)` walks a collection's elements through [the iteration interfaces](#the-iteration-interfaces): the iterable hands out its iterator (`iterator()` for a mutable value, `const_iterator()` for a `const` one, or itself when it already is one), and each pass binds `v` to the element `next()` references.
 
 ```
 foreach (v : nums) {
@@ -515,7 +515,7 @@ foreach (v : nums) {
 }
 ```
 
-Anything `Iterable<T>` works - [arrays come iterable](#the-iteration-interfaces) - and `break`/`continue` steer the loop like any other. Iterating a bare iterator value walks a copy of its state, from wherever it stands. A `const` array iterates too, through the builtin `ConstArrayIterator<T>`: its elements read as `const &T`, so the contract follows them and writing one is an error.
+Anything `Iterable<T>` works - [arrays come iterable](#the-iteration-interfaces) - and `break`/`continue` steer the loop like any other. Iterating a bare iterator value walks a copy of its state, from wherever it stands. A `const` value iterates through its `const_iterator()`: its elements read as `const &T`, so the contract follows them and writing one is an error.
 
 #### Enumerate
 
@@ -2081,7 +2081,23 @@ fn String::add(&self, arr: const char*) -> String { ... }
 fn String::eq(&self, arr: const char*) -> bool { ... }
 ```
 
-The extended name may be a struct's or an alias's. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
+The extended name may be a struct's, an enum's, a primitive's, or an alias's for any of them: whatever a method takes as its receiver extends. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
+
+```
+interface Formattable;
+
+fn Formattable::format(const &self) -> String;
+
+@extend i64: Formattable;
+
+fn i64::format(const &self) -> String { ... }
+
+fn show(v: const Formattable) -> String { return v.format(); }
+
+show(count);   // an i64 passes where the interface is required
+```
+
+A primitive's operators stay the machine's: claiming `Eq<i64>` over `i64` declares a callable `eq` without `==` ever routing through it. The shorthands only reach structs and arrays, whose operators have nowhere else to come from.
 
 Arrays extend two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. Either way an array then passes wherever the (substituted) interface is required, and the operator shorthands apply:
 
@@ -2095,7 +2111,7 @@ if (word == "hello") { ... }   // char[]'s eq
 
 #### The iteration interfaces
 
-`Iterator<T>` and `Iterable<T>` are builtin, visible everywhere without an import:
+`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are builtin, visible everywhere without an import:
 
 ```
 interface Iterator<T>;
@@ -2103,12 +2119,20 @@ interface Iterator<T>;
 fn Iterator<T>::has_next(&self) -> bool;
 fn Iterator<T>::next(&self) -> &T;
 
+interface ConstIterator<T>;
+
+fn ConstIterator<T>::has_next(&self) -> bool;
+fn ConstIterator<T>::next(&self) -> const &T;
+
 interface Iterable<T>;
 
 fn Iterable<T>::iterator(&self) -> Iterator<T>;
+fn Iterable<T>::const_iterator(const &self) -> ConstIterator<T>;
 ```
 
-A struct claiming `: Iterator<T>` provides both actions, `next` handing back a [reference](#references) to the element. A collection claims `: Iterable<T>` and provides `iterator`, whose declared `Iterator<T>` return is satisfied by any implementing type; that is the general rule when an action declares an interface return. Any `Iterator<T>` parameter then walks the elements:
+A struct claiming `: Iterator<T>` provides both actions, `next` handing back a [reference](#references) to the element. `ConstIterator<T>` is the read-only half: its `next` hands back a `const &T`, so the elements carry the contract and the collection stays untouched.
+
+A collection claims `: Iterable<T>` and provides both getters, whose declared interface returns are satisfied by any implementing type; that is the general rule when an action declares an interface return. Which getter runs follows the value: iterating a mutable collection goes to `iterator()`, a `const` one to `const_iterator()`, so the same `foreach` reads or writes according to what it was handed. Any `Iterator<T>` parameter then walks the elements:
 
 ```
 fn sum(it: Iterator<i32>) -> i32 {
@@ -2120,13 +2144,18 @@ fn sum(it: Iterator<i32>) -> i32 {
 }
 ```
 
-[Arrays](#arrays) come iterable: a `T[]` implements `Iterable<T>` through the builtin `ArrayIterator<T>`, so an array passes to an `Iterable<T>` parameter and answers `iterator()` directly:
+[Arrays](#arrays) come iterable by definition: the prelude declares their getters and claims the interface for the whole family, exactly as any code would. A `T[]` therefore passes to an `Iterable<T>` parameter and answers both getters directly, through the builtin `ArrayIterator<T>` and `ConstArrayIterator<T>`:
 
 ```
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];
     index: u64;
 }
+
+fn T[]::iterator(&self) -> ArrayIterator<T> { ... }
+fn T[]::const_iterator(const &self) -> ConstArrayIterator<T> { ... }
+
+@extend T[]: Iterable<T>;
 
 let it = nums.iterator();   // an ArrayIterator over the array
 it.next() = 5;              // the references reach the array itself

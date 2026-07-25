@@ -12,7 +12,7 @@ import re
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.generics import split_generic, substitute
-from siec.codegen.types import strip_const, strip_reference
+from siec.codegen.types import SCALAR_TYPES, strip_const, strip_reference
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -47,6 +47,23 @@ def find_interface_spelling(gen: CodeGenerator, text: str | None):
     return None
 
 
+def takes_self(fn) -> bool:
+    """
+    Whether a method's first parameter is its receiver, the shape that
+    makes it an instance method. Any other first parameter is a static
+    method's own, and adapts like the rest.
+    """
+    if fn.receiver is None or not fn.params:
+        return False
+
+    # an array receiver already spells its element in the reference
+    spelling = fn.receiver
+    if fn.receiver_params is not None and not fn.receiver.endswith("[]"):
+        spelling += f"<{','.join(fn.receiver_params)}>"
+
+    return strip_const(fn.params[0].type) == f"&{spelling}"
+
+
 def adapt_interface_params(gen: CodeGenerator, fn) -> None:
     """
     Rewrite a function's interface-typed parameters into type parameters
@@ -59,7 +76,10 @@ def adapt_interface_params(gen: CodeGenerator, fn) -> None:
     previous, gen.current_file = gen.current_file, fn.file
     try:
         constraints = {}
-        start = 1 if fn.receiver is not None and fn.params else 0
+
+        # a method's '&self' receiver stands for its own type, never an
+        # interface; a static method's first parameter adapts like any
+        start = 1 if takes_self(fn) else 0
         for param in fn.params[start:]:
             while (found := find_interface_spelling(gen, param.type)) is not None:
                 spelling, begin, end = found
@@ -163,11 +183,19 @@ def run_conformance(gen: CodeGenerator) -> None:
         check_conformance(gen, *gen.pending_conformance.pop(0))
 
 
-def noun(name: str) -> str:
+def noun(gen: CodeGenerator, name: str) -> str:
     """
-    What a conforming type calls itself in an error: arrays aren't structs.
+    What a conforming type calls itself in an error: only a struct is a
+    struct - an array, an enum, and a primitive are plain types, and an
+    alias is whatever it names.
     """
-    return "type" if name.endswith("[]") else "struct"
+    from siec.codegen.aliases import expand_alias
+
+    canonical = strip_const(expand_alias(gen, name, checked=False)) or name
+    base = split_generic(canonical)
+    base = base[0] if base is not None else canonical
+    return ("struct" if base in gen.structs or base in gen.generic_structs
+            else "type")
 
 
 def check_conformance(gen: CodeGenerator, name: str, template_base: str,
@@ -203,13 +231,13 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                 field = next((f for f in fields or ()
                               if f.name == required.name), None)
                 if field is None:
-                    raise TypeError(f"{noun(template_base)} {template_base!r} does not "
+                    raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not "
                                     f"implement {spelling!r}: it is missing "
                                     f"the field '{required.name}: "
                                     f"{required.type}'")
 
                 if strip_const(expand_lax(gen, field.type)) != strip_const(required_type):
-                    raise TypeError(f"{noun(template_base)} {template_base!r} does not "
+                    raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not "
                                     f"implement {spelling!r}: field "
                                     f"{required.name!r} must be "
                                     f"{required_type!r}, not {field.type!r}")
@@ -236,7 +264,7 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
 
     symbol = resolve_method(gen, name, method)
     if symbol is None:
-        raise TypeError(f"{noun(template_base)} {template_base!r} does not implement "
+        raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not implement "
                         f"{spelling!r}: it is missing the method {method!r}")
 
     def bare(param: str) -> str:
@@ -263,11 +291,11 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
             return
 
     if shape_matched:
-        raise TypeError(f"{noun(template_base)} {template_base!r} does not implement "
+        raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not implement "
                         f"{spelling!r}: method {method!r} must return "
                         f"{required_ret!r}")
 
-    raise TypeError(f"{noun(template_base)} {template_base!r} does not implement "
+    raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not implement "
                     f"{spelling!r}: method {method!r} must take "
                     f"({', '.join(required)})")
 
@@ -416,11 +444,18 @@ def register_extends(gen: CodeGenerator, program) -> None:
                 register_template_extend(gen, ext, *parts)
                 continue
 
+            # a struct, an enum, or a primitive extends: whatever a
+            # method can name as its receiver
             canonical = strip_const(expand_alias(gen, ext.name))
             info = gen.structs.get(canonical)
-            if info is None or info.fields is None:
+            if info is not None and info.fields is None:
+                raise TypeError(f"cannot extend {ext.name!r}: the struct has "
+                                "no body to extend")
+
+            if (info is None and canonical not in SCALAR_TYPES
+                    and canonical not in gen.enums):
                 raise TypeError(f"cannot extend {ext.name!r}: it does not "
-                                "name a struct")
+                                "name a struct, an enum, or a primitive")
 
             declare_implements(gen, canonical, ext.name, ext.interfaces,
                                ext.line, ext.file)

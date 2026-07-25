@@ -566,3 +566,30 @@ def test_a_failed_constraint_names_the_whole_argument(compile_source):
             return 0;
         }
         """)
+
+
+def test_a_static_method_adapts_its_first_interface_parameter(run):
+    """
+    Only a method's '&self' is exempt from interface adaptation: a
+    static method's first parameter takes an interface like any other.
+    """
+    source = """
+    interface Named;
+
+    fn Named::name(const &self) -> const char[];
+
+    struct P: Named { tag: char[]; }
+    fn P::name(const &self) -> const char[] { return self.tag; }
+
+    struct Holder { total: u64; }
+
+    fn Holder::measure(n: Named) -> u64 {
+        return n.name().length;
+    }
+
+    fn main() -> i32 {
+        let p: P = { "abcd" };
+        return Holder::measure(p) as i32 - 4;
+    }
+    """
+    assert run(source).returncode == 0
