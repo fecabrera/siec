@@ -154,6 +154,11 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if not isinstance(func, ir.Function):
         raise NameError(f"undefined function {call.name!r}")
 
+    # the caller reaches this callee: an edge for the deprecation walk
+    from siec.codegen.deprecation import note_use
+
+    note_use(gen, symbol)
+
     # only a reference-returning call has an address to keep
     if as_address and not is_reference(gen.return_types.get(func.name)):
         raise TypeError("cannot take the address of a call's value")

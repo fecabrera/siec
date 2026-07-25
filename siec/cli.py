@@ -1,13 +1,13 @@
 """Command-line driver for the Sie compiler."""
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
 
 from siec.backend import compile_to_object, emit_assembly, emit_llvm, link, run_jit
 from siec.codegen import codegen
+from siec.codegen.errors import display_path
 from siec.loader import load_program
 
 
@@ -18,18 +18,6 @@ def host_triple() -> str:
     from llvmlite import binding
 
     return binding.get_default_triple()
-
-
-def display_path(path: str) -> str:
-    """
-    Show a source path relative to the current directory when that is shorter.
-    """
-    try:
-        relative = os.path.relpath(path)
-    except ValueError:
-        return path
-
-    return relative if len(relative) < len(path) else path
 
 
 def error_parts(error: Exception) -> tuple[str | None, int | None, str]:

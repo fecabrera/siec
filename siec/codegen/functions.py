@@ -168,6 +168,11 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     gen.return_types[symbol] = fn.return_type
     gen.param_types[symbol] = [p.type for p in fn.params]
 
+    # '@deprecated' advice travels with the symbol: its reachable uses
+    # warn once the program is emitted
+    if fn.deprecated is not None:
+        gen.deprecated[symbol] = fn.deprecated
+
     # defaults fill omitted call arguments; they emit under the
     # declaring file's view, so it travels with them
     if any(p.default is not None for p in fn.params):
@@ -262,6 +267,12 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         if func.blocks:
             raise TypeError(f"function '{shown_signature(fn)}' "
                             "is defined more than once")
+
+        # the names this body uses are recorded against it: the call graph
+        # the deprecation walk reads
+        gen.current_function = symbol
+        gen.current_line = fn.line
+        gen.call_graph.setdefault(symbol, set())
 
         ret_type = func.function_type.return_type
         builder = ir.IRBuilder(func.append_basic_block("entry"))

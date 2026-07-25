@@ -157,8 +157,13 @@ def emit_statement(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: dict)
     Emit a single statement into the builder's current block, tagging errors with its line.
     """
     with source_location(line=getattr(stmt, "line", 0)):
+        # this statement's line locates whatever it uses, a deprecated
+        # name included
+        if line := getattr(stmt, "line", 0):
+            gen.current_line = line
+
         # under '-g', instructions emitted from here carry this statement's line
-        if gen.debug is not None and (line := getattr(stmt, "line", 0)):
+        if gen.debug is not None and line:
             builder.debug_metadata = gen.debug.location(line)
 
         emit_statement_body(gen, builder, stmt, scope)

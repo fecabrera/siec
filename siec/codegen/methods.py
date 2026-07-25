@@ -289,10 +289,17 @@ def method_reference(gen: CodeGenerator, expr) -> ir.Function | None:
     if symbol is None:
         return None
 
+    from siec.codegen.deprecation import note_use
     from siec.codegen.overloads import overload_candidates
 
-    func = gen.module.globals.get(overload_candidates(gen, symbol)[0])
-    return func if isinstance(func, ir.Function) else None
+    candidate = overload_candidates(gen, symbol)[0]
+    func = gen.module.globals.get(candidate)
+    if not isinstance(func, ir.Function):
+        return None
+
+    # handing the method around reaches it as surely as calling it
+    note_use(gen, candidate)
+    return func
 
 
 def method_reference_type(gen: CodeGenerator, expr) -> str | None:

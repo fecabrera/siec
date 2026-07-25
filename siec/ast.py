@@ -509,6 +509,7 @@ class Function:
     receiver_params: list[str] | None = None  # 'fn S<A>::m': its placeholders
     constraints: dict | None = None  # interface bound per synthetic type param
     variadic: bool = False  # 'args...': the last param is an 'Any[]' sugar
+    deprecated: str | None = None  # '@deprecated("...")': the advice its uses warn with
     line: int = _line()
     file: str = _file()
 

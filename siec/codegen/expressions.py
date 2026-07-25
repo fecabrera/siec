@@ -283,8 +283,13 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             raise TypeError(f"ambiguous reference to overloaded "
                             f"function {expr.name!r}")
 
-        func = gen.module.globals.get(overload_candidates(gen, symbol)[0])
+        candidate = overload_candidates(gen, symbol)[0]
+        func = gen.module.globals.get(candidate)
         if isinstance(func, ir.Function):
+            # handing the function around reaches it as surely as calling it
+            from siec.codegen.deprecation import note_use
+
+            note_use(gen, candidate)
             return func
 
         raise NameError(f"undefined variable {expr.name!r}")

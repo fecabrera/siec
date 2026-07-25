@@ -207,6 +207,18 @@ class CodeGenerator:
         # the registered '@const' macros by name, expanded at their calls
         self.macros: dict = {}
 
+        # '@deprecated' functions by symbol, mapped to their advice; the
+        # call graph and the uses met while emitting decide which of them
+        # warn, once the whole program is in
+        self.deprecated: dict[str, str] = {}
+        self.call_graph: dict = {}
+        self.deprecated_uses: list = []
+
+        # the function whose body is being emitted, and the line of the
+        # statement inside it: where a use of a deprecated name sits
+        self.current_function: str | None = None
+        self.current_line: int = 0
+
         # the registered enums by name, their members evaluated to integers
         self.enums: dict[str, EnumInfo] = {}
 
@@ -691,5 +703,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.expressions import finish_typename_table
 
     finish_typename_table(gen)
+
+    # the whole call graph is in: the uses of deprecated functions the
+    # program can reach warn now
+    from siec.codegen.deprecation import report_deprecations
+
+    report_deprecations(gen)
 
     return gen.module

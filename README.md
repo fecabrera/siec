@@ -1009,6 +1009,25 @@ fn checked(x: i32) -> i32 {
 
 Since it hands nothing back, an `@noreturn` function cannot declare a return type, and a `return` inside its body is a compile-time error. The promise passes to LLVM, which optimizes on it.
 
+#### Deprecated
+
+Functions and methods can be decorated with `@deprecated("advice")` to mark them as on their way out. Every use the program can reach warns at its own line, quoting the advice:
+
+```
+fn new_func() { }
+
+@deprecated("use new_func")
+fn old_func() { }
+
+fn main() {
+    old_func(); // warning: 'old_func' is deprecated: use new_func
+}
+```
+
+A warning describes code that compiles: the build goes through. Which uses report follows the call graph from `main`, so a use inside a function nothing reaches stays quiet, and a use inside a `@deprecated` function does too, an old implementation being free to lean on its own generation. Handing the function around as a [reference](#function-references) counts as a use, and reaches it just the same. A unit compiled without a `main` of its own ([separate compilation](#imports)) has no entry to walk from, so every use in it reports.
+
+Generic functions and methods deprecate like any other, each warning naming what the call stamped (`'scale<i32>' is deprecated: ...`). The decorator stacks with the others, `@extern` included, since it describes the name rather than the body.
+
 #### Asm
 
 Functions can be decorated with `@asm` to indicate that their body is written in assembly instead of Sie code.

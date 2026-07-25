@@ -324,6 +324,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     decorators = set()
     symbol = None
     clobbers = []
+    deprecated = None
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
@@ -337,6 +338,12 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
 
         if decorator == "clobbers":
             clobbers = parse_clobbers(ts)
+            continue
+
+        if decorator == "deprecated":
+            ts.expect("sym", "(")
+            deprecated = ts.expect("str").value
+            ts.expect("sym", ")")
             continue
 
         if decorator not in DECORATORS:
@@ -491,7 +498,8 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                         is_inline, is_static, symbol, ts.next().value, clobbers,
                         noreturn, type_params=type_params, receiver=receiver,
                         receiver_params=receiver_params,
-                        variadic=variadic, line=line)
+                        variadic=variadic, deprecated=deprecated,
+                        line=line)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
@@ -500,7 +508,8 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                         is_inline, is_static, symbol, noreturn=noreturn,
                         type_params=type_params, receiver=receiver,
                         receiver_params=receiver_params,
-                        variadic=variadic, line=line)
+                        variadic=variadic, deprecated=deprecated,
+                        line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -512,4 +521,5 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                     is_inline, is_static, symbol, noreturn=noreturn,
                     type_params=type_params, receiver=receiver,
                     receiver_params=receiver_params,
-                    variadic=variadic, line=line)
+                    variadic=variadic, deprecated=deprecated,
+                    line=line)

@@ -704,11 +704,17 @@ def emit_generic_reference(gen: CodeGenerator, expr) -> object:
     The function value of an explicit 'f<i32>' reference: the instance,
     declared on first use like any generic call's.
     """
+    from siec.codegen.deprecation import note_use
+
     template = reference_template(gen, expr.name)
     if template is None:
         raise TypeError(f"function {expr.name!r} is not generic")
 
-    return gen.module.globals[instantiate_function(gen, template, expr.type_args)]
+    symbol = instantiate_function(gen, template, expr.type_args)
+
+    # handing the instance around reaches it as surely as calling it
+    note_use(gen, symbol)
+    return gen.module.globals[symbol]
 
 
 def reference_for_target(gen: CodeGenerator, expr, target_name: str):
@@ -752,8 +758,14 @@ def bind_to_target(gen: CodeGenerator, template, name: str, target_name: str):
                         f"{named} for generic function {name!r} from "
                         f"{target_name!r}: spell them, '{name}<...>'")
 
+    from siec.codegen.deprecation import note_use
+
     type_args = [bindings[p] for p in template.type_params]
-    return gen.module.globals[instantiate_function(gen, template, type_args)]
+    symbol = instantiate_function(gen, template, type_args)
+
+    # handing the instance around reaches it as surely as calling it
+    note_use(gen, symbol)
+    return gen.module.globals[symbol]
 
 
 def reference_type(gen: CodeGenerator, expr) -> str | None:
