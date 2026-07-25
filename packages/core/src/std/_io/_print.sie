@@ -1,4 +1,4 @@
-import { format } from std;
+import { format } from std.format;
 import { String } from std.collections;
 import { stdin } from _stdin;
 import { stdout } from _stdout;

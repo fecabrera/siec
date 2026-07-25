@@ -220,8 +220,8 @@ struct mpd_spec {
 
 @extern fn mpd_to_sci(dec: mpd*, fmt: i32) -> char*;
 @extern fn mpd_to_eng(dec: mpd*, fmt: i32) -> char*;
-@extern fn mpd_to_sci_size(res: char**, dec: mpd*, fmt: i32) -> i64;
-@extern fn mpd_to_eng_size(res: char**, dec: mpd*, fmt: i32) -> i64;
+@extern fn mpd_to_sci_size(res: char**, dec: const mpd*, fmt: i32) -> i64;
+@extern fn mpd_to_eng_size(res: char**, dec: const mpd*, fmt: i32) -> i64;
 @extern fn mpd_validate_lconv(spec: mpd_spec*) -> i32;
 @extern fn mpd_parse_fmt_str(spec: mpd_spec*, fmt: char*, caps: i32) -> i32;
 @extern fn mpd_qformat_spec(dec: mpd*, spec: mpd_spec*, ctx: mpd_context*, status: mpd_status*) -> char*;

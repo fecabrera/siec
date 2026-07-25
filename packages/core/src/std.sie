@@ -1,3 +1,2 @@
-@include("std/_format")
 @include("std/_panic")
 @include("std/_assert")

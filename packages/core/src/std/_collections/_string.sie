@@ -1,11 +1,13 @@
 import _list;
+import { Formattable } from std.format;
 
 @type String = _list.List<char>;
 
 @extend String:
     Add<String, char*>,
     Add<String, char>,
-    Eq<char*>;
+    Eq<char*>,
+    Formattable;
 
 /**
  * Initialize the String with the given array.
@@ -58,6 +60,7 @@ fn String::append(&self, arr: const char*) {
 /**
  * Null terminate the String.
  */
+@inline
 fn String::null_terminate(&self) {
     self.push('\0');
     self.pop();
@@ -68,6 +71,7 @@ fn String::null_terminate(&self) {
  *
  * @return The byte array.
  */
+@inline
 fn String::as_bytes(&self) -> u8[] {
     return {self.data as u8*, self.length};
 }
@@ -77,6 +81,18 @@ fn String::as_bytes(&self) -> u8[] {
  *
  * @return The byte array.
  */
- fn String::as_const_bytes(const &self) -> const u8[] {
+@inline
+fn String::as_const_bytes(const &self) -> const u8[] {
     return {self.data as const u8*, self.length};
+}
+
+/**
+ * Format the String with the given modifiers.
+ *
+ * @param modifiers The modifiers to format the String with.
+ * @return The formatted String.
+ */
+@inline
+fn String::format(const &self, modifiers: const &Iterable<char>) -> String {
+    return self.as_const_array().format(modifiers);
 }

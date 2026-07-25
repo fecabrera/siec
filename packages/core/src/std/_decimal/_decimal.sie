@@ -1,4 +1,5 @@
 import mpdecimal;
+import { Formattable } from std.format;
 import { String } from std.collections;
 
 @static let __default_ctx: mpdecimal.mpd_context;
@@ -26,7 +27,8 @@ struct Decimal
       Div<Decimal, i64>,
       Div<Decimal, u64>,
       Eq<Decimal>,
-      Ord<Decimal> {
+      Ord<Decimal>,
+      Formattable {
     ctx: mpdecimal.mpd_context*;
     mpd: mpdecimal.mpd*;
 }
@@ -91,7 +93,7 @@ fn Decimal::destroy(&self) {
  *
  * @return The string representation of the Decimal.
  */
-fn Decimal::to_string(&self) -> String {
+fn Decimal::to_string(const &self) -> String {
     let ptr: char[];
     ptr.length = mpdecimal.mpd_to_sci_size(&ptr.data, self.mpd, 0) as u64;
     defer mpdecimal.mpd_free(ptr.data);
@@ -450,4 +452,9 @@ fn Decimal::ceil(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_ceil(result.mpd, self.mpd, self.ctx);
     return result;
+}
+
+@inline
+fn Decimal::format(const &self, modifiers: const &Iterable<T>) -> String {
+    return self.to_string();
 }

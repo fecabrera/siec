@@ -1,15 +1,5 @@
 import { String } from std.collections;
-
-interface Formattable {
-    fn format(&self, modifiers: const &Iterable<char>) -> String;
-}
-
-@extend i64: Formattable;
-
-fn i64::format(&self, modifiers: const &Iterable<char>) -> String {
-    let str = String();
-    return str;
-}
+import { Formattable } from _formattable;
 
 /**
  * Format the given string with the given arguments.
@@ -55,18 +45,14 @@ fn format(str: const &Iterable<char>, args...) -> String {
 
             if (i < args.length) {
                 case (@typeof(args[i])) {
-                when bool:
-                    let arg = args[i] as bool;
-                    result.append(arg ? "true": "false");
                 when char*:
                     let arg = args[i] as char*;
                     result.append(arg);
-                when char[]:
-                    let arg = args[i] as char[];
-                    result.append(arg);
-                when String:
-                    let arg = args[i] as String;
-                    result.append(arg);
+                when Formattable:
+                    let arg = args[i] as Formattable;
+                    let tmp = arg.format(modifier);
+                    defer tmp.destroy();
+                    result.append(tmp);
                 else:
                     result.append(@typename(args[i]));
                 }

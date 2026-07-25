@@ -1,0 +1,29 @@
+import { String } from std.collections;
+
+interface Formattable {
+    fn format(const &self, modifiers: const &Iterable<char>) -> String;
+}
+
+@extend i64: Formattable;
+
+fn i64::format(const &self, modifiers: const &Iterable<char>) -> String {
+    let str = String();
+    return str;
+}
+
+fn u64::format(const &self, modifiers: const &Iterable<char>) -> String {
+    let str = String();
+    return str;
+}
+
+@extend bool: Formattable;
+
+fn bool::format(const &self, modifiers: const &Iterable<char>) -> String {
+    return String(self ? "true": "false");
+}
+
+@extend char[]: Formattable;
+
+fn char[]::format(const &self, modifiers: const &Iterable<char>) -> String {
+    return String(self);
+}
