@@ -1,0 +1,63 @@
+import { String } from std.collections;
+
+enum StrFmtState {
+    SIDE,
+    PADDING,
+    FORMAT,
+}
+
+enum PaddingSide {
+    LEFT,
+    RIGHT,
+}
+
+@macro format_str(value, modifier) = _format_str(value, modifier);
+
+@static
+fn _format_str(value: const &char[], modifier: const &char[]) -> String {
+    let str = String();
+    let state = StrFmtState::SIDE;
+    let pad_side = PaddingSide::RIGHT;
+    let pad: u64 = 0;
+    
+    let i: u64 = 0;
+    while (i < modifier.length) {
+        let c = modifier[i];
+        case (state) {
+        when StrFmtState::SIDE:
+            state = StrFmtState::PADDING;
+            if (c == '-') {
+                pad_side = PaddingSide::LEFT;
+            } else {
+                continue;
+            }
+        when StrFmtState::PADDING:
+            if (c >= '0' and c <= '9') {
+                pad *= 10;
+                pad += (c - '0') as u64;
+            } else {
+                state = StrFmtState::FORMAT;
+                continue;
+            }
+        when StrFmtState::FORMAT:
+            break;
+        }
+        i += 1;
+    }
+
+    if (pad_side == PaddingSide::LEFT) {
+        for (let i = value.length; i < pad; i += 1) {
+            str.push(' ');
+        }
+    }
+
+    str.append(value);
+
+    if (pad_side == PaddingSide::RIGHT) {
+        for (let i = value.length; i < pad; i += 1) {
+            str.push(' ');
+        }
+    }
+
+    return str;
+}

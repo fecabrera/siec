@@ -1,4 +1,5 @@
 @include("_int")
+@include("_str")
 
 import { String } from std.collections;
 
@@ -76,12 +77,12 @@ fn bool::format(const &self, modifiers: const &char[]) -> String {
     else if (modifiers == "yes")
         return String(self ? "yes": "no");
     else
-    return String(self ? "true": "false");
+        return String(self ? "true": "false");
 }
 
 @extend char[]: Formattable;
 
 @inline
 fn char[]::format(const &self, modifiers: const &char[]) -> String {
-    return String(self);
+    return format_str(self, modifiers);
 }

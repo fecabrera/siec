@@ -95,7 +95,7 @@ fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
     }
     
     if (padding > buf.length) {
-        for(let i = padding; i < buf.length; i += 1) {
+        for(let i = buf.length; i < padding; i += 1) {
             str.push(zero ? '0' : ' ');
         }
     }
