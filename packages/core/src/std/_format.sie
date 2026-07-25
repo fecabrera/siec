@@ -1,5 +1,16 @@
 import { String } from std.collections;
 
+interface Formattable {
+    fn format(&self, modifiers: const &Iterable<char>) -> String;
+}
+
+@extend i64: Formattable;
+
+fn i64::format(&self, modifiers: const &Iterable<char>) -> String {
+    let str = String();
+    return str;
+}
+
 /**
  * Format the given string with the given arguments.
  *
@@ -55,7 +66,7 @@ fn format(str: const &Iterable<char>, args...) -> String {
                     result.append(arg);
                 when String:
                     let arg = args[i] as String;
-                    result.append(arg.as_array());
+                    result.append(arg);
                 else:
                     result.append(@typename(args[i]));
                 }

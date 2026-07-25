@@ -26,7 +26,7 @@ fn Dependency::destroy(&self) {
  *
  * @param name The name to set the Dependency to.
  */
-fn Dependency::setName(&self, name: const char[]) {
+fn Dependency::setName(&self, name: const &Iterable<char>) {
     self.name.reset();
     self.name.append(name);
 }
@@ -55,7 +55,7 @@ fn Dependency::setName(&self, name: String) {
  *
  * @param version The version to set the Dependency to.
  */
-fn Dependency::setVersion(&self, version: const char[]) {
+fn Dependency::setVersion(&self, version: const &Iterable<char>) {
     self.version.reset();
     self.version.append(version); 
 }
