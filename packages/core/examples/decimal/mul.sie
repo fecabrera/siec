@@ -15,11 +15,8 @@ fn main(args: const char*[]) -> i32 {
 
     let result = a * b;
     defer result.destroy();
-
-    let str = result.to_string();
-    defer str.destroy();
     
-    std.io.println("{}", str);
+    std.io.println("{}", result);
 
     return 0;
 }
