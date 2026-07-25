@@ -262,3 +262,19 @@ def test_string_initializer_needs_a_char_pointer(compile_source):
     """
     with pytest.raises(TypeError, match="cannot initialize"):
         compile_source('@static let x: i32 = "hi";')
+
+
+def test_static_char_array_takes_a_string_initializer(run):
+    """
+    A string constant initializes a 'char[]' global as the fat array it
+    is anywhere else, its length excluding the null terminator.
+    """
+    source = """
+    @static let hex: char[] = "0123456789abcdef";
+
+    fn main() -> i32 {
+        let last = hex[15];
+        return ((hex.length as i32) - 16) + (last == 'f' ? 0 : 100);
+    }
+    """
+    assert run(source).returncode == 0

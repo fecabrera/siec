@@ -126,9 +126,19 @@ def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
 
         return ir.Constant(type_, None)
 
-    # a string initializer points at a private string constant
+    # a string initializer points at a private string constant: bare for
+    # a 'char*', the fat array for a 'char[]', its length excluding the
+    # null terminator like any string literal's
     if isinstance(expr, StrLiteral):
-        if strip_const(sie_type) != "char*":
+        stripped = strip_const(sie_type)
+        if stripped == "char[]":
+            zero = ir.Constant(ir.IntType(32), 0)
+            data = string_constant(gen, expr.value)
+            return ir.Constant(type_, [data.gep([zero, zero]),
+                                       ir.Constant(ir.IntType(64),
+                                                   len(expr.value.encode()))])
+
+        if stripped != "char*":
             raise TypeError(f"cannot initialize a {sie_type!r} value with a string")
 
         return string_constant(gen, expr.value).bitcast(type_)
