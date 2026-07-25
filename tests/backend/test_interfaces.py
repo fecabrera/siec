@@ -301,7 +301,7 @@ def test_conformance_is_checked(compile_source):
         """)
 
     with pytest.raises(TypeError, match="struct 'P' does not implement "
-                                        "'Named': it is missing the method 'greet'"):
+                                        r"'Named': it is missing the method 'greet\(\) -> i32'"):
         compile_source("""
         interface Named { name: char[]; }
         fn Named::greet(self: &Named) -> i32;

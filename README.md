@@ -1581,6 +1581,18 @@ case (@typeof(arg)) {
 
 `a as T` reads the erased value back as `T`, unchecked: comparing `@typeof(a)` first is the caller's job. The pointed value lives in the frame of the function that wrapped it, so an `Any` outliving that frame dangles like any pointer to a local would; and wrapping erases the `const` contract, which the unwrapper chooses anew.
 
+A `when` may also name an [interface](#interfaces): the arm is generic, expanding into one arm per type known to implement it, the body stamped with the concrete type wherever the interface is spelled. The cast in each stamped arm therefore reads the arm's own type:
+
+```
+case (@typeof(args[i])) {
+when Formattable:
+    let arg = args[i] as Formattable;  // 'as i64' in the i64 arm, ...
+    result.append(arg.format(modifier));
+}
+```
+
+The expansion covers every type claiming the interface, arrays included through the family's claim, so `when Iterable<char>:` arms `char[]` among the implementers. A type an earlier arm already matched never reaches its stamped arm: the first match still wins.
+
 ### Enums
 
 Enums are collections of constants. They are declared through the keyword `enum` followed by their name. Their members are declared by name, separated by commas.

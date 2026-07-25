@@ -75,3 +75,71 @@ def test_any_is_one_concrete_type(run):
     }
     """
     assert run(source).returncode == 0
+
+
+def test_when_interface_expands_per_implementer(run):
+    """
+    A 'when Iface:' arm of a '@typeof' case is a generic arm: one arm
+    per implementing type, the body stamped with the concrete type
+    wherever the interface is spelled, so the cast reads the arm's own
+    type.
+    """
+    source = """
+    interface Doubler;
+
+    fn Doubler::doubled(const &self) -> i64;
+
+    struct P: Doubler { x: i64; }
+    fn P::doubled(const &self) -> i64 { return self.x * 2; }
+
+    struct Q: Doubler { y: i64; }
+    fn Q::doubled(const &self) -> i64 { return self.y * 3; }
+
+    fn tally(args...) -> i64 {
+        let total: i64 = 0;
+        let i: u64 = 0;
+        while (i < args.length) {
+            case (@typeof(args[i])) {
+            when i64:
+                total = total + (args[i] as i64);
+            when Doubler:
+                let v = args[i] as Doubler;
+                total = total + v.doubled();
+            else:
+                total = total + 1000;
+            }
+            i = i + 1;
+        }
+        return total;
+    }
+
+    fn main() -> i32 {
+        let p: P = { 10 };
+        let q: Q = { 7 };
+        let n: i64 = 4;
+        return (tally(n, p, q, false) - 1045) as i32;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_when_interface_covers_the_array_family(run):
+    """
+    The family's claim names the array: 'when Iterable<char>:' arms
+    'char[]' among the implementers, the cast reading 'char[]'.
+    """
+    source = """
+    fn width(args...) -> u64 {
+        case (@typeof(args[0])) {
+        when Iterable<char>:
+            let arg = args[0] as Iterable<char>;
+            return arg.length;
+        }
+        return 100;
+    }
+
+    fn main() -> i32 {
+        return width("hello") as i32 - 5;
+    }
+    """
+    assert run(source).returncode == 0

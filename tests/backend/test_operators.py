@@ -150,7 +150,7 @@ def test_claim_without_the_method_is_an_error(compile_source):
     """
     Claiming 'Add<S, T>' without a matching 'add' fails conformance.
     """
-    with pytest.raises(TypeError, match="missing the method 'add'"):
+    with pytest.raises(TypeError, match=r"missing the method 'add\(P\) -> P'"):
         compile_source("""
         struct P : Add<P, P> { x: i32; }
 

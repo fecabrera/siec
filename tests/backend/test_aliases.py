@@ -223,3 +223,39 @@ def test_deriving_from_a_modified_target_is_an_error(compile_source):
 
             fn f(v: view*) {}
         """)
+
+
+def test_an_alias_method_taking_an_interface_joins_the_canon(run):
+    """
+    A method declared through an alias becomes a template when it takes
+    an interface parameter; it still joins the canonical receiver's
+    name, so the claim's conformance finds it and its calls pass the
+    receiver.
+    """
+    source = """
+    interface Fmt;
+
+    fn Fmt::fmt(const &self, modifiers: const &Iterable<char>) -> i64;
+
+    struct Box<T> {
+        v: T;
+    }
+
+    @type Str = Box<char>;
+
+    @extend Str: Fmt;
+
+    fn Str::fmt(const &self, modifiers: const &Iterable<char>) -> i64 {
+        let n: i64 = 0;
+        foreach (c : modifiers) {
+            n = n + 1;
+        }
+        return n;
+    }
+
+    fn main() -> i32 {
+        let s: Str = { 'a' };
+        return (s.fmt("xy") - 2) as i32;
+    }
+    """
+    assert run(source).returncode == 0

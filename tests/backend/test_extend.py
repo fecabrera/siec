@@ -132,7 +132,7 @@ def test_extend_conformance_is_checked(compile_source):
     An '@extend' claim without the method is the conformance error the
     declaration's own claim would be.
     """
-    with pytest.raises(TypeError, match="missing the method 'eq'"):
+    with pytest.raises(TypeError, match=r"missing the method 'eq\(P\) -> bool'"):
         compile_source("""
         struct P { x: i32; }
 
@@ -146,7 +146,7 @@ def test_array_extend_needs_the_template(compile_source):
     """
     '@extend T[]' checks each action has its 'T[]::m' template.
     """
-    with pytest.raises(TypeError, match="missing the method 'eq'"):
+    with pytest.raises(TypeError, match=r"missing the method 'eq\(T\[\]\) -> bool'"):
         compile_source("""
         @extend T[]: Eq<T[]>;
 

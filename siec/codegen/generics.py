@@ -282,15 +282,15 @@ def template_key(template) -> tuple:
                  for p in template.params)
 
 
-def substitute_types(node, mapping: dict) -> None:
+def rewrite_types(node, apply) -> None:
     """
-    Walk an AST subtree, substituting type parameters into every type
-    annotation in place: 'let x: T', casts, sizeofs, parameters, returns,
-    and nested explicit type arguments.
+    Walk an AST subtree, applying a rewrite to every type annotation in
+    place: 'let x: T', casts, sizeofs, parameters, returns, and nested
+    explicit type arguments.
     """
     if isinstance(node, (list, tuple)):
         for item in node:
-            substitute_types(item, mapping)
+            rewrite_types(item, apply)
         return
 
     if not is_dataclass(node):
@@ -303,14 +303,33 @@ def substitute_types(node, mapping: dict) -> None:
             if (field.name in ("type", "return_type")
                     or (isinstance(node, (SizeOf, TypeId, TypeName))
                         and field.name == "name")):
-                setattr(node, field.name, substitute(value, mapping))
+                setattr(node, field.name, apply(value))
         elif field.name == "type_args" and value is not None:
-            setattr(node, field.name, [substitute(v, mapping) for v in value])
+            setattr(node, field.name, [apply(v) for v in value])
         elif field.name == "constraints" and value is not None:
             setattr(node, field.name,
-                    {k: substitute(v, mapping) for k, v in value.items()})
+                    {k: apply(v) for k, v in value.items()})
         else:
-            substitute_types(value, mapping)
+            rewrite_types(value, apply)
+
+
+def substitute_types(node, mapping: dict) -> None:
+    """
+    Walk an AST subtree, substituting type parameters into every type
+    annotation in place, whole identifiers only: 'T*' becomes 'i32*',
+    'Tx' stays itself.
+    """
+    rewrite_types(node, lambda value: substitute(value, mapping))
+
+
+def respell_types(node, spelling: str, concrete: str) -> None:
+    """
+    Walk an AST subtree, replacing whole occurrences of one full type
+    spelling - generic arguments included, so 'Iterable<char>' respells
+    without touching other 'Iterable' instantiations.
+    """
+    pattern = re.compile(rf"(?<!\w){re.escape(spelling)}(?![\w<])")
+    rewrite_types(node, lambda value: pattern.sub(concrete, value))
 
 
 def unify(pattern: str | None, concrete: str | None,

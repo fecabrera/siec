@@ -23,9 +23,11 @@ from siec.ast import (
     MemberAssign,
     RefAssign,
     Return,
+    TypeId,
     TypeOf,
     UnaryOp,
     Var,
+    When,
     While,
 )
 from siec.codegen.aliases import expand_alias
@@ -688,6 +690,44 @@ def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) 
     builder.position_at_end(end_block)
 
 
+def expand_when_interface(gen: CodeGenerator, arm: When, scope: dict) -> list:
+    """
+    A 'when Iface:' arm of a '@typeof' case is a generic arm: it expands
+    into one arm per type known to implement the interface, each body
+    stamped with the concrete type wherever the arm's spelling appears,
+    so 'args[i] as Formattable' reads 'args[i] as i64' in the 'i64' arm.
+    """
+    import copy
+
+    from siec.codegen.generics import respell_types
+    from siec.codegen.interfaces import (canonical_interface,
+                                         interface_implementers)
+
+    plain, spellings = [], []
+    for value in arm.values:
+        if (isinstance(value, Var) and value.name not in scope
+                and value.name in gen.interfaces):
+            spelling = value.name
+            if value.type_args is not None:
+                spelling += f"<{','.join(value.type_args)}>"
+            spellings.append(spelling)
+        else:
+            plain.append(value)
+
+    if not spellings:
+        return [arm]
+
+    arms = [When(plain, arm.body)] if plain else []
+    for spelling in spellings:
+        required = canonical_interface(gen, spelling)
+        for concrete in interface_implementers(gen, required):
+            body = copy.deepcopy(arm.body)
+            respell_types(body, spelling, concrete)
+            arms.append(When([TypeId(concrete)], body))
+
+    return arms
+
+
 def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict) -> None:
     """
     Emit a case as a chain of equality tests: the subject is evaluated
@@ -695,9 +735,13 @@ def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict
     jumps past the case, with no fall-through.
     """
     # matching on '@typeof' lets bare type names arm the case:
-    # 'when T:' means 'when @typeid(T):'
+    # 'when T:' means 'when @typeid(T):', and 'when Iface:' expands
+    # into an arm per implementing type
     if isinstance(stmt.subject, TypeOf):
         from siec.codegen.expressions import type_operand
+
+        stmt.arms = [expanded for arm in stmt.arms
+                     for expanded in expand_when_interface(gen, arm, scope)]
 
         for arm in stmt.arms:
             arm.values = [type_operand(gen, value, scope)

@@ -58,6 +58,22 @@ def register_method(gen: CodeGenerator, fn) -> None:
 
             templates.append(fn)
         elif fn.type_params is not None:
+            # a template registers under its name directly, so an alias
+            # receiver joins its canonical name here, in the declaring
+            # file's view, its signature respelled to the same canon the
+            # concrete path declares under
+            from siec.codegen.aliases import expand_alias
+            from siec.codegen.functions import join_canonical_receiver
+
+            previous, gen.current_file = gen.current_file, fn.file
+            try:
+                join_canonical_receiver(gen, fn)
+                fn.return_type = expand_alias(gen, fn.return_type)
+                for param in fn.params:
+                    param.type = expand_alias(gen, param.type)
+            finally:
+                gen.current_file = previous
+
             register_generic_function(gen, fn)
         else:
             declare_function(gen, fn)

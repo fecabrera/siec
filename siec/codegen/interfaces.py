@@ -262,11 +262,6 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
     """
     from siec.codegen.methods import resolve_method
 
-    symbol = resolve_method(gen, name, method)
-    if symbol is None:
-        raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not implement "
-                        f"{spelling!r}: it is missing the method {method!r}")
-
     def bare(param: str) -> str:
         return strip_const(strip_reference(strip_const(param)))
 
@@ -274,6 +269,14 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
                 for p in action.params[1:]]
     required_ret = action.return_type and expand_lax(
         gen, substitute(action.return_type, mapping))
+
+    symbol = resolve_method(gen, name, method)
+    if symbol is None:
+        wanted = f"{method}({', '.join(required)})"
+        if required_ret is not None:
+            wanted += f" -> {required_ret}"
+        raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not implement "
+                        f"{spelling!r}: it is missing the method '{wanted}'")
 
     shape_matched = False
     for candidate in [s for _, s in gen.overloads.get(symbol, ())] or [symbol]:
@@ -355,6 +358,26 @@ def expand_lax(gen: CodeGenerator, name: str | None) -> str | None:
         return canonical_interface(gen, name)
 
     return expand_alias(gen, name, checked=False)
+
+
+def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
+    """
+    Every type known to implement an interface: the declared claims,
+    plus the array the family's claim spells once its element unifies
+    out of the requirement - 'Iterable<char>' names 'char[]'.
+    """
+    from siec.codegen.generics import unify
+
+    found = [name for name in gen.implements
+             if type_implements(gen, name, required)]
+
+    for param, claim in gen.array_claims:
+        bindings: dict = {}
+        unify(claim, required, [param], bindings)
+        if param in bindings and f"{bindings[param]}[]" not in found:
+            found.append(f"{bindings[param]}[]")
+
+    return found
 
 
 def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
@@ -545,12 +568,21 @@ def register_array_extend(gen: CodeGenerator, ext) -> None:
             raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
                             "an array carries no interface fields")
 
-        for (action_iface, method) in gen.interface_actions:
+        mapping = dict(zip(iface.params or (), args))
+        for (action_iface, method), actions in gen.interface_actions.items():
             if (action_iface == base
                     and ("[]", method) not in gen.generic_methods):
+                action = actions[0]
+                params = ", ".join(expand_lax(gen, substitute(p.type, mapping))
+                                   for p in action.params[1:])
+                wanted = f"{method}({params})"
+                if action.return_type is not None:
+                    wanted += (" -> " + expand_lax(
+                        gen, substitute(action.return_type, mapping)))
+
                 raise TypeError(f"{ext.name!r} does not implement "
                                 f"{spelling!r}: it is missing the method "
-                                f"{method!r} ('fn {elem}[]::{method}')")
+                                f"'{wanted}' ('fn {elem}[]::{method}')")
 
         gen.array_claims.append((elem, spelling))
 
