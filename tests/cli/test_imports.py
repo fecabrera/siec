@@ -802,3 +802,40 @@ def test_module_constants_build_on_their_siblings(tmp_path, monkeypatch):
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_a_template_return_type_is_not_gated_by_the_callers_view(tmp_path, monkeypatch):
+    """
+    Inferring a generic call's return type expands the template's own
+    spelling - a struct from the template's module - which the calling
+    file need not see to hold the value.
+    """
+    mod = tmp_path / "lib"
+    mod.mkdir()
+    (mod / "boxes.sie").write_text("""
+        struct Box<T> {
+            v: T;
+        }
+
+        fn wrap(v: const &Iterable<char>) -> Box<u64> {
+            let n: u64 = 0;
+            foreach (c : v) {
+                n += 1;
+            }
+            let b: Box<u64> = { n };
+            return b;
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { wrap } from lib.boxes;
+
+        fn main() -> i32 {
+            let b = wrap("hello");
+            return (b.v as i32) + 37;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42

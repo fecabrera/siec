@@ -270,9 +270,15 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             if template.return_type is None:
                 return None
 
+            # the substituted spelling mixes the template's names with
+            # the call's arguments, so no view gates it
             mapping = dict(zip(template.type_params, type_args))
-            return strip_reference(
-                expand_alias(gen, substitute(template.return_type, mapping)))
+            gen.ungated_types += 1
+            try:
+                return strip_reference(
+                    expand_alias(gen, substitute(template.return_type, mapping)))
+            finally:
+                gen.ungated_types -= 1
 
         # 'S(...)' constructs and types as the S it builds
         if symbol not in gen.return_types:
