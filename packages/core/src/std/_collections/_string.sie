@@ -93,6 +93,6 @@ fn String::as_const_bytes(const &self) -> const u8[] {
  * @return The formatted String.
  */
 @inline
-fn String::format(const &self, modifiers: const &Iterable<char>) -> String {
+fn String::format(const &self, modifiers: const &char[]) -> String {
     return self.as_const_array().format(modifiers);
 }

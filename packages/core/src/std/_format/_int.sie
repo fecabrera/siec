@@ -1,0 +1,108 @@
+import { String } from std.collections;
+
+enum IntFormatterState {
+    PADDING = 0,
+    LENGTH = 1,
+    FORMAT = 2,
+}
+
+@static let _hex: char[] = "0123456789abcdef";
+@static let _hexu: char[] = "0123456789ABCDEF";
+
+@macro format_int(value, modifiers, neg) = _format_int(value, modifiers, neg);
+
+@static
+fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
+    let str = String();
+    let base: u64 = 10;
+    let pointer = false;
+    let mayus = false;
+    let zero = false;
+    let padding: u32 = 0;
+    let state = IntFormatterState::PADDING;
+
+    let i: u64 = 0;
+    while (i < modifiers.length) {
+        let c = modifiers[i];
+        case (state) {
+        when IntFormatterState::PADDING:
+            if (c == '0') {
+                zero = true;
+            } else if (c > '0' and c <= '9') {
+                state = IntFormatterState::LENGTH;
+                continue;
+            } else {
+                state = IntFormatterState::FORMAT;
+                continue;
+            }
+        when IntFormatterState::LENGTH:
+            if (c >= '0' and c <= '9') {
+                padding *= 10;
+                padding += (c - '0') as u32;
+            } else {
+                state = IntFormatterState::FORMAT;
+                continue;
+            }
+        when IntFormatterState::FORMAT:
+            if (c == 'p') {
+                pointer = true;
+                base = 16;
+            } else if (c == 'b') {
+                base = 2;
+            } else if (c == 'x') {
+                base = 16;
+            } else if (c == 'X') {
+                base = 16;
+                mayus = true;
+            }
+            break;
+        }
+        i += 1;
+    }
+    
+    let buf = String();
+    defer buf.destroy();
+
+    let num = value;
+    while (true) {
+        buf.push(mayus ? _hexu[num % base] : _hex[num % base]);
+        num = num / base;
+        if (num == 0) break;
+    }
+
+    if (neg) {
+        if (pointer) {
+            if (zero) {
+                str.push('-');
+                str.append("0x");
+            } else {
+                buf.append("x0");
+                buf.push('-');
+            }
+        } else {
+            if (zero) {
+                str.push('-');
+            } else {
+                buf.push('-');
+            }
+        }
+    } else if (pointer) {
+        if (zero) {
+            str.append("0x");
+        } else {
+            buf.append("x0");
+        }
+    }
+    
+    if (padding > buf.length) {
+        for(let i = padding; i < buf.length; i += 1) {
+            str.push(zero ? '0' : ' ');
+        }
+    }
+
+    for(let i: u64 = 0; i < buf.length; i += 1) {
+        str.push(buf.data[buf.length - i - 1]);
+    }
+
+    return str;
+}
