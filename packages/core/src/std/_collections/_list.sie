@@ -171,7 +171,7 @@ fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
  * @param lst The List to check if the List is equal to.
  * @return True if the List is equal to the given List, false otherwise.
  */
- fn List<T>::eq(&self, lst: const &List<T>) -> bool {
+ fn List<T>::eq(const &self, lst: const &List<T>) -> bool {
     if (self.length != lst.length)
         return false;
 
@@ -234,7 +234,7 @@ fn T[]::add(&self, it: const &Iterable<T>) -> List<T> {
  * @param arr The array to check if the array is equal to.
  * @return True if the array is equal to the given array, false otherwise.
  */
-fn T[]::eq(&self, arr: const T[]) -> bool {
+fn T[]::eq(const &self, arr: const T[]) -> bool {
     if (self.length != arr.length)
         return false;
 
@@ -252,6 +252,6 @@ fn T[]::eq(&self, arr: const T[]) -> bool {
  * @param lst The List to check if the array is equal to.
  * @return True if the array is equal to the given List, false otherwise.
  */
-fn T[]::eq(&self, lst: const &List<T>) -> bool {
+fn T[]::eq(const &self, lst: const &List<T>) -> bool {
     return self == lst.as_array();
 }

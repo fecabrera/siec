@@ -37,7 +37,7 @@ fn String::add(&self, arr: const char*) -> String {
  * @param arr The char pointer to check if the String is equal to.
  * @return True if the String is equal to the given array, false otherwise.
  */
-fn String::eq(&self, arr: const char*) -> bool {
+fn String::eq(const &self, arr: const char*) -> bool {
     for (let i: u64 = 0; i < self.length; i += 1) {
         if (arr[i] == 0 or self.data[i] != arr[i])
             return false;
