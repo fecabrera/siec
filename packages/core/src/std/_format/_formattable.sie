@@ -71,6 +71,11 @@ fn u8::format(const &self, modifiers: const &char[]) -> String {
 
 @inline
 fn bool::format(const &self, modifiers: const &char[]) -> String {
+    if (modifiers == "y")
+        return String(self ? "y": "n");
+    else if (modifiers == "yes")
+        return String(self ? "yes": "no");
+    else
     return String(self ? "true": "false");
 }
 
