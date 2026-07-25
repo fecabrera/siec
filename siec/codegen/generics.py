@@ -248,6 +248,12 @@ def register_generic_function(gen: CodeGenerator, fn) -> None:
             raise TypeError("'main' cannot be generic: the C runtime "
                             "calls it directly")
 
+        # a removed template has nothing left to stamp: its name is
+        # recorded so uses of it fail with the advice
+        if fn.removed is not None:
+            gen.removed[fn.name] = fn.removed
+            return
+
         if fn.body is None and fn.asm is None:
             raise TypeError(f"generic function {fn.name!r} needs a body: "
                             "there is nothing to declare without one")

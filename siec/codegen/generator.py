@@ -214,6 +214,10 @@ class CodeGenerator:
         self.call_graph: dict = {}
         self.deprecated_uses: list = []
 
+        # '@remove' functions by symbol, mapped to their advice: a
+        # declaration stands so uses name it, and each use fails
+        self.removed: dict[str, str] = {}
+
         # the function whose body is being emitted, and the line of the
         # statement inside it: where a use of a deprecated name sits
         self.current_function: str | None = None

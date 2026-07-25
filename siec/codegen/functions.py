@@ -169,9 +169,12 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     gen.param_types[symbol] = [p.type for p in fn.params]
 
     # '@deprecated' advice travels with the symbol: its reachable uses
-    # warn once the program is emitted
+    # warn once the program is emitted, and a '@remove' one's fail
     if fn.deprecated is not None:
         gen.deprecated[symbol] = fn.deprecated
+
+    if fn.removed is not None:
+        gen.removed[symbol] = fn.removed
 
     # defaults fill omitted call arguments; they emit under the
     # declaring file's view, so it travels with them

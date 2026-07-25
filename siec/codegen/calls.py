@@ -2,7 +2,7 @@
 
 from llvmlite import ir
 
-from siec.ast import Block, BlockExpr, Call, Expr
+from siec.ast import Block, BlockExpr, Call, Expr, Var
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
@@ -75,7 +75,13 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         # type, so it may carry dotted generic arguments
         symbol = qualified_method(gen, call.name)
         if symbol is None:
+            from siec.codegen.deprecation import check_removed_method
+
             base = call.name.partition("::")[0]
+
+            # a removed method leaves no declaration to resolve; its
+            # name still answers for the advice
+            check_removed_method(gen, base, call.name.partition("::")[2])
             raise NameError(f"type {base!r} has no method "
                             f"{call.name.partition('::')[2]!r}")
     elif "." in call.name:
@@ -91,6 +97,16 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
             symbol, receiver = found
 
         if symbol is None:
+            from siec.codegen.deprecation import check_removed_method
+            from siec.codegen.inference import expr_sie_type
+
+            # a removed method leaves no declaration to resolve; the
+            # receiver's type still names it for the advice
+            base, _, method = call.name.rpartition(".")
+            if base in scope:
+                check_removed_method(gen, expr_sie_type(gen, Var(base), scope),
+                                     method)
+
             raise NameError(f"undefined function {call.name!r}")
 
         if receiver is None and symbol in gen.globals:
@@ -109,6 +125,12 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         symbol = gen.resolve_symbol(call.name)
         if call.name in scope or symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope)
+
+    # a removed generic leaves no template to resolve, so its name is
+    # checked before the lookups that would call it undefined
+    from siec.codegen.deprecation import check_removed
+
+    check_removed(gen, symbol)
 
     # the sugar form passes the receiver as the hidden first argument
     if receiver is not None:

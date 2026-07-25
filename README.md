@@ -1028,6 +1028,30 @@ A warning describes code that compiles: the build goes through. Which uses repor
 
 Generic functions and methods deprecate like any other, each warning naming what the call stamped (`'scale<i32>' is deprecated: ...`). The decorator stacks with the others, `@extern` included, since it describes the name rather than the body.
 
+#### Remove
+
+Once a deprecated function is actually gone, `@remove("advice")` leaves a tombstone in its place: the declaration stands so its uses still name it, but there is nothing left to define, so it takes no body. Any use is a compile error quoting the advice:
+
+```
+fn new_func() { }
+
+@remove("use new_func")
+fn old_func();
+
+fn main() {
+    old_func(); // error: 'old_func' was removed: use new_func
+}
+```
+
+Unlike a deprecation, a removal is not gated by reachability: the code cannot compile at all, so a use anywhere fails, references included. A tombstone nothing uses compiles fine, which is the point of leaving it: callers get the advice instead of `undefined function`.
+
+Methods, generic functions, and a generic struct's or an array's methods all remove the same way. A removed generic never registers a template, so nothing can stamp it, and the name answers for the advice on its own:
+
+```
+@remove("use scale2") fn scale<T>(v: T) -> T;
+@remove("use foreach") fn T[]::walk(&self) -> u64;
+```
+
 #### Asm
 
 Functions can be decorated with `@asm` to indicate that their body is written in assembly instead of Sie code.

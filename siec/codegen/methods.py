@@ -31,6 +31,13 @@ def register_method(gen: CodeGenerator, fn) -> None:
 
     with source_location(line=fn.line, file=fn.file):
         if fn.receiver_params is not None:
+            # a removed template has nothing left to stamp: its name is
+            # recorded so uses of it fail with the advice
+            if fn.removed is not None:
+                base = "[]" if fn.receiver.endswith("[]") else fn.receiver
+                gen.removed[f"{base}::{fn.name.partition('::')[2]}"] = fn.removed
+                return
+
             if fn.body is None and fn.asm is None:
                 raise TypeError(f"method {fn.name!r} needs a body: there is "
                                 "nothing to declare without one")
@@ -364,6 +371,11 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
     receiver_type = expr_sie_type(gen, expr.receiver, scope)
     symbol = resolve_method(gen, receiver_type, expr.method)
     if symbol is None:
+        from siec.codegen.deprecation import check_removed_method
+
+        # a removed method leaves no declaration to resolve; its name
+        # still answers for the advice
+        check_removed_method(gen, receiver_type, expr.method)
         raise TypeError(f"type {receiver_type or '?'} has no method "
                         f"{expr.method!r}")
 

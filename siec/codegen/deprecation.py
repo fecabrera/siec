@@ -1,10 +1,11 @@
-"""Warnings for uses of '@deprecated' functions.
+"""Warnings and errors for uses of '@deprecated' and '@remove' functions.
 
 Every emitted call and function reference records an edge from the
 function it sits in to the one it names, so once the whole program is
 emitted the call graph says which functions 'main' can reach. A use of a
 deprecated function inside a reachable one warns at its source line; one
-no path from 'main' arrives at stays quiet.
+no path from 'main' arrives at stays quiet. A removed function has no
+body left to reach: any use of it fails on the spot.
 """
 
 from siec.codegen.errors import warn
@@ -15,13 +16,58 @@ def note_use(gen: CodeGenerator, symbol: str) -> None:
     """
     Record that the function being emitted names another: an edge for the
     reachability walk, and, when the callee is deprecated, the use itself.
+
+    A removed callee stops the build here, with the advice it declared.
     """
+    check_removed(gen, symbol)
+
     caller = gen.current_function
     gen.call_graph.setdefault(caller, set()).add(symbol)
 
     if symbol in gen.deprecated:
         gen.deprecated_uses.append((caller, symbol, gen.current_line,
                                     gen.current_file))
+
+
+def check_removed(gen: CodeGenerator, symbol: str) -> None:
+    """
+    Fail on a use of a '@remove' function, quoting its advice.
+    """
+    from siec.codegen.overloads import display_name
+
+    if (advice := gen.removed.get(symbol)) is not None:
+        name = display_name(symbol)
+
+        # an array's methods register under the one family: spell it back
+        # the way it was declared
+        if name.startswith("[]::"):
+            name = f"T{name}"
+
+        raise TypeError(f"{name!r} was removed: {advice}")
+
+
+def check_removed_method(gen: CodeGenerator, receiver_type: str | None,
+                         method: str) -> None:
+    """
+    Fail on a use of a removed method, whether it was declared on the
+    receiver's own name or, for a generic struct or an array, on the
+    template the receiver instantiates.
+    """
+    from siec.codegen.generics import split_generic
+    from siec.codegen.types import strip_const, strip_reference
+
+    base = strip_const(strip_reference(receiver_type or ""))
+    if not base:
+        return
+
+    check_removed(gen, f"{base}::{method}")
+
+    parts = split_generic(base)
+    if parts is None and base.endswith("[]"):
+        parts = ("[]", [base[:-2]])
+
+    if parts is not None:
+        check_removed(gen, f"{parts[0]}::{method}")
 
 
 def reachable_from(gen: CodeGenerator, entry: str) -> set:

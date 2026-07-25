@@ -325,6 +325,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     symbol = None
     clobbers = []
     deprecated = None
+    removed = None
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
@@ -343,6 +344,12 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         if decorator == "deprecated":
             ts.expect("sym", "(")
             deprecated = ts.expect("str").value
+            ts.expect("sym", ")")
+            continue
+
+        if decorator == "remove":
+            ts.expect("sym", "(")
+            removed = ts.expect("str").value
             ts.expect("sym", ")")
             continue
 
@@ -488,6 +495,12 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         raise SyntaxError(f"line {line}: an '@noreturn' function cannot "
                           "declare a return type")
 
+    # a removed function is a tombstone: the declaration stands so its
+    # uses name it, but there is nothing left to define
+    if removed is not None and ts.peek().value != ";":
+        raise SyntaxError(f"line {ts.peek().line}: a '@remove' function "
+                          "cannot have a body")
+
     # an '@asm' function's body is raw assembly, captured whole by the lexer
     if is_asm:
         if ts.peek().kind != "asm":
@@ -499,7 +512,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                         noreturn, type_params=type_params, receiver=receiver,
                         receiver_params=receiver_params,
                         variadic=variadic, deprecated=deprecated,
-                        line=line)
+                        removed=removed, line=line)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
@@ -509,7 +522,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                         type_params=type_params, receiver=receiver,
                         receiver_params=receiver_params,
                         variadic=variadic, deprecated=deprecated,
-                        line=line)
+                        removed=removed, line=line)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -522,4 +535,4 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                     type_params=type_params, receiver=receiver,
                     receiver_params=receiver_params,
                     variadic=variadic, deprecated=deprecated,
-                    line=line)
+                    removed=removed, line=line)
