@@ -1,22 +1,24 @@
 import std.io;
 
 fn main() -> i32 {
-    std.io.println("true:   {}", true);
-    std.io.println("false:  {}", false);
+    std.io.println("true:       {} {y} {yes}", true, true, true);
+    std.io.println("false:      {} {y} {yes}", false, false, false);
 
-    std.io.println("i8:     {}", -1 as i8);
-    std.io.println("i16:    {}", -1 as i16);
-    std.io.println("i32:    {}", -1 as i32);
-    std.io.println("i64:    {}", -1 as i64);
+    std.io.println("i8:         {} {8x} {08x}", -1 as i8, -0x7f as i8, -0x7f as i8);
+    std.io.println("i16:        {} {8x} {08x}", -1 as i16, -0x7f as i16, -0x7f as i16);
+    std.io.println("i32:        {} {8x} {08x}", -1 as i32, -0x7f as i32, -0x7f as i32);
+    std.io.println("i64:        {} {8x} {08x}", -1 as i64, -0x7f as i64, -0x7f as i64);
 
-    std.io.println("u8:     {}", 1 as u8);
-    std.io.println("u16:    {}", 1 as u16);
-    std.io.println("u32:    {}", 1 as u32);
-    std.io.println("u64:    {}", 1 as u64);
+    std.io.println("u8:         {} {8x} {08x}", 1 as u8, 0x7f as u64, 0x7f as u64);
+    std.io.println("u16:        {} {8x} {08x}", 1 as u16, 0x7f as u32, 0x7f as u32);
+    std.io.println("u32:        {} {8x} {08x}", 1 as u32, 0x7f as u16, 0x7f as u16);
+    std.io.println("u64:        {} {8x} {08x}", 1 as u64, 0x7f as u8, 0x7f as u8);
 
-    std.io.println("char*:  {}", "hello" as char*);
-    std.io.println("char[]: {}", "hello" as char[]);
-    std.io.println("i32[]:  {}", [1, 2, 3] as i32[]);
+    std.io.println("char*:      {}", "hello" as char*);
+    std.io.println("char[]:     {} {10} {-10}", "hello" as char[], "hello" as char[], "hello" as char[]);
+    std.io.println("i32[]:      {}", [1, 2, 3] as i32[]);
+
+    std.io.println("char[][]:   {}", ["hello", "world"] as char[][]);
     
     return 0;
 }
