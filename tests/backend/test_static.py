@@ -37,3 +37,26 @@ def test_static_main_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="'main' cannot be static"):
         compile_source("@static fn main() -> i32 { return 0; }")
+
+
+def test_a_static_template_instantiates_under_its_own_symbol(run):
+    """
+    A '@static' function with an interface parameter is a template; its
+    instances mangle at instantiation, so the call finds the symbol the
+    declaration landed under.
+    """
+    source = """
+    @static
+    fn helper(v: const &Iterable<char>) -> u64 {
+        let n: u64 = 0;
+        foreach (c : v) {
+            n += 1;
+        }
+        return n;
+    }
+
+    fn main() -> i32 {
+        return (helper("hello") as i32) - 5;
+    }
+    """
+    assert run(source).returncode == 0

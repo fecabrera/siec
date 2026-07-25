@@ -143,8 +143,9 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
 
     # a '@static' function is local to its file: it lives under a mangled
     # module symbol its own file resolves to, so other files neither see it
-    # nor collide with its name
-    if fn.is_static:
+    # nor collide with its name; an already-pinned symbol (a template's
+    # instance, mangled at instantiation) keeps its name
+    if fn.is_static and fn.symbol is None:
         if fn.name == "main":
             raise TypeError("'main' cannot be static: the C runtime must find it")
 

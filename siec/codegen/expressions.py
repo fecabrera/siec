@@ -332,7 +332,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             base = builder.extract_value(base, 0, name="index.data")
 
         if not isinstance(base.type, ir.PointerType):
-            raise TypeError(f"cannot index a value of type {base.type}")
+            raise TypeError(f"cannot index a value of type "
+                            f"{indexed_spelling(gen, expr, base, scope)!r}: "
+                            "only a pointer or an array indexes")
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
         load = builder.load(builder.gep(base, [index]))
@@ -578,7 +580,9 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
             base = builder.extract_value(base, 0, name="index.data")
 
         if not isinstance(base.type, ir.PointerType):
-            raise TypeError(f"cannot index a value of type {base.type}")
+            raise TypeError(f"cannot index a value of type "
+                            f"{indexed_spelling(gen, expr, base, scope)!r}: "
+                            "only a pointer or an array indexes")
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
         return builder.gep(base, [index])
@@ -967,6 +971,19 @@ def emit_tuple(gen: CodeGenerator, builder: ir.IRBuilder, expr: TupleLiteral,
         value = builder.insert_value(value, filled, i, name=f"tuple.{i}")
 
     return value
+
+
+def indexed_spelling(gen: CodeGenerator, expr, base, scope: dict) -> str:
+    """
+    The Sie spelling of an index expression's base, for the error naming
+    it; the LLVM type stands in when inference has nothing.
+    """
+    from siec.codegen.inference import expr_sie_type
+    from siec.codegen.types import strip_const, strip_reference
+
+    spelled = expr_sie_type(gen, expr.base, scope)
+    return (strip_const(strip_reference(strip_const(spelled)))
+            if spelled is not None else str(base.type))
 
 
 def type_operand(gen: CodeGenerator, expr: Expr, scope: dict) -> Expr:

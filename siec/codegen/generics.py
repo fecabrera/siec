@@ -645,6 +645,16 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
            for other in siblings):
         symbol = f"{symbol}({','.join(template_key(template))})"
 
+    # a '@static' template's instances stay file-local like the template:
+    # the symbol mangles per file, so another file's same-named static
+    # neither sees nor collides with it
+    if template.is_static:
+        key = (template.file, symbol)
+        if key not in gen.statics:
+            gen.statics[key] = f"{symbol}.static.{len(gen.statics)}"
+
+        symbol = gen.statics[key]
+
     if symbol not in gen.instantiated_functions:
         gen.instantiated_functions.add(symbol)
 
