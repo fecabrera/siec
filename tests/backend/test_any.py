@@ -143,3 +143,52 @@ def test_when_interface_covers_the_array_family(run):
     }
     """
     assert run(source).returncode == 0
+
+
+def test_when_interface_expands_nested_combinations(run):
+    """
+    A nested interface argument expands per combination:
+    'when Iterable<Sized>:' arms every array whose element implements
+    'Sized', the cast reading each arm's own array type.
+    """
+    source = """
+    interface Sized;
+
+    fn Sized::size(const &self) -> i64;
+
+    struct P: Sized { x: i64; }
+    fn P::size(const &self) -> i64 { return self.x; }
+
+    @extend i64: Sized;
+    fn i64::size(const &self) -> i64 { return self; }
+
+    fn tally(args...) -> i64 {
+        let total: i64 = 0;
+        let i: u64 = 0;
+        while (i < args.length) {
+            case (@typeof(args[i])) {
+            when Sized:
+                let v = args[i] as Sized;
+                total = total + v.size();
+            when Iterable<Sized>:
+                let v = args[i] as Iterable<Sized>;
+                foreach (el : v) {
+                    total = total + el.size();
+                }
+            else:
+                total = total + 1000;
+            }
+            i = i + 1;
+        }
+        return total;
+    }
+
+    fn main() -> i32 {
+        let p: P = { 3 };
+        let nums: i64[] = [10, 20];
+        let ps: P[] = [{ 1 }, { 2 }];
+        let f = 1.5;
+        return (tally(p, nums, ps, f) - 1036) as i32;
+    }
+    """
+    assert run(source).returncode == 0

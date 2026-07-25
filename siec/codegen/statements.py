@@ -696,12 +696,13 @@ def expand_when_interface(gen: CodeGenerator, arm: When, scope: dict) -> list:
     into one arm per type known to implement the interface, each body
     stamped with the concrete type wherever the arm's spelling appears,
     so 'args[i] as Formattable' reads 'args[i] as i64' in the 'i64' arm.
+    A nested interface argument expands per combination:
+    'Iterable<Formattable>' arms every iterable of every formattable.
     """
     import copy
 
     from siec.codegen.generics import respell_types
-    from siec.codegen.interfaces import (canonical_interface,
-                                         interface_implementers)
+    from siec.codegen.interfaces import interface_expansions
 
     plain, spellings = [], []
     for value in arm.values:
@@ -719,8 +720,7 @@ def expand_when_interface(gen: CodeGenerator, arm: When, scope: dict) -> list:
 
     arms = [When(plain, arm.body)] if plain else []
     for spelling in spellings:
-        required = canonical_interface(gen, spelling)
-        for concrete in interface_implementers(gen, required):
+        for concrete in interface_expansions(gen, spelling):
             body = copy.deepcopy(arm.body)
             respell_types(body, spelling, concrete)
             arms.append(When([TypeId(concrete)], body))

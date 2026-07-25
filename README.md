@@ -1593,6 +1593,8 @@ when Formattable:
 
 The expansion covers every type claiming the interface, arrays included through the family's claim, so `when Iterable<char>:` arms `char[]` among the implementers. A type an earlier arm already matched never reaches its stamped arm: the first match still wins.
 
+A nested interface argument expands per combination: `when Iterable<Formattable>:` substitutes each formattable type into the argument and arms every iterable of each, so an `i64[]` and a `P[]` both land in it when `i64` and `P` claim `Formattable`.
+
 ### Enums
 
 Enums are collections of constants. They are declared through the keyword `enum` followed by their name. Their members are declared by name, separated by commas.

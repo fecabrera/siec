@@ -360,6 +360,30 @@ def expand_lax(gen: CodeGenerator, name: str | None) -> str | None:
     return expand_alias(gen, name, checked=False)
 
 
+def interface_expansions(gen: CodeGenerator, spelling: str) -> list[str]:
+    """
+    Concrete types satisfying an interface spelling whose arguments may
+    themselves be interfaces: each inner interface substitutes each of
+    its implementers, the outer expanding per combination, so
+    'Iterable<Formattable>' names every iterable of every formattable.
+    """
+    parts = split_generic(spelling)
+    if parts is not None:
+        base, args = parts
+        for index, arg in enumerate(args):
+            inner = (split_generic(arg) or (arg, None))[0]
+            if inner in gen.interfaces:
+                found = []
+                for concrete in interface_expansions(gen, arg):
+                    respelled = [*args[:index], concrete, *args[index + 1:]]
+                    found.extend(interface_expansions(
+                        gen, f"{base}<{','.join(respelled)}>"))
+
+                return list(dict.fromkeys(found))
+
+    return interface_implementers(gen, canonical_interface(gen, spelling))
+
+
 def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
     """
     Every type known to implement an interface: the declared claims,
