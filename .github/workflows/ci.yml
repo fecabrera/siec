@@ -53,6 +53,10 @@ jobs:
       - name: Install dependencies
         run: pipenv sync --dev
 
+      - name: Install libcurl
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+
       # ubuntu-latest (24.04) has no libmpdec package - Ubuntu dropped
       # mpdecimal after 22.04 and only reintroduced it in 25.10 - so the
       # library builds from the upstream release instead
