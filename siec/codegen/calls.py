@@ -292,9 +292,16 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
         return emit_lvalue(gen, builder, arg, scope)
     except TypeError:
         # a literal has no storage to alias, and no declared type to
-        # spill at; a typed temporary (a call's result, an operator
-        # chain) spills to its own stack slot, referenced in place
+        # spill at; against a 'const &T' it materializes at the
+        # parameter's own type - a mutable reference stays an error,
+        # its writes would land on the temporary
         if arg_name is None:
+            if is_const(referenced):
+                value = emit_coerced(gen, builder, arg, referenced, scope)
+                slot = entry_alloca(builder, value.type, "ref.spill")
+                builder.store(value, slot)
+                return slot
+
             raise TypeError(f"a {param_name!r} parameter needs an "
                             "assignable argument") from None
 

@@ -146,15 +146,15 @@ def register_action(gen: CodeGenerator, fn) -> None:
 def canonical_interface(gen: CodeGenerator, spelling: str) -> str:
     """
     An interface spelling under canonical type arguments, so every way of
-    writing one instance compares equal.
+    writing one instance compares equal. An argument may itself be an
+    interface - it only ever lands in an action's parameter, where an
+    interface is allowed - so arguments expand laxly.
     """
-    from siec.codegen.aliases import expand_alias
-
     if (parts := split_generic(spelling)) is None:
         return spelling
 
     base, args = parts
-    return f"{base}<{','.join(expand_alias(gen, a, checked=False) for a in args)}>"
+    return f"{base}<{','.join(expand_lax(gen, a) for a in args)}>"
 
 
 def declare_implements(gen: CodeGenerator, name: str, template_base: str,
@@ -288,6 +288,27 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
         shape_matched = True
         if implements_or_equals(gen, gen.return_types.get(candidate),
                                 required_ret):
+            return
+
+    # an interface-taking overload lives on as a template, its parameters
+    # respelled as constrained placeholders; the constraints substitute
+    # back to compare its true shape
+    for template in [t for t in (gen.generic_functions.get(symbol),
+                                 *gen.generic_overloads.get(symbol, ()))
+                     if t is not None]:
+        constraints = template.constraints or {}
+        if any(p not in constraints for p in template.type_params or ()):
+            return  # a still-generic method matches by existence
+
+        have = [expand_lax(gen, substitute(p.type, constraints))
+                for p in template.params[1:]]
+        if [bare(p) for p in have] != [bare(p) for p in required]:
+            continue
+
+        shape_matched = True
+        ret = template.return_type and expand_lax(
+            gen, substitute(template.return_type, constraints))
+        if implements_or_equals(gen, ret, required_ret):
             return
 
     if shape_matched:

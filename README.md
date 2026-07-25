@@ -1368,6 +1368,8 @@ fn main() {
 }
 ```
 
+A reference parameter normally aliases assignable storage in the caller. A `const &T` parameter only reads, so a literal may pass too: it materializes at the parameter's own type, referenced in place. A mutable `&T` still needs the caller's storage, since writes to a temporary would vanish with it.
+
 A function may also return a reference, `-> &T`, provided it has a reference parameter to derive it from, the receiver usually; returning storage that dies with the call (a local, a parameter's copy) has no reference to give. The `return` takes the value's address, and the call's result reads as the T it aliases, like a reference parameter does: reading copies the value out, while calling a [method](#methods) on it, or returning it along, keeps aliasing the original.
 
 ```
@@ -2067,6 +2069,8 @@ interface Iterable<T>;
 fn Iterable<T>::iterator(self: &Iterable<T>) -> Iterator<T>;
 ```
 
+A claim's type argument may itself be an interface: `struct List<T>: Add<List<T>, Iterable<T>>` requires an `add` taking any iterable, and the overload whose parameter spells that same interface satisfies it.
+
 #### Extending types
 
 `@extend Type: Iface, ...;` adds interface claims to an existing type, outside its declaration. Methods already declare anywhere, so this is the claiming half: together they extend a type's surface from another file, the claims checked like the declaration's own.
@@ -2160,6 +2164,8 @@ fn T[]::const_iterator(const &self) -> ConstArrayIterator<T> { ... }
 let it = nums.iterator();   // an ArrayIterator over the array
 it.next() = 5;              // the references reach the array itself
 ```
+
+An aggregate literal has no type of its own; offered to an `Iterable<T>` parameter it takes the family's array reading, so `{ptr, len}` passes as the `T[]` it spells.
 
 ### Error handling
 

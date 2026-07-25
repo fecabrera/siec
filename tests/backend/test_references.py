@@ -172,3 +172,47 @@ def test_reference_cannot_be_a_field(compile_source):
     """
     with pytest.raises(TypeError, match="field 'r' cannot be a reference"):
         compile_source("struct S { r: &i32; }")
+
+
+def test_a_literal_materializes_for_a_const_reference(run):
+    """
+    An untyped literal has no storage to alias, but a 'const &T'
+    parameter only reads: the literal materializes at the parameter's
+    own type, referenced in place.
+    """
+    source = """
+    struct Point {
+        x: i32;
+        y: i32;
+    }
+
+    fn total(p: const &Point) -> i32 {
+        return p.x + p.y;
+    }
+
+    fn main() -> i32 {
+        return total({40, 2});
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_a_literal_cannot_bind_a_mutable_reference(compile_source):
+    """
+    A mutable '&T' aliases the caller's storage; a literal has none, and
+    writes to a temporary would vanish.
+    """
+    with pytest.raises(TypeError, match="a '&Point' parameter needs an "
+                                        "assignable argument"):
+        compile_source("""
+        struct Point { x: i32; y: i32; }
+
+        fn shift(p: &Point) {
+            p.x += 1;
+        }
+
+        fn main() -> i32 {
+            shift({1, 2});
+            return 0;
+        }
+        """)

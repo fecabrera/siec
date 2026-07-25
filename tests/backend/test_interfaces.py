@@ -593,3 +593,56 @@ def test_a_static_method_adapts_its_first_interface_parameter(run):
     }
     """
     assert run(source).returncode == 0
+
+
+def test_a_claim_may_take_an_interface_argument(run):
+    """
+    An interface claim's type argument may itself be an interface -
+    'Add<Box, Iterable<i32>>' - the requirement satisfied by the
+    interface-taking overload, template though it is.
+    """
+    source = """
+    struct Box: Add<Box, Iterable<i32>> {
+        total: i32;
+    }
+
+    fn Box::add(&self, it: const &Iterable<i32>) -> Box {
+        let sum = self.total;
+        foreach (v : it) {
+            sum += v;
+        }
+        let b: Box = { sum };
+        return b;
+    }
+
+    fn main() -> i32 {
+        let b: Box = { 5 };
+        let arr: i32[] = [1, 2, 3];
+        let c = b.add(arr);
+        return c.total - 11;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_literal_takes_the_array_reading_of_a_constraint(run):
+    """
+    An aggregate literal has no type of its own; against an
+    'Iterable<T>'-constrained parameter it reads as the 'T[]' the array
+    family claims - '{ptr, len}' where an 'Iterable<i32>' is expected.
+    """
+    source = """
+    fn total(values: const &Iterable<i32>) -> i32 {
+        let sum = 0;
+        foreach (v : values) {
+            sum += v;
+        }
+        return sum;
+    }
+
+    fn main() -> i32 {
+        let arr: i32[] = [13, 12, 14, 99];
+        return total({arr.data, 3}) - 39;
+    }
+    """
+    assert run(source).returncode == 0

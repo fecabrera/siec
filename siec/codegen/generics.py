@@ -10,7 +10,8 @@ import copy
 import re
 from dataclasses import fields as dataclass_fields, is_dataclass
 
-from siec.ast import Call, Field, SizeOf, TypeId, TypeName
+from siec.ast import (AggregateLiteral, ArrayLiteral, Call, Field, SizeOf,
+                      TypeId, TypeName)
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import (
@@ -400,6 +401,25 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
 
     for name, value in inferred.items():
         bindings.setdefault(name, value)
+
+    # an aggregate literal has no type of its own, so it leaves an
+    # interface placeholder unbound; the array family's claim gives it
+    # the array reading - '{ptr, len}' against 'Iterable<char>' is a
+    # 'char[]', arrays being iterable by definition
+    constraints = template.constraints or {}
+    for param, arg in zip(template.params, call.args):
+        placeholder = strip_const(strip_reference(strip_const(param.type)))
+        if (placeholder in bindings or placeholder not in constraints
+                or not isinstance(arg, (AggregateLiteral, ArrayLiteral))):
+            continue
+
+        required = substitute(constraints[placeholder], bindings)
+        for family_param, claim in gen.array_claims:
+            family: dict = {}
+            unify(claim, required, [family_param], family)
+            if family_param in family:
+                bindings[placeholder] = f"{family[family_param]}[]"
+                break
 
     missing = [p for p in template.type_params if p not in bindings]
     if missing:
