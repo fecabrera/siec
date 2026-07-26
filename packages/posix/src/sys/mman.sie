@@ -1,7 +1,7 @@
 @if (TARGET_OS == OS_DARWIN) {
-    @include("_mman/_darwin_mman")
+    @include("_darwin/sys/mman")
 } @else @if (TARGET_OS == OS_LINUX) {
-    @include("_mman/_linux_mman")
+    @include("_linux/sys/mman")
 } @else {
     @error("Unsupported platform")
 }
