@@ -5,7 +5,7 @@ import { Formattable } from std.format;
 
 @extend String:
     Add<String, char*>,
-    Add<String, char>,
+    AddAssign<char*>,
     Eq<char*>,
     Formattable;
 
@@ -29,6 +29,16 @@ fn String::add(&self, arr: const char*) -> String {
     let result = String(self);
     result.append(arr);
     return result;
+}
+
+/**
+ * Add in place the given null-terminated array to the String.
+ *
+ * @param arr The array to add to the String.
+ * @return The resulting String.
+ */
+fn String::add_assign(&self, arr: const char*) {
+    self.append(arr);
 }
 
 /**
