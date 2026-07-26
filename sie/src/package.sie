@@ -110,7 +110,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
     if (include.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {include.arr.elem, include.arr.size as u64};
         foreach (el : elements) {
-            self.include.push(String({el.str.ptr, el.str.len as u64}));
+            self.include += String({el.str.ptr, el.str.len as u64});
         }
     }
 
@@ -118,7 +118,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
     if (libs.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {libs.arr.elem, libs.arr.size as u64};
         foreach (el : elements) {
-            self.libs.push(String({el.str.ptr, el.str.len as u64}));
+            self.libs += String({el.str.ptr, el.str.len as u64});
         }
     }
 

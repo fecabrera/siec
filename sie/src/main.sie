@@ -15,17 +15,17 @@ fn main(args: char*[]) -> i32 {
     defer path.destroy();
 
     if (args.length > 1) {
-        path.append(args[1]);
-        path.append("/package.toml");
+        path += args[1];
+        path += "/package.toml";
     } else {
-        path.append("package.toml");
+        path += "package.toml";
     }
 
     path.null_terminate();
 
     let fp = fopen(path.as_array(), "r");
     if (fp == null) {
-        std.io.println(std.io.stderr, "{} not found", path);
+        std.io.println(std.io.stderr, "{}: Not found", path);
         return 1;
     }
     defer fclose(fp);
@@ -34,7 +34,7 @@ fn main(args: char*[]) -> i32 {
     defer toml_free(result);
 
     if (not result.ok) {
-        std.io.println(std.io.stderr, "could not parse {} ", path);
+        std.io.println(std.io.stderr, "{}: TOML error", path);
         return 2;
     }
 
@@ -43,7 +43,7 @@ fn main(args: char*[]) -> i32 {
 
     let res = pkg.parse(result);
     if (not res.ok) {
-        std.io.println(std.io.stderr, "could not parse package: {}", res.error);
+        std.io.println(std.io.stderr, "{}: Parsing error", path);
         return 4;
     }
     
@@ -56,28 +56,28 @@ fn main(args: char*[]) -> i32 {
     let compile_cmd = String("python -m siec");
 
     foreach (dep : pkg.dependencies) {
-        compile_cmd.append(" -L packages/"); 
-        compile_cmd.append(dep.name);
-        compile_cmd.append("/src"); 
+        compile_cmd += " -L packages/"; 
+        compile_cmd += dep.name;
+        compile_cmd += "/src"; 
     }
 
     // l1, l2, ...    
     foreach (lib : pkg.libs) {
-        compile_cmd.append(" -l ");
-        compile_cmd.append(lib);
+        compile_cmd += " -l ";
+        compile_cmd += lib;
     }
     
     // inc1, inc2, ...
     foreach (inc : pkg.include) {
-        compile_cmd.append(" ");
-        compile_cmd.append(pkg.path);
-        compile_cmd.append("/");
-        compile_cmd.append(inc);
-        compile_cmd.append("*.sie");
+        compile_cmd += " ";
+        compile_cmd += pkg.path;
+        compile_cmd += "/";
+        compile_cmd += inc;
+        compile_cmd += "*.sie";
     }
     
-    compile_cmd.append(" -o dist/bin/");
-    compile_cmd.append(pkg.name);
+    compile_cmd += " -o dist/bin/";
+    compile_cmd += pkg.name;
 
     std.io.println(compile_cmd);
     
