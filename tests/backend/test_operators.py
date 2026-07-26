@@ -344,3 +344,128 @@ def test_ord_conformance_is_checked(compile_source):
 
         fn main() -> i32 { return 0; }
         """)
+
+
+def test_compound_assignment_updates_in_place(run):
+    """
+    'a += b' on a type with an '<op>_assign' method calls it: the value
+    updates in place, so nothing is built to assign back over it.
+    """
+    source = """
+    @static let built: i32 = 0;
+
+    struct Dec: Add<Dec, i64>, AddAssign<i64> {
+        value: i64;
+        id: i32;
+    }
+
+    fn Dec::init(&self, v: i64) {
+        built += 1;                     // stands in for an allocation
+        self.value = v;
+        self.id = built;
+    }
+
+    fn Dec::add(&self, v: i64) -> Dec {
+        return Dec(self.value + v);     // a fresh value, like a real Decimal
+    }
+
+    fn Dec::add_assign(&self, v: i64) {
+        self.value += v;
+    }
+
+    fn main() -> i32 {
+        let d = Dec(10);
+        let before = built;
+
+        d += 5;
+        if (d.value != 15) { return 1; }
+        if (built != before) { return 2; }   // no temporary was built
+        if (d.id != before) { return 3; }    // and it is the same value
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_compound_assignment_falls_back_to_the_operator(run):
+    """
+    Without an in-place method the operator's result assigns back, so a
+    type carrying only 'Add' keeps working.
+    """
+    source = """
+    struct Plain: Add<Plain, i64> {
+        value: i64;
+    }
+
+    fn Plain::add(&self, v: i64) -> Plain {
+        let p: Plain;
+        p.value = self.value + v;
+        return p;
+    }
+
+    fn main() -> i32 {
+        let p: Plain;
+        p.value = 1;
+        p += 41;
+        if (p.value != 42) { return 1; }
+
+        let n = 40;                     // plain numbers are untouched
+        n += 2;
+        return n - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_every_compound_operator_has_an_in_place_form(run):
+    """
+    '+=', '-=', '*=', '/=', and '%=' each reach their own method, on a
+    named target, a field, or an element.
+    """
+    source = """
+    struct Acc: AddAssign<i64>, SubAssign<i64>, MulAssign<i64>,
+                DivAssign<i64>, RemAssign<i64> {
+        value: i64;
+    }
+
+    fn Acc::add_assign(&self, v: i64) { self.value += v; }
+    fn Acc::sub_assign(&self, v: i64) { self.value -= v; }
+    fn Acc::mul_assign(&self, v: i64) { self.value *= v; }
+    fn Acc::div_assign(&self, v: i64) { self.value /= v; }
+    fn Acc::rem_assign(&self, v: i64) { self.value %= v; }
+
+    struct Holder { acc: Acc; }
+
+    fn main() -> i32 {
+        let a: Acc;
+        a.value = 10;
+        a += 5;  if (a.value != 15) { return 1; }
+        a -= 3;  if (a.value != 12) { return 2; }
+        a *= 4;  if (a.value != 48) { return 3; }
+        a /= 6;  if (a.value != 8)  { return 4; }
+        a %= 5;  if (a.value != 3)  { return 5; }
+
+        let h: Holder;                  // a field target updates in place
+        h.acc.value = 1;
+        h.acc += 41;
+        if (h.acc.value != 42) { return 6; }
+
+        let arr: Acc[2];                // and an element
+        arr[1].value = 2;
+        arr[1] += 40;
+        return arr[1].value as i32 - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_assign_conformance_is_checked(compile_source):
+    """
+    Claiming 'AddAssign<T>' declares the shorthand's contract, checked
+    like any other interface.
+    """
+    with pytest.raises(TypeError, match="does not implement 'AddAssign<i64>'"):
+        compile_source("""
+        struct S: AddAssign<i64> { value: i64; }
+        fn main() -> i32 { let s: S; return 0; }
+        """)

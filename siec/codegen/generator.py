@@ -428,6 +428,29 @@ interface Rem<S, T>;
 
 fn Rem<S, T>::rem(&self, value: T) -> S;
 
+// the compound assignment interfaces: 'a += b' on a struct operand is
+// the 'a.add_assign(b)' shorthand, which updates 'a' in place instead of
+// assigning an operator's result back over it
+interface AddAssign<T>;
+
+fn AddAssign<T>::add_assign(&self, value: T);
+
+interface SubAssign<T>;
+
+fn SubAssign<T>::sub_assign(&self, value: T);
+
+interface MulAssign<T>;
+
+fn MulAssign<T>::mul_assign(&self, value: T);
+
+interface DivAssign<T>;
+
+fn DivAssign<T>::div_assign(&self, value: T);
+
+interface RemAssign<T>;
+
+fn RemAssign<T>::rem_assign(&self, value: T);
+
 // equality: 'a == b' on a struct operand is the 'a.eq(b)' shorthand,
 // and 'a != b' its negation; claiming 'Eq<T>' declares the contract
 interface Eq<T>;

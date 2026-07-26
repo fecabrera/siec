@@ -7,6 +7,7 @@ from siec.ast import (
     Break,
     Call,
     Case,
+    CompoundAssign,
     Continue,
     Defer,
     Emit,
@@ -329,9 +330,12 @@ def parse_step(ts: TokenStream):
         op = ts.next().value
 
         value = parse_expression(ts)
-        # a compound 'lvalue <op>= v' desugars to 'lvalue = lvalue <op> v'
+
+        # a compound 'lvalue <op>= v' keeps its shape: codegen knows
+        # whether the target updates in place or takes the operator's
+        # result, and only it knows the target's type
         if op != "=":
-            value = BinaryOp(op[:-1], expr, value)
+            return CompoundAssign(expr, op[:-1], value, line=line)
 
         return make_assignment(expr, value, line)
 

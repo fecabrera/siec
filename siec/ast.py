@@ -403,6 +403,20 @@ class Block:
 
 
 @dataclass
+class CompoundAssign:
+    """
+    A compound assignment, 'lvalue <op>= value': its own statement until
+    codegen, which knows whether the target's type updates in place
+    through an '<op>_assign' method or falls back to 'lvalue = lvalue
+    <op> value'.
+    """
+    target: Expr
+    op: str
+    value: Expr
+    line: int = _line()
+
+
+@dataclass
 class Assign:
     """
     An assignment of a new value to an existing variable. A qualified one

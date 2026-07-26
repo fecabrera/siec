@@ -807,13 +807,20 @@ A function's module symbol carries its parameter types: `pick(i64)`, `List<char>
 
 #### Operator overloading
 
-Binary operators on a struct operand are shorthand for method calls: `a + b` is `a.add(b)`, picking among `add`'s overloads by `b`'s type. The operators map to `add`, `sub`, `mul`, `div`, and `rem`, and compound assignment follows: `a += b` is `a = a.add(b)`.
+Binary operators on a struct operand are shorthand for method calls: `a + b` is `a.add(b)`, picking among `add`'s overloads by `b`'s type. The operators map to `add`, `sub`, `mul`, `div`, and `rem`.
 
 ```
 let sum = dec + other;   // dec.add(other)
 let scaled = dec * 10;   // dec.mul(10): the i64 overload
-dec += 1;                // dec = dec.add(1)
 ```
+
+Compound assignment has methods of its own, `add_assign` through `rem_assign`, taking the value and returning nothing: `a += b` is `a.add_assign(b)`, which updates `a` where it stands. This matters when the binary operator builds a new value: `add` returning a fresh `Decimal` would leave `a += b` assigning that result back over `a`, dropping whatever `a` held. The in-place method spends no copy and leaves nothing behind.
+
+```
+dec += 1;                // dec.add_assign(1): dec updates in place
+```
+
+A type without the in-place method falls back to the operator's result, `a = a + b`, which is how numbers and simple structs work. So `add_assign` is the one to write when the value owns something.
 
 Equality desugars the same way: `a == b` on a struct operand is `a.eq(b)`, and `a != b` is its negation, `not a.eq(b)`. There is no `ne` method to write. The four ordering operators share one method: each compares `cmp`'s sign against zero, `a < b` as `a.cmp(b) < 0`, C's `strcmp`-style.
 
@@ -823,10 +830,11 @@ if (dec != 1) { ... }       // not dec.eq(1): the i64 overload
 if (dec < other) { ... }    // dec.cmp(other) < 0
 ```
 
-The prelude declares an interface per operator: `Add<S, T>` requires `add(&self, value: T) -> S`, and `Sub`, `Mul`, `Div`, and `Rem` follow the same shape; `Eq<T>` requires `eq(&self, value: T) -> bool`, and `Ord<T>` requires `cmp(&self, value: T) -> i32`. Claiming one declares and enforces the contract, one claim per supported right-hand type:
+The prelude declares an interface per operator: `Add<S, T>` requires `add(&self, value: T) -> S`, and `Sub`, `Mul`, `Div`, and `Rem` follow the same shape; `AddAssign<T>` requires `add_assign(&self, value: T)`, with `SubAssign`, `MulAssign`, `DivAssign`, and `RemAssign` alongside; `Eq<T>` requires `eq(&self, value: T) -> bool`, and `Ord<T>` requires `cmp(&self, value: T) -> i32`. Claiming one declares and enforces the contract, one claim per supported right-hand type:
 
 ```
-struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64>, Eq<Decimal>, Ord<Decimal> {
+struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64>, AddAssign<i64>,
+                 Eq<Decimal>, Ord<Decimal> {
     // ...
 }
 ```

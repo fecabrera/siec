@@ -7,6 +7,7 @@ from siec.ast import (
     BinaryOp,
     Block,
     Call,
+    CompoundAssign,
     Defer,
     ExprStmt,
     If,
@@ -142,13 +143,14 @@ def test_assignment(ts):
     assert parse_statement(ts("num = f();")) == Assign("num", Call("f", []))
 
 
-def test_compound_assignment_desugars_to_a_binary_op(ts):
+def test_compound_assignment_keeps_its_shape(ts):
     """
-    'name <op>= expr;' parses to 'name = name <op> expr'.
+    'name <op>= expr;' parses to a CompoundAssign: codegen decides
+    between the in-place '<op>_assign' method and 'name = name <op> expr'.
     """
     for op in ("+", "-", "*", "/", "%", "**", "<<", ">>", "&", "|", "^"):
-        assert parse_statement(ts(f"num {op}= 2;")) == Assign(
-            "num", BinaryOp(op, Var("num"), IntLiteral(2)))
+        assert parse_statement(ts(f"num {op}= 2;")) == CompoundAssign(
+            Var("num"), op, IntLiteral(2))
 
 
 def test_member_assignment(ts):
@@ -166,12 +168,13 @@ def test_nested_member_assignment(ts):
         Member(Var("l"), "to"), "x", IntLiteral(5))
 
 
-def test_compound_member_assignment_desugars(ts):
+def test_compound_member_assignment_keeps_its_shape(ts):
     """
-    'base.field <op>= expr;' desugars to 'base.field = base.field <op> expr'.
+    'base.field <op>= expr;' carries the member target, its desugar left
+    to codegen along with any in-place method.
     """
-    assert parse_statement(ts("p.x += 2;")) == MemberAssign(
-        Var("p"), "x", BinaryOp("+", Member(Var("p"), "x"), IntLiteral(2)))
+    assert parse_statement(ts("p.x += 2;")) == CompoundAssign(
+        Member(Var("p"), "x"), "+", IntLiteral(2))
 
 
 def test_string_statements_do_not_read_as_syntax(ts):
@@ -216,7 +219,7 @@ def test_braceless_while(ts):
 
     assert parse_statement(ts("while (x) x -= 1;")) == While(
         Var("x"),
-        [Assign("x", BinaryOp("-", Var("x"), IntLiteral(1)))]
+        [CompoundAssign(Var("x"), "-", IntLiteral(1))]
     )
 
 
@@ -239,7 +242,7 @@ def test_while_statement(ts):
 
     assert parse_statement(ts("while (x < 3) { x += 1; }")) == While(
         BinaryOp("<", Var("x"), IntLiteral(3)),
-        [Assign("x", BinaryOp("+", Var("x"), IntLiteral(1)))])
+        [CompoundAssign(Var("x"), "+", IntLiteral(1))])
 
 
 def test_while_condition_requires_parentheses(ts):
@@ -259,7 +262,7 @@ def test_for_statement(ts):
     assert parse_statement(ts("for (let i: i32 = 0; i < 3; i += 1) { f(); }")) == For(
         Let("i", "i32", IntLiteral(0)),
         BinaryOp("<", Var("i"), IntLiteral(3)),
-        Assign("i", BinaryOp("+", Var("i"), IntLiteral(1))),
+        CompoundAssign(Var("i"), "+", IntLiteral(1)),
         [ExprStmt(Call("f", []))])
 
 
@@ -308,13 +311,13 @@ def test_index_assignment(ts):
         Var("p"), IntLiteral(0), IntLiteral(5))
 
 
-def test_compound_index_assignment_desugars(ts):
+def test_compound_index_assignment_keeps_its_shape(ts):
     """
-    'base[i] += v' desugars to 'base[i] = base[i] + v'.
+    'base[i] += v' carries the element target, its desugar left to
+    codegen along with any in-place method.
     """
-    assert parse_statement(ts("p[1] += 2;")) == IndexAssign(
-        Var("p"), IntLiteral(1),
-        BinaryOp("+", Index(Var("p"), IntLiteral(1)), IntLiteral(2)))
+    assert parse_statement(ts("p[1] += 2;")) == CompoundAssign(
+        Index(Var("p"), IntLiteral(1)), "+", IntLiteral(2))
 
 
 def test_dereference_assignment_desugars(ts):
@@ -325,13 +328,13 @@ def test_dereference_assignment_desugars(ts):
         Var("p"), IntLiteral(0), IntLiteral(5))
 
 
-def test_compound_dereference_assignment_desugars(ts):
+def test_compound_dereference_assignment_keeps_its_shape(ts):
     """
-    '*p += v' desugars to 'p[0] = *p + v'.
+    '*p += v' carries the dereferenced target, codegen desugaring it to
+    the 'p[0] = *p + v' it means.
     """
-    assert parse_statement(ts("*p += 2;")) == IndexAssign(
-        Var("p"), IntLiteral(0),
-        BinaryOp("+", UnaryOp("*", Var("p")), IntLiteral(2)))
+    assert parse_statement(ts("*p += 2;")) == CompoundAssign(
+        UnaryOp("*", Var("p")), "+", IntLiteral(2))
 
 
 def test_arrow_member_assignment(ts):

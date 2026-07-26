@@ -4,10 +4,12 @@ from llvmlite import ir
 
 from siec.ast import (
     Assign,
+    BinaryOp,
     Block,
     Break,
     Call,
     Case,
+    CompoundAssign,
     Continue,
     Defer,
     Emit,
@@ -21,6 +23,7 @@ from siec.ast import (
     LetTuple,
     Member,
     MemberAssign,
+    MethodCall,
     RefAssign,
     Return,
     TypeId,
@@ -61,6 +64,12 @@ from siec.codegen.types import (
     strip_const,
     strip_reference,
 )
+
+
+# the in-place method each compound assignment reaches for, when the
+# target's type has one: 'a += b' is 'a.add_assign(b)'
+COMPOUND_METHODS = {"+": "add_assign", "-": "sub_assign", "*": "mul_assign",
+                    "/": "div_assign", "%": "rem_assign"}
 
 
 def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
@@ -221,6 +230,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                 volatile_store(gen, builder.store(default, slot))
     elif isinstance(stmt, LetTuple):
         emit_let_tuple(gen, builder, stmt, scope)
+    elif isinstance(stmt, CompoundAssign):
+        emit_compound_assign(gen, builder, stmt, scope)
     elif isinstance(stmt, Assign):
         # an object-like macro's name assigns through its expansion,
         # 'errno = EINVAL;'-style; a scope variable shadows it
@@ -460,6 +471,40 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             builder.unreachable()
     else:
         raise TypeError(f"cannot generate code for statement {stmt!r}")
+
+
+def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
+                         stmt, scope: dict) -> None:
+    """
+    Emit 'lvalue <op>= value'.
+
+    A type that updates in place takes it directly: 'dec += 1' is
+    'dec.add_assign(1)', which spends no copy and leaves nothing to
+    reassign. Without that method the operator's result assigns back,
+    'dec = dec + 1', the way every numeric target works.
+    """
+    from siec.codegen.methods import resolve_method
+    from siec.parser.statements import make_assignment
+
+    method = COMPOUND_METHODS.get(stmt.op)
+    target_type = strip_const(expr_sie_type(gen, stmt.target, scope) or "")
+
+    # only a struct or an array carries methods; anything else takes the
+    # operator's own instructions
+    if method is not None and (target_type in gen.structs
+                               or target_type.endswith("[]")):
+        if resolve_method(gen, target_type, method) is not None:
+            emit_statement_body(gen, builder,
+                                ExprStmt(MethodCall(stmt.target, method,
+                                                    [stmt.value]),
+                                         line=stmt.line), scope)
+            return
+
+    emit_statement_body(gen, builder,
+                        make_assignment(stmt.target,
+                                        BinaryOp(stmt.op, stmt.target,
+                                                 stmt.value), stmt.line),
+                        scope)
 
 
 def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
