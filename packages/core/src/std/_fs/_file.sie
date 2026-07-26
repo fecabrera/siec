@@ -3,6 +3,8 @@ import errno;
 import { errno } from errno;
 import { strlen } from string;
 import { IOReadable, IOWritable, IOError } from std.io;
+import { String } from std.collections;
+import { Formattable } from std.format;
 
 enum FileMode: i32 {
     None        = 0,
@@ -19,6 +21,25 @@ enum OpenError {
     InvalidMode,
     NotFound,
     PermissionDenied,
+}
+
+@extend OpenError: Formattable;
+
+fn OpenError::format(&self, modifiers: const &char[]) -> String {
+    case (self) {
+    when OpenError::SystemError:
+        return String("System error");
+    when OpenError::AlreadyOpen:
+        return String("Already open");
+    when OpenError::InvalidMode:
+        return String("Invalid mode");
+    when OpenError::NotFound:
+        return String("Not found");
+    when OpenError::PermissionDenied:
+        return String("Permission denied");
+    else:
+        return String("Unknown error");
+    }
 }
 
 enum CloseError {

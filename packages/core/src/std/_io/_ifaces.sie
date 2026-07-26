@@ -1,9 +1,29 @@
+import { String } from std.collections;
+import { Formattable } from std.format;
+
 enum IOError {
     SystemError,
     NotOpen,
     PermissionDenied,
     InvalidBuffer,
     InvalidOffset,
+}
+
+fn IOError::format(&self, modifiers: const &char[]) -> String {
+    case (self) {
+    when IOError::SystemError:
+        return String("System error");
+    when IOError::NotOpen:
+        return String("Not open");
+    when IOError::PermissionDenied:
+        return String("Permission denied");
+    when IOError::InvalidBuffer:
+        return String("Invalid buffer");
+    when IOError::InvalidOffset:
+        return String("Invalid offset");
+    else:
+        return String("Unknown error");
+    }
 }
 
 interface IOReadable {
