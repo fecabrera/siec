@@ -2,6 +2,8 @@
 // https://blog.jyotiprakash.org/file-compression-and-decompression-in-c-using-zlib
 
 import std.io;
+import { Formattable } from std.format;
+import { String } from std.collections;
 import { File, FileMode, OpenError, CloseError } from std.fs;
 import unistd;
 import zlib;
@@ -10,8 +12,35 @@ import zlib;
    through zlib CHUNK bytes at a time so files of any size use constant memory. */
 @const CHUNK = 16384;
 
+enum ProgramError {
+    ReadError,
+    WriteError,
+    ShortWrite,
+    InitError,
+    InflateError,
+}
+
+@extend ProgramError: Formattable;
+
+fn ProgramError::format(const &self, modifiers: const &char[]) -> String {
+    case (self) {
+    when ProgramError::ReadError:
+        return String("Read error");
+    when ProgramError::WriteError:
+        return String("Write error");
+    when ProgramError::ShortWrite:
+        return String("Short write");
+    when ProgramError::InitError:
+        return String("Init error");
+    when ProgramError::InflateError:
+        return String("Inflate error");
+    else:
+        return String("Unknown error");
+    }
+}
+
 fn main(argc: i32, argv: char**) -> i32 {
-    let fnc: fn (&File, &File);
+    let fnc: fn (&File, &File) -> Result<ProgramError>;
 
     while (true) {
         let opt = unistd.getopt(argc, argv, ":id");
@@ -37,35 +66,35 @@ fn main(argc: i32, argv: char**) -> i32 {
     let output_path = argv[unistd.optind + 1];
 
     let input = File(input_path, FileMode::Read);
+    defer input.destroy();
+    
     let in_res = input.open();
     if (not in_res.ok) {
         std.io.println(std.io.stderr, "{}: {}", input_path, in_res.error);
         return 1;
     }
-
-    defer {
-        input.close();
-        input.destroy();
-    }
+    defer input.close();
     
     let output = File(output_path, FileMode::Write | FileMode::Create);
+    defer output.destroy();
+    
     let out_res = output.open();
     if (not out_res.ok) {
         std.io.println(std.io.stderr, "{}: {}", output_path, out_res.error);
         return 1;
     }
+    defer output.close();
 
-    defer {
-        output.close();
-        output.destroy();
+    let result = fnc(input, output);
+    if (not result.ok) {
+        std.io.println(std.io.stderr, "{}", result.error);
+        return 1;
     }
-
-    fnc(input, output);
 
     return 0;
 }
 
-fn compress_file(src: &File, dst: &File) {
+fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
     let flush: zlib.z_flush;
     let have: u64;
     let next_in: u8[CHUNK];
@@ -79,7 +108,7 @@ fn compress_file(src: &File, dst: &File) {
     let ret = zlib.deflateInit(&strm, zlib.z_level::Z_DEFAULT_COMPRESSION);
     if (ret != zlib.z_status::Z_OK) {
         std.io.println(std.io.stderr, "deflateInit() returned {}: {}", ret, strm.msg);
-        return;
+        return Error(ProgramError::InitError);
     }
     
     defer zlib.deflateEnd(&strm); // cleanup on every exit path
@@ -88,7 +117,7 @@ fn compress_file(src: &File, dst: &File) {
         let res = src.read(next_in, CHUNK);
         if (not res.ok) {
             std.io.println(std.io.stderr, "read(): {}", res.error);
-            return;
+            return Error(ProgramError::ReadError);
         }
 
         strm.avail_in = res.value as u32;
@@ -107,20 +136,22 @@ fn compress_file(src: &File, dst: &File) {
             let res = dst.write(next_out, have);
             if (not res.ok) {
                 std.io.println(std.io.stderr, "write(): {}", res.error);
-                return;
+                return Error(ProgramError::WriteError);
             }
             
             if (res.value as u64 != have)
-                return;
+                return Error(ProgramError::ShortWrite);
 
             if (strm.avail_out) break; // write done
         }
 
         if (flush == zlib.z_flush::Z_FINISH) break; // all done
     }
+
+    return Ok();
 }
 
-fn decompress_file(src: &File, dst: &File) {
+fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
     let have: u64;
     let next_in: u8[CHUNK];
     let next_out: u8[CHUNK];
@@ -133,7 +164,7 @@ fn decompress_file(src: &File, dst: &File) {
     let ret = zlib.inflateInit(&strm);
     if (ret != zlib.z_status::Z_OK) {
         std.io.println(std.io.stderr, "deflateInit() returned {}: {}", ret, strm.msg);
-        return;
+        return Error(ProgramError::InitError);
     }
 
     defer zlib.inflateEnd(&strm); // cleanup on every exit path
@@ -142,7 +173,7 @@ fn decompress_file(src: &File, dst: &File) {
         let res = src.read(next_in, CHUNK);
         if (not res.ok) {
             std.io.println(std.io.stderr, "read(): {}", res.error);
-            return;
+            return Error(ProgramError::ReadError);
         }
         strm.avail_in = res.value as u32;
 
@@ -160,7 +191,7 @@ fn decompress_file(src: &File, dst: &File) {
                  zlib.z_status::Z_DATA_ERROR,
                  zlib.z_status::Z_MEM_ERROR:
                  std.io.println(std.io.stderr, "inflate() returned {}", ret);
-                 return;
+                 return Error(ProgramError::InflateError);
             }
 
             have = CHUNK as u64 - strm.avail_out;
@@ -168,15 +199,17 @@ fn decompress_file(src: &File, dst: &File) {
             let res = dst.write(next_out, have);
             if (not res.ok) {
                 std.io.println(std.io.stderr, "write(): {}", res.error);
-                return;
+                return Error(ProgramError::WriteError);
             }
             
             if (res.value as u64 != have)
-                return;
+                return Error(ProgramError::ShortWrite);
 
             if (strm.avail_out) break; // write done
         }
         
         if (ret == zlib.z_status::Z_STREAM_END) break; // all done
     }
+
+    return Ok();
 }
