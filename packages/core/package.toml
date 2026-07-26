@@ -1,8 +1,9 @@
 [package]
 name = "core"
 version = "1.0.0"
-source = ["src/"]
+sources = ["src/"]
 
 [dependencies]
 libc = "~1"
 mpdecimal = "~1"
+posix = "~1"
