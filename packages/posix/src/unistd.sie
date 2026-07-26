@@ -36,6 +36,8 @@
     @const O_EXCL = 8;
     @const O_TRUNC = 16;
     @const O_APPEND = 32;
+} @else {
+    @error("Unsupported platform")
 }
 
 @const SEEK_SET = 0;       /* set file offset to offset */
