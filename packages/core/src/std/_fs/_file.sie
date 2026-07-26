@@ -79,21 +79,25 @@ fn File::destroy(&self) {
 fn File::open(&self) -> Result<OpenError> {
     if (self.open) return Error(OpenError::AlreadyOpen);
     
-    let mode: i32 = 0;
+    let flags: i32 = 0;
+    let mode: unistd.mode_t = 0;
     
     if (self.mode & FileMode::Read and self.mode & FileMode::Write)
-        mode = unistd.O_RDWR;
+        flags = unistd.O_RDWR;
     else if (self.mode & FileMode::Read)
-        mode = unistd.O_RDONLY;
+        flags = unistd.O_RDONLY;
     else if (self.mode & FileMode::Write)
-        mode = unistd.O_WRONLY;
+        flags = unistd.O_WRONLY;
     else
         return Error(OpenError::InvalidMode);
 
-    if (self.mode & FileMode::Append) mode |= unistd.O_APPEND;
-    if (self.mode & FileMode::Create) mode |= unistd.O_CREAT;
+    if (self.mode & FileMode::Append) flags |= unistd.O_APPEND;
+    if (self.mode & FileMode::Create) {
+        flags |= unistd.O_CREAT;
+        mode |= unistd.S_ISUID | unistd.S_IRWXU | unistd.S_IRWXG | unistd.S_IRWXO;
+    }
 
-    let fd = unistd.open(self.path, mode);
+    let fd = mode ? unistd.open(self.path, flags, mode) : unistd.open(self.path, flags);
     if (fd < 0) {
         let errsv = errno();
         case (errsv) {

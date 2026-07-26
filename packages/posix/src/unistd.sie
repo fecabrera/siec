@@ -44,7 +44,7 @@
 @const SEEK_HOLE = 3;       /* set file offset to the start of the next hole greater than or equal to the supplied offset */
 @const SEEK_DATA = 4;       /* set file offset to the start of the next non-hole file region greater than or equal to the supplied offset */
 
-@type mode_t = u16;
+@include("sys/_types/_s_ifmt");
 
 @extern fn chdir(path: const char*) -> i32;
 @extern fn fchdir(fd: i32) -> i32;

@@ -1,0 +1,42 @@
+@type mode_t = u16;
+
+/*
+ * [XSI] The symbolic names for file modes for use as values of mode_t
+ * shall be defined as described in <sys/stat.h>
+ */
+/* File type */
+@const S_IFMT       = 0170000;         /* [XSI] type of file mask */
+@const S_IFIFO      = 0010000;         /* [XSI] named pipe (fifo) */
+@const S_IFCHR      = 0020000;         /* [XSI] character special */
+@const S_IFDIR      = 0040000;         /* [XSI] directory */
+@const S_IFBLK      = 0060000;         /* [XSI] block special */
+@const S_IFREG      = 0100000;         /* [XSI] regular */
+@const S_IFLNK      = 0120000;         /* [XSI] symbolic link */
+@const S_IFSOCK     = 0140000;         /* [XSI] socket */
+@const S_IFWHT      = 0160000;         /* OBSOLETE: whiteout */
+
+/* File mode */
+/* Read, write, execute/search by owner */
+@const S_IRWXU: mode_t  = 0000700;         /* [XSI] RWX mask for owner */
+@const S_IRUSR: mode_t  = 0000400;         /* [XSI] R for owner */
+@const S_IWUSR: mode_t  = 0000200;         /* [XSI] W for owner */
+@const S_IXUSR: mode_t  = 0000100;         /* [XSI] X for owner */
+/* Read, write, execute/search by group */
+@const S_IRWXG: mode_t  = 0000070;         /* [XSI] RWX mask for group */
+@const S_IRGRP: mode_t  = 0000040;         /* [XSI] R for group */
+@const S_IWGRP: mode_t  = 0000020;         /* [XSI] W for group */
+@const S_IXGRP: mode_t  = 0000010;         /* [XSI] X for group */
+/* Read, write, execute/search by others */
+@const S_IRWXO: mode_t  = 0000007;         /* [XSI] RWX mask for other */
+@const S_IROTH: mode_t  = 0000004;         /* [XSI] R for other */
+@const S_IWOTH: mode_t  = 0000002;         /* [XSI] W for other */
+@const S_IXOTH: mode_t  = 0000001;         /* [XSI] X for other */
+
+@const S_ISUID      = 0004000;         /* [XSI] set user id on execution */
+@const S_ISGID      = 0002000;         /* [XSI] set group id on execution */
+@const S_ISVTX      = 0001000;         /* [XSI] directory restrcted delete */
+
+@const S_ISTXT      = S_ISVTX;         /* sticky bit: not supported */
+@const S_IREAD      = S_IRUSR;         /* backward compatability */
+@const S_IWRITE     = S_IWUSR;         /* backward compatability */
+@const S_IEXEC      = S_IXUSR;         /* backward compatability */
