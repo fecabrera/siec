@@ -299,6 +299,18 @@ Because includes decide what the program *is*, a condition guarding one evaluate
 
 The message is reported like any compile error, naming the file and line it sits on. Outside an `@if` there is nothing to gate it, so the file simply cannot build; an `@error` in an imported module blames that module, not its importer. A trailing `;` is fine, statement-style.
 
+#### Static assert
+
+`@static_assert(cond, "message")` requires a compile-time condition to hold, C's `static_assert`: nothing happens when it does, and the message stops the compilation when it doesn't, reported as `static assertion failed: <message>`.
+
+```
+struct Header { a: u64; b: u64; }
+
+@static_assert(sizeof(Header) == 16, "Header must stay two words");
+```
+
+Unlike an `@if`, an assert declares nothing, so it is checked once the whole program is registered rather than while the conditions are still choosing what to compile. Its condition can therefore weigh what those declarations turned out to be: a struct's `sizeof`, an enum's members, and constants, whatever order they were written in. An assert inside an `@if` still follows its branch, checked only when that branch is the chosen one.
+
 ### Arithmetic
 
 Numeric values can be combined through the usual arithmetic operators:

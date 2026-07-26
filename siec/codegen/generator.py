@@ -611,7 +611,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     got - which is what the language server reads.
     """
     from siec.codegen.aliases import register_aliases
-    from siec.codegen.conditionals import resolve_conditionals
+    from siec.codegen.conditionals import check_asserts, resolve_conditionals
     from siec.codegen.constants import (register_builtin_constants,
                                         register_constants)
     from siec.codegen.enums import register_enums
@@ -666,6 +666,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     register_enums(gen, program)
     register_structs(gen, program)
     register_globals(gen, program)
+
+    # every declaration is registered: an '@static_assert' can now weigh
+    # what they turned out to be
+    check_asserts(gen, program)
 
     # second pass: declare every function so calls can target ones defined
     # later; a generic function is a template, declared per instantiation,

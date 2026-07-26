@@ -8,6 +8,23 @@ from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 
 
+def check_asserts(gen: CodeGenerator, program: Program) -> None:
+    """
+    Check every '@static_assert' the compilation reached, once the whole
+    program is registered: unlike an '@if', an assert gates no
+    declaration, so its condition may weigh what those declarations
+    turned out to be, a struct's 'sizeof' included.
+    """
+    for assertion in program.asserts:
+        with source_location(line=assertion.line, file=assertion.file):
+            # the condition's names resolve in its own file's view
+            gen.current_file = assertion.file
+
+            if not evaluate(gen, assertion.condition):
+                raise TypeError("static assertion failed: "
+                                f"{assertion.message}")
+
+
 def resolve_conditionals(gen: CodeGenerator, program: Program) -> None:
     """
     Evaluate every '@if' block and splice the chosen branches' declarations
@@ -36,6 +53,10 @@ def resolve_conditionals(gen: CodeGenerator, program: Program) -> None:
         register_aliases(gen, branch)
         register_constants(gen, branch)
         resolve_conditionals(gen, branch)
+
+        # a branch's asserts join the program's, checked once every
+        # declaration is registered
+        program.asserts.extend(branch.asserts)
 
         program.functions.extend(branch.functions)
         program.structs.extend(branch.structs)

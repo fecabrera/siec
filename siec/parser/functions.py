@@ -9,6 +9,7 @@ from siec.ast import (
     Import,
     Param,
     Program,
+    StaticAssert,
     TypeAlias,
 )
 from siec.parser.constants import parse_const, parse_macro
@@ -81,10 +82,32 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.extends.append(parse_extend(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "error":
             program.errors.append(parse_error(ts))
+        elif ts.peek().value == "@" and ts.peek(1).value == "static_assert":
+            program.asserts.append(parse_static_assert(ts))
         else:
             program.functions.append(parse_function(ts))
 
     return program
+
+
+def parse_static_assert(ts: TokenStream) -> StaticAssert:
+    """
+    Parse an '@static_assert(cond, "message")' directive, the trailing
+    ';' optional.
+    """
+    line = ts.peek().line
+    ts.expect("sym", "@")
+    ts.expect("ident", "static_assert")
+    ts.expect("sym", "(")
+    condition = parse_expression(ts)
+    ts.expect("sym", ",")
+    message = ts.expect("str").value
+    ts.expect("sym", ")")
+
+    if ts.peek().syntax == ";":
+        ts.next()
+
+    return StaticAssert(condition, message, line=line)
 
 
 def parse_error(ts: TokenStream) -> CompileError:

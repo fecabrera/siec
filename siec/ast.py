@@ -688,6 +688,7 @@ class Program:
     imports: list[Import] = field(default_factory=list)
     extends: list["Extend"] = field(default_factory=list)
     errors: list["CompileError"] = field(default_factory=list)
+    asserts: list["StaticAssert"] = field(default_factory=list)
 
     # filled by the loader on the merged program: what each file's
     # 'import's bound, and what each module offers
@@ -699,6 +700,21 @@ class Program:
     include_closure: dict = field(default_factory=dict)  # file -> itself and its includes
     entry_files: list = field(default_factory=list)      # the command-line sources
     unit_files: set | None = None                        # the sources and their includes
+
+
+@dataclass
+class StaticAssert:
+    """
+    An '@static_assert(cond, "...")' directive: the condition must hold,
+    or the message stops the compilation.
+
+    It declares nothing, so unlike an '@if' it is checked once the whole
+    program is registered, where 'sizeof' knows every struct's layout.
+    """
+    condition: Expr
+    message: str
+    line: int = _line()
+    file: str = _file()
 
 
 @dataclass

@@ -214,3 +214,75 @@ def test_error_directive_at_the_top_level_always_fires(compile_source):
 
         fn main() -> i32 { return 0; }
         """)
+
+
+def test_static_assert_holds_or_stops(compile_source):
+    """
+    '@static_assert(cond, "...")' requires the condition: it passes
+    silently when it holds, and stops the compilation with its message
+    when it does not.
+    """
+    source = """
+    @const WIDTH = 8;
+
+    @static_assert(WIDTH == 8, "WIDTH must be eight");
+    @static_assert(sizeof(u64) == WIDTH, "u64 must be WIDTH bytes")
+
+    fn main() -> i32 { return 0; }
+    """
+    compile_source(source)
+
+    with pytest.raises(TypeError, match="static assertion failed: "
+                                        "WIDTH must be eight"):
+        compile_source("""
+        @const WIDTH = 4;
+        @static_assert(WIDTH == 8, "WIDTH must be eight");
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_static_assert_weighs_the_whole_program(compile_source):
+    """
+    An assert gates no declaration, so it is checked once everything is
+    registered: a struct's layout and an enum's members are in reach,
+    whatever order they were declared in.
+    """
+    source = """
+    @static_assert(sizeof(Header) == 16, "Header must stay two words");
+    @static_assert(Mode::Both == 3, "Both must follow Read and Write");
+
+    struct Header { a: u64; b: u64; }
+    enum Mode { Read, Write, Both }
+
+    fn main() -> i32 { return 0; }
+    """
+    compile_source(source)
+
+    with pytest.raises(TypeError, match="Header must stay one word"):
+        compile_source("""
+        struct Header { a: u64; b: u64; }
+        @static_assert(sizeof(Header) == 8, "Header must stay one word");
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_static_assert_follows_the_chosen_branch(compile_source):
+    """
+    An assert inside an '@if' is checked only when its branch is chosen,
+    like every other declaration in it.
+    """
+    source = """
+    @if (TARGET_OS == OS_DARWIN) {
+        @static_assert(true, "the darwin arm checks its own");
+    } @else {
+        @static_assert(false, "not on darwin");
+    }
+
+    fn main() -> i32 { return 0; }
+    """
+    compile_source(source, target="arm64-apple-darwin")
+
+    with pytest.raises(TypeError, match="static assertion failed: not on darwin"):
+        compile_source(source, target="x86_64-unknown-linux-gnu")
