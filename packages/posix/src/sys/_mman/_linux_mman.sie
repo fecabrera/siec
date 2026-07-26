@@ -1,0 +1,172 @@
+import { off_t } from sys.types;
+
+@const PROT_NONE        = 0x0;          /* Page can not be accessed */
+@const PROT_READ        = 0x1;          /* Page can be read */
+@const PROT_WRITE       = 0x2;          /* Page can be written */
+@const PROT_EXEC        = 0x4;          /* Page can be executed */
+@const PROT_GROWSDOWN   = 0x01000000;   /* Extend change to start of growsdown vma */
+@const PROT_GROWSUP     = 0x02000000;   /* Extend change to end of growsup vma */
+
+/*
+ * Flags contain sharing type and options.
+ * Sharing types; choose one.
+ */
+@const MAP_SHARED           = 0x01;     /* Share changes */
+@const MAP_PRIVATE          = 0x02;     /* Changes are private */
+@const MAP_SHARED_VALIDATE  = 0x03;     /* Share changes, rejecting unknown flags */
+@const MAP_TYPE             = 0x0f;     /* Mask for type of mapping */
+
+/*
+ * Other flags
+ */
+@const MAP_FIXED            = 0x00010;      /* Interpret addr exactly */
+@const MAP_GROWSDOWN        = 0x00100;      /* Stack-like segment */
+@const MAP_DENYWRITE        = 0x00800;      /* ETXTBSY */
+@const MAP_EXECUTABLE       = 0x01000;      /* Mark it as an executable */
+@const MAP_LOCKED           = 0x02000;      /* Lock the mapping */
+@const MAP_NORESERVE        = 0x04000;      /* Don't check for reservations */
+@const MAP_POPULATE         = 0x08000;      /* Populate (prefault) pagetables */
+@const MAP_NONBLOCK         = 0x10000;      /* Do not block on IO */
+@const MAP_STACK            = 0x20000;      /* Allocation is for a stack */
+@const MAP_HUGETLB          = 0x40000;      /* Create a huge page mapping */
+@const MAP_SYNC             = 0x80000;      /* Perform synchronous page faults */
+@const MAP_FIXED_NOREPLACE  = 0x100000;     /* MAP_FIXED, but fail rather than unmap what is there */
+
+/*
+ * Mapping type
+ */
+@const MAP_FILE         = 0x00;         /* Map from file (default) */
+@const MAP_ANONYMOUS    = 0x20;         /* Allocated from memory, backed by no file */
+@const MAP_ANON         = MAP_ANONYMOUS;
+
+/*
+ * A huge page mapping takes the log2 of the page size to use in the bits
+ * above MAP_HUGE_SHIFT: 'MAP_HUGETLB | (21 << MAP_HUGE_SHIFT)' asks for 2MB.
+ */
+@const MAP_HUGE_SHIFT   = 26;
+@const MAP_HUGE_MASK    = 0x3f;
+
+/*
+ * Only x86-64 keeps room below 4G to hand out, so only it defines the flag.
+ */
+@if (TARGET_ARCH == ARCH_X86_64) {
+    @const MAP_32BIT    = 0x40;         /* Return virtual addresses <4G only */
+}
+
+/*
+ * Error return from mmap()
+ */
+@const MAP_FAILED   = -1 as opaque*;
+
+/*
+ * msync() flags
+ */
+@const MS_ASYNC         = 1;            /* Return immediately */
+@const MS_INVALIDATE    = 2;            /* Invalidate all cached data */
+@const MS_SYNC          = 4;            /* Msync synchronously */
+
+/*
+ * Advice to madvise
+ */
+@const POSIX_MADV_NORMAL        = 0;    /* No further special treatment */
+@const POSIX_MADV_RANDOM        = 1;    /* Expect random page refs */
+@const POSIX_MADV_SEQUENTIAL    = 2;    /* Expect sequential page refs */
+@const POSIX_MADV_WILLNEED      = 3;    /* Will need these pages */
+@const POSIX_MADV_DONTNEED      = 4;    /* Dont need these pages */
+
+@const MADV_NORMAL              = POSIX_MADV_NORMAL;
+@const MADV_RANDOM              = POSIX_MADV_RANDOM;
+@const MADV_SEQUENTIAL          = POSIX_MADV_SEQUENTIAL;
+@const MADV_WILLNEED            = POSIX_MADV_WILLNEED;
+@const MADV_DONTNEED            = POSIX_MADV_DONTNEED;
+@const MADV_FREE                = 8;    /* Free pages only if under memory pressure */
+@const MADV_REMOVE              = 9;    /* Punch a hole in the backing store */
+@const MADV_DONTFORK            = 10;   /* Do not inherit across fork */
+@const MADV_DOFORK              = 11;   /* Do inherit across fork */
+@const MADV_MERGEABLE           = 12;   /* KSM may merge identical pages */
+@const MADV_UNMERGEABLE         = 13;   /* KSM may not merge identical pages */
+@const MADV_HUGEPAGE            = 14;   /* Worth backing with hugepages */
+@const MADV_NOHUGEPAGE          = 15;   /* Not worth backing with hugepages */
+@const MADV_DONTDUMP            = 16;   /* Leave out of a core dump */
+@const MADV_DODUMP              = 17;   /* Clear the MADV_DONTDUMP flag */
+@const MADV_WIPEONFORK          = 18;   /* Zero memory on fork, child only */
+@const MADV_KEEPONFORK          = 19;   /* Undo MADV_WIPEONFORK */
+@const MADV_COLD                = 20;   /* Deactivate these pages */
+@const MADV_PAGEOUT             = 21;   /* Reclaim these pages */
+@const MADV_POPULATE_READ       = 22;   /* Populate (prefault) page tables readable */
+@const MADV_POPULATE_WRITE      = 23;   /* Populate (prefault) page tables writable */
+@const MADV_DONTNEED_LOCKED     = 24;   /* Like MADV_DONTNEED, but drop locked pages too */
+@const MADV_COLLAPSE            = 25;   /* Collapse the range into hugepages */
+@const MADV_HWPOISON            = 100;  /* Poison a page for testing */
+@const MADV_SOFT_OFFLINE        = 101;  /* Soft offline a page for testing */
+
+/*
+ * Process memory locking
+ */
+@const MCL_CURRENT  = 1;                /* Lock all currently mapped pages */
+@const MCL_FUTURE   = 2;                /* Lock all future mappings as well */
+@const MCL_ONFAULT  = 4;                /* Lock pages as they are faulted in */
+
+/*
+ * mlock2() flags
+ */
+@const MLOCK_ONFAULT    = 1;            /* Lock pages as they are faulted in, without prefaulting */
+
+/*
+ * mremap() flags
+ */
+@const MREMAP_MAYMOVE   = 1;            /* The mapping may move */
+@const MREMAP_FIXED     = 2;            /* Move it to the address the call names */
+@const MREMAP_DONTUNMAP = 4;            /* Leave the old mapping in place */
+
+/*
+ * memfd_create() flags
+ */
+@const MFD_CLOEXEC          = 1;        /* Close the descriptor on exec */
+@const MFD_ALLOW_SEALING    = 2;        /* Allow sealing operations */
+@const MFD_HUGETLB          = 4;        /* Back the memfd with huge pages */
+@const MFD_NOEXEC_SEAL      = 8;        /* Seal the file as non-executable */
+@const MFD_EXEC             = 16;       /* Create an executable memfd */
+
+/*
+ * Return bits from mincore: Linux fills one byte per page, whose low bit
+ * says the page is resident; the rest are reserved.
+ */
+@const MINCORE_INCORE   = 0x1;          /* Page is incore */
+
+/* [ML] */
+@extern fn mlockall(flags: i32) -> i32;
+@extern fn munlockall() -> i32;
+/* [MR] */
+@extern fn mlock(addr: const opaque*, len: u64) -> i32;
+/* [MC3]*/
+@extern fn mmap(addr: opaque*, len: u64, prot: i32, flags: i32, fd: i32, offset: off_t) -> opaque*;
+/* [MPR] */
+@extern fn mprotect(addr: opaque*, size: u64, prot: i32) -> i32;
+/* [MF|SIO] */
+@extern fn msync(addr: opaque*, len: u64, flags: i32) -> i32;
+/* [MR] */
+@extern fn munlock(addr: const opaque*, len: u64) -> i32;
+/* [MC3]*/
+@extern fn munmap(addr: opaque*, len: u64) -> i32;
+/* [SHM] */
+@extern fn shm_open(name: const char*, oflag: i32, ...) -> i32;
+@extern fn shm_unlink(name: const char*) -> i32;
+/* [ADV] */
+@extern fn posix_madvise(addr: opaque*, size: u64, advice: i32) -> i32;
+
+@extern fn madvise(addr: opaque*, size: u64, advice: i32) -> i32;
+
+/* the vector takes one byte per page; glibc spells it 'unsigned char*' */
+@extern fn mincore(addr: const opaque*, size: u64, vec: char*) -> i32;
+
+/*
+ * Linux extensions
+ */
+@extern fn mlock2(addr: const opaque*, len: u64, flags: u32) -> i32;
+
+/* 'mremap(addr, old_len, new_len, flags[, new_addr])': MREMAP_FIXED reads the address */
+@extern fn mremap(addr: opaque*, old_len: u64, new_len: u64, flags: i32, ...) -> opaque*;
+
+@extern fn remap_file_pages(addr: opaque*, size: u64, prot: i32, pgoff: u64, flags: i32) -> i32;
+@extern fn memfd_create(name: const char*, flags: u32) -> i32;
