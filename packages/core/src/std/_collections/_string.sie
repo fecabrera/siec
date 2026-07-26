@@ -68,6 +68,16 @@ fn String::append(&self, arr: const char*) {
 }
 
 /**
+ * Set the String to the given array.
+ *
+ * @param arr The array to set the String to.
+ */
+fn String::set(&self, arr: const char*) {
+    self.reset();
+    self.append(arr);
+}
+
+/**
  * Null terminate the String.
  */
 @inline

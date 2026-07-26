@@ -69,6 +69,16 @@ fn List<T>::reset(&self) {
 }
 
 /**
+ * Set the List to the given iterable.
+ *
+ * @param str The iterable to set the List to.
+ */
+fn List<T>::set(&self, str: const &Iterable<char>) {
+    self.reset();
+    self.append(str);
+}
+
+/**
  * Get the element at the given index.
  *
  * @param index The index of the element to get.
