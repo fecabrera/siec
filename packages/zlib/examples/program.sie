@@ -39,18 +39,7 @@ fn main(argc: i32, argv: char**) -> i32 {
     let input = File(input_path, FileMode::Read);
     let in_res = input.open();
     if (not in_res.ok) {
-        case (in_res.error) {
-        when OpenError::SystemError:
-            std.io.println(std.io.stderr, "{}: System error", input_path);
-        when OpenError::AlreadyOpen:
-            std.io.println(std.io.stderr, "{}: Already open", input_path);
-        when OpenError::InvalidMode:
-            std.io.println(std.io.stderr, "{}: Invalid mode", input_path);
-        when OpenError::NotFound:
-            std.io.println(std.io.stderr, "{}: Not found", input_path);
-        when OpenError::PermissionDenied:
-            std.io.println(std.io.stderr, "{}: Permission denied", input_path);
-        }
+        std.io.println(std.io.stderr, "{}: {}", input_path, in_res.error);
         return 1;
     }
 
@@ -62,18 +51,7 @@ fn main(argc: i32, argv: char**) -> i32 {
     let output = File(output_path, FileMode::Write | FileMode::Create);
     let out_res = output.open();
     if (not out_res.ok) {
-        case (out_res.error) {
-        when OpenError::SystemError:
-            std.io.println(std.io.stderr, "{}: System error", output_path);
-        when OpenError::AlreadyOpen:
-            std.io.println(std.io.stderr, "{}: Already open", output_path);
-        when OpenError::InvalidMode:
-            std.io.println(std.io.stderr, "{}: Invalid mode", output_path);
-        when OpenError::NotFound:
-            std.io.println(std.io.stderr, "{}: Not found", output_path);
-        when OpenError::PermissionDenied:
-            std.io.println(std.io.stderr, "{}: Permission denied", output_path);
-        }
+        std.io.println(std.io.stderr, "{}: {}", output_path, out_res.error);
         return 1;
     }
 
@@ -109,7 +87,7 @@ fn compress_file(src: &File, dst: &File) {
     while (true) {
         let res = src.read(next_in, CHUNK);
         if (not res.ok) {
-            std.io.println(std.io.stderr, "read() returned {}", res.error);
+            std.io.println(std.io.stderr, "read(): {}", res.error);
             return;
         }
 
@@ -128,7 +106,7 @@ fn compress_file(src: &File, dst: &File) {
 
             let res = dst.write(next_out, have);
             if (not res.ok) {
-                std.io.println(std.io.stderr, "write() returned {}", res.error);
+                std.io.println(std.io.stderr, "write(): {}", res.error);
                 return;
             }
             
@@ -163,7 +141,7 @@ fn decompress_file(src: &File, dst: &File) {
     while (true) {
         let res = src.read(next_in, CHUNK);
         if (not res.ok) {
-            std.io.println(std.io.stderr, "read() returned {}", res.error);
+            std.io.println(std.io.stderr, "read(): {}", res.error);
             return;
         }
         strm.avail_in = res.value as u32;
@@ -189,7 +167,7 @@ fn decompress_file(src: &File, dst: &File) {
 
             let res = dst.write(next_out, have);
             if (not res.ok) {
-                std.io.println(std.io.stderr, "write() returned {}", res.error);
+                std.io.println(std.io.stderr, "write(): {}", res.error);
                 return;
             }
             
