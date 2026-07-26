@@ -174,7 +174,18 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
             adjusted = builder.add(length, ir.Constant(ir.IntType(64), delta))
             return builder.insert_value(value, adjusted, 1)
 
+        # an integer casts to a pointer, C's '(void *) -1' idiom: the
+        # value is the address
+        if isinstance(target_type, ir.PointerType) and isinstance(value.type, ir.IntType):
+            return builder.inttoptr(value, target_type)
+
         raise TypeError(f"cannot cast to non-numeric type {expr.type!r}")
+
+    # a pointer casts to an integer, the reverse: the address is the value
+    if strip_const(operand_name or "").endswith("*"):
+        value = emit_expression(gen, builder, expr.operand, None, scope)
+        if isinstance(value.type, ir.PointerType):
+            return builder.ptrtoint(value, resolve_type(expr.type, gen.structs))
 
     value = emit_expression(gen, builder, expr.operand, None, scope)
     source = value_class(gen, value, expr.operand, scope)

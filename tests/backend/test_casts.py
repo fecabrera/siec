@@ -149,3 +149,30 @@ def test_pointer_casts_keep_const(compile_source):
             return 0;
         }
         """)
+
+
+def test_integer_and_pointer_cast_into_each_other(run):
+    """
+    An explicit 'as' converts between an integer and a pointer, C's
+    '(void *) -1' idiom included: the address is the value.
+    """
+    source = """
+    @const FAILED = -1 as opaque*;
+
+    fn main() -> i32 {
+        let n: i32 = 42;
+        let p = &n as i32*;
+
+        let address = p as u64;
+        if (address == 0) { return 1; }
+
+        let back = address as i32*;
+        if (back[0] != 42) { return 2; }
+
+        // the sentinel a mapping call answers with
+        let sentinel: opaque* = FAILED;
+        if (sentinel == null) { return 3; }
+        return (p as opaque*) == sentinel ? 4 : 0;
+    }
+    """
+    assert run(source).returncode == 0
