@@ -12,18 +12,7 @@ fn main(args: char*[]) -> i32 {
     
     let open_res = file.open();
     if (not open_res.ok) {
-        case (open_res.error) {
-        when OpenError::SystemError:
-            std.io.println(std.io.stderr, "{}: System error", args[1]);
-        when OpenError::AlreadyOpen:
-            std.io.println(std.io.stderr, "{}: Already open", args[1]);
-        when OpenError::InvalidMode:
-            std.io.println(std.io.stderr, "{}: Invalid mode", args[1]);
-        when OpenError::NotFound:
-            std.io.println(std.io.stderr, "{}: Not found", args[1]);
-        when OpenError::PermissionDenied:
-            std.io.println(std.io.stderr, "{}: Permission denied", args[1]);
-        }
+        std.io.println(std.io.stderr, "{}: {}", args[1], open_res.error);
         return 1;
     }
     
@@ -31,12 +20,8 @@ fn main(args: char*[]) -> i32 {
     
     let close_res = file.close();
     if (not close_res.ok) {
-        case (close_res.error) {
-        when CloseError::SystemError:
-            std.io.println(std.io.stderr, "{}: System error", args[1]);
-        when CloseError::AlreadyClosed:
-            std.io.println(std.io.stderr, "{}: Already closed", args[1]);
-        }
+        std.io.println(std.io.stderr, "{}: {}", args[1], close_res.error);
+        return 1;
     }
 
     std.io.println("Closed \"{}\"", args[1]);
