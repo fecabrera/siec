@@ -144,13 +144,13 @@
         },
         "builtin-types": {
             "name": "support.type.primitive.sie",
-            "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|char|raw)\\b"
+            "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|char|opaque|raw)\\b"
         },
         "builtin-names": {
             "patterns": [
                 {
                     "name": "support.class.builtin.sie",
-                    "match": "\\b(Result|Iterator|Iterable|ArrayIterator|ConstArrayIterator|Enumerated|EnumerateIterator)\\b"
+                    "match": "\\b(Any|Result|Tuple|Iterator|ConstIterator|Iterable|ArrayIterator|ConstArrayIterator|Enumerated|EnumerateIterator|Add|Sub|Mul|Div|Rem|AddAssign|SubAssign|MulAssign|DivAssign|RemAssign|Eq|Ord)\\b"
                 },
                 {
                     "name": "support.function.builtin.sie",
