@@ -2,6 +2,7 @@ import { abort } from stdlib;
 import { println } from std.io;
 import { String } from std.collections;
 
+@noreturn
 fn panic(msg: const Iterable<T>[], args...) {
     println(stderr, msg, args);
     abort();
