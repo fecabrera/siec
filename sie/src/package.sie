@@ -33,7 +33,7 @@ fn Package::init(&self) {
  *
  * @param path The path to initialize the Package with.
  */
-fn Package::init(&self, path: const char[]) {
+fn Package::init(&self, path: const &Iterable<char>) {
     self.init();
     self.setPath(path);
 }
@@ -46,15 +46,6 @@ fn Package::init(&self, path: const char[]) {
 fn Package::init(&self, path: const char*) {
     self.init();
     self.setPath(path);
-}
-
-/**
- * Initialize the Package with the given path.
- *
- * @param path The path to initialize the Package with.
- */
-fn Package::init(&self, path: String) {
-    self.init(path.as_array());
 }
 
 /**
@@ -94,14 +85,14 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
 
     let name = toml_get(package, "name");
     if (name.type == toml_type::STRING) {
-        self.setName({name.str.ptr, name.str.len as u64});
+        self.setName(name.s);
     } else {
         return Error(PackageError::FieldRequired);
     }
 
     let version = toml_get(package, "version");
     if (version.type == toml_type::STRING) {
-        self.setVersion({version.str.ptr, version.str.len as u64});
+        self.setVersion(version.s);
     } else {
         return Error(PackageError::FieldRequired);
     }
@@ -110,7 +101,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
     if (include.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {include.arr.elem, include.arr.size as u64};
         foreach (el : elements) {
-            self.include += String({el.str.ptr, el.str.len as u64});
+            self.include += String(el.s);
         }
     }
 
@@ -118,7 +109,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
     if (libs.type == toml_type::ARRAY) {
         let elements: toml_datum[] = {libs.arr.elem, libs.arr.size as u64};
         foreach (el : elements) {
-            self.libs += String({el.str.ptr, el.str.len as u64});
+            self.libs += String(el.s);
         }
     }
 
@@ -131,9 +122,9 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
         foreach (el : enumerate(values)) {
             if (el.value.type == toml_type::STRING) {
                 let dep = Dependency();
-                dep.setName({key_ptrs[el.index], key_lens[el.index] as u64});
-                dep.setVersion({el.value.str.ptr, el.value.str.len as u64});
-                self.dependencies.push(dep);
+                dep.setName(key_ptrs[el.index]);
+                dep.setVersion(el.value.s);
+                self.dependencies += dep;
             } else {
                 return Error(PackageError::FieldRequired);
             }
@@ -148,9 +139,8 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
  *
  * @param path The path to set the Package to.
  */
-fn Package::setPath(&self, path: const char[]) {
-    self.path.reset();
-    self.path.append(path);
+fn Package::setPath(&self, path: const &Iterable<char>) {
+    self.path.set(path);
 }
 
 /**
@@ -159,17 +149,7 @@ fn Package::setPath(&self, path: const char[]) {
  * @param path The path to set the Package to. The path is null terminated.
  */
 fn Package::setPath(&self, path: const char*) {
-    self.path.reset();
-    self.path.append(path);
-}
-
-/**
- * Set the path of the Package.
- *
- * @param path The path to set the Package to.
- */
-fn Package::setPath(&self, path: String) {
-    self.setPath(path.as_array());
+    self.path.set(path);
 }
 
 /**
@@ -177,7 +157,7 @@ fn Package::setPath(&self, path: String) {
  *
  * @param name The name to set the Package to.
  */
-fn Package::setName(&self, name: const char[]) {
+fn Package::setName(&self, name: const &Iterable<char>) {
     self.name.reset();
     self.name.append(name);
 }
@@ -188,17 +168,7 @@ fn Package::setName(&self, name: const char[]) {
  * @param name The name to set the Package to. The name is null terminated.
  */
 fn Package::setName(&self, name: const char*) {
-    self.name.reset();
-    self.name.append(name);
-}
-
-/**
- * Set the name of the Package.
- *
- * @param name The name to set the Package to.
- */
-fn Package::setName(&self, name: String) {
-    self.setName(name.as_array());
+    self.name.set(name);
 }
 
 /**
@@ -206,9 +176,8 @@ fn Package::setName(&self, name: String) {
  *
  * @param version The version to set the Package to.
  */
-fn Package::setVersion(&self, version: const char[]) {
-    self.version.reset();
-    self.version.append(version);
+fn Package::setVersion(&self, version: const &Iterable<char>) {
+    self.version.set(version);
 }
 
 /**
@@ -217,15 +186,5 @@ fn Package::setVersion(&self, version: const char[]) {
  * @param version The version to set the Package to. The version is null terminated.
  */
 fn Package::setVersion(&self, version: const char*) {
-    self.version.reset();
-    self.version.append(version);
-}
-
-/**
- * Set the version of the Package.
- *
- * @param version The version to set the Package to.
- */
-fn Package::setVersion(&self, version: String) {
-    self.setVersion(version.as_array());
+    self.version.set(version);
 }

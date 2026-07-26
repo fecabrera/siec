@@ -27,8 +27,7 @@ fn Dependency::destroy(&self) {
  * @param name The name to set the Dependency to.
  */
 fn Dependency::setName(&self, name: const &Iterable<char>) {
-    self.name.reset();
-    self.name.append(name);
+    self.name.set(name);
 }
 
 /**
@@ -37,17 +36,7 @@ fn Dependency::setName(&self, name: const &Iterable<char>) {
  * @param name The name to set the Dependency to. The name is null terminated.
  */
 fn Dependency::setName(&self, name: const char*) {
-    self.name.reset();
-    self.name.append(name); 
-}
-
-/**
- * Set the name of the Dependency.
- *
- * @param name The name to set the Dependency to.
- */
-fn Dependency::setName(&self, name: String) {
-    self.setName(name.as_array());
+    self.name.set(name);
 }
 
 /**
@@ -56,8 +45,7 @@ fn Dependency::setName(&self, name: String) {
  * @param version The version to set the Dependency to.
  */
 fn Dependency::setVersion(&self, version: const &Iterable<char>) {
-    self.version.reset();
-    self.version.append(version); 
+    self.version.set(version); 
 }
 
 /**
@@ -66,15 +54,5 @@ fn Dependency::setVersion(&self, version: const &Iterable<char>) {
  * @param version The version to set the Dependency to. The version is null terminated.
  */
 fn Dependency::setVersion(&self, version: const char*) {
-    self.version.reset();
-    self.version.append(version); 
-}
-
-/**
- * Set the version of the Dependency.
- *
- * @param version The version to set the Dependency to.
- */
-fn Dependency::setVersion(&self, version: String) {
-    self.setVersion(version.as_array());
+    self.version.set(version); 
 }
