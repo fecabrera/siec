@@ -10,6 +10,12 @@
 # command at an absolute path when it isn't on Helix's PATH. The include
 # path comes from the project's package.toml ([package] include); extra
 # directories (the compiler's -I) go in `config.includePaths`.
+#
+# Highlighting comes from the tree-sitter grammar beside this file. Point
+# the [[grammar]] source at your checkout, copy `runtime/queries/sie` into
+# `~/.config/helix/runtime/queries/`, then:
+#
+#     hx --grammar fetch && hx --grammar build
 
 [language-server.sie-lsp]
 command = "sie-lsp"
@@ -25,3 +31,7 @@ block-comment-tokens = { start = "/*", end = "*/" }
 indent = { tab-width = 4, unit = "    " }
 auto-pairs = { "(" = ")", "{" = "}", "[" = "]", '"' = '"', "'" = "'" }
 language-servers = ["sie-lsp"]
+
+[[grammar]]
+name = "sie"
+source = { path = "/path/to/sielang/editors/tree-sitter-sie" }

@@ -189,7 +189,8 @@ def outline(text: str) -> list[Symbol] | None:
             symbols.append(Symbol(enum.name, "enum", enum.line))
 
         for const in program.consts:
-            symbols.append(Symbol(const.name, "constant", const.line))
+            kind = "macro" if const.is_macro else "constant"
+            symbols.append(Symbol(const.name, kind, const.line))
 
         for glob in program.globals:
             symbols.append(Symbol(glob.name, "variable", glob.line))
@@ -710,6 +711,9 @@ def create_server():
              "interface": types.SymbolKind.Interface,
              "enum": types.SymbolKind.Enum,
              "constant": types.SymbolKind.Constant,
+             # a macro substitutes rather than stores; an editor's outline
+             # has no kind of its own for it, so it shows as a function
+             "macro": types.SymbolKind.Function,
              "variable": types.SymbolKind.Variable,
              "alias": types.SymbolKind.Class}
 

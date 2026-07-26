@@ -334,3 +334,22 @@ fn main() -> i32 {
 
     assert probe(analysis, src, 1, 12) is None
     assert probe(analysis, src, 0, 0) is None
+
+
+def test_outline_names_macros_apart_from_constants():
+    """
+    '@macro' substitutes rather than stores, so the outline says so.
+    """
+    from siec.lsp import outline
+
+    symbols = outline("""
+        @const WIDTH = 8;
+        @macro errno = 42;
+        @macro twice(v) = v + v;
+    """)
+
+    assert [(s.name, s.kind) for s in symbols] == [
+        ("WIDTH", "constant"),
+        ("errno", "macro"),
+        ("twice", "macro"),
+    ]
