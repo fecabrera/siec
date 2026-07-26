@@ -17,6 +17,13 @@ def resolve_conditionals(gen: CodeGenerator, program: Program) -> None:
     A branch's aliases and constants register on the spot: later conditions,
     including nested ones, may build on them.
     """
+    # an '@error' the compilation reaches stops it with its own message;
+    # one in a branch is reached only when that branch is chosen, since
+    # an unchosen one is never resolved
+    for error in program.errors:
+        with source_location(line=error.line, file=error.file):
+            raise TypeError(error.message)
+
     for cond in program.conds:
         with source_location(line=cond.line, file=cond.file):
             # the condition's names resolve in its own file's view

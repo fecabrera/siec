@@ -16,11 +16,12 @@ from siec.lexer import lex
 from siec.parser import parse
 
 
-def compile_module(source: str):
+def compile_module(source: str, target: str | None = None):
     """
-    Lex, parse, and generate an LLVM module from source text.
+    Lex, parse, and generate an LLVM module from source text, for the
+    host's target or the one named.
     """
-    return codegen(parse(lex(source)), "m")
+    return codegen(parse(lex(source)), "m", target=target)
 
 
 @pytest.fixture

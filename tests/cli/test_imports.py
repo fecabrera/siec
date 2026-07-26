@@ -839,3 +839,27 @@ def test_a_template_return_type_is_not_gated_by_the_callers_view(tmp_path, monke
 
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_error_directive_blames_its_own_module(tmp_path, monkeypatch, capsys):
+    """
+    An '@error' inside an imported module names that module and its line,
+    the way any other compile error does.
+    """
+    (tmp_path / "refuser.sie").write_text("""
+        @if (true) {
+            @error("this platform has no binding")
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import refuser;
+
+        fn main() -> i32 { return 0; }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert ("refuser.sie at line 3: this platform has no binding"
+            in capsys.readouterr().err)

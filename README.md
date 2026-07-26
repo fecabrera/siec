@@ -283,6 +283,22 @@ An `@include` may also sit in a branch: only the chosen arm's files load, and an
 
 Because includes decide what the program *is*, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
 
+#### Error
+
+`@error("message")` stops the compilation with the message it carries. Since an unchosen branch is never resolved, one inside an `@if` is reached only when that branch is the chosen one, which is how a set of platform arms refuses everything it has no binding for:
+
+```
+@if (TARGET_OS == OS_DARWIN) {
+    // ...
+} @else @if (TARGET_OS == OS_LINUX) {
+    // ...
+} @else {
+    @error("Unsupported OS")
+}
+```
+
+The message is reported like any compile error, naming the file and line it sits on. Outside an `@if` there is nothing to gate it, so the file simply cannot build; an `@error` in an imported module blames that module, not its importer. A trailing `;` is fine, statement-style.
+
 ### Arithmetic
 
 Numeric values can be combined through the usual arithmetic operators:

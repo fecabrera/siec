@@ -687,6 +687,7 @@ class Program:
     conds: list["CondBlock"] = field(default_factory=list)
     imports: list[Import] = field(default_factory=list)
     extends: list["Extend"] = field(default_factory=list)
+    errors: list["CompileError"] = field(default_factory=list)
 
     # filled by the loader on the merged program: what each file's
     # 'import's bound, and what each module offers
@@ -698,6 +699,18 @@ class Program:
     include_closure: dict = field(default_factory=dict)  # file -> itself and its includes
     entry_files: list = field(default_factory=list)      # the command-line sources
     unit_files: set | None = None                        # the sources and their includes
+
+
+@dataclass
+class CompileError:
+    """
+    An '@error("...")' directive: reaching it stops the compilation with
+    the message it carries. One inside an '@if' is reached only when its
+    branch is the chosen one.
+    """
+    message: str
+    line: int = _line()
+    file: str = _file()
 
 
 @dataclass

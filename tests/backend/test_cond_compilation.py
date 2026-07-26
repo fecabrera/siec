@@ -148,3 +148,69 @@ def test_conditional_include_parses():
         }
     """))
     assert program.conds[0].then.includes[0].path == "libc/stdio"
+
+
+def test_error_directive_stops_the_chosen_branch(compile_source):
+    """
+    An '@error' the compilation reaches stops it with the message it
+    carries, the way a platform that has no binding refuses to build.
+    """
+    source = """
+    @if (TARGET_OS == OS_WINDOWS) {
+        @error("Unsupported OS")
+    }
+
+    fn main() -> i32 { return 0; }
+    """
+    with pytest.raises(TypeError, match="Unsupported OS"):
+        compile_source(source, target="x86_64-pc-windows-msvc")
+
+
+def test_error_directive_stays_quiet_in_an_unchosen_branch(compile_source):
+    """
+    An unchosen branch is never resolved, so the '@error' inside it is
+    never reached: this is what makes the '@else' arm work.
+    """
+    source = """
+    @if (TARGET_OS == OS_DARWIN) {
+        fn platform() -> i32 { return 1; }
+    } @else @if (TARGET_OS == OS_LINUX) {
+        fn platform() -> i32 { return 1; }
+    } @else {
+        @error("Unsupported OS")
+    }
+
+    fn main() -> i32 { return platform() - 1; }
+    """
+    compile_source(source, target="arm64-apple-darwin")
+    compile_source(source, target="x86_64-unknown-linux-gnu")
+
+
+def test_error_directive_reaches_through_nesting(compile_source):
+    """
+    A nested '@if' inside a chosen branch reaches its own '@error'.
+    """
+    with pytest.raises(TypeError, match="nested reach"):
+        compile_source("""
+        @const DEPTH = 2;
+
+        @if (DEPTH > 1) {
+            @if (DEPTH == 2) {
+                @error("nested reach")
+            }
+        }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_error_directive_at_the_top_level_always_fires(compile_source):
+    """
+    Outside any '@if' there is nothing to gate it: the file cannot build.
+    """
+    with pytest.raises(TypeError, match="this file is not ready"):
+        compile_source("""
+        @error("this file is not ready");
+
+        fn main() -> i32 { return 0; }
+        """)

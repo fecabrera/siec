@@ -1,6 +1,7 @@
 """Parsing of function declarations, definitions, and whole programs."""
 
 from siec.ast import (
+    CompileError,
     CondBlock,
     Extend,
     Function,
@@ -78,10 +79,29 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.aliases.append(parse_alias(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "extend":
             program.extends.append(parse_extend(ts))
+        elif ts.peek().value == "@" and ts.peek(1).value == "error":
+            program.errors.append(parse_error(ts))
         else:
             program.functions.append(parse_function(ts))
 
     return program
+
+
+def parse_error(ts: TokenStream) -> CompileError:
+    """
+    Parse an '@error("message")' directive, the trailing ';' optional.
+    """
+    line = ts.peek().line
+    ts.expect("sym", "@")
+    ts.expect("ident", "error")
+    ts.expect("sym", "(")
+    message = ts.expect("str").value
+    ts.expect("sym", ")")
+
+    if ts.peek().syntax == ";":
+        ts.next()
+
+    return CompileError(message, line=line)
 
 
 def parse_extend(ts: TokenStream) -> Extend:

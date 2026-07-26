@@ -123,6 +123,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
     aliases = []
     conds = []
     extends_ = []
+    errors = []
     visited = set()
 
     module_bindings = {}
@@ -183,7 +184,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
         # it, into '@if' branches and all
         for decl in (*program.structs, *program.functions, *program.consts,
                      *program.enums, *program.globals, *program.aliases,
-                     *program.extends):
+                     *program.extends, *program.errors):
             decl.file = file
 
         for cond in program.conds:
@@ -329,6 +330,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
         aliases.extend(program.aliases)
         conds.extend(program.conds)
         extends_.extend(program.extends)
+        errors.extend(program.errors)
 
     for source in sources:
         load(source)
@@ -389,6 +391,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
     merged = Program([], functions, structs, consts, enums, globals_, aliases, conds)
     merged.extends = extends_
+    merged.errors = errors
     merged.module_bindings = module_bindings
     merged.member_bindings = member_bindings
     merged.member_targets = member_targets
