@@ -718,7 +718,7 @@ def test_target_aims_the_module_at_the_triple(tmp_path, capsys, monkeypatch):
     src = tmp_path / "p.sie"
     src.write_text("""
     fn main() -> i32 {
-        return TARGET_OS * 10 + TARGET_ARCH + (sizeof(opaque*) as i32) * 100;
+        return TARGET_OS * 10 + TARGET_ARCH + (@sizeof(opaque*) as i32) * 100;
     }
     """)
 
@@ -735,7 +735,7 @@ def test_target_layout_decides_sizeof(tmp_path, capsys, monkeypatch):
     A 32-bit target's pointers measure 4 bytes at compile time.
     """
     src = tmp_path / "p.sie"
-    src.write_text("fn main() -> i32 { return sizeof(opaque*) as i32; }")
+    src.write_text("fn main() -> i32 { return @sizeof(opaque*) as i32; }")
 
     assert run_cli(monkeypatch, src, "--target", "i686-unknown-linux-gnu",
                    "-O", "1", "--emit-llvm") == 0

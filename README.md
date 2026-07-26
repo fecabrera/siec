@@ -35,7 +35,7 @@ siec main.sie libfoo.a -o main
 - `-g` emits DWARF debug info, cc-style: every instruction maps to its source line, and every function, parameter, and variable is described with its type. A `-g` build debugs at source level in lldb or gdb: breakpoints by file and line, stepping, `bt` with Sie lines, and `frame variable` showing struct fields, arrays as their `{data, length}` pair, and unions. Debug at `-O0`, where nothing is reordered; on macOS, keep the `.o` the build leaves next to the executable, since the debugger reads the DWARF from it.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
-- `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as the JIT runs in-process.
+- `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `@sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as the JIT runs in-process.
 - `--emit-llvm` prints the LLVM IR and exits, without building.
 - `--emit-asm` prints the target's assembly and exits, without building.
 - `--run` JIT-compiles and runs the program in place of building it, exiting with the program's own exit code. Anything after the flag is passed along as its arguments:
@@ -95,7 +95,7 @@ A module offers every one of its top-level declarations except its `@static` one
 
 An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
 
-Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types *inferred* across the boundary (a call's return type, say) flow without their module's name in view.
+Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `@sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types *inferred* across the boundary (a call's return type, say) flow without their module's name in view.
 
 Imports carry across separate compilation. Under `-c`, an imported module's functions stay declarations: the unit calls them by [signature symbol](#overloading), and the module's own `-c` object defines them. Compile each module once, link the objects:
 
@@ -247,7 +247,7 @@ Unlike C's, the expansion is checked: a value macro's type follows from what it 
 }
 ```
 
-The condition is a constant expression: literals, `@const` names, enum members, `sizeof`, arithmetic, comparisons, and `and`/`or`/`not`. The unchosen branch is skipped entirely, never parsed into the program, so its declarations may collide with the chosen one's:
+The condition is a constant expression: literals, `@const` names, enum members, `@sizeof`, arithmetic, comparisons, and `and`/`or`/`not`. The unchosen branch is skipped entirely, never parsed into the program, so its declarations may collide with the chosen one's:
 
 ```
 @if (TARGET_OS == OS_DARWIN) {
@@ -281,7 +281,7 @@ An `@include` may also sit in a branch: only the chosen arm's files load, and an
 }
 ```
 
-Because includes decide what the program *is*, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
+Because includes decide what the program *is*, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `@sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
 
 #### Error
 
@@ -306,10 +306,10 @@ The message is reported like any compile error, naming the file and line it sits
 ```
 struct Header { a: u64; b: u64; }
 
-@static_assert(sizeof(Header) == 16, "Header must stay two words");
+@static_assert(@sizeof(Header) == 16, "Header must stay two words");
 ```
 
-Unlike an `@if`, an assert declares nothing, so it is checked once the whole program is registered rather than while the conditions are still choosing what to compile. Its condition can therefore weigh what those declarations turned out to be: a struct's `sizeof`, an enum's members, and constants, whatever order they were written in. An assert inside an `@if` still follows its branch, checked only when that branch is the chosen one.
+Unlike an `@if`, an assert declares nothing, so it is checked once the whole program is registered rather than while the conditions are still choosing what to compile. Its condition can therefore weigh what those declarations turned out to be: a struct's `@sizeof`, an enum's members, and constants, whatever order they were written in. An assert inside an `@if` still follows its branch, checked only when that branch is the chosen one.
 
 ### Arithmetic
 
@@ -1391,12 +1391,12 @@ struct buf {
 }
 ```
 
-`N` is any constant integer expression: literals, `@const` names, `sizeof`, or any mix. The size is part of the type, so `@raw<i32>[4]` and `@raw<i32>[8]` never convert into each other.
+`N` is any constant integer expression: literals, `@const` names, `@sizeof`, or any mix. The size is part of the type, so `@raw<i32>[4]` and `@raw<i32>[8]` never convert into each other.
 
 ```
 @const N = 4;
 
-let a: @raw<u8>[N * 2 + sizeof(i32)];
+let a: @raw<u8>[N * 2 + @sizeof(i32)];
 a[0] = 1;              // elements index in place, unchecked like C's
 a.length;              // the element count, a compile-time constant
 let p: u8* = &a[0];    // a plain pointer into the storage
@@ -1561,31 +1561,31 @@ let f: u32 = a as u32 + 1; // (a as u32) + 1
 
 #### Sizeof
 
-`sizeof` yields the size in bytes of a type, or of a variable's declared type, computed at compile time. It takes either between its parentheses:
+`@sizeof` yields the size in bytes of a type, or of a variable's declared type, computed at compile time. It takes either between its parentheses:
 
 ```
-sizeof(T)
-sizeof(v)
+@sizeof(T)
+@sizeof(v)
 ```
 
 ```
 let c: char = 'a';
-sizeof(char);   // 1
-sizeof(c);      // 1
+@sizeof(char);   // 1
+@sizeof(c);      // 1
 
 let msg: char[] = "hello";
-sizeof(char[]); // 16: an array is a {pointer, length} pair
-sizeof(msg);    // 16
+@sizeof(char[]); // 16: an array is a {pointer, length} pair
+@sizeof(msg);    // 16
 ```
 
-The result adopts the integer type of its context like a literal does, defaulting to `u64`. Structs measure their full layout, padding included, so `@packed` and `@align(N)` change what `sizeof` reports.
+The result adopts the integer type of its context like a literal does, defaulting to `u64`. Structs measure their full layout, padding included, so `@packed` and `@align(N)` change what `@sizeof` reports.
 
-Being a compile-time constant, `sizeof` also works anywhere one is required: `@const` values, enum member values, and array sizes.
+Being a compile-time constant, `@sizeof` also works anywhere one is required: `@const` values, enum member values, and array sizes.
 
 ```
-@const WORD = sizeof(u64);
+@const WORD = @sizeof(u64);
 
-let buffer: u8[sizeof(i32) * 8];
+let buffer: u8[@sizeof(i32) * 8];
 ```
 
 #### Typename
@@ -1811,7 +1811,7 @@ struct List<T> {
 
 A bare declaration of a struct with any default starts from its defaults, the undefaulted fields zeroed (`let l: List<i32>;` holds `{null, 0, 8}`), and defaults of nested struct fields cascade. A named aggregate literal fills what it names and defaults the rest (`{ length = 2 }` keeps `data = null`); a positional literal still fills every field. A struct with no defaults anywhere stays uninitialized on a bare declaration, as ever.
 
-Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `sizeof` are the natural fits. Union fields take no default, since their fields share one storage, and module-level globals keep their zero initialization.
+Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `@sizeof` are the natural fits. Union fields take no default, since their fields share one storage, and module-level globals keep their zero initialization.
 
 #### Generic structs
 
@@ -1904,7 +1904,7 @@ struct datum {
 d.u.i = 42; // fields chain through like any other
 ```
 
-An unnamed type's identity is structural: two spellings with the same fields are one type, so a `struct { x: i32; y: i32; }` local passes to a `struct { x: i32; y: i32; }` parameter directly. They compose everywhere a named type would: locals, aliases, raw arrays, pointers, `sizeof`, and each other.
+An unnamed type's identity is structural: two spellings with the same fields are one type, so a `struct { x: i32; y: i32; }` local passes to a `struct { x: i32; y: i32; }` parameter directly. They compose everywhere a named type would: locals, aliases, raw arrays, pointers, `@sizeof`, and each other.
 
 An unnamed struct or union can also be a member with no name of its own: its fields then hoist into the enclosing struct, C-style, nesting included:
 

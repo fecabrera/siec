@@ -41,7 +41,7 @@ def test_tuples_build_and_index(run):
         let one = (42,);                     // the single-element spelling
         if (one[0] != 42 or one.length != 1) { return 8; }
 
-        return (sizeof(Tuple<i32, i32>) as i32) - 8;
+        return (@sizeof(Tuple<i32, i32>) as i32) - 8;
     }
     """
     assert run(source).returncode == 0

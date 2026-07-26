@@ -130,7 +130,7 @@ struct gz_header {
     Z_VERSION_ERROR on a library/header mismatch. */
 @inline
 fn inflateInit(strm: z_stream*) -> z_status {
-    return inflateInit_(strm, ZLIB_VERSION, sizeof(z_stream) as i32);
+    return inflateInit_(strm, ZLIB_VERSION, @sizeof(z_stream) as i32);
 }
 
 /** Initialize `strm` for compression at the given `level`. Convenience wrapper
@@ -141,7 +141,7 @@ fn inflateInit(strm: z_stream*) -> z_status {
 @inline
 fn deflateInit(strm: z_stream*,
                level: z_level) -> z_status {
-    return deflateInit_(strm, level, ZLIB_VERSION, sizeof(z_stream) as i32);
+    return deflateInit_(strm, level, ZLIB_VERSION, @sizeof(z_stream) as i32);
 }
 
 /** Return the runtime version string of the linked zlib library. Compare against
@@ -150,7 +150,7 @@ fn deflateInit(strm: z_stream*,
 fn zlibVersion() -> char*;
 
 /** Low-level compression initializer. Prefer deflateInit(); this variant takes
-    the caller's ZLIB_VERSION and sizeof(z_stream) explicitly so the library can
+    the caller's ZLIB_VERSION and @sizeof(z_stream) explicitly so the library can
     verify ABI compatibility. */
 @extern
 fn deflateInit_(strm: z_stream*,
@@ -173,7 +173,7 @@ fn deflate(strm: z_stream*,
 fn deflateEnd(strm: z_stream*) -> z_status;
 
 /** Low-level decompression initializer. Prefer inflateInit(); this variant takes
-    the caller's ZLIB_VERSION and sizeof(z_stream) explicitly so the library can
+    the caller's ZLIB_VERSION and @sizeof(z_stream) explicitly so the library can
     verify ABI compatibility. */
 @extern
 fn inflateInit_(strm: z_stream*,

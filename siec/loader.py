@@ -25,7 +25,7 @@ def evaluate_directive(expr, lookup, chain=()) -> int:
 
     The choice happens at load time, before the program assembles, so only
     literals, operators, the target constants, and '@const' values already
-    in view can appear; enum members and 'sizeof' need the whole program
+    in view can appear; enum members and '@sizeof' need the whole program
     and cannot.
     """
     # deferred import: the ops table lives with the codegen evaluator

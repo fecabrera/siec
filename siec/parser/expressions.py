@@ -176,6 +176,15 @@ def parse_primary(ts: TokenStream) -> Expr:
         ts.expect("sym", ")")
         return parse_postfix(ts, node(target))
 
+    # '@sizeof(T)' is the byte size of a type, or of a variable's type,
+    # measured at codegen for the compilation target
+    if tok.syntax == "@" and ts.peek().value == "sizeof":
+        ts.next()
+        ts.expect("sym", "(")
+        name = parse_type(ts)
+        ts.expect("sym", ")")
+        return parse_postfix(ts, SizeOf(name))
+
     # '@typeof(v)' is the type id an expression carries: an 'Any' reads
     # its own, anything else folds to its static type's '@typeid'
     if tok.syntax == "@" and ts.peek().value == "typeof":
@@ -281,12 +290,12 @@ def parse_primary(ts: TokenStream) -> Expr:
     # an identifier is an enum member if followed by '::', a call if
     # followed by '(', and a variable otherwise
     if tok.kind == "ident":
-        # 'sizeof(T)' takes a type or a variable's name, measured at codegen
+        # a size is a compile-time measure, so it is spelled '@sizeof'
+        # like the rest of them; the bare word says so rather than
+        # reading as a call to a function nobody declared
         if tok.value == "sizeof" and ts.peek().syntax == "(":
-            ts.next()
-            name = parse_type(ts)
-            ts.expect("sym", ")")
-            return parse_postfix(ts, SizeOf(name))
+            raise SyntaxError(f"line {tok.line}: a size is spelled "
+                              "'@sizeof(T)', a compile-time function")
 
         if ts.peek().syntax == "::":
             ts.next()

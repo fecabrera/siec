@@ -53,7 +53,7 @@ def test_nested_and_recursive_generics(run):
 
 def test_generic_unions_and_sizeof(run):
     """
-    'union S<T>' instantiates the same way, and sizeof sees the layout.
+    'union S<T>' instantiates the same way, and '@sizeof' sees the layout.
     """
     source = """
     union Slot<T> {
@@ -65,7 +65,7 @@ def test_generic_unions_and_sizeof(run):
         let s: Slot<f64>;
         s.value = 1.0;
 
-        if (sizeof(Slot<f64>) != 8 or s.bits != 0x3FF0000000000000) {
+        if (@sizeof(Slot<f64>) != 8 or s.bits != 0x3FF0000000000000) {
             return 0;
         }
         return 42;
@@ -91,7 +91,7 @@ def test_aliases_and_sized_arrays_of_instantiations(run):
 
         let aliased: intbox = { 1 };
 
-        if (sizeof(intbox) != sizeof(Box<i32>)) {
+        if (@sizeof(intbox) != @sizeof(Box<i32>)) {
             return 0;
         }
         return boxes[0].value + boxes[1].value + aliased.value;

@@ -45,7 +45,7 @@ fn Queue<T>::destroy(&self) {
  * @param value The value to push to the Queue.
  */
 fn Queue<T>::push(&self, value: T) {
-    let node = malloc(sizeof(QueueNode<T>)) as QueueNode<T>*;
+    let node = malloc(@sizeof(QueueNode<T>)) as QueueNode<T>*;
     *node = { value = value };
     
     if (self.tail == null) {

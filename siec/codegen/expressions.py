@@ -150,7 +150,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return ir.Constant(resolve_type(backing), value)
 
     if isinstance(expr, SizeOf):
-        # 'sizeof' is a compile-time constant adopting an integer context
+        # '@sizeof' is a compile-time constant adopting an integer context
         # like a literal, defaulting to u64
         size = size_of(gen, expr.name, scope)
         if isinstance(expected_type, ir.IntType):

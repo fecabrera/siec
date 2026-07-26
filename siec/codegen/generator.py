@@ -100,7 +100,7 @@ class CodeGenerator:
         """
         from llvmlite import binding
 
-        # the triple decides the target constants and every 'sizeof'
+        # the triple decides the target constants and every '@sizeof'
         self.target = target or binding.get_default_triple()
 
         # a fresh context keeps identified struct types from colliding across modules

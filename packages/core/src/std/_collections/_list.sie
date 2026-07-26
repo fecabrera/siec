@@ -21,7 +21,7 @@ struct List<T>:
  * @param capacity The capacity of the List.
  */
 fn List<T>::init(&self, capacity: u64 = DEFAULT_LIST_CAPACITY) {
-    self.data = malloc(capacity * sizeof(T)) as T*;
+    self.data = malloc(capacity * @sizeof(T)) as T*;
     self.length = 0;
     self.capacity = capacity;
 }
@@ -240,7 +240,7 @@ fn List<T>::eq(&self, arr: const T[]) -> bool {
  */
 fn List<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
-    self.data = realloc(self.data, capacity * sizeof(T)) as T*;
+    self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
     self.capacity = capacity;
 }
 

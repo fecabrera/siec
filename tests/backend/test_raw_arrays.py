@@ -20,13 +20,13 @@ def test_raw_local_reads_writes_and_length(run):
 
 def test_size_takes_any_constant_expression(run):
     """
-    '[N]' evaluates literals, '@const's, 'sizeof', and their mixes.
+    '[N]' evaluates literals, '@const's, '@sizeof', and their mixes.
     """
     result = run("""
         @const N = 4;
 
         fn main() -> i32 {
-            let a: @raw<u8>[N * 2 + sizeof(i32)];
+            let a: @raw<u8>[N * 2 + @sizeof(i32)];
             return a.length as i32;
         }
     """)
@@ -50,7 +50,7 @@ def test_raw_struct_field_lays_out_like_c(run):
             b.data[15] = 2;
             let p: u8* = &b.data[0];
             let through: i32 = (p[0] + p[15]) as i32;
-            return through + (sizeof(buf) as i32) - 20;
+            return through + (@sizeof(buf) as i32) - 20;
         }
     """)
     assert result.returncode == 42
@@ -119,7 +119,7 @@ def test_raw_through_an_alias(run):
         fn main() -> i32 {
             let a: quad;
             a[3] = 42;
-            return a[3] + (sizeof(quad) as i32) - 16;
+            return a[3] + (@sizeof(quad) as i32) - 16;
         }
     """)
     assert result.returncode == 42

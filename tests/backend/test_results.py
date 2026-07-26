@@ -29,7 +29,7 @@ def test_result_holds_a_value_or_an_error(run):
         if (bad.ok or bad.error != 1) { return 2; }
 
         // value and error share storage: bool + padding + union
-        if (sizeof(Result<i64, u8>) != 16) { return 3; }
+        if (@sizeof(Result<i64, u8>) != 16) { return 3; }
         return 0;
     }
     """

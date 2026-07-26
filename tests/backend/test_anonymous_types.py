@@ -45,8 +45,8 @@ def test_identical_shapes_are_one_type(run):
             let p: point;
             p.x = 3;
             p.y = 4;
-            return dist2(p) + (sizeof(point) as i32)
-                 + (sizeof(struct { x: i32; y: i32; }) as i32) - 16;
+            return dist2(p) + (@sizeof(point) as i32)
+                 + (@sizeof(struct { x: i32; y: i32; }) as i32) - 16;
         }
     """)
     assert result.returncode == 25

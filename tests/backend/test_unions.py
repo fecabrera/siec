@@ -41,7 +41,7 @@ def test_size_and_alignment_follow_the_largest_field(run):
         }
 
         fn main() -> i32 {
-            return (sizeof(mixed) as i32) * 10 + (sizeof(holder) as i32);
+            return (@sizeof(mixed) as i32) * 10 + (@sizeof(holder) as i32);
         }
     """)
     assert result.returncode == 8 * 10 + 16

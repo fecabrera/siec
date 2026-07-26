@@ -143,7 +143,7 @@ def evaluate(gen: CodeGenerator, expr) -> int:
     if isinstance(expr, EnumMember):
         return member_value(gen, expr)
 
-    # a sizeof is a compile-time byte count; only type names resolve here,
+    # a '@sizeof' is a compile-time byte count; only type names resolve here,
     # constant contexts having no variables in scope; a '@typeid' hashes
     # the same way
     if isinstance(expr, SizeOf):

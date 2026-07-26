@@ -1,4 +1,4 @@
-"""Compile-time size computation for 'sizeof'."""
+"""Compile-time size computation for '@sizeof'."""
 
 from llvmlite import ir
 
@@ -41,7 +41,7 @@ def size_of(gen: CodeGenerator, name: str, scope: dict | None = None) -> int:
     resolved = resolve_type(name, gen.structs)
 
     if isinstance(resolved, ir.VoidType):
-        raise TypeError("'sizeof' needs a sized type, not void")
+        raise TypeError("'@sizeof' needs a sized type, not void")
 
     size = resolved.get_abi_size(target_data(gen.target), context=gen.module.context)
 

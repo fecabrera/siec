@@ -226,7 +226,7 @@ def test_static_assert_holds_or_stops(compile_source):
     @const WIDTH = 8;
 
     @static_assert(WIDTH == 8, "WIDTH must be eight");
-    @static_assert(sizeof(u64) == WIDTH, "u64 must be WIDTH bytes")
+    @static_assert(@sizeof(u64) == WIDTH, "u64 must be WIDTH bytes")
 
     fn main() -> i32 { return 0; }
     """
@@ -249,7 +249,7 @@ def test_static_assert_weighs_the_whole_program(compile_source):
     whatever order they were declared in.
     """
     source = """
-    @static_assert(sizeof(Header) == 16, "Header must stay two words");
+    @static_assert(@sizeof(Header) == 16, "Header must stay two words");
     @static_assert(Mode::Both == 3, "Both must follow Read and Write");
 
     struct Header { a: u64; b: u64; }
@@ -262,7 +262,7 @@ def test_static_assert_weighs_the_whole_program(compile_source):
     with pytest.raises(TypeError, match="Header must stay one word"):
         compile_source("""
         struct Header { a: u64; b: u64; }
-        @static_assert(sizeof(Header) == 8, "Header must stay one word");
+        @static_assert(@sizeof(Header) == 8, "Header must stay one word");
 
         fn main() -> i32 { return 0; }
         """)

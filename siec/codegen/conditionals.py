@@ -13,7 +13,7 @@ def check_asserts(gen: CodeGenerator, program: Program) -> None:
     Check every '@static_assert' the compilation reached, once the whole
     program is registered: unlike an '@if', an assert gates no
     declaration, so its condition may weigh what those declarations
-    turned out to be, a struct's 'sizeof' included.
+    turned out to be, a struct's '@sizeof' included.
     """
     for assertion in program.asserts:
         with source_location(line=assertion.line, file=assertion.file):

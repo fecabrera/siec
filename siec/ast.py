@@ -177,8 +177,8 @@ class NullLiteral:
 class SizeOf:
     """
     The compile-time size in bytes of a type or of a variable's type:
-    'sizeof(T)' or 'sizeof(v)'. The name holds whatever was written between
-    the parentheses, resolved at codegen.
+    '@sizeof(T)' or '@sizeof(v)'. The name holds whatever was written
+    between the parentheses, resolved at codegen.
     """
     name: str
 
@@ -709,7 +709,7 @@ class StaticAssert:
     or the message stops the compilation.
 
     It declares nothing, so unlike an '@if' it is checked once the whole
-    program is registered, where 'sizeof' knows every struct's layout.
+    program is registered, where '@sizeof' knows every struct's layout.
     """
     condition: Expr
     message: str
