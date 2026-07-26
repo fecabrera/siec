@@ -72,7 +72,7 @@ fn String::append(&self, arr: const char*) {
  *
  * @param arr The array to set the String to.
  */
-fn String::set(&self, arr: const char*) {
+fn String::assign(&self, arr: const char*) {
     self.reset();
     self.append(arr);
 }

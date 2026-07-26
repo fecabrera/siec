@@ -140,7 +140,7 @@ fn Package::parse(&self, result: &toml_result) -> Result<PackageError> {
  * @param path The path to set the Package to.
  */
 fn Package::setPath(&self, path: const &Iterable<char>) {
-    self.path.set(path);
+    self.path.assign(path);
 }
 
 /**
@@ -149,7 +149,7 @@ fn Package::setPath(&self, path: const &Iterable<char>) {
  * @param path The path to set the Package to. The path is null terminated.
  */
 fn Package::setPath(&self, path: const char*) {
-    self.path.set(path);
+    self.path.assign(path);
 }
 
 /**
@@ -168,7 +168,7 @@ fn Package::setName(&self, name: const &Iterable<char>) {
  * @param name The name to set the Package to. The name is null terminated.
  */
 fn Package::setName(&self, name: const char*) {
-    self.name.set(name);
+    self.name.assign(name);
 }
 
 /**
@@ -177,7 +177,7 @@ fn Package::setName(&self, name: const char*) {
  * @param version The version to set the Package to.
  */
 fn Package::setVersion(&self, version: const &Iterable<char>) {
-    self.version.set(version);
+    self.version.assign(version);
 }
 
 /**
@@ -186,5 +186,5 @@ fn Package::setVersion(&self, version: const &Iterable<char>) {
  * @param version The version to set the Package to. The version is null terminated.
  */
 fn Package::setVersion(&self, version: const char*) {
-    self.version.set(version);
+    self.version.assign(version);
 }

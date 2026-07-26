@@ -73,7 +73,7 @@ fn List<T>::reset(&self) {
  *
  * @param str The iterable to set the List to.
  */
-fn List<T>::set(&self, str: const &Iterable<char>) {
+fn List<T>::assign(&self, str: const &Iterable<char>) {
     self.reset();
     self.append(str);
 }
