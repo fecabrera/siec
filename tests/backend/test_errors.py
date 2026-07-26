@@ -92,6 +92,20 @@ def test_member_on_non_struct(compile_source):
         compile_source(source)
 
 
+def test_member_on_an_unbound_name_names_it(compile_source):
+    """
+    A member access whose base names nothing blames the name, not the
+    field: a mistyped module prefix reads as a member on thin air.
+    """
+    source = """
+    fn main() -> i32 {
+        return unitstd.S_IRWXG;
+    }
+    """
+    with pytest.raises(NameError, match="undefined variable 'unitstd'"):
+        compile_source(source)
+
+
 def test_aggregate_element_count_mismatch(compile_source):
     """
     An aggregate literal with the wrong number of elements is an error.

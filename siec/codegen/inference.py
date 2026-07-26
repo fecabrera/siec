@@ -833,6 +833,12 @@ def member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, st
     base_type = expr_sie_type(gen, expr.base, scope)
     info = type_info(gen, base_type)
     if info is None:
-        raise TypeError(f"cannot access field {expr.field!r} on non-struct type {base_type}")
+        # a base that types as nothing is the real story: an unbound name
+        # ('unitstd.S_IRWXG') reads as a member access on thin air
+        if base_type is None and (reason := untyped_reason(gen, expr.base, scope)):
+            raise reason
+
+        raise TypeError(f"cannot access field {expr.field!r} on non-struct "
+                        f"type {base_type or '?'}")
 
     return info.field(expr.field)
