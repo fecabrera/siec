@@ -30,7 +30,7 @@ syn keyword sieBuiltinType ArrayIterator ConstArrayIterator Enumerated
 syn keyword sieBuiltinType EnumerateIterator
 syn keyword sieBuiltinType Add Sub Mul Div Rem
 syn keyword sieBuiltinType AddAssign SubAssign MulAssign DivAssign RemAssign
-syn keyword sieBuiltinType Eq Ord
+syn keyword sieBuiltinType Eq Ord GetItem SetItem
 syn match sieBuiltinFunc "\<\(Ok\|Error\|enumerate\)\>\ze\s*[(<]"
 
 " a directive or decorator: '@const', '@if', '@sizeof', '@extern', and the

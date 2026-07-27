@@ -135,7 +135,7 @@
   "ArrayIterator" "ConstArrayIterator" "Enumerated" "EnumerateIterator"
   "Add" "Sub" "Mul" "Div" "Rem"
   "AddAssign" "SubAssign" "MulAssign" "DivAssign" "RemAssign"
-  "Eq" "Ord"))
+  "Eq" "Ord" "GetItem" "SetItem"))
 
 ; and the constants it defines for every target
 ((identifier) @constant.builtin
