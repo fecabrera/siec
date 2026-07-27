@@ -26,6 +26,7 @@ Repository = "https://github.com/fecabrera/siec"
 
 [project.scripts]
 siec = "siec.cli:main"
+sie = "siec.sie:main"
 sie-lsp = "siec.lsp:main"
 
 [project.optional-dependencies]

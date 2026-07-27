@@ -56,6 +56,30 @@ pip install -e '.[lsp]'
 
 The `editors/` directory connects it to editors: `editors/vscode/sie` is a VSCode extension holding the syntax highlighting and the client (see its README), `editors/nvim` is a Neovim plugin carrying the same highlighting plus `:make` integration and the client (see its README), `editors/helix/languages.toml` is a block to merge into a Helix configuration, and `editors/tree-sitter-sie` is the tree-sitter grammar the last two read for structural highlighting, folds, and textobjects. Any editor that speaks LSP works the same way: run `sie-lsp` over stdio for `.sie` files. The include path comes from the project's `package.toml`: the `[package] include` entries of the nearest one above the edited file and the workspace root's, reread on each edit. Editor-side extras pass through the initialization options as `includePaths`, like the compiler's `-I`.
 
+## The package manager
+
+`sie` is the project-level tool. Where `siec` compiles a list of sources, `sie` works from a package: a directory holding a `package.toml` manifest that names it and says what it is made of.
+
+```
+[package]
+name = "openssl"
+version = "1.0.0"
+sources = ["src/"]
+libs = ["ssl", "crypto"]
+
+[dependencies]
+libc = "~1"
+```
+
+It takes the package to act on as its argument, a directory holding a manifest, defaulting to the working directory:
+
+```
+sie                 # the package here
+sie packages/core   # the one in that directory
+```
+
+For now it does one thing: read that manifest and print it. Naming a file instead of a directory reads that file as the manifest.
+
 ## The language
 
 ### Imports
