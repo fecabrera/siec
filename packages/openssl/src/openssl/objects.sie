@@ -1,0 +1,30 @@
+import { ASN1_OBJECT } from types;
+
+/*
+ * The object-identifier table. Everything OpenSSL names, an algorithm or an
+ * X.509 attribute, has a NID, a short name ("SHA256"), a long name ("sha256")
+ * and a dotted OID ("2.16.840.1.101.3.4.2.1"). These translate between them.
+ */
+
+@extern fn OBJ_nid2obj(n: i32) -> ASN1_OBJECT*;
+@extern fn OBJ_nid2ln(n: i32) -> const char*;
+@extern fn OBJ_nid2sn(n: i32) -> const char*;
+@extern fn OBJ_obj2nid(o: const ASN1_OBJECT*) -> i32;
+
+/** Looks an object up by short name, long name, or dotted OID. With
+    `no_name` set only the OID form is tried. */
+@extern fn OBJ_txt2obj(s: const char*, no_name: i32) -> ASN1_OBJECT*;
+
+/** Writes the object's name into `buf` and answers the length it wanted,
+    which may exceed `buf_len`. With `no_name` set it always writes the OID. */
+@extern fn OBJ_obj2txt(buf: char*, buf_len: i32, a: const ASN1_OBJECT*, no_name: i32) -> i32;
+
+@extern fn OBJ_txt2nid(s: const char*) -> i32;
+@extern fn OBJ_ln2nid(s: const char*) -> i32;
+@extern fn OBJ_sn2nid(s: const char*) -> i32;
+
+@extern fn OBJ_cmp(a: const ASN1_OBJECT*, b: const ASN1_OBJECT*) -> i32;
+@extern fn OBJ_dup(o: const ASN1_OBJECT*) -> ASN1_OBJECT*;
+@extern fn OBJ_length(obj: const ASN1_OBJECT*) -> u64;
+@extern fn OBJ_get0_data(obj: const ASN1_OBJECT*) -> const u8*;
+@extern fn ASN1_OBJECT_free(a: ASN1_OBJECT*);

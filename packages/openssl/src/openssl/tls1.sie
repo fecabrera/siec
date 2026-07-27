@@ -1,0 +1,31 @@
+import { SSL } from types;
+import { SSL_ctrl, SSL_CTX_ctrl, SSL_CTRL_SET_TLSEXT_HOSTNAME } from ssl;
+
+/*
+ * TLS extensions: the fields a handshake carries beyond the version and the
+ * cipher list.
+ *
+ * The one a client almost always needs is server_name (SNI), which tells the
+ * server which host is being asked for before a certificate is chosen. It
+ * has to be set on the SSL before the handshake, and it is not the same as
+ * the name the certificate is checked against: SSL_set_tlsext_host_name()
+ * says what to ask for, SSL_set1_host() says what to accept, and a client
+ * that skips the second is not verifying anything.
+ */
+
+@const TLSEXT_NAMETYPE_host_name = 0;
+@const TLSEXT_STATUSTYPE_ocsp = 1;
+@const TLSEXT_MAXLEN_host_name = 255;
+
+/** Sends `name` as the server_name extension. */
+@macro SSL_set_tlsext_host_name(s, name) =
+    SSL_ctrl(s, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name, name as opaque*);
+
+/** On a server, the name the client asked for, or null when it sent none. */
+@extern fn SSL_get_servername(s: const SSL*, type: const i32) -> const char*;
+@extern fn SSL_get_servername_type(s: const SSL*) -> i32;
+
+/** Derives key material bound to this connection, the way a protocol layered
+    over TLS gets a secret that cannot be replayed onto another connection. */
+@extern fn SSL_export_keying_material(s: SSL*, out: u8*, olen: u64, label: const char*,
+    llen: u64, context: const u8*, contextlen: u64, use_context: i32) -> i32;

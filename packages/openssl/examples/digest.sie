@@ -1,0 +1,129 @@
+// Hash a file, or standard input, with any digest OpenSSL knows:
+//
+//   digest sha256 README.md
+//   digest sha3-512 < README.md
+//
+// The point of going through EVP rather than calling SHA256() is that the
+// algorithm is a value here: the name off the command line picks it, and no
+// other line of this program changes.
+
+import std.io;
+import { IOReadable } from std.io;
+import { File, FileMode } from std.fs;
+import {
+    EVP_MAX_MD_SIZE,
+    EVP_MD_CTX_new,
+    EVP_MD_CTX_free,
+    EVP_DigestInit_ex,
+    EVP_DigestUpdate,
+    EVP_DigestFinal_ex,
+    EVP_MD_fetch,
+    EVP_MD_free,
+} from openssl.evp;
+import { EVP_MD_CTX } from openssl.types;
+import { ERR_get_error, ERR_error_string_n } from openssl.err;
+
+@const CHUNK = 65536;
+
+fn hex(digest: const u8[], length: u32) {
+    for (let i: u32 = 0; i < length; i += 1)
+        std.io.print("{02x}", digest[i]);
+}
+
+// A failure inside OpenSSL is a 0 and an entry on a per-thread queue. The
+// queue is drained, not read: an error raised several layers down leaves one
+// entry per layer, oldest first
+fn report(what: const char*) {
+    let code = ERR_get_error();
+    if (code == 0) {
+        std.io.println(std.io.stderr, "{}: failed", what);
+        return;
+    }
+
+    while (code != 0) {
+        let buf: char[256];
+        ERR_error_string_n(code, buf, 256);
+        std.io.println(std.io.stderr, "{}: {}", what, buf);
+        code = ERR_get_error();
+    }
+}
+
+// Feeds everything the stream has into the running digest. Update may be
+// called as many times as there is input and gives the same answer as one
+// call over the whole thing, so nothing is held in memory but this buffer
+fn absorb(ctx: EVP_MD_CTX*, source: &IOReadable) -> bool {
+    let buf: u8[CHUNK];
+
+    while (true) {
+        let read = source.read(buf, CHUNK);
+        if (not read.ok) {
+            std.io.println(std.io.stderr, "read: {}", read.error);
+            return false;
+        }
+
+        if (read.value == 0) break;
+
+        if (not EVP_DigestUpdate(ctx, buf, read.value as u64)) {
+            report("digest");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length < 2 or args.length > 3) {
+        std.io.println(std.io.stderr, "usage: {} <algorithm> [file]", args[0]);
+        return 1;
+    }
+
+    // any name a provider answers to: "SHA256", "SHA3-512", "BLAKE2b512".
+    // A fetched digest is a reference, so it is given back at the end
+    let md = EVP_MD_fetch(null, args[1], null);
+    if (md == null) {
+        std.io.println(std.io.stderr, "{}: no such digest", args[1]);
+        return 1;
+    }
+    defer EVP_MD_free(md);
+
+    let ctx = EVP_MD_CTX_new();
+    if (ctx == null) {
+        std.io.println(std.io.stderr, "{}: out of memory", args[0]);
+        return 1;
+    }
+    defer EVP_MD_CTX_free(ctx);
+
+    if (not EVP_DigestInit_ex(ctx, md, null)) {
+        report("digest");
+        return 1;
+    }
+
+    // the named file, or whatever is piped in
+    if (args.length == 3) {
+        let input = File(args[2], FileMode::Read);
+        defer input.destroy();
+
+        let opened = input.open();
+        if (not opened.ok) {
+            std.io.println(std.io.stderr, "{}: {}", args[2], opened.error);
+            return 1;
+        }
+
+        if (not absorb(ctx, input)) return 1;
+    } else {
+        if (not absorb(ctx, std.io.stdin)) return 1;
+    }
+
+    let digest: u8[EVP_MAX_MD_SIZE];
+    let length: u32 = 0;
+    if (not EVP_DigestFinal_ex(ctx, digest, &length)) {
+        report("digest");
+        return 1;
+    }
+
+    hex(digest, length);
+    std.io.println("  {}", args.length == 3 ? args[2] : "-");
+
+    return 0;
+}

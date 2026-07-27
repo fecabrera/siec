@@ -1,0 +1,40 @@
+struct stack_st;
+
+@type OPENSSL_STACK = stack_st;
+
+@type OPENSSL_sk_compfunc = fn(const opaque*, const opaque*) -> i32;
+@type OPENSSL_sk_freefunc = fn(opaque*);
+@type OPENSSL_sk_freefunc_thunk = fn(OPENSSL_sk_freefunc, opaque*);
+@type OPENSSL_sk_copyfunc = fn(const opaque*) -> opaque*;
+
+@extern fn OPENSSL_sk_num(st: const OPENSSL_STACK*) -> i32;
+@extern fn OPENSSL_sk_value(st: const OPENSSL_STACK*, num: i32) -> opaque*;
+
+@extern fn OPENSSL_sk_set(st: OPENSSL_STACK*, i: i32, data: const opaque*) -> opaque*;
+
+@extern fn OPENSSL_sk_new(cmp: OPENSSL_sk_compfunc) -> OPENSSL_STACK*;
+@extern fn OPENSSL_sk_new_null() -> OPENSSL_STACK*;
+@extern fn OPENSSL_sk_new_reserve(c: OPENSSL_sk_compfunc, n: i32) -> OPENSSL_STACK*;
+@extern fn OPENSSL_sk_set_thunks(st: OPENSSL_STACK*, f_thunk: OPENSSL_sk_freefunc_thunk) -> OPENSSL_STACK*;
+@extern fn OPENSSL_sk_reserve(st: OPENSSL_STACK*, n: i32) -> i32;
+@extern fn OPENSSL_sk_free(st: OPENSSL_STACK*);
+@extern fn OPENSSL_sk_pop_free(st: OPENSSL_STACK*, func: OPENSSL_sk_freefunc);
+@extern fn OPENSSL_sk_deep_copy(st: const OPENSSL_STACK*,
+    c: OPENSSL_sk_copyfunc,
+    f: OPENSSL_sk_freefunc) -> OPENSSL_STACK*;
+@extern fn OPENSSL_sk_insert(sk: OPENSSL_STACK*, data: const opaque*, where: i32) -> i32;
+@extern fn OPENSSL_sk_delete(st: OPENSSL_STACK*, loc: i32) -> opaque*;
+@extern fn OPENSSL_sk_delete_ptr(st: OPENSSL_STACK*, p: const opaque*) -> opaque*;
+@extern fn OPENSSL_sk_find(st: OPENSSL_STACK*, data: const opaque*) -> i32;
+@extern fn OPENSSL_sk_find_ex(st: OPENSSL_STACK*, data: const opaque*) -> i32;
+@extern fn OPENSSL_sk_find_all(st: OPENSSL_STACK*, data: const opaque*, pnum: i32*) -> i32;
+@extern fn OPENSSL_sk_push(st: OPENSSL_STACK*, data: const opaque*) -> i32;
+@extern fn OPENSSL_sk_unshift(st: OPENSSL_STACK*, data: const opaque*) -> i32;
+@extern fn OPENSSL_sk_shift(st: OPENSSL_STACK*) -> opaque*;
+@extern fn OPENSSL_sk_pop(st: OPENSSL_STACK*) -> opaque*;
+@extern fn OPENSSL_sk_zero(st: OPENSSL_STACK*);
+@extern fn OPENSSL_sk_set_cmp_func(sk: OPENSSL_STACK*,
+    cmp: OPENSSL_sk_compfunc) -> OPENSSL_sk_compfunc;
+@extern fn OPENSSL_sk_dup(st: const OPENSSL_STACK*) -> OPENSSL_STACK*;
+@extern fn OPENSSL_sk_sort(st: OPENSSL_STACK*);
+@extern fn OPENSSL_sk_is_sorted(st: const OPENSSL_STACK*) -> i32;

@@ -1,0 +1,205 @@
+import { X509, X509_STORE, X509_STORE_CTX, X509_VERIFY_PARAM, X509_CRL, EVP_PKEY } from types;
+import { StackOf } from safestack;
+
+/*
+ * Chain verification: given a certificate, the ones it came with, and a
+ * store of trust anchors, decide whether the chain holds up.
+ *
+ * A TLS client rarely calls X509_verify_cert() itself, since SSL_connect()
+ * runs it and leaves the answer in SSL_get_verify_result(). What the client
+ * does need is here too: the X509_V_* codes that answer is one of, and
+ * X509_verify_cert_error_string() to say what one means.
+ */
+
+/* The verdict. Everything but X509_V_OK is a reason the chain was rejected. */
+@const X509_V_OK = 0;
+@const X509_V_ERR_UNSPECIFIED = 1;
+@const X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT = 2;
+@const X509_V_ERR_UNABLE_TO_GET_CRL = 3;
+@const X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE = 4;
+@const X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE = 5;
+@const X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY = 6;
+@const X509_V_ERR_CERT_SIGNATURE_FAILURE = 7;
+@const X509_V_ERR_CRL_SIGNATURE_FAILURE = 8;
+@const X509_V_ERR_CERT_NOT_YET_VALID = 9;
+@const X509_V_ERR_CERT_HAS_EXPIRED = 10;
+@const X509_V_ERR_CRL_NOT_YET_VALID = 11;
+@const X509_V_ERR_CRL_HAS_EXPIRED = 12;
+@const X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD = 13;
+@const X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD = 14;
+@const X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD = 15;
+@const X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD = 16;
+@const X509_V_ERR_OUT_OF_MEM = 17;
+@const X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT = 18;
+@const X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN = 19;
+@const X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY = 20;
+@const X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE = 21;
+@const X509_V_ERR_CERT_CHAIN_TOO_LONG = 22;
+@const X509_V_ERR_CERT_REVOKED = 23;
+@const X509_V_ERR_NO_ISSUER_PUBLIC_KEY = 24;
+@const X509_V_ERR_PATH_LENGTH_EXCEEDED = 25;
+@const X509_V_ERR_INVALID_PURPOSE = 26;
+@const X509_V_ERR_CERT_UNTRUSTED = 27;
+@const X509_V_ERR_CERT_REJECTED = 28;
+@const X509_V_ERR_SUBJECT_ISSUER_MISMATCH = 29;
+@const X509_V_ERR_AKID_SKID_MISMATCH = 30;
+@const X509_V_ERR_AKID_ISSUER_SERIAL_MISMATCH = 31;
+@const X509_V_ERR_KEYUSAGE_NO_CERTSIGN = 32;
+@const X509_V_ERR_UNABLE_TO_GET_CRL_ISSUER = 33;
+@const X509_V_ERR_UNHANDLED_CRITICAL_EXTENSION = 34;
+@const X509_V_ERR_KEYUSAGE_NO_CRL_SIGN = 35;
+@const X509_V_ERR_UNHANDLED_CRITICAL_CRL_EXTENSION = 36;
+@const X509_V_ERR_INVALID_NON_CA = 37;
+@const X509_V_ERR_PROXY_PATH_LENGTH_EXCEEDED = 38;
+@const X509_V_ERR_KEYUSAGE_NO_DIGITAL_SIGNATURE = 39;
+@const X509_V_ERR_PROXY_CERTIFICATES_NOT_ALLOWED = 40;
+@const X509_V_ERR_INVALID_EXTENSION = 41;
+@const X509_V_ERR_INVALID_POLICY_EXTENSION = 42;
+@const X509_V_ERR_NO_EXPLICIT_POLICY = 43;
+@const X509_V_ERR_DIFFERENT_CRL_SCOPE = 44;
+@const X509_V_ERR_UNSUPPORTED_EXTENSION_FEATURE = 45;
+@const X509_V_ERR_UNNESTED_RESOURCE = 46;
+@const X509_V_ERR_PERMITTED_VIOLATION = 47;
+@const X509_V_ERR_EXCLUDED_VIOLATION = 48;
+@const X509_V_ERR_SUBTREE_MINMAX = 49;
+@const X509_V_ERR_APPLICATION_VERIFICATION = 50;
+@const X509_V_ERR_UNSUPPORTED_CONSTRAINT_TYPE = 51;
+@const X509_V_ERR_UNSUPPORTED_CONSTRAINT_SYNTAX = 52;
+@const X509_V_ERR_UNSUPPORTED_NAME_SYNTAX = 53;
+@const X509_V_ERR_CRL_PATH_VALIDATION_ERROR = 54;
+@const X509_V_ERR_PATH_LOOP = 55;
+@const X509_V_ERR_SUITE_B_INVALID_VERSION = 56;
+@const X509_V_ERR_SUITE_B_INVALID_ALGORITHM = 57;
+@const X509_V_ERR_SUITE_B_INVALID_CURVE = 58;
+@const X509_V_ERR_SUITE_B_INVALID_SIGNATURE_ALGORITHM = 59;
+@const X509_V_ERR_SUITE_B_LOS_NOT_ALLOWED = 60;
+@const X509_V_ERR_SUITE_B_CANNOT_SIGN_P_384_WITH_P_256 = 61;
+@const X509_V_ERR_HOSTNAME_MISMATCH = 62;
+@const X509_V_ERR_EMAIL_MISMATCH = 63;
+@const X509_V_ERR_IP_ADDRESS_MISMATCH = 64;
+@const X509_V_ERR_DANE_NO_MATCH = 65;
+@const X509_V_ERR_EE_KEY_TOO_SMALL = 66;
+@const X509_V_ERR_CA_KEY_TOO_SMALL = 67;
+@const X509_V_ERR_CA_MD_TOO_WEAK = 68;
+@const X509_V_ERR_INVALID_CALL = 69;
+@const X509_V_ERR_STORE_LOOKUP = 70;
+@const X509_V_ERR_NO_VALID_SCTS = 71;
+@const X509_V_ERR_PROXY_SUBJECT_NAME_VIOLATION = 72;
+@const X509_V_ERR_OCSP_VERIFY_NEEDED = 73;
+@const X509_V_ERR_OCSP_VERIFY_FAILED = 74;
+@const X509_V_ERR_OCSP_CERT_UNKNOWN = 75;
+@const X509_V_ERR_UNSUPPORTED_SIGNATURE_ALGORITHM = 76;
+@const X509_V_ERR_SIGNATURE_ALGORITHM_MISMATCH = 77;
+@const X509_V_ERR_SIGNATURE_ALGORITHM_INCONSISTENCY = 78;
+@const X509_V_ERR_INVALID_CA = 79;
+@const X509_V_ERR_PATHLEN_INVALID_FOR_NON_CA = 80;
+@const X509_V_ERR_PATHLEN_WITHOUT_KU_KEY_CERT_SIGN = 81;
+@const X509_V_ERR_KU_KEY_CERT_SIGN_INVALID_FOR_NON_CA = 82;
+@const X509_V_ERR_ISSUER_NAME_EMPTY = 83;
+@const X509_V_ERR_SUBJECT_NAME_EMPTY = 84;
+@const X509_V_ERR_MISSING_AUTHORITY_KEY_IDENTIFIER = 85;
+@const X509_V_ERR_MISSING_SUBJECT_KEY_IDENTIFIER = 86;
+@const X509_V_ERR_EMPTY_SUBJECT_ALT_NAME = 87;
+@const X509_V_ERR_EMPTY_SUBJECT_SAN_NOT_CRITICAL = 88;
+@const X509_V_ERR_CA_BCONS_NOT_CRITICAL = 89;
+@const X509_V_ERR_AUTHORITY_KEY_IDENTIFIER_CRITICAL = 90;
+@const X509_V_ERR_SUBJECT_KEY_IDENTIFIER_CRITICAL = 91;
+@const X509_V_ERR_CA_CERT_MISSING_KEY_USAGE = 92;
+@const X509_V_ERR_EXTENSIONS_REQUIRE_VERSION_3 = 93;
+@const X509_V_ERR_EC_KEY_EXPLICIT_PARAMS = 94;
+@const X509_V_ERR_RPK_UNTRUSTED = 95;
+@const X509_V_ERR_OCSP_RESP_INVALID = 96;
+@const X509_V_ERR_OCSP_SIGNATURE_FAILURE = 97;
+@const X509_V_ERR_OCSP_NOT_YET_VALID = 98;
+@const X509_V_ERR_OCSP_HAS_EXPIRED = 99;
+@const X509_V_ERR_OCSP_NO_RESPONSE = 100;
+@const X509_V_ERR_CRL_VERIFY_FAILED = 101;
+
+/* Flags on a verification, set through X509_VERIFY_PARAM_set_flags() */
+@const X509_V_FLAG_USE_CHECK_TIME = 0x2;
+@const X509_V_FLAG_CRL_CHECK = 0x4;         /* check the leaf against a CRL */
+@const X509_V_FLAG_CRL_CHECK_ALL = 0x8;     /* check every certificate in the chain */
+@const X509_V_FLAG_IGNORE_CRITICAL = 0x10;
+@const X509_V_FLAG_X509_STRICT = 0x20;
+@const X509_V_FLAG_ALLOW_PROXY_CERTS = 0x40;
+@const X509_V_FLAG_POLICY_CHECK = 0x80;
+@const X509_V_FLAG_EXPLICIT_POLICY = 0x100;
+@const X509_V_FLAG_INHIBIT_ANY = 0x200;
+@const X509_V_FLAG_INHIBIT_MAP = 0x400;
+@const X509_V_FLAG_NOTIFY_POLICY = 0x800;
+@const X509_V_FLAG_EXTENDED_CRL_SUPPORT = 0x1000;
+@const X509_V_FLAG_USE_DELTAS = 0x2000;
+@const X509_V_FLAG_CHECK_SS_SIGNATURE = 0x4000;
+@const X509_V_FLAG_TRUSTED_FIRST = 0x8000;
+@const X509_V_FLAG_SUITEB_128_LOS_ONLY = 0x10000;
+@const X509_V_FLAG_SUITEB_192_LOS = 0x20000;
+@const X509_V_FLAG_SUITEB_128_LOS = 0x30000;
+@const X509_V_FLAG_PARTIAL_CHAIN = 0x80000;
+@const X509_V_FLAG_NO_ALT_CHAINS = 0x100000;
+@const X509_V_FLAG_NO_CHECK_TIME = 0x200000;
+
+/** Says in words what an X509_V_* code means, which is what a program
+    reports when SSL_get_verify_result() is not X509_V_OK. */
+@extern fn X509_verify_cert_error_string(n: i64) -> const char*;
+
+@extern fn X509_STORE_new() -> X509_STORE*;
+@extern fn X509_STORE_free(xs: X509_STORE*);
+@extern fn X509_STORE_up_ref(xs: X509_STORE*) -> i32;
+@extern fn X509_STORE_add_cert(xs: X509_STORE*, x: X509*) -> i32;
+@extern fn X509_STORE_add_crl(xs: X509_STORE*, x: X509_CRL*) -> i32;
+
+/** Loads the trust anchors the installation was built to use, which on most
+    systems is the operating system's CA bundle. */
+@extern fn X509_STORE_set_default_paths(xs: X509_STORE*) -> i32;
+
+/** Loads anchors from a PEM file, a directory of hashed files, or both. */
+@extern fn X509_STORE_load_locations(s: X509_STORE*, file: const char*, dir: const char*) -> i32;
+@extern fn X509_STORE_load_file(xs: X509_STORE*, file: const char*) -> i32;
+@extern fn X509_STORE_load_path(xs: X509_STORE*, path: const char*) -> i32;
+@extern fn X509_STORE_set_flags(xs: X509_STORE*, flags: u64) -> i32;
+@extern fn X509_STORE_set_depth(xs: X509_STORE*, depth: i32) -> i32;
+@extern fn X509_STORE_get0_param(xs: const X509_STORE*) -> X509_VERIFY_PARAM*;
+
+@extern fn X509_STORE_CTX_new() -> X509_STORE_CTX*;
+@extern fn X509_STORE_CTX_free(ctx: X509_STORE_CTX*);
+@extern fn X509_STORE_CTX_cleanup(ctx: X509_STORE_CTX*);
+
+/** Sets up one verification: the anchors to trust, the certificate to check,
+    and the chain the peer sent along with it. */
+@extern fn X509_STORE_CTX_init(ctx: X509_STORE_CTX*, trust_store: X509_STORE*,
+    target: X509*, untrusted: StackOf<X509>*) -> i32;
+
+/** Answers 1 when the chain verifies, 0 when it does not, and a negative
+    number when the attempt itself failed. Ask X509_STORE_CTX_get_error()
+    which of the X509_V_* codes it was either way. */
+@extern fn X509_verify_cert(ctx: X509_STORE_CTX*) -> i32;
+
+@extern fn X509_STORE_CTX_get_error(ctx: const X509_STORE_CTX*) -> i32;
+@extern fn X509_STORE_CTX_set_error(ctx: X509_STORE_CTX*, s: i32);
+
+/** How far up the chain the failure was: 0 is the peer's own certificate. */
+@extern fn X509_STORE_CTX_get_error_depth(ctx: const X509_STORE_CTX*) -> i32;
+@extern fn X509_STORE_CTX_get_current_cert(ctx: const X509_STORE_CTX*) -> X509*;
+@extern fn X509_STORE_CTX_get0_chain(ctx: const X509_STORE_CTX*) -> StackOf<X509>*;
+@extern fn X509_STORE_CTX_get1_chain(ctx: const X509_STORE_CTX*) -> StackOf<X509>*;
+@extern fn X509_STORE_CTX_get0_param(ctx: const X509_STORE_CTX*) -> X509_VERIFY_PARAM*;
+
+@extern fn X509_VERIFY_PARAM_new() -> X509_VERIFY_PARAM*;
+@extern fn X509_VERIFY_PARAM_free(param: X509_VERIFY_PARAM*);
+@extern fn X509_VERIFY_PARAM_set_flags(param: X509_VERIFY_PARAM*, flags: u64) -> i32;
+@extern fn X509_VERIFY_PARAM_clear_flags(param: X509_VERIFY_PARAM*, flags: u64) -> i32;
+@extern fn X509_VERIFY_PARAM_get_flags(param: const X509_VERIFY_PARAM*) -> u64;
+@extern fn X509_VERIFY_PARAM_set_depth(param: X509_VERIFY_PARAM*, depth: i32);
+@extern fn X509_VERIFY_PARAM_set_time(param: X509_VERIFY_PARAM*, t: i64);
+
+/** Names the host the certificate has to be good for. Setting it makes the
+    verification check the name too, instead of leaving that to the caller. */
+@extern fn X509_VERIFY_PARAM_set1_host(param: X509_VERIFY_PARAM*, name: const char*,
+    namelen: u64) -> i32;
+@extern fn X509_VERIFY_PARAM_add1_host(param: X509_VERIFY_PARAM*, name: const char*,
+    namelen: u64) -> i32;
+@extern fn X509_VERIFY_PARAM_set_hostflags(param: X509_VERIFY_PARAM*, flags: u32);
+@extern fn X509_VERIFY_PARAM_get0_peername(param: const X509_VERIFY_PARAM*) -> char*;
+@extern fn X509_VERIFY_PARAM_set1_email(param: X509_VERIFY_PARAM*, email: const char*,
+    emaillen: u64) -> i32;
+@extern fn X509_VERIFY_PARAM_set1_ip_asc(param: X509_VERIFY_PARAM*, ipasc: const char*) -> i32;

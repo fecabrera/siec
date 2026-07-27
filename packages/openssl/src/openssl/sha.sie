@@ -1,0 +1,32 @@
+/*
+ * The SHA families, with the sizes their digests come out at. The one-shot
+ * functions here hash a buffer already in memory; anything streamed goes
+ * through EVP_DigestUpdate in evp.sie instead, which is also where an
+ * algorithm chosen at runtime comes from.
+ *
+ * SHA_LBLOCK counts 32-bit words, so a block is 64 bytes for SHA-1 and
+ * SHA-256 and 128 for SHA-512, which is the length an HMAC key is padded to.
+ */
+
+@const SHA_LBLOCK = 16;
+
+@const SHA_DIGEST_LENGTH = 20;
+@const SHA_CBLOCK = SHA_LBLOCK * 4;
+@const SHA_LAST_BLOCK = SHA_CBLOCK - 8;
+
+@const SHA224_DIGEST_LENGTH = 28;
+@const SHA256_DIGEST_LENGTH = 32;
+@const SHA256_192_DIGEST_LENGTH = 24;
+@const SHA256_CBLOCK = SHA_LBLOCK * 4;
+
+@const SHA384_DIGEST_LENGTH = 48;
+@const SHA512_DIGEST_LENGTH = 64;
+@const SHA512_CBLOCK = SHA_LBLOCK * 8;
+
+/* Writes the digest into `md`, which must hold the matching
+   SHA*_DIGEST_LENGTH bytes, and answers that same pointer. */
+@extern fn SHA1(d: const u8*, n: u64, md: u8*) -> u8*;
+@extern fn SHA224(d: const u8*, n: u64, md: u8*) -> u8*;
+@extern fn SHA256(d: const u8*, n: u64, md: u8*) -> u8*;
+@extern fn SHA384(d: const u8*, n: u64, md: u8*) -> u8*;
+@extern fn SHA512(d: const u8*, n: u64, md: u8*) -> u8*;

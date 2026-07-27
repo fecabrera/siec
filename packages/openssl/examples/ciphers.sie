@@ -1,0 +1,107 @@
+// List the ciphersuites a client would offer, in the order it prefers them:
+//
+//   ciphers
+//   ciphers 'ECDHE+AESGCM:!aNULL'
+//
+// This is where STACK_OF(TYPE) shows up in practice. SSL_get_ciphers()
+// answers a STACK_OF(SSL_CIPHER), which is OpenSSL's one generic stack with
+// the element type kept only in the signature; `StackOf<SSL_CIPHER>*` is the
+// same thing said in Sie, and it is walked with the OPENSSL_sk_* functions
+// that every sk_TYPE_* macro in C expands to.
+//
+// The list is worth being able to print: what a connection actually
+// negotiates comes out of it, and a cipher string that quietly matched
+// nothing is otherwise only noticed when a handshake fails.
+
+import std.io;
+import { SSL, SSL_CIPHER } from openssl.types;
+import {
+    SSL_CTX_new, SSL_CTX_free, SSL_CTX_set_cipher_list,
+    SSL_new, SSL_free, SSL_get_ciphers,
+    SSL_CIPHER_get_name, SSL_CIPHER_standard_name,
+    SSL_CIPHER_get_version, SSL_CIPHER_get_bits,
+    TLS_client_method,
+} from openssl.ssl;
+import { StackOf } from openssl.safestack;
+import { OPENSSL_sk_num, OPENSSL_sk_value } from openssl.stack;
+import { ERR_get_error, ERR_error_string_n } from openssl.err;
+
+fn report(what: const char*) {
+    let code = ERR_get_error();
+    if (code == 0) {
+        std.io.println(std.io.stderr, "{}: failed", what);
+        return;
+    }
+
+    while (code != 0) {
+        let buf: char[256];
+        ERR_error_string_n(code, buf, 256);
+        std.io.println(std.io.stderr, "{}: {}", what, buf);
+        code = ERR_get_error();
+    }
+}
+
+fn list(ciphers: StackOf<SSL_CIPHER>*) -> i32 {
+    let count = OPENSSL_sk_num(ciphers);
+
+    for (let i: i32 = 0; i < count; i += 1) {
+        // the stack holds void pointers; the element type lives in the
+        // signature, so this cast is the one place it is spelled out
+        let cipher = OPENSSL_sk_value(ciphers, i) as const SSL_CIPHER*;
+
+        let bits: i32 = 0;
+        SSL_CIPHER_get_bits(cipher, &bits);
+
+        std.io.println("{2} {5} {3} bits  {}  ({})",
+                       i + 1,
+                       SSL_CIPHER_get_version(cipher),
+                       bits,
+                       SSL_CIPHER_standard_name(cipher),
+                       SSL_CIPHER_get_name(cipher));
+    }
+
+    return count;
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length > 2) {
+        std.io.println(std.io.stderr, "usage: {} [cipher-list]", args[0]);
+        return 2;
+    }
+
+    let ctx = SSL_CTX_new(TLS_client_method());
+    if (ctx == null) {
+        report("SSL_CTX_new");
+        return 1;
+    }
+    defer SSL_CTX_free(ctx);
+
+    // A cipher list only governs TLS 1.2 and below; the TLS 1.3 suites are
+    // set separately with SSL_CTX_set_ciphersuites and stay in the list
+    // either way, which is why three of them survive any filter here
+    if (args.length == 2 and not SSL_CTX_set_cipher_list(ctx, args[1])) {
+        report("cipher list");
+        return 1;
+    }
+
+    // the list belongs to the connection, so one has to exist to ask
+    let ssl = SSL_new(ctx);
+    if (ssl == null) {
+        report("SSL_new");
+        return 1;
+    }
+    defer SSL_free(ssl);
+
+    // borrowed from the SSL: not freed here
+    let ciphers = SSL_get_ciphers(ssl);
+    if (ciphers == null) {
+        std.io.println(std.io.stderr, "no ciphers");
+        return 1;
+    }
+
+    let count = list(ciphers);
+    std.io.println("");
+    std.io.println("{} ciphersuites", count);
+
+    return 0;
+}

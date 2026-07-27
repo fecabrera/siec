@@ -1,0 +1,226 @@
+import { BIO, BIO_METHOD, OSSL_LIB_CTX } from types;
+import { FILE } from stdio;
+
+/*
+ * BIOs are OpenSSL's byte streams. A source-sink BIO is one end of
+ * something real (a file, a socket, a block of memory) and a filter BIO sits
+ * on top of another and transforms what passes through (base64, a digest,
+ * TLS). BIO_push() chains them, and a read or write at the head runs down
+ * the chain, so a program reads plaintext from the top of an SSL chain
+ * without ever seeing a record go by.
+ *
+ * Most of the control surface is one function, BIO_ctrl(), with the command
+ * spelled by a BIO_CTRL_* or BIO_C_* number. C wraps each command in a macro
+ * so callers never write the number, and so does this file.
+ */
+
+/* What BIO_method_type() answers */
+@const BIO_TYPE_DESCRIPTOR = 0x0100;   /* wraps a file descriptor */
+@const BIO_TYPE_FILTER = 0x0200;
+@const BIO_TYPE_SOURCE_SINK = 0x0400;
+
+@const BIO_TYPE_NONE = 0;
+@const BIO_TYPE_MEM = 1 | BIO_TYPE_SOURCE_SINK;
+@const BIO_TYPE_FILE = 2 | BIO_TYPE_SOURCE_SINK;
+@const BIO_TYPE_FD = 4 | BIO_TYPE_SOURCE_SINK | BIO_TYPE_DESCRIPTOR;
+@const BIO_TYPE_SOCKET = 5 | BIO_TYPE_SOURCE_SINK | BIO_TYPE_DESCRIPTOR;
+@const BIO_TYPE_NULL = 6 | BIO_TYPE_SOURCE_SINK;
+@const BIO_TYPE_SSL = 7 | BIO_TYPE_FILTER;
+@const BIO_TYPE_MD = 8 | BIO_TYPE_FILTER;
+@const BIO_TYPE_BUFFER = 9 | BIO_TYPE_FILTER;
+@const BIO_TYPE_CIPHER = 10 | BIO_TYPE_FILTER;
+@const BIO_TYPE_BASE64 = 11 | BIO_TYPE_FILTER;
+@const BIO_TYPE_CONNECT = 12 | BIO_TYPE_SOURCE_SINK | BIO_TYPE_DESCRIPTOR;
+@const BIO_TYPE_ACCEPT = 13 | BIO_TYPE_SOURCE_SINK | BIO_TYPE_DESCRIPTOR;
+@const BIO_TYPE_NULL_FILTER = 17 | BIO_TYPE_FILTER;
+@const BIO_TYPE_BIO = 19 | BIO_TYPE_SOURCE_SINK;
+@const BIO_TYPE_LINEBUFFER = 20 | BIO_TYPE_FILTER;
+@const BIO_TYPE_DGRAM = 21 | BIO_TYPE_SOURCE_SINK | BIO_TYPE_DESCRIPTOR;
+@const BIO_TYPE_ASN1 = 22 | BIO_TYPE_FILTER;
+@const BIO_TYPE_COMP = 23 | BIO_TYPE_FILTER;
+@const BIO_TYPE_MASK = 0xff;
+
+/* Whether freeing the BIO also closes what it wraps */
+@const BIO_NOCLOSE = 0x00;
+@const BIO_CLOSE = 0x01;
+
+/* Commands every BIO understands */
+@const BIO_CTRL_RESET = 1;
+@const BIO_CTRL_EOF = 2;
+@const BIO_CTRL_INFO = 3;
+@const BIO_CTRL_SET = 4;
+@const BIO_CTRL_GET = 5;
+@const BIO_CTRL_PUSH = 6;
+@const BIO_CTRL_POP = 7;
+@const BIO_CTRL_GET_CLOSE = 8;
+@const BIO_CTRL_SET_CLOSE = 9;
+@const BIO_CTRL_PENDING = 10;
+@const BIO_CTRL_FLUSH = 11;
+@const BIO_CTRL_DUP = 12;
+@const BIO_CTRL_WPENDING = 13;
+@const BIO_CTRL_SET_CALLBACK = 14;
+@const BIO_CTRL_GET_CALLBACK = 15;
+@const BIO_CTRL_PEEK = 29;
+@const BIO_CTRL_SET_FILENAME = 30;
+
+/* Commands particular kinds understand */
+@const BIO_C_SET_CONNECT = 100;
+@const BIO_C_DO_STATE_MACHINE = 101;
+@const BIO_C_SET_NBIO = 102;
+@const BIO_C_SET_FD = 104;
+@const BIO_C_GET_FD = 105;
+@const BIO_C_SET_FILE_PTR = 106;
+@const BIO_C_GET_FILE_PTR = 107;
+@const BIO_C_SET_FILENAME = 108;
+@const BIO_C_SET_SSL = 109;
+@const BIO_C_GET_SSL = 110;
+@const BIO_C_SET_MD = 111;
+@const BIO_C_GET_MD = 112;
+@const BIO_C_GET_CIPHER_STATUS = 113;
+@const BIO_C_SET_BUF_MEM = 114;
+@const BIO_C_GET_BUF_MEM_PTR = 115;
+@const BIO_C_GET_BUFF_NUM_LINES = 116;
+@const BIO_C_SET_BUFF_SIZE = 117;
+@const BIO_C_SET_ACCEPT = 118;
+@const BIO_C_SSL_MODE = 119;
+@const BIO_C_GET_MD_CTX = 120;
+@const BIO_C_GET_CONNECT = 123;
+@const BIO_C_GET_ACCEPT = 124;
+@const BIO_C_SET_SSL_RENEGOTIATE_BYTES = 125;
+@const BIO_C_GET_SSL_NUM_RENEGOTIATES = 126;
+@const BIO_C_SET_SSL_RENEGOTIATE_TIMEOUT = 127;
+@const BIO_C_FILE_SEEK = 128;
+@const BIO_C_GET_CIPHER_CTX = 129;
+@const BIO_C_SET_BUF_MEM_EOF_RETURN = 130;
+@const BIO_C_FILE_TELL = 133;
+@const BIO_C_SET_EX_ARG = 153;
+@const BIO_C_GET_EX_ARG = 154;
+
+/* Flags a BIO carries, read back with BIO_test_flags() */
+@const BIO_FLAGS_READ = 0x01;
+@const BIO_FLAGS_WRITE = 0x02;
+@const BIO_FLAGS_IO_SPECIAL = 0x04;
+@const BIO_FLAGS_RWS = BIO_FLAGS_READ | BIO_FLAGS_WRITE | BIO_FLAGS_IO_SPECIAL;
+@const BIO_FLAGS_SHOULD_RETRY = 0x08;
+@const BIO_FLAGS_BASE64_NO_NL = 0x100;
+@const BIO_FLAGS_MEM_RDONLY = 0x200;
+@const BIO_FLAGS_NONCLEAR_RST = 0x400;
+@const BIO_FLAGS_IN_EOF = 0x800;
+
+@extern fn BIO_new(type: const BIO_METHOD*) -> BIO*;
+@extern fn BIO_new_ex(libctx: OSSL_LIB_CTX*, method: const BIO_METHOD*) -> BIO*;
+
+/** Frees one BIO and answers 1, leaving the rest of its chain alone. */
+@extern fn BIO_free(a: BIO*) -> i32;
+
+/** Frees a whole chain. This is what a program that pushed a filter on top
+    of a connection calls, since freeing only the head would leak the rest. */
+@extern fn BIO_free_all(a: BIO*);
+@extern fn BIO_vfree(a: BIO*);
+@extern fn BIO_up_ref(a: BIO*) -> i32;
+
+/** Answers how many bytes were read, 0 at end of stream, or a negative
+    number on error. A negative is not always fatal: on a non-blocking
+    source, BIO_should_retry() says whether the same call is worth repeating. */
+@extern fn BIO_read(b: BIO*, data: opaque*, dlen: i32) -> i32;
+@extern fn BIO_read_ex(b: BIO*, data: opaque*, dlen: u64, readbytes: u64*) -> i32;
+@extern fn BIO_write(b: BIO*, data: const opaque*, dlen: i32) -> i32;
+@extern fn BIO_write_ex(b: BIO*, data: const opaque*, dlen: u64, written: u64*) -> i32;
+@extern fn BIO_puts(bp: BIO*, buf: const char*) -> i32;
+
+/** Reads a line, up to `size` - 1 bytes, keeping the newline. */
+@extern fn BIO_gets(bp: BIO*, buf: char*, size: i32) -> i32;
+
+@extern fn BIO_ctrl(bp: BIO*, cmd: i32, larg: i64, parg: opaque*) -> i64;
+@extern fn BIO_int_ctrl(bp: BIO*, cmd: i32, larg: i64, iarg: i32) -> i64;
+@extern fn BIO_ptr_ctrl(bp: BIO*, cmd: i32, larg: i64) -> opaque*;
+
+/** Puts `append` under `b` and answers `b`, so a chain builds head first. */
+@extern fn BIO_push(b: BIO*, append: BIO*) -> BIO*;
+
+/** Detaches the head and answers what was under it. */
+@extern fn BIO_pop(b: BIO*) -> BIO*;
+@extern fn BIO_next(b: BIO*) -> BIO*;
+@extern fn BIO_find_type(b: BIO*, bio_type: i32) -> BIO*;
+@extern fn BIO_dup_chain(in: BIO*) -> BIO*;
+
+@extern fn BIO_set_flags(b: BIO*, flags: i32);
+@extern fn BIO_test_flags(b: const BIO*, flags: i32) -> i32;
+@extern fn BIO_clear_flags(b: BIO*, flags: i32);
+@extern fn BIO_method_type(b: const BIO*) -> i32;
+@extern fn BIO_get_retry_reason(bio: BIO*) -> i32;
+@extern fn BIO_number_read(bio: BIO*) -> u64;
+@extern fn BIO_number_written(bio: BIO*) -> u64;
+
+@macro BIO_get_flags(b) = BIO_test_flags(b, ~0);
+@macro BIO_should_read(a) = BIO_test_flags(a, BIO_FLAGS_READ);
+@macro BIO_should_write(a) = BIO_test_flags(a, BIO_FLAGS_WRITE);
+@macro BIO_should_io_special(a) = BIO_test_flags(a, BIO_FLAGS_IO_SPECIAL);
+@macro BIO_retry_type(a) = BIO_test_flags(a, BIO_FLAGS_RWS);
+
+/** True when a failed read or write only ran out of room or data, and the
+    same call should be made again once the source is ready. */
+@macro BIO_should_retry(a) = BIO_test_flags(a, BIO_FLAGS_SHOULD_RETRY);
+
+/* The commands, in the spelling C gives them */
+@macro BIO_reset(b) = BIO_ctrl(b, BIO_CTRL_RESET, 0, null) as i32;
+@macro BIO_eof(b) = BIO_ctrl(b, BIO_CTRL_EOF, 0, null) as i32;
+@macro BIO_set_close(b, c) = BIO_ctrl(b, BIO_CTRL_SET_CLOSE, c, null) as i32;
+@macro BIO_get_close(b) = BIO_ctrl(b, BIO_CTRL_GET_CLOSE, 0, null) as i32;
+@macro BIO_pending(b) = BIO_ctrl(b, BIO_CTRL_PENDING, 0, null) as i32;
+@macro BIO_wpending(b) = BIO_ctrl(b, BIO_CTRL_WPENDING, 0, null) as i32;
+@macro BIO_flush(b) = BIO_ctrl(b, BIO_CTRL_FLUSH, 0, null) as i32;
+@macro BIO_seek(b, ofs) = BIO_ctrl(b, BIO_C_FILE_SEEK, ofs, null) as i32;
+@macro BIO_tell(b) = BIO_ctrl(b, BIO_C_FILE_TELL, 0, null) as i32;
+@macro BIO_set_nbio(b, n) = BIO_ctrl(b, BIO_C_SET_NBIO, n, null);
+@macro BIO_set_fd(b, fd, c) = BIO_int_ctrl(b, BIO_C_SET_FD, c, fd);
+@macro BIO_get_fd(b, c) = BIO_ctrl(b, BIO_C_GET_FD, 0, c as opaque*);
+@macro BIO_set_buffer_size(b, size) = BIO_ctrl(b, BIO_C_SET_BUFF_SIZE, size, null);
+
+/* Memory BIOs */
+@extern fn BIO_s_mem() -> const BIO_METHOD*;
+
+/** Wraps a buffer the caller owns as a read-only stream. Nothing is copied,
+    so the buffer has to outlive the BIO; a `len` of -1 means the bytes run
+    to a terminating NUL. */
+@extern fn BIO_new_mem_buf(buf: const opaque*, len: i32) -> BIO*;
+
+/** Points `pp` at the memory BIO's own buffer and answers its length, which
+    is how output written into a BIO_s_mem() is read back out. */
+@macro BIO_get_mem_data(b, pp) = BIO_ctrl(b, BIO_CTRL_INFO, 0, pp as opaque*);
+@macro BIO_get_mem_ptr(b, pp) = BIO_ctrl(b, BIO_C_GET_BUF_MEM_PTR, 0, pp as opaque*);
+@macro BIO_set_mem_eof_return(b, v) = BIO_ctrl(b, BIO_C_SET_BUF_MEM_EOF_RETURN, v, null);
+
+/* File and descriptor BIOs */
+@extern fn BIO_s_file() -> const BIO_METHOD*;
+@extern fn BIO_new_file(filename: const char*, mode: const char*) -> BIO*;
+@extern fn BIO_new_fp(stream: FILE*, close_flag: i32) -> BIO*;
+@extern fn BIO_s_fd() -> const BIO_METHOD*;
+@extern fn BIO_new_fd(fd: i32, close_flag: i32) -> BIO*;
+
+/* Socket BIOs. BIO_s_connect() resolves the name and opens the connection
+   itself, which is why a TLS client can be written without a socket call. */
+@extern fn BIO_s_socket() -> const BIO_METHOD*;
+@extern fn BIO_new_socket(sock: i32, close_flag: i32) -> BIO*;
+@extern fn BIO_s_connect() -> const BIO_METHOD*;
+@extern fn BIO_s_accept() -> const BIO_METHOD*;
+@extern fn BIO_new_connect(host_port: const char*) -> BIO*;
+@extern fn BIO_new_accept(host_port: const char*) -> BIO*;
+
+/** Sets where a connect BIO will go, as "host:port" or "host" alone. */
+@macro BIO_set_conn_hostname(b, name) = BIO_ctrl(b, BIO_C_SET_CONNECT, 0, name as opaque*);
+@macro BIO_set_conn_port(b, port) = BIO_ctrl(b, BIO_C_SET_CONNECT, 1, port as opaque*);
+@macro BIO_get_conn_hostname(b) = BIO_ptr_ctrl(b, BIO_C_GET_CONNECT, 0) as const char*;
+@macro BIO_get_conn_port(b) = BIO_ptr_ctrl(b, BIO_C_GET_CONNECT, 1) as const char*;
+
+/** Runs whatever the chain has to do before it carries data: connecting for
+    a connect BIO, the TLS handshake for an SSL one, both when they are
+    stacked. Answers 1 on success. */
+@macro BIO_do_handshake(b) = BIO_ctrl(b, BIO_C_DO_STATE_MACHINE, 0, null);
+@macro BIO_do_connect(b) = BIO_do_handshake(b);
+@macro BIO_do_accept(b) = BIO_do_handshake(b);
+
+/* Filters that do nothing but buffer, or nothing at all */
+@extern fn BIO_f_buffer() -> const BIO_METHOD*;
+@extern fn BIO_f_null() -> const BIO_METHOD*;
+@extern fn BIO_s_null() -> const BIO_METHOD*;

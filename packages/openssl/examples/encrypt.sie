@@ -1,0 +1,244 @@
+// Authenticated encryption under a password, with AES-256-GCM:
+//
+//   encrypt seal hunter2 "meet at noon"
+//   encrypt open hunter2 <blob>
+//
+// The blob that comes out is base64 over
+//
+//   salt (16) || iv (12) || tag (16) || ciphertext
+//
+// GCM is an AEAD mode: one pass both encrypts and authenticates, and the tag
+// it produces is what makes `open` able to refuse a blob that was edited
+// rather than hand back plausible-looking garbage. Change any character of
+// the base64 and the decryption fails at Final instead of succeeding.
+//
+// The salt and the iteration count are why a password can be used at all: a
+// key comes out of PBKDF2, not out of the password directly, so two people
+// who pick the same password get different keys and guessing one costs
+// ITERATIONS hashes per attempt.
+
+import std.io;
+import { strlen, strcmp } from string;
+import {
+    EVP_CIPHER_CTX_new,
+    EVP_CIPHER_CTX_free,
+    EVP_CIPHER_CTX_ctrl,
+    EVP_EncryptInit_ex,
+    EVP_EncryptUpdate,
+    EVP_EncryptFinal_ex,
+    EVP_DecryptInit_ex,
+    EVP_DecryptUpdate,
+    EVP_DecryptFinal_ex,
+    EVP_EncodeBlock,
+    EVP_DecodeBlock,
+    EVP_aes_256_gcm,
+    EVP_sha256,
+    EVP_CTRL_AEAD_SET_IVLEN,
+    EVP_CTRL_AEAD_GET_TAG,
+    EVP_CTRL_AEAD_SET_TAG,
+    PKCS5_PBKDF2_HMAC,
+} from openssl.evp;
+import { RAND_bytes } from openssl.rand;
+import { OPENSSL_cleanse } from openssl.crypto;
+import { ERR_get_error, ERR_error_string_n } from openssl.err;
+
+@const SALT_SIZE = 16;
+@const IV_SIZE = 12;    /* what GCM is specified for; anything else is slower */
+@const TAG_SIZE = 16;
+@const KEY_SIZE = 32;   /* AES-256 */
+@const HEADER_SIZE = SALT_SIZE + IV_SIZE + TAG_SIZE;
+
+/* deliberately expensive: this is the cost of one password guess */
+@const ITERATIONS = 600000;
+
+@const MAX_MESSAGE = 4096;
+@const MAX_BLOB = HEADER_SIZE + MAX_MESSAGE;
+
+fn report(what: const char*) {
+    let code = ERR_get_error();
+    if (code == 0) {
+        std.io.println(std.io.stderr, "{}: failed", what);
+        return;
+    }
+
+    while (code != 0) {
+        let buf: char[256];
+        ERR_error_string_n(code, buf, 256);
+        std.io.println(std.io.stderr, "{}: {}", what, buf);
+        code = ERR_get_error();
+    }
+}
+
+fn derive(password: const char*, salt: const u8*, key: u8*) -> bool {
+    return PKCS5_PBKDF2_HMAC(password, strlen(password) as i32,
+                             salt, SALT_SIZE, ITERATIONS,
+                             EVP_sha256(), KEY_SIZE, key) == 1;
+}
+
+fn seal(password: const char*, message: const char*, blob: u8*) -> i32 {
+    let length = strlen(message) as i32;
+    if (length > MAX_MESSAGE) {
+        std.io.println(std.io.stderr, "seal: message too long");
+        return -1;
+    }
+
+    // a fresh salt per message, so the same password never derives the same
+    // key twice, and a fresh IV, which GCM must never see repeated under one
+    // key: reuse there does not weaken the encryption, it breaks it
+    if (not RAND_bytes(&blob[0], SALT_SIZE)
+        or not RAND_bytes(&blob[SALT_SIZE], IV_SIZE)) {
+        report("seal");
+        return -1;
+    }
+
+    let key: u8[KEY_SIZE];
+    defer OPENSSL_cleanse(key, KEY_SIZE);   // the key does not outlive this call
+
+    if (not derive(password, blob, key)) {
+        report("seal");
+        return -1;
+    }
+
+    let ctx = EVP_CIPHER_CTX_new();
+    if (ctx == null) return -1;
+    defer EVP_CIPHER_CTX_free(ctx);
+
+    // the cipher first, then the IV length it should expect, then the key
+    // and IV: three calls, because the second changes what the third means
+    if (not EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), null, null, null)
+        or not EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, IV_SIZE, null)
+        or not EVP_EncryptInit_ex(ctx, null, null, key, &blob[SALT_SIZE])) {
+        report("seal");
+        return -1;
+    }
+
+    let written: i32 = 0;
+    if (not EVP_EncryptUpdate(ctx, &blob[HEADER_SIZE], &written,
+                              message as const u8*, length)) {
+        report("seal");
+        return -1;
+    }
+
+    // GCM is a stream mode, so Final produces nothing; what it does is
+    // finish the authentication so the tag can be read out
+    let extra: i32 = 0;
+    if (not EVP_EncryptFinal_ex(ctx, &blob[HEADER_SIZE + written], &extra)) {
+        report("seal");
+        return -1;
+    }
+
+    if (not EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, TAG_SIZE,
+                                &blob[SALT_SIZE + IV_SIZE] as opaque*)) {
+        report("seal");
+        return -1;
+    }
+
+    return HEADER_SIZE + written + extra;
+}
+
+// `blob` is not const: EVP_CIPHER_CTX_ctrl takes a plain void * even for
+// SET_TAG, which only reads through it, and Sie will not cast const away
+fn unseal(password: const char*, blob: u8*, size: i32, out: u8*) -> i32 {
+    if (size < HEADER_SIZE) {
+        std.io.println(std.io.stderr, "open: blob is truncated");
+        return -1;
+    }
+
+    let key: u8[KEY_SIZE];
+    defer OPENSSL_cleanse(key, KEY_SIZE);
+
+    if (not derive(password, blob, key)) {
+        report("open");
+        return -1;
+    }
+
+    let ctx = EVP_CIPHER_CTX_new();
+    if (ctx == null) return -1;
+    defer EVP_CIPHER_CTX_free(ctx);
+
+    if (not EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), null, null, null)
+        or not EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, IV_SIZE, null)
+        or not EVP_DecryptInit_ex(ctx, null, null, key, &blob[SALT_SIZE])) {
+        report("open");
+        return -1;
+    }
+
+    let written: i32 = 0;
+    if (not EVP_DecryptUpdate(ctx, out, &written,
+                              &blob[HEADER_SIZE], size - HEADER_SIZE)) {
+        report("open");
+        return -1;
+    }
+
+    // the tag has to be handed over before Final, which is where it is
+    // checked. Everything Update wrote so far is unverified until then
+    if (not EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, TAG_SIZE,
+                                &blob[SALT_SIZE + IV_SIZE] as opaque*)) {
+        report("open");
+        return -1;
+    }
+
+    let extra: i32 = 0;
+    if (not EVP_DecryptFinal_ex(ctx, &out[written], &extra)) {
+        // no error is queued for this one: the ciphertext simply is not the
+        // one that tag was made for, whether from tampering or a wrong
+        // password. The plaintext already written must be thrown away
+        OPENSSL_cleanse(out, written as u64);
+        std.io.println(std.io.stderr, "open: wrong password, or the blob was altered");
+        return -1;
+    }
+
+    return written + extra;
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length != 4) {
+        std.io.println(std.io.stderr, "usage: {} seal <password> <message>", args[0]);
+        std.io.println(std.io.stderr, "       {} open <password> <blob>", args[0]);
+        return 2;
+    }
+
+    let blob: u8[MAX_BLOB];
+
+    if (strcmp(args[1], "seal") == 0) {
+        let size = seal(args[2], args[3], blob);
+        if (size < 0) return 1;
+
+        // base64 so the result survives a copy and paste. EncodeBlock writes
+        // a terminating NUL and answers the length without it
+        let text: char[4 * ((MAX_BLOB + 2) / 3) + 1];
+        EVP_EncodeBlock(text as u8*, blob, size);
+        std.io.println("{}", text as char*);
+        return 0;
+    }
+
+    if (strcmp(args[1], "open") != 0) {
+        std.io.println(std.io.stderr, "{}: expected 'seal' or 'open'", args[0]);
+        return 2;
+    }
+
+    let text = args[3];
+    let text_length = strlen(text) as i32;
+    if (text_length == 0 or text_length % 4 != 0) {
+        std.io.println(std.io.stderr, "open: not base64");
+        return 2;
+    }
+
+    let size = EVP_DecodeBlock(blob, text as const u8*, text_length);
+    if (size < 0) {
+        std.io.println(std.io.stderr, "open: not base64");
+        return 2;
+    }
+
+    // DecodeBlock counts the bytes the padding stood for, so they come off
+    if (text[text_length - 1] == '=') size -= 1;
+    if (text[text_length - 2] == '=') size -= 1;
+
+    let message: u8[MAX_MESSAGE + 1];
+    let length = unseal(args[2], blob, size, message);
+    if (length < 0) return 1;
+
+    message[length] = 0;
+    std.io.println("{}", message as char*);
+    return 0;
+}

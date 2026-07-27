@@ -1,0 +1,8 @@
+[package]
+name = "openssl"
+version = "1.0.0"
+sources = ["src/"]
+libs = ["ssl", "crypto"]
+
+[dependencies]
+libc = "~1"

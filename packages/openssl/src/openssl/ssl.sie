@@ -1,0 +1,597 @@
+import {
+    SSL, SSL_CTX, SSL_METHOD, SSL_CIPHER, SSL_SESSION,
+    X509, X509_NAME, X509_STORE, X509_STORE_CTX, X509_VERIFY_PARAM,
+    EVP_PKEY, BIO, BIO_METHOD, OSSL_LIB_CTX, OPENSSL_INIT_SETTINGS,
+    pem_password_cb,
+} from types;
+import { StackOf } from safestack;
+import { BIO_ctrl, BIO_C_SET_SSL, BIO_C_GET_SSL, BIO_C_SSL_MODE } from bio;
+
+/* ssl.h includes prov_ssl.h for these, and the version macros below take
+   them, so they are in scope where those macros expand */
+import {
+    SSL3_VERSION, TLS1_VERSION, TLS1_1_VERSION, TLS1_2_VERSION, TLS1_3_VERSION,
+    DTLS1_VERSION, DTLS1_2_VERSION, DTLS1_BAD_VER,
+} from prov_ssl;
+
+/* text strings for the ciphers */
+
+/* These are used to specify which ciphers to use and not to use */
+
+@const SSL_TXT_LOW = "LOW";
+@const SSL_TXT_MEDIUM = "MEDIUM";
+@const SSL_TXT_HIGH = "HIGH";
+@const SSL_TXT_FIPS = "FIPS";
+
+@const SSL_TXT_aNULL = "aNULL";
+@const SSL_TXT_eNULL = "eNULL";
+@const SSL_TXT_NULL = "NULL";
+
+@const SSL_TXT_kRSA = "kRSA";
+@const SSL_TXT_kDHr = "kDHr";       /* this cipher class has been removed */
+@const SSL_TXT_kDHd = "kDHd";       /* this cipher class has been removed */
+@const SSL_TXT_kDH = "kDH";         /* this cipher class has been removed */
+@const SSL_TXT_kEDH = "kEDH";       /* alias for kDHE */
+@const SSL_TXT_kDHE = "kDHE";
+@const SSL_TXT_kECDHr = "kECDHr";   /* this cipher class has been removed */
+@const SSL_TXT_kECDHe = "kECDHe";   /* this cipher class has been removed */
+@const SSL_TXT_kECDH = "kECDH";     /* this cipher class has been removed */
+@const SSL_TXT_kEECDH = "kEECDH";   /* alias for kECDHE */
+@const SSL_TXT_kECDHE = "kECDHE";
+@const SSL_TXT_kPSK = "kPSK";
+@const SSL_TXT_kRSAPSK = "kRSAPSK";
+@const SSL_TXT_kECDHEPSK = "kECDHEPSK";
+@const SSL_TXT_kDHEPSK = "kDHEPSK";
+@const SSL_TXT_kGOST = "kGOST";
+@const SSL_TXT_kGOST18 = "kGOST18";
+@const SSL_TXT_kSRP = "kSRP";
+
+@const SSL_TXT_aRSA = "aRSA";
+@const SSL_TXT_aDSS = "aDSS";
+@const SSL_TXT_aDH = "aDH";         /* this cipher class has been removed */
+@const SSL_TXT_aECDH = "aECDH";     /* this cipher class has been removed */
+@const SSL_TXT_aECDSA = "aECDSA";
+@const SSL_TXT_aPSK = "aPSK";
+@const SSL_TXT_aGOST94 = "aGOST94";
+@const SSL_TXT_aGOST01 = "aGOST01";
+@const SSL_TXT_aGOST12 = "aGOST12";
+@const SSL_TXT_aGOST = "aGOST";
+@const SSL_TXT_aSRP = "aSRP";
+
+@const SSL_TXT_DSS = "DSS";
+@const SSL_TXT_DH = "DH";
+@const SSL_TXT_DHE = "DHE";         /* same as "kDHE:-ADH" */
+@const SSL_TXT_EDH = "EDH";         /* alias for DHE */
+@const SSL_TXT_ADH = "ADH";
+@const SSL_TXT_RSA = "RSA";
+@const SSL_TXT_ECDH = "ECDH";
+@const SSL_TXT_EECDH = "EECDH";     /* alias for ECDHE" */
+@const SSL_TXT_ECDHE = "ECDHE";     /* same as "kECDHE:-AECDH" */
+@const SSL_TXT_AECDH = "AECDH";
+@const SSL_TXT_ECDSA = "ECDSA";
+@const SSL_TXT_PSK = "PSK";
+@const SSL_TXT_SRP = "SRP";
+
+@const SSL_TXT_DES = "DES";
+@const SSL_TXT_3DES = "3DES";
+@const SSL_TXT_RC4 = "RC4";
+@const SSL_TXT_RC2 = "RC2";
+@const SSL_TXT_IDEA = "IDEA";
+@const SSL_TXT_SEED = "SEED";
+@const SSL_TXT_AES128 = "AES128";
+@const SSL_TXT_AES256 = "AES256";
+@const SSL_TXT_AES = "AES";
+@const SSL_TXT_AES_GCM = "AESGCM";
+@const SSL_TXT_AES_CCM = "AESCCM";
+@const SSL_TXT_AES_CCM_8 = "AESCCM8";
+@const SSL_TXT_CAMELLIA128 = "CAMELLIA128";
+@const SSL_TXT_CAMELLIA256 = "CAMELLIA256";
+@const SSL_TXT_CAMELLIA = "CAMELLIA";
+@const SSL_TXT_CHACHA20 = "CHACHA20";
+@const SSL_TXT_GOST = "GOST89";
+@const SSL_TXT_ARIA = "ARIA";
+@const SSL_TXT_ARIA_GCM = "ARIAGCM";
+@const SSL_TXT_ARIA128 = "ARIA128";
+@const SSL_TXT_ARIA256 = "ARIA256";
+@const SSL_TXT_GOST2012_GOST8912_GOST8912 = "GOST2012-GOST8912-GOST8912";
+@const SSL_TXT_CBC = "CBC";
+
+@const SSL_TXT_MD5 = "MD5";
+@const SSL_TXT_SHA1 = "SHA1";
+@const SSL_TXT_SHA = "SHA"; /* same as "SHA1" */
+@const SSL_TXT_GOST94 = "GOST94";
+@const SSL_TXT_GOST89MAC = "GOST89MAC";
+@const SSL_TXT_GOST12 = "GOST12";
+@const SSL_TXT_GOST89MAC12 = "GOST89MAC12";
+@const SSL_TXT_SHA256 = "SHA256";
+@const SSL_TXT_SHA384 = "SHA384";
+
+@const SSL_TXT_SSLV3 = "SSLv3";
+@const SSL_TXT_TLSV1 = "TLSv1";
+@const SSL_TXT_TLSV1_1 = "TLSv1.1";
+@const SSL_TXT_TLSV1_2 = "TLSv1.2";
+
+@const SSL_TXT_ALL = "ALL";
+
+/*-
+ * COMPLEMENTOF* definitions. These identifiers are used to (de-select)
+ * ciphers normally not being used.
+ * Example: "RC4" will activate all ciphers using RC4 including ciphers
+ * without authentication, which would normally disabled by DEFAULT (due
+ * the "!ADH" being part of default). Therefore "RC4:!COMPLEMENTOFDEFAULT"
+ * will make sure that it is also disabled in the specific selection.
+ * COMPLEMENTOF* identifiers are portable between version, as adjustments
+ * to the default cipher setup will also be included here.
+ *
+ * COMPLEMENTOFDEFAULT does not experience the same special treatment that
+ * DEFAULT gets, as only selection is being done and no sorting as needed
+ * for DEFAULT.
+ */
+@const SSL_TXT_CMPALL = "COMPLEMENTOFALL";
+@const SSL_TXT_CMPDEF = "COMPLEMENTOFDEFAULT";
+
+/*
+ * As of OpenSSL 1.0.0, ssl_create_cipher_list() in ssl/ssl_ciph.c always
+ * starts with a reasonable order, and all we have to do for DEFAULT is
+ * throwing out anonymous and unencrypted ciphersuites! (The latter are not
+ * actually enabled by ALL, but "ALL:RSA" would enable some of them.)
+ */
+
+/* Used in SSL_set_shutdown()/SSL_get_shutdown(); */
+@const SSL_SENT_SHUTDOWN = 1;
+@const SSL_RECEIVED_SHUTDOWN = 2;
+
+/* SRTP protection profiles for use with the use_srtp extension (RFC 5764)*/
+struct srtp_protection_profile_st {
+    name: const char*;
+    id: u64;
+}
+
+@type tls_session_ticket_ext_cb_fn = fn(SSL*, const u8*, i32, opaque*) -> i32;
+@type tls_session_secret_cb_fn = fn(SSL*, opaque*, i32*, StackOf<SSL_CIPHER>*, const SSL_CIPHER**, opaque*) -> i32;
+
+/* Extension context codes */
+/* This extension is only allowed in TLS */
+@const SSL_EXT_TLS_ONLY = 0x00001;
+/* This extension is only allowed in DTLS */
+@const SSL_EXT_DTLS_ONLY = 0x00002;
+/* Some extensions may be allowed in DTLS but we don't implement them for it */
+@const SSL_EXT_TLS_IMPLEMENTATION_ONLY = 0x00004;
+/* Most extensions are not defined for SSLv3 but EXT_TYPE_renegotiate is */
+@const SSL_EXT_SSL3_ALLOWED = 0x00008;
+/* Extension is only defined for TLS1.2 and below */
+@const SSL_EXT_TLS1_2_AND_BELOW_ONLY = 0x00010;
+/* Extension is only defined for TLS1.3 and above */
+@const SSL_EXT_TLS1_3_ONLY = 0x00020;
+/* Ignore this extension during parsing if we are resuming */
+@const SSL_EXT_IGNORE_ON_RESUMPTION = 0x00040;
+@const SSL_EXT_CLIENT_HELLO = 0x00080;
+/* Really means TLS1.2 or below */
+@const SSL_EXT_TLS1_2_SERVER_HELLO = 0x00100;
+@const SSL_EXT_TLS1_3_SERVER_HELLO = 0x00200;
+@const SSL_EXT_TLS1_3_ENCRYPTED_EXTENSIONS = 0x00400;
+@const SSL_EXT_TLS1_3_HELLO_RETRY_REQUEST = 0x00800;
+@const SSL_EXT_TLS1_3_CERTIFICATE = 0x01000;
+@const SSL_EXT_TLS1_3_NEW_SESSION_TICKET = 0x02000;
+@const SSL_EXT_TLS1_3_CERTIFICATE_REQUEST = 0x04000;
+@const SSL_EXT_TLS1_3_CERTIFICATE_COMPRESSION = 0x08000;
+/* When sending a raw public key in a certificate message */
+@const SSL_EXT_TLS1_3_RAW_PUBLIC_KEY = 0x10000;
+/*
+ * A callback consulted once per certificate in the chain during
+ * verification. `preverify_ok` is what the library concluded, and the
+ * callback's answer replaces it, so returning 1 unconditionally turns
+ * verification off while looking like it is on.
+ */
+@type SSL_verify_cb = fn(i32, X509_STORE_CTX*) -> i32;
+
+/* Everything the peer's certificate is or is not checked for */
+@const SSL_VERIFY_NONE = 0x00;
+
+/** Ask for the peer's certificate and verify it. On a client this is what
+    makes a failed chain fail the handshake; without it SSL_connect()
+    succeeds against any certificate at all. */
+@const SSL_VERIFY_PEER = 0x01;
+
+/** On a server, refuse a client that sends no certificate. */
+@const SSL_VERIFY_FAIL_IF_NO_PEER_CERT = 0x02;
+@const SSL_VERIFY_CLIENT_ONCE = 0x04;
+@const SSL_VERIFY_POST_HANDSHAKE = 0x08;
+
+/* What SSL_get_error() answers after a call returned zero or less */
+@const SSL_ERROR_NONE = 0;
+@const SSL_ERROR_SSL = 1;               /* the protocol failed; the error queue says how */
+@const SSL_ERROR_WANT_READ = 2;         /* the transport has nothing yet; call again */
+@const SSL_ERROR_WANT_WRITE = 3;        /* the transport is full; call again */
+@const SSL_ERROR_WANT_X509_LOOKUP = 4;
+@const SSL_ERROR_SYSCALL = 5;           /* the transport failed; consult errno */
+@const SSL_ERROR_ZERO_RETURN = 6;       /* the peer closed the TLS connection cleanly */
+@const SSL_ERROR_WANT_CONNECT = 7;
+@const SSL_ERROR_WANT_ACCEPT = 8;
+@const SSL_ERROR_WANT_ASYNC = 9;
+@const SSL_ERROR_WANT_ASYNC_JOB = 10;
+@const SSL_ERROR_WANT_CLIENT_HELLO_CB = 11;
+@const SSL_ERROR_WANT_RETRY_VERIFY = 12;
+
+/* Encodings for the file-loading functions */
+@const SSL_FILETYPE_PEM = 1;
+@const SSL_FILETYPE_ASN1 = 2;
+
+/*
+ * Options, passed to SSL_CTX_set_options(). Each is one bit of a 64-bit
+ * word; C builds them with SSL_OP_BIT(n) and the bit number is noted here.
+ * They only ever turn things on, so setting one twice is harmless and
+ * clearing one takes SSL_CTX_clear_options().
+ */
+@const SSL_OP_NO_EXTENDED_MASTER_SECRET = 0x1;                  /* bit 0 */
+@const SSL_OP_CLEANSE_PLAINTEXT = 0x2;                          /* bit 1 */
+@const SSL_OP_LEGACY_SERVER_CONNECT = 0x4;                      /* bit 2 */
+@const SSL_OP_ENABLE_KTLS = 0x8;                                /* bit 3 */
+@const SSL_OP_TLSEXT_PADDING = 0x10;                            /* bit 4 */
+@const SSL_OP_SAFARI_ECDHE_ECDSA_BUG = 0x40;                    /* bit 6 */
+@const SSL_OP_IGNORE_UNEXPECTED_EOF = 0x80;                     /* bit 7 */
+@const SSL_OP_ALLOW_CLIENT_RENEGOTIATION = 0x100;               /* bit 8 */
+@const SSL_OP_DISABLE_TLSEXT_CA_NAMES = 0x200;                  /* bit 9 */
+@const SSL_OP_ALLOW_NO_DHE_KEX = 0x400;                         /* bit 10 */
+@const SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS = 0x800;              /* bit 11 */
+@const SSL_OP_NO_QUERY_MTU = 0x1000;                            /* bit 12 */
+@const SSL_OP_COOKIE_EXCHANGE = 0x2000;                         /* bit 13 */
+@const SSL_OP_NO_TICKET = 0x4000;                               /* bit 14 */
+@const SSL_OP_CISCO_ANYCONNECT = 0x8000;                        /* bit 15 */
+@const SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION = 0x10000; /* bit 16 */
+@const SSL_OP_NO_COMPRESSION = 0x20000;                         /* bit 17 */
+@const SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION = 0x40000;      /* bit 18 */
+@const SSL_OP_NO_ENCRYPT_THEN_MAC = 0x80000;                    /* bit 19 */
+@const SSL_OP_ENABLE_MIDDLEBOX_COMPAT = 0x100000;               /* bit 20 */
+@const SSL_OP_PRIORITIZE_CHACHA = 0x200000;                     /* bit 21 */
+@const SSL_OP_SERVER_PREFERENCE = 0x400000;                     /* bit 22 */
+@const SSL_OP_CIPHER_SERVER_PREFERENCE = SSL_OP_SERVER_PREFERENCE;
+@const SSL_OP_TLS_ROLLBACK_BUG = 0x800000;                      /* bit 23 */
+@const SSL_OP_NO_ANTI_REPLAY = 0x1000000;                       /* bit 24 */
+@const SSL_OP_NO_SSLv3 = 0x2000000;                             /* bit 25 */
+@const SSL_OP_NO_TLSv1 = 0x4000000;                             /* bit 26 */
+@const SSL_OP_NO_TLSv1_2 = 0x8000000;                           /* bit 27 */
+@const SSL_OP_NO_TLSv1_1 = 0x10000000;                          /* bit 28 */
+@const SSL_OP_NO_TLSv1_3 = 0x20000000;                          /* bit 29 */
+@const SSL_OP_NO_DTLSv1 = 0x4000000;                            /* bit 26 */
+@const SSL_OP_NO_DTLSv1_2 = 0x8000000;                          /* bit 27 */
+@const SSL_OP_NO_RENEGOTIATION = 0x40000000;                    /* bit 30 */
+@const SSL_OP_CRYPTOPRO_TLSEXT_BUG = 0x80000000;                /* bit 31 */
+@const SSL_OP_NO_TX_CERTIFICATE_COMPRESSION = 0x100000000;      /* bit 32 */
+@const SSL_OP_NO_RX_CERTIFICATE_COMPRESSION = 0x200000000;      /* bit 33 */
+@const SSL_OP_ENABLE_KTLS_TX_ZEROCOPY_SENDFILE = 0x400000000;   /* bit 34 */
+@const SSL_OP_PREFER_NO_DHE_KEX = 0x800000000;                  /* bit 35 */
+@const SSL_OP_LEGACY_EC_POINT_FORMATS = 0x1000000000;           /* bit 36 */
+
+@const SSL_OP_NO_SSL_MASK = SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1
+                          | SSL_OP_NO_TLSv1_2 | SSL_OP_NO_TLSv1_3;
+@const SSL_OP_NO_DTLS_MASK = SSL_OP_NO_DTLSv1 | SSL_OP_NO_DTLSv1_2;
+
+/** The bug workarounds that are harmless to enable, which is what most
+    programs pass to SSL_CTX_set_options() if they pass anything. */
+@const SSL_OP_ALL = SSL_OP_CRYPTOPRO_TLSEXT_BUG | SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS
+                  | SSL_OP_TLSEXT_PADDING | SSL_OP_SAFARI_ECDHE_ECDSA_BUG;
+
+/*
+ * Modes, passed to SSL_CTX_set_mode(). Where options change the protocol,
+ * modes change how the calls behave.
+ */
+@const SSL_MODE_ENABLE_PARTIAL_WRITE = 0x00000001;
+@const SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER = 0x00000002;
+
+/** Handle a renegotiation inside SSL_read()/SSL_write() rather than
+    returning SSL_ERROR_WANT_READ for it. On a blocking socket this is what
+    keeps a read from spuriously failing mid-connection. */
+@const SSL_MODE_AUTO_RETRY = 0x00000004;
+@const SSL_MODE_NO_AUTO_CHAIN = 0x00000008;
+@const SSL_MODE_RELEASE_BUFFERS = 0x00000010;
+@const SSL_MODE_SEND_CLIENTHELLO_TIME = 0x00000020;
+@const SSL_MODE_SEND_SERVERHELLO_TIME = 0x00000040;
+@const SSL_MODE_SEND_FALLBACK_SCSV = 0x00000080;
+@const SSL_MODE_ASYNC = 0x00000100;
+
+/* Session cache behaviour, for SSL_CTX_set_session_cache_mode() */
+@const SSL_SESS_CACHE_OFF = 0x0000;
+@const SSL_SESS_CACHE_CLIENT = 0x0001;
+@const SSL_SESS_CACHE_SERVER = 0x0002;
+@const SSL_SESS_CACHE_BOTH = SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_SERVER;
+@const SSL_SESS_CACHE_NO_AUTO_CLEAR = 0x0080;
+@const SSL_SESS_CACHE_NO_INTERNAL_LOOKUP = 0x0100;
+@const SSL_SESS_CACHE_NO_INTERNAL_STORE = 0x0200;
+@const SSL_SESS_CACHE_NO_INTERNAL = SSL_SESS_CACHE_NO_INTERNAL_LOOKUP
+                                  | SSL_SESS_CACHE_NO_INTERNAL_STORE;
+
+/* Commands for SSL_ctrl()/SSL_CTX_ctrl(), which the macros below wrap */
+@const SSL_CTRL_SET_TMP_DH = 3;
+@const SSL_CTRL_SET_TMP_ECDH = 4;
+@const SSL_CTRL_SET_MSG_CALLBACK_ARG = 16;
+@const SSL_CTRL_MODE = 33;
+@const SSL_CTRL_SET_SESS_CACHE_MODE = 44;
+@const SSL_CTRL_GET_SESS_CACHE_MODE = 45;
+@const SSL_CTRL_SET_TLSEXT_HOSTNAME = 55;
+@const SSL_CTRL_CLEAR_MODE = 78;
+@const SSL_CTRL_CHAIN = 88;
+@const SSL_CTRL_SET_GROUPS_LIST = 92;
+@const SSL_CTRL_SET_SIGALGS_LIST = 98;
+@const SSL_CTRL_GET_PEER_SIGNATURE_NID = 108;
+@const SSL_CTRL_GET_PEER_TMP_KEY = 109;
+@const SSL_CTRL_SET_MIN_PROTO_VERSION = 123;
+@const SSL_CTRL_SET_MAX_PROTO_VERSION = 124;
+@const SSL_CTRL_GET_MIN_PROTO_VERSION = 130;
+@const SSL_CTRL_GET_MAX_PROTO_VERSION = 131;
+@const SSL_CTRL_GET_NEGOTIATED_GROUP = 134;
+
+/* Flags for OPENSSL_init_ssl(), on top of the crypto ones */
+@const OPENSSL_INIT_NO_LOAD_SSL_STRINGS = 0x00100000;
+@const OPENSSL_INIT_LOAD_SSL_STRINGS = 0x00200000;
+
+/*
+ * Methods. A method fixes the protocol family, and the version range is
+ * narrowed afterwards with SSL_CTX_set_min_proto_version(); the old
+ * per-version methods are gone. TLS_method() is the one to use unless the
+ * program is only ever one end of the connection.
+ */
+@extern fn TLS_method() -> const SSL_METHOD*;
+@extern fn TLS_client_method() -> const SSL_METHOD*;
+@extern fn TLS_server_method() -> const SSL_METHOD*;
+@extern fn DTLS_method() -> const SSL_METHOD*;
+@extern fn DTLS_client_method() -> const SSL_METHOD*;
+@extern fn DTLS_server_method() -> const SSL_METHOD*;
+
+/** The library initializes itself on first use; this only matters to a
+    program that wants different defaults. */
+@extern fn OPENSSL_init_ssl(opts: u64, settings: const OPENSSL_INIT_SETTINGS*) -> i32;
+
+/*
+ * Contexts. An SSL_CTX holds the settings a connection is made from: the
+ * trust store, the certificate and key, the cipher preferences. Building one
+ * is the expensive part, and it is meant to be built once and shared by
+ * every connection a program makes.
+ */
+@extern fn SSL_CTX_new(meth: const SSL_METHOD*) -> SSL_CTX*;
+@extern fn SSL_CTX_new_ex(libctx: OSSL_LIB_CTX*, propq: const char*,
+    meth: const SSL_METHOD*) -> SSL_CTX*;
+@extern fn SSL_CTX_free(ctx: SSL_CTX*);
+@extern fn SSL_CTX_up_ref(ctx: SSL_CTX*) -> i32;
+
+@extern fn SSL_CTX_set_options(ctx: SSL_CTX*, op: u64) -> u64;
+@extern fn SSL_CTX_clear_options(ctx: SSL_CTX*, op: u64) -> u64;
+@extern fn SSL_CTX_get_options(ctx: const SSL_CTX*) -> u64;
+@extern fn SSL_set_options(s: SSL*, op: u64) -> u64;
+@extern fn SSL_clear_options(s: SSL*, op: u64) -> u64;
+@extern fn SSL_get_options(s: const SSL*) -> u64;
+
+@extern fn SSL_ctrl(ssl: SSL*, cmd: i32, larg: i64, parg: opaque*) -> i64;
+@extern fn SSL_CTX_ctrl(ctx: SSL_CTX*, cmd: i32, larg: i64, parg: opaque*) -> i64;
+
+@macro SSL_CTX_set_mode(ctx, op) = SSL_CTX_ctrl(ctx, SSL_CTRL_MODE, op, null);
+@macro SSL_CTX_clear_mode(ctx, op) = SSL_CTX_ctrl(ctx, SSL_CTRL_CLEAR_MODE, op, null);
+@macro SSL_CTX_get_mode(ctx) = SSL_CTX_ctrl(ctx, SSL_CTRL_MODE, 0, null);
+@macro SSL_set_mode(ssl, op) = SSL_ctrl(ssl, SSL_CTRL_MODE, op, null);
+@macro SSL_clear_mode(ssl, op) = SSL_ctrl(ssl, SSL_CTRL_CLEAR_MODE, op, null);
+@macro SSL_get_mode(ssl) = SSL_ctrl(ssl, SSL_CTRL_MODE, 0, null);
+
+/** Refuses anything older than `version`, one of the TLS1_*_VERSION numbers
+    in prov_ssl.sie. A client that does not set this accepts whatever the
+    installation's defaults allow. */
+@macro SSL_CTX_set_min_proto_version(ctx, version) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MIN_PROTO_VERSION, version, null);
+@macro SSL_CTX_set_max_proto_version(ctx, version) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MAX_PROTO_VERSION, version, null);
+@macro SSL_CTX_get_min_proto_version(ctx) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_GET_MIN_PROTO_VERSION, 0, null);
+@macro SSL_CTX_get_max_proto_version(ctx) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_GET_MAX_PROTO_VERSION, 0, null);
+@macro SSL_set_min_proto_version(s, version) =
+    SSL_ctrl(s, SSL_CTRL_SET_MIN_PROTO_VERSION, version, null);
+@macro SSL_set_max_proto_version(s, version) =
+    SSL_ctrl(s, SSL_CTRL_SET_MAX_PROTO_VERSION, version, null);
+
+@macro SSL_CTX_set_session_cache_mode(ctx, m) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_SET_SESS_CACHE_MODE, m, null);
+@macro SSL_CTX_get_session_cache_mode(ctx) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_GET_SESS_CACHE_MODE, 0, null);
+
+/** Names the elliptic curves and finite-field groups to offer, in order:
+    "X25519:P-256", say. */
+@macro SSL_CTX_set1_groups_list(ctx, s) =
+    SSL_CTX_ctrl(ctx, SSL_CTRL_SET_GROUPS_LIST, 0, s as opaque*);
+@macro SSL_set1_groups_list(s, str) =
+    SSL_ctrl(s, SSL_CTRL_SET_GROUPS_LIST, 0, str as opaque*);
+
+/* Trust: which certificates the peer's chain is allowed to end at */
+
+/** Loads the installation's default trust anchors, which on most systems is
+    the operating system's CA bundle. A client that verifies at all needs
+    this or one of the two below. */
+@extern fn SSL_CTX_set_default_verify_paths(ctx: SSL_CTX*) -> i32;
+@extern fn SSL_CTX_set_default_verify_dir(ctx: SSL_CTX*) -> i32;
+@extern fn SSL_CTX_set_default_verify_file(ctx: SSL_CTX*) -> i32;
+
+/** Loads anchors from a PEM file, a directory of hashed files, or both. */
+@extern fn SSL_CTX_load_verify_locations(ctx: SSL_CTX*, CAfile: const char*,
+    CApath: const char*) -> i32;
+@extern fn SSL_CTX_load_verify_file(ctx: SSL_CTX*, CAfile: const char*) -> i32;
+@extern fn SSL_CTX_load_verify_dir(ctx: SSL_CTX*, CApath: const char*) -> i32;
+@extern fn SSL_CTX_get_cert_store(ctx: const SSL_CTX*) -> X509_STORE*;
+@extern fn SSL_CTX_set_cert_store(ctx: SSL_CTX*, store: X509_STORE*);
+
+/** Turns verification on. Pass SSL_VERIFY_PEER and a null callback, and the
+    handshake fails on a chain that does not check out. */
+@extern fn SSL_CTX_set_verify(ctx: SSL_CTX*, mode: i32, callback: SSL_verify_cb);
+@extern fn SSL_CTX_set_verify_depth(ctx: SSL_CTX*, depth: i32);
+@extern fn SSL_set_verify(s: SSL*, mode: i32, callback: SSL_verify_cb);
+@extern fn SSL_get_verify_mode(s: const SSL*) -> i32;
+
+/* This end's own certificate, which a server always needs and a client needs
+   only when the server asks for one */
+@extern fn SSL_CTX_use_certificate(ctx: SSL_CTX*, x: X509*) -> i32;
+@extern fn SSL_CTX_use_certificate_file(ctx: SSL_CTX*, file: const char*, type: i32) -> i32;
+
+/** Loads a certificate and the intermediates above it from one PEM file,
+    which is what a server needs to send a complete chain. */
+@extern fn SSL_CTX_use_certificate_chain_file(ctx: SSL_CTX*, file: const char*) -> i32;
+@extern fn SSL_CTX_use_PrivateKey(ctx: SSL_CTX*, pkey: EVP_PKEY*) -> i32;
+@extern fn SSL_CTX_use_PrivateKey_file(ctx: SSL_CTX*, file: const char*, type: i32) -> i32;
+
+/** Answers whether the loaded key belongs to the loaded certificate. Worth
+    calling: a mismatch otherwise surfaces as a handshake failure later. */
+@extern fn SSL_CTX_check_private_key(ctx: const SSL_CTX*) -> i32;
+@extern fn SSL_check_private_key(ctx: const SSL*) -> i32;
+@extern fn SSL_CTX_set_default_passwd_cb(ctx: SSL_CTX*, cb: pem_password_cb);
+@extern fn SSL_CTX_set_default_passwd_cb_userdata(ctx: SSL_CTX*, u: opaque*);
+@extern fn SSL_CTX_set_client_CA_list(ctx: SSL_CTX*, name_list: StackOf<X509_NAME>*);
+
+/** Chooses which TLS 1.2 and earlier ciphersuites to offer, in OpenSSL's
+    cipher-list language ("HIGH:!aNULL:!MD5"). */
+@extern fn SSL_CTX_set_cipher_list(ctx: SSL_CTX*, str: const char*) -> i32;
+@extern fn SSL_set_cipher_list(s: SSL*, str: const char*) -> i32;
+
+/** The TLS 1.3 list, which is separate and uses the RFC names. */
+@extern fn SSL_CTX_set_ciphersuites(ctx: SSL_CTX*, str: const char*) -> i32;
+@extern fn SSL_set_ciphersuites(s: SSL*, str: const char*) -> i32;
+
+/** Offers application protocols, as a sequence of length-prefixed names:
+    "\x02h2\x08http/1.1". Answers 0 on success, unlike almost everything
+    else here. */
+@extern fn SSL_CTX_set_alpn_protos(ctx: SSL_CTX*, protos: const u8*,
+    protos_len: u32) -> i32;
+@extern fn SSL_set_alpn_protos(ssl: SSL*, protos: const u8*, protos_len: u32) -> i32;
+
+/** Points `data` at the protocol the server picked, with `len` 0 when it
+    picked none. */
+@extern fn SSL_get0_alpn_selected(ssl: const SSL*, data: const u8**, len: u32*);
+
+/*
+ * Connections. An SSL is one connection, made from a context and thrown
+ * away with it.
+ */
+@extern fn SSL_new(ctx: SSL_CTX*) -> SSL*;
+@extern fn SSL_free(ssl: SSL*);
+@extern fn SSL_up_ref(s: SSL*) -> i32;
+@extern fn SSL_clear(s: SSL*) -> i32;
+
+/** Attaches an already-connected socket. */
+@extern fn SSL_set_fd(s: SSL*, fd: i32) -> i32;
+@extern fn SSL_set_rfd(s: SSL*, fd: i32) -> i32;
+@extern fn SSL_set_wfd(s: SSL*, fd: i32) -> i32;
+@extern fn SSL_get_fd(s: const SSL*) -> i32;
+
+/** Attaches BIOs instead, which is how TLS runs over anything that is not a
+    socket. The SSL takes ownership of both. */
+@extern fn SSL_set_bio(s: SSL*, rbio: BIO*, wbio: BIO*);
+@extern fn SSL_set0_rbio(s: SSL*, rbio: BIO*);
+@extern fn SSL_set0_wbio(s: SSL*, wbio: BIO*);
+@extern fn SSL_get_rbio(s: const SSL*) -> BIO*;
+@extern fn SSL_get_wbio(s: const SSL*) -> BIO*;
+
+/** Names the host whose certificate this connection will accept. Without it
+    verification checks that the chain is trusted but not that it belongs to
+    whoever was dialled, which is most of the point. */
+@extern fn SSL_set1_host(s: SSL*, host: const char*) -> i32;
+@extern fn SSL_add1_host(s: SSL*, host: const char*) -> i32;
+@extern fn SSL_set_hostflags(s: SSL*, flags: u32);
+@extern fn SSL_get0_peername(s: SSL*) -> const char*;
+@extern fn SSL_get0_param(ssl: SSL*) -> X509_VERIFY_PARAM*;
+
+@extern fn SSL_set_connect_state(s: SSL*);
+@extern fn SSL_set_accept_state(s: SSL*);
+
+/** Runs the handshake as a client. Answers 1 on success; anything else goes
+    to SSL_get_error() to find out whether it can be retried. */
+@extern fn SSL_connect(ssl: SSL*) -> i32;
+@extern fn SSL_accept(ssl: SSL*) -> i32;
+@extern fn SSL_do_handshake(s: SSL*) -> i32;
+@extern fn SSL_is_init_finished(s: const SSL*) -> i32;
+
+@extern fn SSL_read(ssl: SSL*, buf: opaque*, num: i32) -> i32;
+@extern fn SSL_read_ex(ssl: SSL*, buf: opaque*, num: u64, readbytes: u64*) -> i32;
+@extern fn SSL_peek(ssl: SSL*, buf: opaque*, num: i32) -> i32;
+@extern fn SSL_write(ssl: SSL*, buf: const opaque*, num: i32) -> i32;
+@extern fn SSL_write_ex(s: SSL*, buf: const opaque*, num: u64, written: u64*) -> i32;
+
+/** How many bytes are already decrypted and waiting, which a program using
+    select() has to check before blocking: the socket can be quiet while a
+    whole record sits in the buffer. */
+@extern fn SSL_pending(s: const SSL*) -> i32;
+@extern fn SSL_has_pending(s: const SSL*) -> i32;
+
+/** Sends close_notify, and answers 1 once the peer's has come back. A 0
+    means ours went out and theirs has not arrived; calling again waits for
+    it, which only matters when the connection is being handed on rather
+    than dropped. */
+@extern fn SSL_shutdown(s: SSL*) -> i32;
+@extern fn SSL_get_shutdown(ssl: const SSL*) -> i32;
+@extern fn SSL_set_shutdown(ssl: SSL*, mode: i32);
+
+/** Turns a call's return value into a reason. It reads per-thread state, so
+    it must be called right after the call that failed and before anything
+    else touches the connection. */
+@extern fn SSL_get_error(s: const SSL*, ret_code: i32) -> i32;
+
+/* What actually got negotiated */
+@extern fn SSL_get_version(s: const SSL*) -> const char*;
+@extern fn SSL_get_current_cipher(s: const SSL*) -> const SSL_CIPHER*;
+@extern fn SSL_get_ciphers(s: const SSL*) -> StackOf<SSL_CIPHER>*;
+@extern fn SSL_CIPHER_get_name(c: const SSL_CIPHER*) -> const char*;
+@extern fn SSL_CIPHER_standard_name(c: const SSL_CIPHER*) -> const char*;
+@extern fn SSL_CIPHER_get_version(c: const SSL_CIPHER*) -> const char*;
+@extern fn SSL_CIPHER_get_bits(c: const SSL_CIPHER*, alg_bits: i32*) -> i32;
+@extern fn SSL_CIPHER_get_id(c: const SSL_CIPHER*) -> u32;
+@extern fn SSL_CIPHER_description(c: const SSL_CIPHER*, buf: char*, size: i32) -> char*;
+
+@macro SSL_get_cipher(s) = SSL_CIPHER_get_name(SSL_get_current_cipher(s));
+@macro SSL_get_cipher_name(s) = SSL_CIPHER_get_name(SSL_get_current_cipher(s));
+@macro SSL_get_cipher_bits(s, np) = SSL_CIPHER_get_bits(SSL_get_current_cipher(s), np);
+@macro SSL_get_cipher_version(s) = SSL_CIPHER_get_version(SSL_get_current_cipher(s));
+
+/** The peer's certificate, as a reference the caller frees with X509_free().
+    Getting one back says nothing about whether it verified: that is what
+    SSL_get_verify_result() is for. */
+@extern fn SSL_get1_peer_certificate(s: const SSL*) -> X509*;
+@extern fn SSL_get_peer_cert_chain(s: const SSL*) -> StackOf<X509>*;
+
+/** X509_V_OK when the chain verified, and one of the other X509_V_* codes
+    when it did not. With SSL_VERIFY_PEER set the handshake has already
+    failed by then, so this is mainly for reporting why. */
+@extern fn SSL_get_verify_result(ssl: const SSL*) -> i64;
+
+/** The signature algorithm the peer signed the handshake with, and the key
+    exchange group it was agreed over, both as NIDs. */
+@macro SSL_get_peer_signature_nid(s, pn) =
+    SSL_ctrl(s, SSL_CTRL_GET_PEER_SIGNATURE_NID, 0, pn as opaque*);
+@macro SSL_get_negotiated_group(s) =
+    SSL_ctrl(s, SSL_CTRL_GET_NEGOTIATED_GROUP, 0, null);
+@macro SSL_get_peer_tmp_key(s, pk) =
+    SSL_ctrl(s, SSL_CTRL_GET_PEER_TMP_KEY, 0, pk as opaque*);
+
+/* Sessions, which is how a second connection to the same server skips most
+   of the handshake */
+@extern fn SSL_get_session(ssl: const SSL*) -> SSL_SESSION*;
+@extern fn SSL_get1_session(ssl: SSL*) -> SSL_SESSION*;
+@extern fn SSL_set_session(to: SSL*, session: SSL_SESSION*) -> i32;
+@extern fn SSL_SESSION_free(ses: SSL_SESSION*);
+@extern fn SSL_SESSION_up_ref(ses: SSL_SESSION*) -> i32;
+@extern fn SSL_session_reused(s: const SSL*) -> i32;
+
+/* Saying in words what a state or an alert was */
+@extern fn SSL_state_string_long(s: const SSL*) -> const char*;
+@extern fn SSL_rstate_string_long(s: const SSL*) -> const char*;
+@extern fn SSL_alert_type_string_long(value: i32) -> const char*;
+@extern fn SSL_alert_desc_string_long(value: i32) -> const char*;
+
+/*
+ * TLS as a BIO. BIO_new_ssl_connect() builds an SSL BIO on top of a connect
+ * BIO, so one chain resolves the name, opens the socket, and runs the
+ * handshake, and reads and writes at its head are plaintext.
+ */
+@extern fn BIO_f_ssl() -> const BIO_METHOD*;
+@extern fn BIO_new_ssl(ctx: SSL_CTX*, client: i32) -> BIO*;
+@extern fn BIO_new_ssl_connect(ctx: SSL_CTX*) -> BIO*;
+@extern fn BIO_new_buffer_ssl_connect(ctx: SSL_CTX*) -> BIO*;
+@extern fn BIO_ssl_copy_session_id(to: BIO*, from: BIO*) -> i32;
+
+/* From bio.sie's BIO_C_* set: reach the SSL inside an SSL BIO */
+@macro BIO_set_ssl(b, ssl, c) = BIO_ctrl(b, BIO_C_SET_SSL, c, ssl as opaque*);
+@macro BIO_get_ssl(b, sslp) = BIO_ctrl(b, BIO_C_GET_SSL, 0, sslp as opaque*);
+@macro BIO_set_ssl_mode(b, client) = BIO_ctrl(b, BIO_C_SSL_MODE, client, null);

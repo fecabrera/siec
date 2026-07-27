@@ -1,0 +1,59 @@
+/*
+ * Numeric identifiers for the algorithms and attributes OpenSSL knows.
+ *
+ * The C header is generated and runs to some six thousand names, one per
+ * object identifier the library has ever needed. Transcribing all of them
+ * would be transcribing a table, not a binding, so what follows is the set
+ * the rest of this package refers to: the key types EVP_PKEY_* are spelled
+ * as, the digests and ciphers with names of their own, and the handful of
+ * X.509 name attributes a certificate is read through. Anything else is
+ * reachable at runtime with OBJ_txt2nid() in objects.sie, which looks a NID
+ * up by its short name or dotted OID.
+ */
+
+@const NID_undef = 0;
+
+@const NID_md5 = 4;
+@const NID_sha1 = 64;
+@const NID_sha256 = 672;
+@const NID_sha384 = 673;
+@const NID_sha512 = 674;
+@const NID_sha224 = 675;
+@const NID_sha3_224 = 1096;
+@const NID_sha3_256 = 1097;
+@const NID_sha3_384 = 1098;
+@const NID_sha3_512 = 1099;
+
+@const NID_rsaEncryption = 6;
+@const NID_rsassaPss = 912;
+@const NID_dsa = 116;
+@const NID_dhKeyAgreement = 28;
+@const NID_X9_62_id_ecPublicKey = 408;
+@const NID_sm2 = 1172;
+@const NID_hmac = 855;
+@const NID_poly1305 = 1061;
+@const NID_X25519 = 1034;
+@const NID_X448 = 1035;
+@const NID_ED25519 = 1087;
+@const NID_ED448 = 1088;
+
+@const NID_aes_128_cbc = 419;
+@const NID_aes_128_gcm = 895;
+@const NID_aes_256_cbc = 427;
+@const NID_aes_256_gcm = 901;
+@const NID_chacha20_poly1305 = 1018;
+
+/* X.509 name attributes: the pieces a subject or issuer name is built of */
+@const NID_commonName = 13;
+@const NID_countryName = 14;
+@const NID_localityName = 15;
+@const NID_stateOrProvinceName = 16;
+@const NID_organizationName = 17;
+@const NID_organizationalUnitName = 18;
+@const NID_pkcs9_emailAddress = 48;
+
+/* X.509v3 extensions worth naming */
+@const NID_subject_alt_name = 85;
+@const NID_basic_constraints = 87;
+@const NID_key_usage = 83;
+@const NID_ext_key_usage = 126;

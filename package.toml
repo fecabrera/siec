@@ -12,4 +12,5 @@ include = [
     "packages/mpdecimal/src",
     "packages/zlib/src",
     "packages/libcurl/src",
+    "packages/openssl/src",
 ]

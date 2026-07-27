@@ -1,0 +1,121 @@
+/*
+ * The typedefs the rest of the library is written in terms of. In C every
+ * one of these names is a `struct something_st` that no public header ever
+ * defines: the layout lives inside libcrypto and callers only ever hold a
+ * pointer. A forward-declared struct says exactly that here.
+ */
+
+struct asn1_string_st;
+struct asn1_object_st;
+struct asn1_type_st;
+
+@type ASN1_STRING = asn1_string_st;
+@type ASN1_INTEGER = asn1_string_st;
+@type ASN1_ENUMERATED = asn1_string_st;
+@type ASN1_BIT_STRING = asn1_string_st;
+@type ASN1_OCTET_STRING = asn1_string_st;
+@type ASN1_UTCTIME = asn1_string_st;
+@type ASN1_TIME = asn1_string_st;
+@type ASN1_GENERALIZEDTIME = asn1_string_st;
+@type ASN1_UTF8STRING = asn1_string_st;
+@type ASN1_OBJECT = asn1_object_st;
+@type ASN1_TYPE = asn1_type_st;
+
+@type ASN1_BOOLEAN = i32;
+@type ASN1_NULL = i32;
+
+struct bio_st;
+struct bio_method_st;
+struct bignum_st;
+struct bignum_ctx;
+struct buf_mem_st;
+
+@type BIO = bio_st;
+@type BIO_METHOD = bio_method_st;
+@type BIGNUM = bignum_st;
+@type BN_CTX = bignum_ctx;
+
+struct err_state_st;
+
+@type ERR_STATE = err_state_st;
+
+struct evp_cipher_st;
+struct evp_cipher_ctx_st;
+struct evp_md_st;
+struct evp_md_ctx_st;
+struct evp_mac_st;
+struct evp_mac_ctx_st;
+struct evp_pkey_st;
+struct evp_pkey_ctx_st;
+struct evp_kdf_st;
+struct evp_kdf_ctx_st;
+struct evp_Encode_Ctx_st;
+
+@type EVP_CIPHER = evp_cipher_st;
+@type EVP_CIPHER_CTX = evp_cipher_ctx_st;
+@type EVP_MD = evp_md_st;
+@type EVP_MD_CTX = evp_md_ctx_st;
+@type EVP_MAC = evp_mac_st;
+@type EVP_MAC_CTX = evp_mac_ctx_st;
+@type EVP_PKEY = evp_pkey_st;
+@type EVP_PKEY_CTX = evp_pkey_ctx_st;
+@type EVP_KDF = evp_kdf_st;
+@type EVP_KDF_CTX = evp_kdf_ctx_st;
+@type EVP_ENCODE_CTX = evp_Encode_Ctx_st;
+
+struct hmac_ctx_st;
+
+@type HMAC_CTX = hmac_ctx_st;
+
+struct x509_st;
+struct X509_algor_st;
+struct X509_crl_st;
+struct X509_name_st;
+struct X509_name_entry_st;
+struct X509_extension_st;
+struct X509_pubkey_st;
+struct x509_store_st;
+struct x509_store_ctx_st;
+struct X509_VERIFY_PARAM_st;
+
+@type X509 = x509_st;
+@type X509_ALGOR = X509_algor_st;
+@type X509_CRL = X509_crl_st;
+@type X509_NAME = X509_name_st;
+@type X509_NAME_ENTRY = X509_name_entry_st;
+@type X509_EXTENSION = X509_extension_st;
+@type X509_PUBKEY = X509_pubkey_st;
+@type X509_STORE = x509_store_st;
+@type X509_STORE_CTX = x509_store_ctx_st;
+@type X509_VERIFY_PARAM = X509_VERIFY_PARAM_st;
+
+struct ssl_st;
+struct ssl_ctx_st;
+struct ssl_method_st;
+struct ssl_cipher_st;
+struct ssl_session_st;
+
+@type SSL = ssl_st;
+@type SSL_CTX = ssl_ctx_st;
+@type SSL_METHOD = ssl_method_st;
+@type SSL_CIPHER = ssl_cipher_st;
+@type SSL_SESSION = ssl_session_st;
+
+struct engine_st;
+struct ossl_lib_ctx_st;
+struct ossl_provider_st;
+struct ossl_param_st;
+struct ossl_init_settings_st;
+struct conf_st;
+
+@type ENGINE = engine_st;
+@type OSSL_LIB_CTX = ossl_lib_ctx_st;
+@type OSSL_PROVIDER = ossl_provider_st;
+@type OSSL_PARAM = ossl_param_st;
+@type OPENSSL_INIT_SETTINGS = ossl_init_settings_st;
+@type CONF = conf_st;
+
+/* Asks the caller for the passphrase guarding a private key. Fills `buf`
+   with at most `size` bytes and answers with how many it wrote, or a
+   negative number to give up; `rwflag` is 1 when a key is being written. */
+@type pem_password_cb = fn(char*, i32, i32, opaque*) -> i32;

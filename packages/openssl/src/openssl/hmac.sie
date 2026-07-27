@@ -1,0 +1,41 @@
+import { HMAC_CTX, EVP_MD, ENGINE } from types;
+
+/*
+ * HMAC: a digest keyed so that only a holder of the key can produce it.
+ *
+ * Where a bare digest answers "is this the same data", an HMAC answers "did
+ * someone with the key vouch for this data". Verifying one means recomputing
+ * it and comparing with CRYPTO_memcmp, never with memcmp, since a comparison
+ * that stops at the first differing byte tells an attacker how much of a
+ * guessed tag was right.
+ *
+ * OpenSSL 3.0 deprecated the context calls in favour of the EVP_MAC
+ * interface. They still work, and the one-shot HMAC() is not deprecated at
+ * all, which makes it the reasonable choice for data already in memory.
+ */
+
+/** Computes the whole thing in one call. Writes the tag into `md` (at most
+    EVP_MAX_MD_SIZE bytes, or pass null to use a static buffer that is not
+    thread-safe), puts its length in `md_len`, and answers `md`, or null on
+    failure. */
+@extern fn HMAC(evp_md: const EVP_MD*, key: const opaque*, key_len: i32,
+    data: const u8*, data_len: u64, md: u8*, md_len: u32*) -> u8*;
+
+/* The streaming form, for input that arrives in pieces. Deprecated since
+   3.0: new code that needs streaming should reach for EVP_MAC. */
+@extern fn HMAC_CTX_new() -> HMAC_CTX*;
+@extern fn HMAC_CTX_free(ctx: HMAC_CTX*);
+@extern fn HMAC_CTX_reset(ctx: HMAC_CTX*) -> i32;
+@extern fn HMAC_CTX_copy(dctx: HMAC_CTX*, sctx: HMAC_CTX*) -> i32;
+@extern fn HMAC_CTX_set_flags(ctx: HMAC_CTX*, flags: u64);
+@extern fn HMAC_CTX_get_md(ctx: const HMAC_CTX*) -> const EVP_MD*;
+
+/** Starts a keyed digest. A `key` of null keeps the one already set, which
+    is how a context is reused for a second message under the same key. */
+@extern fn HMAC_Init_ex(ctx: HMAC_CTX*, key: const opaque*, len: i32,
+    md: const EVP_MD*, impl: ENGINE*) -> i32;
+@extern fn HMAC_Update(ctx: HMAC_CTX*, data: const u8*, len: u64) -> i32;
+@extern fn HMAC_Final(ctx: HMAC_CTX*, md: u8*, len: u32*) -> i32;
+
+/** The tag length this context will produce, the same as the digest's. */
+@extern fn HMAC_size(e: const HMAC_CTX*) -> u64;

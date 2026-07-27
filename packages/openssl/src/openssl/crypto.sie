@@ -1,0 +1,121 @@
+import { OSSL_LIB_CTX, OPENSSL_INIT_SETTINGS } from types;
+
+/*
+ * Allocation, wiping, constant-time comparison, and the library's own
+ * bookkeeping.
+ *
+ * C spells the allocators as macros that tack the caller's __FILE__ and
+ * __LINE__ onto every call, for the leak reports a debug build prints. A
+ * build configured with OPENSSL_NO_FILENAMES passes "" and 0 instead, which
+ * is what the macros here do: same functions, no source positions.
+ */
+
+@extern fn CRYPTO_malloc(num: u64, file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_zalloc(num: u64, file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_malloc_array(num: u64, size: u64, file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_realloc(addr: opaque*, num: u64, file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_clear_realloc(addr: opaque*, old_num: u64, num: u64,
+    file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_strdup(str: const char*, file: const char*, line: i32) -> char*;
+@extern fn CRYPTO_strndup(str: const char*, s: u64, file: const char*, line: i32) -> char*;
+@extern fn CRYPTO_free(ptr: opaque*, file: const char*, line: i32);
+@extern fn CRYPTO_clear_free(ptr: opaque*, num: u64, file: const char*, line: i32);
+@extern fn CRYPTO_secure_malloc(num: u64, file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_secure_zalloc(num: u64, file: const char*, line: i32) -> opaque*;
+@extern fn CRYPTO_secure_free(ptr: opaque*, file: const char*, line: i32);
+
+@macro OPENSSL_malloc(num) = CRYPTO_malloc(num, "", 0);
+@macro OPENSSL_zalloc(num) = CRYPTO_zalloc(num, "", 0);
+@macro OPENSSL_malloc_array(num, size) = CRYPTO_malloc_array(num, size, "", 0);
+@macro OPENSSL_realloc(addr, num) = CRYPTO_realloc(addr, num, "", 0);
+@macro OPENSSL_clear_realloc(addr, old_num, num) = CRYPTO_clear_realloc(addr, old_num, num, "", 0);
+@macro OPENSSL_strdup(str) = CRYPTO_strdup(str, "", 0);
+@macro OPENSSL_strndup(str, n) = CRYPTO_strndup(str, n, "", 0);
+@macro OPENSSL_free(addr) = CRYPTO_free(addr, "", 0);
+@macro OPENSSL_clear_free(addr, num) = CRYPTO_clear_free(addr, num, "", 0);
+@macro OPENSSL_secure_malloc(num) = CRYPTO_secure_malloc(num, "", 0);
+@macro OPENSSL_secure_zalloc(num) = CRYPTO_secure_zalloc(num, "", 0);
+@macro OPENSSL_secure_free(addr) = CRYPTO_secure_free(addr, "", 0);
+
+/** Overwrites `len` bytes at `ptr`, in a way the optimizer is not allowed to
+    drop as dead. Use it on keys and plaintext before the memory goes back. */
+@extern fn OPENSSL_cleanse(ptr: opaque*, len: u64);
+
+/** Compares `len` bytes in time that does not depend on where they first
+    differ, and answers 0 when they are equal. Every comparison against a
+    secret (a MAC tag, a password hash) belongs here rather than in memcmp,
+    whose early exit leaks the matching prefix. */
+@extern fn CRYPTO_memcmp(in_a: const opaque*, in_b: const opaque*, len: u64) -> i32;
+
+/* Hex conversion. Both allocate with OPENSSL_malloc, so the result is freed
+   with OPENSSL_free. */
+@extern fn OPENSSL_buf2hexstr(buf: const u8*, buflen: i64) -> char*;
+@extern fn OPENSSL_buf2hexstr_ex(str: char*, str_n: u64, strlength: u64*,
+    buf: const u8*, buflen: u64, sep: char) -> i32;
+@extern fn OPENSSL_hexstr2buf(str: const char*, buflen: i64*) -> u8*;
+@extern fn OPENSSL_hexstr2buf_ex(buf: u8*, buf_n: u64, buflen: u64*,
+    str: const char*, sep: char) -> i32;
+@extern fn OPENSSL_hexchar2int(c: u8) -> i32;
+
+/* Selectors for OpenSSL_version() */
+@const OPENSSL_VERSION = 0;
+@const OPENSSL_CFLAGS = 1;
+@const OPENSSL_BUILT_ON = 2;
+@const OPENSSL_PLATFORM = 3;
+@const OPENSSL_DIR = 4;
+@const OPENSSL_ENGINES_DIR = 5;
+@const OPENSSL_VERSION_STRING = 6;
+@const OPENSSL_FULL_VERSION_STRING = 7;
+@const OPENSSL_MODULES_DIR = 8;
+@const OPENSSL_CPU_INFO = 9;
+@const OPENSSL_WINCTX = 10;
+
+@const OPENSSL_INFO_CONFIG_DIR = 1001;
+@const OPENSSL_INFO_ENGINES_DIR = 1002;
+@const OPENSSL_INFO_MODULES_DIR = 1003;
+@const OPENSSL_INFO_DSO_EXTENSION = 1004;
+@const OPENSSL_INFO_DIR_FILENAME_SEPARATOR = 1005;
+@const OPENSSL_INFO_LIST_SEPARATOR = 1006;
+@const OPENSSL_INFO_SEED_SOURCE = 1008;
+@const OPENSSL_INFO_CPU_SETTINGS = 1009;
+@const OPENSSL_INFO_WINDOWS_CONTEXT = 1010;
+
+@extern fn OpenSSL_version_num() -> u64;
+@extern fn OpenSSL_version(type: i32) -> const char*;
+@extern fn OPENSSL_info(type: i32) -> const char*;
+
+/* Flags for OPENSSL_init_crypto() */
+@const OPENSSL_INIT_NO_LOAD_CRYPTO_STRINGS = 0x00000001;
+@const OPENSSL_INIT_LOAD_CRYPTO_STRINGS = 0x00000002;
+@const OPENSSL_INIT_ADD_ALL_CIPHERS = 0x00000004;
+@const OPENSSL_INIT_ADD_ALL_DIGESTS = 0x00000008;
+@const OPENSSL_INIT_NO_ADD_ALL_CIPHERS = 0x00000010;
+@const OPENSSL_INIT_NO_ADD_ALL_DIGESTS = 0x00000020;
+@const OPENSSL_INIT_LOAD_CONFIG = 0x00000040;
+@const OPENSSL_INIT_NO_LOAD_CONFIG = 0x00000080;
+@const OPENSSL_INIT_ASYNC = 0x00000100;
+@const OPENSSL_INIT_ENGINE_RDRAND = 0x00000200;
+@const OPENSSL_INIT_ENGINE_DYNAMIC = 0x00000400;
+@const OPENSSL_INIT_ENGINE_OPENSSL = 0x00000800;
+@const OPENSSL_INIT_ENGINE_CRYPTODEV = 0x00001000;
+@const OPENSSL_INIT_ENGINE_CAPI = 0x00002000;
+@const OPENSSL_INIT_ENGINE_PADLOCK = 0x00004000;
+@const OPENSSL_INIT_ENGINE_AFALG = 0x00008000;
+@const OPENSSL_INIT_ATFORK = 0x00020000;
+@const OPENSSL_INIT_NO_ATEXIT = 0x00080000;
+
+/*
+ * Since 1.1.0 the library initializes itself on first use, so a program only
+ * calls this to ask for something other than the defaults: reading the
+ * config file, say, or keeping the error strings out of a small binary.
+ */
+@extern fn OPENSSL_init_crypto(opts: u64, settings: const OPENSSL_INIT_SETTINGS*) -> i32;
+@extern fn OPENSSL_cleanup();
+@extern fn OPENSSL_atexit(handler: fn()) -> i32;
+@extern fn OPENSSL_thread_stop();
+@extern fn OPENSSL_thread_stop_ex(ctx: OSSL_LIB_CTX*);
+
+@extern fn OSSL_LIB_CTX_new() -> OSSL_LIB_CTX*;
+@extern fn OSSL_LIB_CTX_free(ctx: OSSL_LIB_CTX*);
+@extern fn OSSL_LIB_CTX_get0_global_default() -> OSSL_LIB_CTX*;
+@extern fn OSSL_LIB_CTX_set0_default(libctx: OSSL_LIB_CTX*) -> OSSL_LIB_CTX*;

@@ -1,0 +1,98 @@
+// Authenticate a message with a shared key, and check one that arrives:
+//
+//   hmac sign   hunter2 "transfer 100 to bob"
+//   hmac verify hunter2 "transfer 100 to bob" 4f2c...
+//
+// A digest says whether a message changed. An HMAC says whether it changed
+// *and* whether whoever produced the tag held the key, which is what makes
+// it worth sending alongside data an attacker can rewrite.
+//
+// The verify side is the part worth copying: the tag is recomputed and
+// compared with CRYPTO_memcmp, never memcmp. A comparison that returns as
+// soon as two bytes differ takes measurably longer for a nearly-right guess
+// than a wrong one, and that alone is enough to recover a tag byte by byte.
+
+import std.io;
+import { strlen, strcmp } from string;
+import { EVP_MAX_MD_SIZE, EVP_sha256 } from openssl.evp;
+import { HMAC } from openssl.hmac;
+import { SHA256_DIGEST_LENGTH } from openssl.sha;
+import {
+    CRYPTO_memcmp,
+    OPENSSL_hexstr2buf,
+    OPENSSL_free,
+} from openssl.crypto;
+
+fn tag(key: const char*, message: const char*, out: &u8[]) -> u32 {
+    let length: u32 = 0;
+
+    // one call: init, update, final. HMAC answers null on failure, and
+    // otherwise the same buffer it was handed
+    let res = HMAC(EVP_sha256(),
+                   key as const opaque*, strlen(key) as i32,
+                   message as const u8*, strlen(message),
+                   out, &length);
+
+    return res == null ? 0 : length;
+}
+
+fn print_hex(bytes: const u8[], length: u32) {
+    for (let i: u32 = 0; i < length; i += 1)
+        std.io.print("{02x}", bytes[i]);
+    std.io.println("");
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length < 4) {
+        std.io.println(std.io.stderr,
+                       "usage: {} sign <key> <message>", args[0]);
+        std.io.println(std.io.stderr,
+                       "       {} verify <key> <message> <tag>", args[0]);
+        return 2;
+    }
+
+    let computed: u8[EVP_MAX_MD_SIZE];
+    let length = tag(args[2], args[3], computed);
+    if (length == 0) {
+        std.io.println(std.io.stderr, "{}: HMAC failed", args[0]);
+        return 1;
+    }
+
+    if (strcmp(args[1], "sign") == 0) {
+        print_hex(computed, length);
+        return 0;
+    }
+
+    if (strcmp(args[1], "verify") != 0 or args.length != 5) {
+        std.io.println(std.io.stderr, "{}: expected 'sign' or 'verify'", args[0]);
+        return 2;
+    }
+
+    // the tag off the command line, back from hex into bytes
+    let given_length: i64 = 0;
+    let given = OPENSSL_hexstr2buf(args[4], &given_length);
+    if (given == null) {
+        std.io.println(std.io.stderr, "{}: tag is not hex", args[0]);
+        return 2;
+    }
+    defer OPENSSL_free(given as opaque*);
+
+    // A length mismatch is public: it says nothing about the key, so
+    // returning early on it leaks nothing
+    if (given_length != SHA256_DIGEST_LENGTH) {
+        std.io.println("bad: tag is {} bytes, expected {}",
+                       given_length, SHA256_DIGEST_LENGTH as i32);
+        return 1;
+    }
+
+    // the contents are not public, so the comparison takes the same time
+    // whether the tags match at the first byte or the last
+    if (CRYPTO_memcmp(given as const opaque*, computed as const opaque*,
+                      SHA256_DIGEST_LENGTH) != 0) {
+        std.io.println("bad: not authentic");
+        return 1;
+    }
+
+    std.io.println("ok: authentic");
+    return 0;
+}

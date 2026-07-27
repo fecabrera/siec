@@ -1,0 +1,220 @@
+// A TLS client: connect, check who answered, ask for a page.
+//
+//   client example.com
+//   client www.openssl.org /source/
+//
+// The whole connection is one BIO chain. BIO_new_ssl_connect() puts an SSL
+// filter on top of a connect BIO, so a single BIO_do_connect() resolves the
+// name, opens the socket, and runs the handshake, and everything written to
+// or read from the head of the chain is plaintext.
+//
+// Three settings are what make this a *verified* connection, and leaving any
+// of them out is the usual way a hand-written TLS client ends up encrypting
+// its traffic to whoever happened to answer:
+//
+//   SSL_CTX_set_default_verify_paths  which certificates are trusted
+//   SSL_CTX_set_verify(SSL_VERIFY_PEER)  fail the handshake if the chain is bad
+//   SSL_set1_host                     fail it if the chain is not this host's
+//
+// SSL_set_tlsext_host_name is separate and does *not* verify anything: it is
+// what the client asks for, so a server holding several names knows which
+// certificate to send.
+
+import std.io;
+import std.format;
+import unistd;
+import { SSL, SSL_CTX, ASN1_TIME } from openssl.types;
+import {
+    SSL_CTX_new, SSL_CTX_free,
+    SSL_CTX_set_default_verify_paths,
+    SSL_CTX_set_verify,
+    SSL_CTX_set_min_proto_version,
+    SSL_set_mode,
+    SSL_set1_host,
+    SSL_get_version,
+    SSL_get_cipher,
+    SSL_get1_peer_certificate,
+    SSL_get_verify_result,
+    TLS_client_method,
+    BIO_new_ssl_connect,
+    BIO_get_ssl,
+    SSL_VERIFY_PEER,
+    SSL_MODE_AUTO_RETRY,
+} from openssl.ssl;
+import { SSL_set_tlsext_host_name } from openssl.tls1;
+import { TLS1_2_VERSION } from openssl.prov_ssl;
+import {
+    BIO_free_all,
+    BIO_new,
+    BIO_s_mem,
+    BIO_read,
+    BIO_write,
+    BIO_set_conn_hostname,
+    BIO_set_conn_port,
+    BIO_do_connect,
+} from openssl.bio;
+import {
+    X509_free,
+    X509_get_subject_name,
+    X509_get_issuer_name,
+    X509_get0_notAfter,
+    X509_NAME_oneline,
+    ASN1_TIME_print,
+} from openssl.x509;
+import { X509_verify_cert_error_string } from openssl.x509_vfy;
+import { OPENSSL_free } from openssl.crypto;
+import { ERR_get_error, ERR_error_string_n } from openssl.err;
+
+@const PORT = "443";
+@const CHUNK = 4096;
+
+fn report(what: const char*) {
+    let code = ERR_get_error();
+    if (code == 0) {
+        std.io.println(std.io.stderr, "{}: failed", what);
+        return;
+    }
+
+    while (code != 0) {
+        let buf: char[256];
+        ERR_error_string_n(code, buf, 256);
+        std.io.println(std.io.stderr, "{}: {}", what, buf);
+        code = ERR_get_error();
+    }
+}
+
+// Several OpenSSL printers write to a BIO rather than answering a string. A
+// memory BIO is the way to catch one: write into it, then read it back out
+fn print_asn1_time(label: const char*, time: const ASN1_TIME*) {
+    let mem = BIO_new(BIO_s_mem());
+    if (mem == null) return;
+    defer BIO_free_all(mem);
+
+    ASN1_TIME_print(mem, time);
+
+    let buf: char[64];
+    let length = BIO_read(mem, buf as opaque*, 63);
+    if (length <= 0) return;
+
+    buf[length] = 0;
+    std.io.println("{}:  {}", label, buf as char*);
+}
+
+fn describe(ssl: SSL*) {
+    std.io.println("protocol: {}", SSL_get_version(ssl));
+    std.io.println("cipher:   {}", SSL_get_cipher(ssl));
+
+    // a reference of its own, so it is freed here
+    let cert = SSL_get1_peer_certificate(ssl);
+    if (cert == null) {
+        std.io.println("peer sent no certificate");
+        return;
+    }
+    defer X509_free(cert);
+
+    // with a null buffer this allocates, and the result goes back through
+    // OPENSSL_free rather than the C library's free
+    let subject = X509_NAME_oneline(X509_get_subject_name(cert), null, 0);
+    let issuer = X509_NAME_oneline(X509_get_issuer_name(cert), null, 0);
+    std.io.println("subject:  {}", subject);
+    std.io.println("issuer:   {}", issuer);
+    OPENSSL_free(subject as opaque*);
+    OPENSSL_free(issuer as opaque*);
+
+    print_asn1_time("expires", X509_get0_notAfter(cert));
+
+    // With SSL_VERIFY_PEER the handshake has already failed if this is not
+    // X509_V_OK, so it is here to report rather than to decide. The error
+    // string for X509_V_OK is "ok"
+    let result = SSL_get_verify_result(ssl);
+    std.io.println("verify:   {}", X509_verify_cert_error_string(result));
+}
+
+fn main(args: char*[]) -> i32 {
+    if (args.length < 2 or args.length > 3) {
+        std.io.println(std.io.stderr, "usage: {} <host> [path]", args[0]);
+        return 2;
+    }
+
+    let host = args[1];
+    let path = args.length == 3 ? args[2] : "/";
+
+    // One context holds the settings; a program making many connections
+    // builds it once and reuses it
+    let ctx = SSL_CTX_new(TLS_client_method());
+    if (ctx == null) {
+        report("SSL_CTX_new");
+        return 1;
+    }
+    defer SSL_CTX_free(ctx);
+
+    if (not SSL_CTX_set_default_verify_paths(ctx)) {
+        report("trust store");
+        return 1;
+    }
+
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, null);
+    SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+
+    let bio = BIO_new_ssl_connect(ctx);
+    if (bio == null) {
+        report("BIO_new_ssl_connect");
+        return 1;
+    }
+    defer BIO_free_all(bio);    // frees the whole chain, and the SSL in it
+
+    // the SSL inside the chain, borrowed: the BIO still owns it
+    let ssl: SSL* = null;
+    BIO_get_ssl(bio, &ssl);
+    if (ssl == null) {
+        report("BIO_get_ssl");
+        return 1;
+    }
+
+    // let a renegotiation be handled inside the read rather than surfacing
+    // as a retryable failure
+    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
+
+    SSL_set_tlsext_host_name(ssl, host);    // what to ask for
+    if (not SSL_set1_host(ssl, host)) {     // what to accept
+        report("SSL_set1_host");
+        return 1;
+    }
+
+    BIO_set_conn_hostname(bio, host);
+    BIO_set_conn_port(bio, PORT);
+
+    // resolve, connect, handshake, verify: all of it, here
+    if (BIO_do_connect(bio) <= 0) {
+        report("connect");
+        return 1;
+    }
+
+    describe(ssl);
+    std.io.println("");
+
+    // past the handshake the chain is an ordinary byte stream
+    let request = std.format.format(
+        "GET {} HTTP/1.0\r\nHost: {}\r\nConnection: close\r\nUser-Agent: sie-openssl\r\n\r\n",
+        path, host);
+    defer request.destroy();
+
+    if (BIO_write(bio, request.data as const opaque*, request.length as i32) <= 0) {
+        report("write");
+        return 1;
+    }
+
+    let buf: u8[CHUNK];
+    while (true) {
+        let read = BIO_read(bio, buf as opaque*, CHUNK);
+        if (read == 0) break;       // the peer closed
+        if (read < 0) {
+            report("read");
+            return 1;
+        }
+
+        unistd.write(unistd.STDOUT_FILENO, buf, read as u64);
+    }
+
+    return 0;
+}

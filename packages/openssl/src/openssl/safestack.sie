@@ -1,0 +1,17 @@
+import { OPENSSL_STACK } from stack;
+
+/*
+ * safestack.h is preprocessor machinery, not code. `STACK_OF(TYPE)` expands
+ * to `struct stack_st_TYPE`, a name that is never defined: a phantom whose
+ * only job is keeping one element type apart from another. Every one of them
+ * is really the same OPENSSL_STACK holding void pointers, and the
+ * `sk_TYPE_*` names around it are per-type macros casting their way down to
+ * the OPENSSL_sk_* functions in stack.sie.
+ *
+ * A generic alias says the same thing without the macros: `StackOf<T>` keeps
+ * the element type in the signature and erases to the one handle, so
+ * `StackOf<SSL_CIPHER>*` is exactly the `STACK_OF(SSL_CIPHER) *` C passes.
+ * Nothing here has a representation of its own, which is the point.
+ */
+
+@type StackOf<T> = OPENSSL_STACK;

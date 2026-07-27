@@ -1,0 +1,219 @@
+import { BIO } from types;
+import { FILE } from stdio;
+
+/*
+ * The error queue. Almost every function in the library answers failure with
+ * a plain 0 or a null pointer and pushes the reason onto a per-thread queue;
+ * the detail is only there if the caller reads it. ERR_get_error() pops the
+ * oldest code, and does so until the queue empties, so an operation that
+ * failed several layers down reports each layer in turn.
+ *
+ * A code packs the library that raised it and the reason into one number,
+ * which the accessors below take apart.
+ */
+
+/* Library codes: which part of OpenSSL raised the error */
+@const ERR_LIB_NONE = 1;
+@const ERR_LIB_SYS = 2;
+@const ERR_LIB_BN = 3;
+@const ERR_LIB_RSA = 4;
+@const ERR_LIB_DH = 5;
+@const ERR_LIB_EVP = 6;
+@const ERR_LIB_BUF = 7;
+@const ERR_LIB_OBJ = 8;
+@const ERR_LIB_PEM = 9;
+@const ERR_LIB_DSA = 10;
+@const ERR_LIB_X509 = 11;
+@const ERR_LIB_ASN1 = 13;
+@const ERR_LIB_CONF = 14;
+@const ERR_LIB_CRYPTO = 15;
+@const ERR_LIB_EC = 16;
+@const ERR_LIB_SSL = 20;
+@const ERR_LIB_BIO = 32;
+@const ERR_LIB_PKCS7 = 33;
+@const ERR_LIB_X509V3 = 34;
+@const ERR_LIB_PKCS12 = 35;
+@const ERR_LIB_RAND = 36;
+@const ERR_LIB_DSO = 37;
+@const ERR_LIB_ENGINE = 38;
+@const ERR_LIB_OCSP = 39;
+@const ERR_LIB_UI = 40;
+@const ERR_LIB_COMP = 41;
+@const ERR_LIB_ECDSA = 42;
+@const ERR_LIB_ECDH = 43;
+@const ERR_LIB_OSSL_STORE = 44;
+@const ERR_LIB_FIPS = 45;
+@const ERR_LIB_CMS = 46;
+@const ERR_LIB_TS = 47;
+@const ERR_LIB_HMAC = 48;
+@const ERR_LIB_CT = 50;
+@const ERR_LIB_ASYNC = 51;
+@const ERR_LIB_KDF = 52;
+@const ERR_LIB_SM2 = 53;
+@const ERR_LIB_ESS = 54;
+@const ERR_LIB_PROP = 55;
+@const ERR_LIB_CRMF = 56;
+@const ERR_LIB_PROV = 57;
+@const ERR_LIB_CMP = 58;
+@const ERR_LIB_OSSL_ENCODER = 59;
+@const ERR_LIB_OSSL_DECODER = 60;
+@const ERR_LIB_HTTP = 61;
+@const ERR_LIB_USER = 128;
+
+/* Flags on the text an error may carry */
+@const ERR_TXT_MALLOCED = 0x01;
+@const ERR_TXT_STRING = 0x02;
+
+@const ERR_FLAG_MARK = 0x01;
+@const ERR_FLAG_CLEAR = 0x02;
+
+/* How many errors one thread's queue holds before dropping the oldest */
+@const ERR_NUM_ERRORS = 16;
+
+/* The layout of a packed code */
+@const ERR_SYSTEM_FLAG = 0x80000000;
+@const ERR_SYSTEM_MASK = 0x7fffffff;
+@const ERR_LIB_OFFSET = 23;
+@const ERR_LIB_MASK = 0xff;
+@const ERR_RFLAGS_OFFSET = 18;
+@const ERR_RFLAGS_MASK = 0x1f;
+@const ERR_REASON_MASK = 0x7fffff;
+
+@const ERR_RFLAG_FATAL = 0x1 << ERR_RFLAGS_OFFSET;
+@const ERR_RFLAG_COMMON = 0x2 << ERR_RFLAGS_OFFSET;
+
+/* Reasons every library shares, alongside its own. The first group says
+   only "the layer below me failed, look further down the queue". */
+@const ERR_R_SYS_LIB = ERR_LIB_SYS | ERR_RFLAG_COMMON;
+@const ERR_R_BN_LIB = ERR_LIB_BN | ERR_RFLAG_COMMON;
+@const ERR_R_RSA_LIB = ERR_LIB_RSA | ERR_RFLAG_COMMON;
+@const ERR_R_DH_LIB = ERR_LIB_DH | ERR_RFLAG_COMMON;
+@const ERR_R_EVP_LIB = ERR_LIB_EVP | ERR_RFLAG_COMMON;
+@const ERR_R_BUF_LIB = ERR_LIB_BUF | ERR_RFLAG_COMMON;
+@const ERR_R_OBJ_LIB = ERR_LIB_OBJ | ERR_RFLAG_COMMON;
+@const ERR_R_PEM_LIB = ERR_LIB_PEM | ERR_RFLAG_COMMON;
+@const ERR_R_DSA_LIB = ERR_LIB_DSA | ERR_RFLAG_COMMON;
+@const ERR_R_X509_LIB = ERR_LIB_X509 | ERR_RFLAG_COMMON;
+@const ERR_R_ASN1_LIB = ERR_LIB_ASN1 | ERR_RFLAG_COMMON;
+@const ERR_R_CONF_LIB = ERR_LIB_CONF | ERR_RFLAG_COMMON;
+@const ERR_R_CRYPTO_LIB = ERR_LIB_CRYPTO | ERR_RFLAG_COMMON;
+@const ERR_R_EC_LIB = ERR_LIB_EC | ERR_RFLAG_COMMON;
+@const ERR_R_SSL_LIB = ERR_LIB_SSL | ERR_RFLAG_COMMON;
+@const ERR_R_BIO_LIB = ERR_LIB_BIO | ERR_RFLAG_COMMON;
+@const ERR_R_PKCS7_LIB = ERR_LIB_PKCS7 | ERR_RFLAG_COMMON;
+@const ERR_R_X509V3_LIB = ERR_LIB_X509V3 | ERR_RFLAG_COMMON;
+@const ERR_R_PKCS12_LIB = ERR_LIB_PKCS12 | ERR_RFLAG_COMMON;
+@const ERR_R_RAND_LIB = ERR_LIB_RAND | ERR_RFLAG_COMMON;
+@const ERR_R_DSO_LIB = ERR_LIB_DSO | ERR_RFLAG_COMMON;
+@const ERR_R_ENGINE_LIB = ERR_LIB_ENGINE | ERR_RFLAG_COMMON;
+@const ERR_R_UI_LIB = ERR_LIB_UI | ERR_RFLAG_COMMON;
+@const ERR_R_ECDSA_LIB = ERR_LIB_ECDSA | ERR_RFLAG_COMMON;
+@const ERR_R_OSSL_STORE_LIB = ERR_LIB_OSSL_STORE | ERR_RFLAG_COMMON;
+@const ERR_R_CMS_LIB = ERR_LIB_CMS | ERR_RFLAG_COMMON;
+@const ERR_R_TS_LIB = ERR_LIB_TS | ERR_RFLAG_COMMON;
+@const ERR_R_CT_LIB = ERR_LIB_CT | ERR_RFLAG_COMMON;
+@const ERR_R_PROV_LIB = ERR_LIB_PROV | ERR_RFLAG_COMMON;
+@const ERR_R_ESS_LIB = ERR_LIB_ESS | ERR_RFLAG_COMMON;
+@const ERR_R_CMP_LIB = ERR_LIB_CMP | ERR_RFLAG_COMMON;
+@const ERR_R_OSSL_ENCODER_LIB = ERR_LIB_OSSL_ENCODER | ERR_RFLAG_COMMON;
+@const ERR_R_OSSL_DECODER_LIB = ERR_LIB_OSSL_DECODER | ERR_RFLAG_COMMON;
+
+@const ERR_R_FATAL = ERR_RFLAG_FATAL | ERR_RFLAG_COMMON;
+@const ERR_R_MALLOC_FAILURE = 256 | ERR_R_FATAL;
+@const ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED = 257 | ERR_R_FATAL;
+@const ERR_R_PASSED_NULL_PARAMETER = 258 | ERR_R_FATAL;
+@const ERR_R_INTERNAL_ERROR = 259 | ERR_R_FATAL;
+@const ERR_R_DISABLED = 260 | ERR_R_FATAL;
+@const ERR_R_INIT_FAIL = 261 | ERR_R_FATAL;
+@const ERR_R_PASSED_INVALID_ARGUMENT = 262 | ERR_RFLAG_COMMON;
+@const ERR_R_OPERATION_FAIL = 263 | ERR_R_FATAL;
+@const ERR_R_INVALID_PROVIDER_FUNCTIONS = 264 | ERR_R_FATAL;
+@const ERR_R_INTERRUPTED_OR_CANCELLED = 265 | ERR_RFLAG_COMMON;
+@const ERR_R_NESTED_ASN1_ERROR = 266 | ERR_RFLAG_COMMON;
+@const ERR_R_MISSING_ASN1_EOS = 267 | ERR_RFLAG_COMMON;
+@const ERR_R_UNSUPPORTED = 268 | ERR_RFLAG_COMMON;
+@const ERR_R_FETCH_FAILED = 269 | ERR_RFLAG_COMMON;
+@const ERR_R_INVALID_PROPERTY_DEFINITION = 270 | ERR_RFLAG_COMMON;
+@const ERR_R_UNABLE_TO_GET_READ_LOCK = 271 | ERR_R_FATAL;
+@const ERR_R_UNABLE_TO_GET_WRITE_LOCK = 272 | ERR_R_FATAL;
+
+/** True when the code carries an errno rather than a library reason. */
+fn ERR_SYSTEM_ERROR(errcode: u64) -> bool {
+    return (errcode & ERR_SYSTEM_FLAG) != 0;
+}
+
+/** The library that raised the error, one of the ERR_LIB_* codes. */
+fn ERR_GET_LIB(errcode: u64) -> i32 {
+    if (ERR_SYSTEM_ERROR(errcode)) return ERR_LIB_SYS;
+    return ((errcode >> ERR_LIB_OFFSET) & ERR_LIB_MASK) as i32;
+}
+
+fn ERR_GET_RFLAGS(errcode: u64) -> i32 {
+    if (ERR_SYSTEM_ERROR(errcode)) return 0;
+    return (errcode & (ERR_RFLAGS_MASK << ERR_RFLAGS_OFFSET)) as i32;
+}
+
+/** The reason within that library, or the errno for a system error. */
+fn ERR_GET_REASON(errcode: u64) -> i32 {
+    if (ERR_SYSTEM_ERROR(errcode)) return (errcode & ERR_SYSTEM_MASK) as i32;
+    return (errcode & ERR_REASON_MASK) as i32;
+}
+
+/** True when the error left the operation unrecoverable, so retrying with
+    different arguments will not help. */
+fn ERR_FATAL_ERROR(errcode: u64) -> bool {
+    return (ERR_GET_RFLAGS(errcode) & ERR_RFLAG_FATAL) != 0;
+}
+
+fn ERR_COMMON_ERROR(errcode: u64) -> bool {
+    return (ERR_GET_RFLAGS(errcode) & ERR_RFLAG_COMMON) != 0;
+}
+
+/** Pops the oldest error off this thread's queue, or 0 when it is empty. */
+@extern fn ERR_get_error() -> u64;
+@extern fn ERR_get_error_all(file: const char**, line: i32*, func: const char**,
+    data: const char**, flags: i32*) -> u64;
+
+/** Reads the oldest error without removing it. */
+@extern fn ERR_peek_error() -> u64;
+@extern fn ERR_peek_error_all(file: const char**, line: i32*, func: const char**,
+    data: const char**, flags: i32*) -> u64;
+
+/** Reads the newest error, the one raised deepest in the call. */
+@extern fn ERR_peek_last_error() -> u64;
+@extern fn ERR_peek_last_error_all(file: const char**, line: i32*, func: const char**,
+    data: const char**, flags: i32*) -> u64;
+
+/** Empties the queue. Worth doing before an operation whose errors you mean
+    to report, so an older failure is not mistaken for this one's. */
+@extern fn ERR_clear_error();
+
+/** Formats a code as "error:<code>:<library>:<function>:<reason>". The
+    buffer must hold at least 256 bytes; ERR_error_string_n is the form that
+    cannot overrun. */
+@extern fn ERR_error_string(e: u64, buf: char*) -> char*;
+@extern fn ERR_error_string_n(e: u64, buf: char*, len: u64);
+@extern fn ERR_lib_error_string(e: u64) -> const char*;
+@extern fn ERR_reason_error_string(e: u64) -> const char*;
+
+/** Drains the queue, writing each error as a line. */
+@extern fn ERR_print_errors(bp: BIO*);
+@extern fn ERR_print_errors_fp(fp: FILE*);
+@extern fn ERR_print_errors_cb(cb: fn(const char*, u64, opaque*) -> i32, u: opaque*);
+
+/* Marks let a caller run an operation whose failure is not interesting and
+   put the queue back the way it was. */
+@extern fn ERR_set_mark() -> i32;
+@extern fn ERR_pop_to_mark() -> i32;
+@extern fn ERR_clear_last_mark() -> i32;
+@extern fn ERR_count_to_mark() -> i32;
+
+/* Raising an error is three calls in C too: ERR_raise() is a macro that
+   opens a slot, records where the caller stands, and fills the reason in. */
+@extern fn ERR_new();
+@extern fn ERR_set_debug(file: const char*, line: i32, func: const char*);
+@extern fn ERR_set_error(lib: i32, reason: i32, fmt: const char*, ...);
+@extern fn ERR_set_error_data(data: char*, flags: i32);
+@extern fn ERR_add_error_data(num: i32, ...);
+@extern fn ERR_add_error_txt(sepr: const char*, txt: const char*);
+@extern fn ERR_add_error_mem_bio(sep: const char*, bio: BIO*);

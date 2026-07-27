@@ -1,0 +1,162 @@
+import {
+    X509, X509_NAME, X509_NAME_ENTRY, X509_EXTENSION, X509_CRL,
+    ASN1_INTEGER, ASN1_TIME, ASN1_STRING, ASN1_OBJECT, EVP_PKEY, EVP_MD, BIO,
+    OSSL_LIB_CTX,
+} from types;
+import { StackOf } from safestack;
+
+/*
+ * Certificates, and the names inside them.
+ *
+ * A certificate that arrived over TLS has already been checked by the time
+ * a program gets to look at it (see x509_vfy.sie); what is left is reading
+ * it: who it was issued to, by whom, and for how long. Every accessor whose
+ * name has a 0 in it hands back a pointer the certificate owns, so the
+ * caller neither frees it nor uses it after freeing the certificate; a 1
+ * means a reference of its own that must be freed.
+ */
+
+/* Encodings a file may be in, for the functions that load one */
+@const X509_FILETYPE_PEM = 1;
+@const X509_FILETYPE_ASN1 = 2;
+@const X509_FILETYPE_DEFAULT = 3;
+
+/* Bits in the key usage extension */
+@const X509v3_KU_DIGITAL_SIGNATURE = 0x0080;
+@const X509v3_KU_NON_REPUDIATION = 0x0040;
+@const X509v3_KU_KEY_ENCIPHERMENT = 0x0020;
+@const X509v3_KU_DATA_ENCIPHERMENT = 0x0010;
+@const X509v3_KU_KEY_AGREEMENT = 0x0008;
+@const X509v3_KU_KEY_CERT_SIGN = 0x0004;
+@const X509v3_KU_CRL_SIGN = 0x0002;
+@const X509v3_KU_ENCIPHER_ONLY = 0x0001;
+@const X509v3_KU_DECIPHER_ONLY = 0x8000;
+
+/* How X509_NAME_print_ex() lays a name out. XN_FLAG_ONELINE is the readable
+   one; XN_FLAG_RFC2253 is the escaped form other tools expect. */
+@const XN_FLAG_SEP_COMMA_PLUS = 1 << 16;
+@const XN_FLAG_SEP_CPLUS_SPC = 2 << 16;
+@const XN_FLAG_SEP_SPLUS_SPC = 3 << 16;
+@const XN_FLAG_SEP_MULTILINE = 4 << 16;
+@const XN_FLAG_DN_REV = 1 << 20;
+@const XN_FLAG_FN_SN = 0;
+@const XN_FLAG_FN_LN = 1 << 21;
+@const XN_FLAG_FN_OID = 2 << 21;
+@const XN_FLAG_FN_NONE = 3 << 21;
+@const XN_FLAG_SPC_EQ = 1 << 23;
+@const XN_FLAG_DUMP_UNKNOWN_FIELDS = 1 << 24;
+
+/* Flags for X509_check_host() and the name checks under it */
+@const X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT = 0x1;
+@const X509_CHECK_FLAG_NO_WILDCARDS = 0x2;
+@const X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS = 0x4;
+@const X509_CHECK_FLAG_MULTI_LABEL_WILDCARDS = 0x8;
+@const X509_CHECK_FLAG_SINGLE_LABEL_SUBDOMAINS = 0x10;
+@const X509_CHECK_FLAG_NEVER_CHECK_SUBJECT = 0x20;
+
+@extern fn X509_new() -> X509*;
+@extern fn X509_free(a: X509*);
+@extern fn X509_dup(a: const X509*) -> X509*;
+@extern fn X509_up_ref(x: X509*) -> i32;
+@extern fn X509_cmp(a: const X509*, b: const X509*) -> i32;
+
+/** The version, counted from zero: 2 is what "X.509v3" means. */
+@extern fn X509_get_version(x: const X509*) -> i64;
+@extern fn X509_get_serialNumber(x: X509*) -> ASN1_INTEGER*;
+
+/** Whom the certificate is about. */
+@extern fn X509_get_subject_name(a: const X509*) -> X509_NAME*;
+
+/** Who signed it, which is the subject name of the next certificate up. */
+@extern fn X509_get_issuer_name(a: const X509*) -> X509_NAME*;
+
+/* The window the certificate is good for */
+@extern fn X509_get0_notBefore(x: const X509*) -> const ASN1_TIME*;
+@extern fn X509_get0_notAfter(x: const X509*) -> const ASN1_TIME*;
+
+/** The subject's public key. The 0 form borrows, the 1 form takes a
+    reference that EVP_PKEY_free() gives back. */
+@extern fn X509_get0_pubkey(x: const X509*) -> EVP_PKEY*;
+@extern fn X509_get_pubkey(x: X509*) -> EVP_PKEY*;
+@extern fn X509_get_signature_nid(x: const X509*) -> i32;
+
+/** Checks the signature against a public key. This is one link of a chain,
+    not a verification: it says nothing about whether the key is trusted. */
+@extern fn X509_verify(a: X509*, r: EVP_PKEY*) -> i32;
+
+/** Hashes the certificate's DER encoding, which is what a fingerprint is. */
+@extern fn X509_digest(data: const X509*, type: const EVP_MD*, md: u8*, len: u32*) -> i32;
+
+/** Answers 1 when the certificate is good for `chk`, 0 when it is not.
+    Wildcards count unless the flags say otherwise, and with `peername`
+    non-null the matched name is written there for the caller to free. */
+@extern fn X509_check_host(x: X509*, chk: const char*, chklen: u64, flags: u32,
+    peername: char**) -> i32;
+@extern fn X509_check_email(x: X509*, chk: const char*, chklen: u64, flags: u32) -> i32;
+@extern fn X509_check_ip(x: X509*, chk: const u8*, chklen: u64, flags: u32) -> i32;
+@extern fn X509_check_ip_asc(x: X509*, ipasc: const char*, flags: u32) -> i32;
+
+@extern fn X509_get_ext_count(x: const X509*) -> i32;
+@extern fn X509_get_ext(x: const X509*, loc: i32) -> X509_EXTENSION*;
+@extern fn X509_get_ext_by_NID(x: const X509*, nid: i32, lastpos: i32) -> i32;
+
+/** Decodes an extension into whatever structure it holds, or null when the
+    certificate has none. The caller frees the result. */
+@extern fn X509_get_ext_d2i(x: const X509*, nid: i32, crit: i32*, idx: i32*) -> opaque*;
+@extern fn X509_EXTENSION_get_object(ex: X509_EXTENSION*) -> ASN1_OBJECT*;
+@extern fn X509_EXTENSION_get_critical(ex: const X509_EXTENSION*) -> i32;
+
+/* Names */
+@extern fn X509_NAME_new() -> X509_NAME*;
+@extern fn X509_NAME_free(a: X509_NAME*);
+@extern fn X509_NAME_dup(a: const X509_NAME*) -> X509_NAME*;
+@extern fn X509_NAME_cmp(a: const X509_NAME*, b: const X509_NAME*) -> i32;
+@extern fn X509_NAME_hash_ex(x: const X509_NAME*, libctx: OSSL_LIB_CTX*, propq: const char*,
+    ok: i32*) -> u64;
+
+/** Flattens a name into the "/C=US/O=Example/CN=example.com" form. With
+    `buf` null it allocates, and the result is freed with OPENSSL_free. */
+@extern fn X509_NAME_oneline(a: const X509_NAME*, buf: char*, size: i32) -> char*;
+
+/** Writes a name to a BIO in whichever of the XN_FLAG_* layouts is asked
+    for, and unlike X509_NAME_oneline it escapes rather than mangles. */
+@extern fn X509_NAME_print_ex(out: BIO*, nm: const X509_NAME*, indent: i32,
+    flags: u64) -> i32;
+
+/** Copies one attribute out by NID (NID_commonName, say) and answers its
+    length, or -1 when the name has no such attribute. */
+@extern fn X509_NAME_get_text_by_NID(name: const X509_NAME*, nid: i32, buf: char*,
+    len: i32) -> i32;
+@extern fn X509_NAME_entry_count(name: const X509_NAME*) -> i32;
+@extern fn X509_NAME_get_entry(name: const X509_NAME*, loc: i32) -> X509_NAME_ENTRY*;
+@extern fn X509_NAME_get_index_by_NID(name: const X509_NAME*, nid: i32, lastpos: i32) -> i32;
+@extern fn X509_NAME_ENTRY_get_object(ne: const X509_NAME_ENTRY*) -> ASN1_OBJECT*;
+@extern fn X509_NAME_ENTRY_get_data(ne: const X509_NAME_ENTRY*) -> ASN1_STRING*;
+
+/* Printing a whole certificate, the way the openssl command does */
+@extern fn X509_print(bp: BIO*, x: X509*) -> i32;
+@extern fn X509_print_ex(bp: BIO*, x: X509*, nmflag: u64, cflag: u64) -> i32;
+
+/* Certificate revocation lists */
+@extern fn X509_CRL_new() -> X509_CRL*;
+@extern fn X509_CRL_free(a: X509_CRL*);
+@extern fn X509_CRL_get_issuer(crl: const X509_CRL*) -> X509_NAME*;
+
+/* Reading and writing the DER encoding a certificate travels in */
+@extern fn d2i_X509(a: X509**, in: const u8**, len: i64) -> X509*;
+@extern fn i2d_X509(a: const X509*, out: u8**) -> i32;
+
+/* ASN.1 pieces a certificate is made of */
+@extern fn ASN1_INTEGER_get(a: const ASN1_INTEGER*) -> i64;
+@extern fn ASN1_STRING_length(x: const ASN1_STRING*) -> i32;
+@extern fn ASN1_STRING_get0_data(x: const ASN1_STRING*) -> const u8*;
+
+/** Writes a time in the "Jun  9 00:00:00 2026 GMT" form. */
+@extern fn ASN1_TIME_print(bp: BIO*, tm: const ASN1_TIME*) -> i32;
+
+/** Compares an ASN.1 time against a real one, `cmp_time` null meaning now,
+    and answers -1 for before, 0 for equal, 1 for after, -2 on a bad time. */
+@extern fn ASN1_TIME_cmp_time_t(s: const ASN1_TIME*, t: i64) -> i32;
+
+/* Stacks of certificates, which is how a chain travels */
+@extern fn X509_chain_up_ref(chain: StackOf<X509>*) -> StackOf<X509>*;

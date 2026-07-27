@@ -1,0 +1,41 @@
+import { OSSL_LIB_CTX, ENGINE } from types;
+
+/*
+ * The random generator. RAND_bytes() draws from a DRBG that the library
+ * seeds from the operating system, so a caller does not seed it; the
+ * RAND_seed()/RAND_add() pair only stirs extra entropy in.
+ *
+ * Every one of these answers 1 on success and 0 or -1 on failure, and a
+ * failure means the bytes are not random. Nothing here is safe to use
+ * without checking that.
+ */
+
+/** Fills `num` bytes with cryptographically strong random data. */
+@extern fn RAND_bytes(buf: u8*, num: i32) -> i32;
+
+/** Same, from the private DRBG instance. Use it for long-term secrets: keys
+    the program keeps, rather than nonces it sends over the wire. */
+@extern fn RAND_priv_bytes(buf: u8*, num: i32) -> i32;
+
+@extern fn RAND_bytes_ex(ctx: OSSL_LIB_CTX*, buf: u8*, num: u64, strength: u32) -> i32;
+@extern fn RAND_priv_bytes_ex(ctx: OSSL_LIB_CTX*, buf: u8*, num: u64, strength: u32) -> i32;
+
+/** Answers 1 once the generator has been seeded well enough to be used. */
+@extern fn RAND_status() -> i32;
+
+/** Mixes `num` bytes into the pool. `randomness` is how many bits of real
+    entropy the caller believes those bytes carry; RAND_seed() is the same
+    call claiming one bit per byte. */
+@extern fn RAND_add(buf: const opaque*, num: i32, randomness: f64);
+@extern fn RAND_seed(buf: const opaque*, num: i32);
+
+@extern fn RAND_poll() -> i32;
+@extern fn RAND_load_file(file: const char*, max_bytes: i64) -> i32;
+@extern fn RAND_write_file(file: const char*) -> i32;
+@extern fn RAND_file_name(file: char*, num: u64) -> const char*;
+@extern fn RAND_keep_random_devices_open(keep: i32);
+
+@extern fn RAND_set_DRBG_type(ctx: OSSL_LIB_CTX*, drbg: const char*, propq: const char*,
+    cipher: const char*, digest: const char*) -> i32;
+@extern fn RAND_set_seed_source_type(ctx: OSSL_LIB_CTX*, seed: const char*,
+    propq: const char*) -> i32;
