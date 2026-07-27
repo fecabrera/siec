@@ -21,17 +21,6 @@ run_echo make
 run_echo cp src/libtomlc17.a ../dist/
 run_echo cd ..
 
-# Build sie
-mkdir -p dist/bin/
-run_echo $SIEC \
-    "${SIE_INCLUDES[@]/#/-I }"\
-    "${SIE_LIB_DIRS[@]/#/-L }"\
-    "${SIE_LINK_LIBS[@]/#/-l }"\
-    ${SIE_FLAGS}\
-    sie/src/*.sie\
-    ${SIE_LIB_OBJS[@]}\
-    -o dist/bin/sie
-
 # Build examples
 for pkg in $(find packages -type d -mindepth 1 -maxdepth 1); do
     mkdir -p dist/$(basename $pkg)/examples/
