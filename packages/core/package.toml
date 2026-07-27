@@ -10,5 +10,4 @@ sources = ["src/"]
 
 [dependencies]
 libc = "~1"
-mpdecimal = "~1"
 posix = "~1"

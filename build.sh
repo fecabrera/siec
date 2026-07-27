@@ -1,7 +1,7 @@
 #!/bin/bash
 SIEC="${SIEC:-pipenv run python -m siec}"
 SIE_FLAGS="${SIE_FLAGS:-}"
-SIE_INCLUDES=("packages/libc/src" "packages/posix/src" "packages/tomlc17/src" "packages/core/src" "packages/mpdecimal/src" "packages/zlib/src" "packages/libcurl/src" "packages/openssl/src")
+SIE_INCLUDES=("packages/libc/src" "packages/posix/src" "packages/tomlc17/src" "packages/core/src" "packages/decimal/src" "packages/mpdecimal/src" "packages/zlib/src" "packages/libcurl/src" "packages/openssl/src")
 # openssl is keg-only on macOS, so its lib directory has to be named: the
 # default search would otherwise find the system's LibreSSL instead
 SIE_LIB_DIRS=("$(brew --prefix)/lib" "$(brew --prefix)/opt/openssl@3/lib")

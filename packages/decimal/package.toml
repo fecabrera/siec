@@ -1,0 +1,12 @@
+[package]
+name = "decimal"
+description = "Sie Decimal Library"
+version = "1.0.0"
+license = "BSD-3-Clause"
+keywords = ["decimal", "arithmetic"]
+
+[library]
+sources = ["src/"]
+
+[dependencies]
+mpdecimal = "~1"
