@@ -6,10 +6,21 @@ import { Formattable } from std.format;
 import { String } from std.collections;
 import { File, FileMode, OpenError, CloseError } from std.fs;
 import unistd;
-import zlib;
+import {
+    z_flush,
+    z_stream,
+    z_level,
+    z_status,
+    deflateInit,
+    deflateEnd,
+    inflateInit,
+    inflateEnd,
+    deflate,
+    inflate,
+} from zlib;
 
 /* Size in bytes of the input and output staging buffers. Data is streamed
-   through zlib CHUNK bytes at a time so files of any size use constant memory. */
+   through CHUNK bytes at a time so files of any size use constant memory. */
 @const CHUNK = 16384;
 
 enum ProgramError {
@@ -92,23 +103,23 @@ fn main(argc: i32, argv: char**) -> i32 {
 }
 
 fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
-    let flush: zlib.z_flush;
+    let flush: z_flush;
     let have: u64;
     let next_in: u8[CHUNK];
     let next_out: u8[CHUNK];
-    let strm: zlib.z_stream = {
+    let strm: z_stream = {
         zalloc = null,
         zfree = null,
         opaque = null,
     };
         
-    let ret = zlib.deflateInit(&strm, zlib.z_level::Z_DEFAULT_COMPRESSION);
-    if (ret != zlib.z_status::Z_OK) {
+    let ret = deflateInit(&strm, z_level::Z_DEFAULT_COMPRESSION);
+    if (ret != z_status::Z_OK) {
         std.io.println(std.io.stderr, "deflateInit() returned {}: {}", ret, strm.msg);
         return Error(ProgramError::InitError);
     }
     
-    defer zlib.deflateEnd(&strm); // cleanup on every exit path
+    defer deflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
         let n = try src.read(next_in, CHUNK) except (err) {
@@ -118,7 +129,7 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
 
         strm.avail_in = n as u32;
 
-        flush = n ? zlib.z_flush::Z_NO_FLUSH : zlib.z_flush::Z_FINISH;
+        flush = n ? z_flush::Z_NO_FLUSH : z_flush::Z_FINISH;
 
         strm.next_in = next_in;
 
@@ -126,7 +137,7 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
             strm.avail_out = CHUNK;
             strm.next_out = next_out;
 
-            ret = zlib.deflate(&strm, flush);
+            ret = deflate(&strm, flush);
             have = CHUNK as u64 - strm.avail_out;
 
             let n = try dst.write(next_out, have) except (err) {
@@ -140,7 +151,7 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
             if (strm.avail_out) break; // write done
         }
 
-        if (flush == zlib.z_flush::Z_FINISH) break; // all done
+        if (flush == z_flush::Z_FINISH) break; // all done
     }
 
     return Ok();
@@ -150,19 +161,19 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
     let have: u64;
     let next_in: u8[CHUNK];
     let next_out: u8[CHUNK];
-    let strm: zlib.z_stream = {
+    let strm: z_stream = {
         zalloc = null,
         zfree = null,
         opaque = null,
     };
 
-    let ret = zlib.inflateInit(&strm);
-    if (ret != zlib.z_status::Z_OK) {
+    let ret = inflateInit(&strm);
+    if (ret != z_status::Z_OK) {
         std.io.println(std.io.stderr, "deflateInit() returned {}: {}", ret, strm.msg);
         return Error(ProgramError::InitError);
     }
 
-    defer zlib.inflateEnd(&strm); // cleanup on every exit path
+    defer inflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
         let n = try src.read(next_in, CHUNK) except (err) {
@@ -178,12 +189,12 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
             strm.avail_out = CHUNK;
             strm.next_out = next_out;
 
-            ret = zlib.inflate(&strm, zlib.z_flush::Z_NO_FLUSH);
+            ret = inflate(&strm, z_flush::Z_NO_FLUSH);
 
             case (ret) {
-            when zlib.z_status::Z_NEED_DICT,
-                 zlib.z_status::Z_DATA_ERROR,
-                 zlib.z_status::Z_MEM_ERROR:
+            when z_status::Z_NEED_DICT,
+                 z_status::Z_DATA_ERROR,
+                 z_status::Z_MEM_ERROR:
                  std.io.println(std.io.stderr, "inflate() returned {}", ret);
                  return Error(ProgramError::InflateError);
             }
@@ -201,7 +212,7 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
             if (strm.avail_out) break; // write done
         }
         
-        if (ret == zlib.z_status::Z_STREAM_END) break; // all done
+        if (ret == z_status::Z_STREAM_END) break; // all done
     }
 
     return Ok();
