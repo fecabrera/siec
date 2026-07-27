@@ -10,7 +10,9 @@ errors surface without emitting every imported module behind it.
 Helix setups that connect it to '.sie' files.
 """
 
+import asyncio
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -71,6 +73,36 @@ class Symbol:
     name: str
     kind: str
     line: int
+
+
+class _ValidationDebouncer:
+    """Own and retire delayed validation tasks, one per document URI."""
+
+    def __init__(self, validate: Callable[[str], None], delay: float = 0.2):
+        self.validate = validate
+        self.delay = delay
+        self.pending: dict[str, asyncio.Task] = {}
+
+    def schedule(self, uri: str) -> None:
+        """Replace any validation waiting for the same document."""
+        self.cancel(uri)
+
+        async def settled() -> None:
+            try:
+                await asyncio.sleep(self.delay)
+                self.validate(uri)
+            finally:
+                # A canceled predecessor may finish after its replacement was
+                # installed; only the task that still owns the URI may remove it.
+                if self.pending.get(uri) is asyncio.current_task():
+                    self.pending.pop(uri, None)
+
+        self.pending[uri] = asyncio.get_running_loop().create_task(settled())
+
+    def cancel(self, uri: str) -> None:
+        """Cancel and forget a document's delayed validation, if any."""
+        if (task := self.pending.pop(uri, None)) is not None:
+            task.cancel()
 
 
 def package_paths(base: Path, data: dict) -> list[Path]:
@@ -751,8 +783,6 @@ def create_server():
     outline; hover and go-to-definition from the last good analysis.
     Initialization options may carry {"includePaths": [...]}.
     """
-    import asyncio
-
     from lsprotocol import types
     from pygls.lsp.server import LanguageServer
     from pygls.uris import from_fs_path, to_fs_path
@@ -774,7 +804,6 @@ def create_server():
     workspace = {"root": None, "extra": []}
     outlines: dict[str, list[Symbol]] = {}
     analyses: dict[str, Analysis] = {}
-    pending: dict[str, asyncio.Task] = {}
 
     def document_path(uri: str) -> Path:
         return Path(to_fs_path(uri)).resolve()
@@ -833,6 +862,8 @@ def create_server():
         server.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics))
 
+    debounce = _ValidationDebouncer(validate)
+
     @server.feature(types.INITIALIZE)
     def initialize(params: types.InitializeParams) -> None:
         if params.root_uri is not None:
@@ -853,19 +884,12 @@ def create_server():
     async def did_change(params: types.DidChangeTextDocumentParams) -> None:
         # let the keystrokes settle, then recompile; a newer change
         # cancels a wait still in flight
-        uri = params.text_document.uri
-        if (task := pending.pop(uri, None)) is not None:
-            task.cancel()
-
-        async def settled() -> None:
-            await asyncio.sleep(0.2)
-            validate(uri)
-
-        pending[uri] = asyncio.get_running_loop().create_task(settled())
+        debounce.schedule(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_CLOSE)
     def did_close(params: types.DidCloseTextDocumentParams) -> None:
         uri = params.text_document.uri
+        debounce.cancel(uri)
         outlines.pop(uri, None)
         analyses.pop(uri, None)
         server.text_document_publish_diagnostics(

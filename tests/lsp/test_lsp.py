@@ -1,5 +1,7 @@
 """Tests for siec.lsp: the analysis behind the language server."""
 
+import asyncio
+
 from siec.lsp import Report, analyze, outline, search_paths
 
 
@@ -84,6 +86,71 @@ def test_analyze_checks_the_file_as_its_own_unit(tmp_path):
     report = analyze(src, [])
     assert report.file == str(src.resolve())
     assert report.line == 4
+
+
+def test_debounced_validation_retires_completed_and_replaced_tasks():
+    """
+    A completed task leaves no retained entry, and a canceled predecessor
+    cannot discard the replacement for the same URI.
+    """
+    from siec.lsp import _ValidationDebouncer
+
+    async def exercise():
+        validated = []
+        debounce = _ValidationDebouncer(validated.append, delay=0.01)
+        uri = "file:///p.sie"
+
+        debounce.schedule(uri)
+        await asyncio.sleep(0)  # let the predecessor enter its wait
+        debounce.schedule(uri)
+        replacement = debounce.pending[uri]
+        await asyncio.sleep(0)
+
+        assert debounce.pending[uri] is replacement
+
+        await asyncio.sleep(0.02)
+        assert validated == [uri]
+        assert debounce.pending == {}
+
+    asyncio.run(exercise())
+
+
+def test_close_cancels_a_pending_validation(tmp_path, monkeypatch):
+    """
+    Closing during the debounce window publishes only the clearing
+    diagnostics and never lets delayed validation touch the closed URI.
+    """
+    from lsprotocol import types
+    from pygls.uris import from_fs_path
+
+    from siec.lsp import create_server
+
+    src = write(tmp_path / "main.sie", "fn main() -> i32 { broken }")
+    uri = from_fs_path(str(src))
+
+    async def exercise():
+        server = create_server()
+        published = []
+        errors = []
+        monkeypatch.setattr(server, "text_document_publish_diagnostics",
+                            published.append)
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _loop, context: errors.append(context))
+
+        did_change = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_CHANGE]
+        did_close = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_CLOSE]
+
+        await did_change(types.DidChangeTextDocumentParams(
+            text_document=types.VersionedTextDocumentIdentifier(uri=uri, version=1),
+            content_changes=[]))
+        did_close(types.DidCloseTextDocumentParams(
+            text_document=types.TextDocumentIdentifier(uri=uri)))
+        await asyncio.sleep(0.25)
+
+        assert [params.diagnostics for params in published] == [[]]
+        assert errors == []
+
+    asyncio.run(exercise())
 
 
 def test_outline_lists_declarations_in_source_order(tmp_path):
