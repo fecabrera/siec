@@ -1,5 +1,7 @@
 """Tests for siec.codegen.generator."""
 
+import copy
+
 from llvmlite import ir
 
 from siec.codegen import codegen
@@ -52,6 +54,30 @@ def test_codegen_declares_all_functions_before_emitting_bodies():
     """
     module = codegen(program(source), "m")
     assert "call i32" in str(module)
+
+
+def test_codegen_can_reuse_the_same_program_without_mutating_it():
+    """
+    Codegen's rewriting passes operate on a private AST, so one parsed
+    Program can safely produce multiple modules.
+    """
+    tree = program("""
+    @type Number = i32;
+
+    fn identity<T>(value: T) -> T { return value; }
+
+    fn main() -> Number {
+        let value: Number = identity(7 as Number);
+        return value;
+    }
+    """)
+    original = copy.deepcopy(tree)
+
+    first = codegen(tree, "m")
+    second = codegen(tree, "m")
+
+    assert tree == original
+    assert str(first) == str(second)
 
 
 def test_codegen_merges_forward_declaration_and_definition():

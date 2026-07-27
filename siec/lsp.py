@@ -230,8 +230,11 @@ def compile_unit(path: Path, include_paths: list[Path],
         file, line, message = error_parts(error)
         report = Report(file or str(path), line, message)
 
-    return Analysis(str(path), report, program,
-                    gen if program is not None else None, overlays)
+    # Codegen owns a rewritten clone of the parsed AST. Keep that semantic
+    # view for hover/navigation while leaving the loader's tree untouched.
+    analyzed = gen.program if gen.program is not None else program
+    return Analysis(str(path), report, analyzed,
+                    gen if analyzed is not None else None, overlays)
 
 
 def analyze(path: Path, include_paths: list[Path],

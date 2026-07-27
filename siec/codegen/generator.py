@@ -1,5 +1,6 @@
 """Code generation state and entry point."""
 
+import copy
 from dataclasses import dataclass
 
 from llvmlite import ir
@@ -107,6 +108,10 @@ class CodeGenerator:
         self.module = ir.Module(name=module_name, context=ir.Context())
         self.module.triple = self.target
         self.str_count = 0
+
+        # Code generation's private working AST. Its passes rewrite types,
+        # conditionals, and expansions without touching the caller's tree.
+        self.program: Program | None = None
 
         # the '-g' debug-info builder, None when not emitting debug info
         self.debug = None
@@ -608,7 +613,9 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     A caller may pass its own generator to emit into: its tables hold
     everything the program declared afterwards - however far emission
-    got - which is what the language server reads.
+    got - which is what the language server reads. The generator also
+    retains the private working copy of the AST; codegen never mutates the
+    Program instance supplied by its caller.
     """
     from siec.codegen.aliases import register_aliases
     from siec.codegen.conditionals import check_asserts, resolve_conditionals
@@ -624,7 +631,13 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     from siec.codegen.constants import BUILTIN_CONSTANTS
 
+    # Registration and emission deliberately rewrite the AST: conditionals
+    # splice declarations, aliases canonicalize annotations, and expansions
+    # attach generated nodes. Keep all of that inside a private working tree.
+    program = copy.deepcopy(program)
+
     gen = gen or CodeGenerator(module_name, target)
+    gen.program = program
     if debug:
         from siec.codegen.debug import DebugInfo
         gen.debug = DebugInfo(gen, module_name)
