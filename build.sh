@@ -6,7 +6,6 @@ SIE_INCLUDES=("packages/libc/src" "packages/posix/src" "packages/tomlc17/src" "p
 # default search would otherwise find the system's LibreSSL instead
 SIE_LIB_DIRS=("$(brew --prefix)/lib" "$(brew --prefix)/opt/openssl@3/lib")
 SIE_LINK_LIBS=("mpdec" "z" "curl" "ssl" "crypto")
-SIE_LIB_OBJS=("dist/libtomlc17.a")
 
 run_echo() {
     echo "$@"
@@ -14,12 +13,6 @@ run_echo() {
 }
 
 mkdir -p dist/
-
-# Build tomlc17
-run_echo cd tomlc17
-run_echo make
-run_echo cp src/libtomlc17.a ../dist/
-run_echo cd ..
 
 # Build examples
 for dir in examples/*/*; do LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib run_echo sie build $dir; done
@@ -33,7 +26,6 @@ for pkg in $(find packages -type d -mindepth 1 -maxdepth 1); do
             "${SIE_LINK_LIBS[@]/#/-l }"\
             ${SIE_FLAGS}\
             $f \
-            ${SIE_LIB_OBJS[@]}\
             -o dist/$(basename -- $pkg)/examples/$(basename -- ${f%.sie}) 
     done
     
@@ -46,7 +38,6 @@ for pkg in $(find packages -type d -mindepth 1 -maxdepth 1); do
                 "${SIE_LINK_LIBS[@]/#/-l }"\
                 ${SIE_FLAGS}\
                 $f \
-                ${SIE_LIB_OBJS[@]}\
                 -o dist/$(basename -- $pkg)/examples/$(basename -- $dir)/$(basename -- ${f%.sie})
         done
     done

@@ -101,7 +101,7 @@ fn main(args: char*[]) -> i32 {
     // the named file, or whatever is piped in
     if (args.length == 3) {
         let input = File(args[2], FileMode::Read);
-        defer input.destroy();
+        defer input.close();
 
         try input.open() except (err) {
             std.io.println(std.io.stderr, "{}: {}", args[2], err);

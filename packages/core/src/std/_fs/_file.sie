@@ -81,17 +81,6 @@ fn File::init(&self, path: const char*, mode: FileMode) {
 }
 
 /**
- * Destroy a file object.
- * 
- * @param self The file object to destroy.
- */
-fn File::destroy(&self) {
-    if (self.open) {
-        self.close();
-    }
-}
-
-/**
  * Open a file.
  * 
  * @param self The file object to open.

@@ -80,8 +80,6 @@ fn main(argc: i32, argv: char**) -> i32 {
     let output_path = argv[unistd.optind + 1];
 
     let input = File(input_path, FileMode::Read);
-    defer input.destroy();
-    
     try input.open() except (err) {
         std.io.println(std.io.stderr, "{}: {}", input_path, err);
         return 1;
@@ -89,8 +87,6 @@ fn main(argc: i32, argv: char**) -> i32 {
     defer input.close();
     
     let output = File(output_path, FileMode::Write | FileMode::Create);
-    defer output.destroy();
-    
     try output.open() except (err) {
         std.io.println(std.io.stderr, "{}: {}", output_path, err);
         return 1;

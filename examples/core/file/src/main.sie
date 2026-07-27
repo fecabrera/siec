@@ -8,7 +8,6 @@ fn main(args: char*[]) -> i32 {
     }
     
     let file = File(args[1], FileMode::Read);
-    defer file.destroy();
     
     try file.open() except (err) {
         std.io.println(std.io.stderr, "{}: {}", args[1], err);
