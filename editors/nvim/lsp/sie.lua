@@ -5,8 +5,10 @@
 -- or 'gd'), and the document outline. The server comes with the compiler:
 -- 'pip install -e ".[lsp]"'.
 --
--- The include path comes from the project's package.toml ([package]
--- include); extra directories (the compiler's -I) go in settings, see the
+-- A project is whatever holds the nearest package.toml, so opening a
+-- package inside a workspace roots the server at that package: its own
+-- sources and its installed dependencies' are what its imports resolve
+-- through. Extra directories (the compiler's -I) go in settings, see the
 -- README.
 return {
   cmd = { "sie-lsp" },

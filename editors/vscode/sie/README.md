@@ -34,5 +34,7 @@ Reload VS Code and open a `.sie` file. (Packaging a `.vsix` with
   `sie-lsp`); point it at an absolute path (a virtualenv's, say) when
   it isn't on VS Code's PATH.
 - `sie.includePaths` — extra include directories for analysis, like the
-  compiler's `-I`. The project's `package.toml` (`[package] include`)
-  supplies the rest on its own.
+  compiler's `-I`. The project's `package.toml` supplies the rest on its
+  own: its `[package] include` entries, and, where it declares an `[app]`
+  or `[library]`, that package's sources and every dependency's resolved
+  from what `sie install` put down.

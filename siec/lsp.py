@@ -73,15 +73,60 @@ class Symbol:
     line: int
 
 
+def package_paths(base: Path, data: dict) -> list[Path]:
+    """
+    The include path a package's own manifest implies: the directories
+    its sources sit in, then those of every dependency resolved from
+    what is installed, exactly as 'sie build' assembles them.
+
+    A dependency that resolves to nothing simply contributes nothing:
+    the editor still analyzes what it can, and the unresolved import
+    reports itself.
+    """
+    from siec.sie import Resolved, resolve, unit
+
+    try:
+        made_of = unit(base / "package.toml", data)[1]
+    except ValueError:
+        # neither an app nor a library: a project's own configuration,
+        # which speaks through '[package] include' instead
+        return []
+
+    table = data.get("package") or {}
+    root = Resolved(str(table.get("name") or base.name),
+                    str(table.get("version") or ""), base, data, made_of)
+
+    try:
+        tree = resolve(root)
+    except LookupError:
+        tree = []
+
+    paths: list[Path] = []
+    for member in (root, *tree):
+        for directory in member.source_dirs():
+            if directory not in paths:
+                paths.append(directory)
+
+    return paths
+
+
 def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
     """
     Include paths from the project's 'package.toml' files: the nearest
-    one walking up from the edited file, then the workspace root's, each
-    contributing its '[package] include' entries relative to itself.
+    one walking up from the edited file, then the workspace root's.
+
+    Each contributes its '[package] include' entries relative to itself,
+    and, where it declares a package of its own, that package's sources
+    and its installed dependencies'.
+
+    Configured directories come first, whichever manifest named them: an
+    'include' entry is a deliberate override, so a checkout pointing at
+    its own packages wins over the copies a dependency resolves to.
     """
     import tomllib
 
-    paths: list[Path] = []
+    configured: list[Path] = []
+    packaged: list[Path] = []
     read: set[Path] = set()
 
     def take(base: Path) -> None:
@@ -96,7 +141,9 @@ def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
             return
 
         for entry in data.get("package", {}).get("include") or ():
-            paths.append((base / entry).resolve())
+            configured.append((base / entry).resolve())
+
+        packaged.extend(package_paths(base, data))
 
     if file_dir is not None:
         for base in (file_dir, *file_dir.parents):
@@ -110,7 +157,7 @@ def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
     if root is not None:
         take(root)
 
-    return paths
+    return [*configured, *packaged]
 
 
 def search_paths(root: Path | None, extra: list[str],
@@ -458,6 +505,13 @@ def resolve_chain(analysis: Analysis, sites: dict, scope: dict, lines: dict,
     """
     gen = analysis.gen
     name = parts[-1]
+
+    # a chain naming a module is the module itself: an import's path, or
+    # the prefix a qualified use reaches through
+    spelling = spell(parts, seps)
+    module = gen.module_bindings.get((analysis.path, spelling))
+    if module is not None:
+        return Finding(text=f"import {spelling};", targets=[(module, 1)])
 
     if len(parts) == 1 and name not in ("self",):
         if name in lines:

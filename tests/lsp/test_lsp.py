@@ -164,6 +164,84 @@ def test_search_paths_prefer_the_nearest_config(tmp_path):
     ]
 
 
+def test_search_paths_follow_a_package_to_its_dependencies(tmp_path, monkeypatch):
+    """
+    A manifest declaring a package of its own puts that package's
+    sources on the include path, and its installed dependencies' after,
+    the way a build assembles them.
+    """
+    monkeypatch.setenv("SIE_PATH", str(tmp_path / "sie"))
+
+    installed = tmp_path / "sie" / "lib" / "core@1.0.0"
+    write(installed / "package.toml",
+          '[package]\nname = "core"\nversion = "1.0.0"\n\n'
+          '[library]\nsources = ["src/"]\n')
+    (installed / "src").mkdir(parents=True)
+
+    project = tmp_path / "app"
+    write(project / "package.toml",
+          '[package]\nname = "app"\n\n[app]\nsources = ["src/"]\n\n'
+          '[dependencies]\ncore = "*"\n')
+    (project / "src").mkdir(parents=True)
+
+    paths = search_paths(project, [], project / "src")
+    assert [str(p) for p in paths] == [
+        str(project / "src"),
+        str(installed / "src"),
+        str(project),
+        str(project / "lib"),
+    ]
+
+
+def test_search_paths_prefer_a_configured_directory_to_a_resolved_one(tmp_path,
+                                                                     monkeypatch):
+    """
+    An 'include' entry is a deliberate override, so it comes first
+    whichever manifest named it: a checkout pointing at its own packages
+    wins over the copies a dependency resolves to.
+    """
+    monkeypatch.setenv("SIE_PATH", str(tmp_path / "sie"))
+
+    installed = tmp_path / "sie" / "lib" / "core@1.0.0"
+    write(installed / "package.toml",
+          '[package]\nname = "core"\nversion = "1.0.0"\n\n'
+          '[library]\nsources = ["src/"]\n')
+    (installed / "src").mkdir(parents=True)
+
+    write(tmp_path / "package.toml", '[package]\ninclude = ["packages/core/src"]\n')
+    (tmp_path / "packages" / "core" / "src").mkdir(parents=True)
+
+    write(tmp_path / "app" / "package.toml",
+          '[package]\nname = "app"\n\n[app]\nsources = ["src/"]\n\n'
+          '[dependencies]\ncore = "*"\n')
+    (tmp_path / "app" / "src").mkdir(parents=True)
+
+    paths = search_paths(tmp_path, [], tmp_path / "app" / "src")
+    assert [str(p) for p in paths[:3]] == [
+        str((tmp_path / "packages" / "core" / "src").resolve()),
+        str(tmp_path / "app" / "src"),
+        str(installed / "src"),
+    ]
+
+
+def test_search_paths_survive_a_dependency_that_is_not_installed(tmp_path,
+                                                                 monkeypatch):
+    """
+    What cannot be resolved contributes nothing: the package's own
+    sources still analyze, and the unresolved import reports itself.
+    """
+    monkeypatch.setenv("SIE_PATH", str(tmp_path / "sie"))
+
+    project = tmp_path / "app"
+    write(project / "package.toml",
+          '[package]\nname = "app"\n\n[app]\nsources = ["src/"]\n\n'
+          '[dependencies]\nmissing = "*"\n')
+    (project / "src").mkdir(parents=True)
+
+    paths = search_paths(project, [], project / "src")
+    assert str(project / "src") in [str(p) for p in paths]
+
+
 def unit(tmp_path, text, name="main.sie"):
     """
     Compile a source file as a unit for inspection.
@@ -302,6 +380,34 @@ fn main() -> i32 {
     finding = probe(analysis, src, 3, 16)
     assert finding.text == "fn add(x: i32, y: i32) -> i32"
     assert finding.targets == [(str((tmp_path / "util.sie").resolve()), 1)]
+
+
+def test_inspect_resolves_an_imported_module(tmp_path):
+    """
+    Hovering an import's path names the module and sites its file, so
+    the import itself navigates; a qualified use's prefix reads the same.
+    """
+    write(tmp_path / "util.sie", """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+""")
+
+    analysis, src = unit(tmp_path, """\
+import util;
+
+fn main() -> i32 {
+    return util.add(40, 2);
+}
+""")
+
+    module = [(str((tmp_path / "util.sie").resolve()), 1)]
+
+    finding = probe(analysis, src, 0, 9)
+    assert finding.text == "import util;"
+    assert finding.targets == module
+
+    prefix = probe(analysis, src, 3, 12)
+    assert prefix.text == "import util;"
+    assert prefix.targets == module
 
 
 def test_inspect_shows_a_struct_declaration(tmp_path):

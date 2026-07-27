@@ -74,8 +74,11 @@ Then, in your Neovim configuration (0.11 or newer):
 vim.lsp.enable("sie")
 ```
 
-The include path comes from the project's `package.toml` (`[package]
-include`) of the nearest one above the edited file. Extra directories, the
+The include path comes from the project's `package.toml`: the nearest one
+above the edited file, and the workspace root's. Each contributes its
+`[package] include` entries and, where it declares an `[app]` or
+`[library]` of its own, that package's sources and every dependency's
+resolved from what `sie install` put down. Extra directories, the
 compiler's `-I`, go in the initialization options:
 
 ```lua

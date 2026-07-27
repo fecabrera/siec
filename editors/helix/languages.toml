@@ -8,8 +8,10 @@
 #
 # `sie-lsp` comes with the compiler: `pip install -e '.[lsp]'`. Point the
 # command at an absolute path when it isn't on Helix's PATH. The include
-# path comes from the project's package.toml ([package] include); extra
-# directories (the compiler's -I) go in `config.includePaths`.
+# path comes from the project's package.toml: its [package] include
+# entries, plus the sources of the package it declares and of every
+# dependency resolved from what `sie install` put down. Extra directories
+# (the compiler's -I) go in `config.includePaths`.
 #
 # Highlighting comes from the tree-sitter grammar beside this file. Point
 # the [[grammar]] source at your checkout, copy `runtime/queries/sie` into
