@@ -1,1 +1,2 @@
-@include("std/_assert");
+@include("std/_assert")
+@include("std/_panic")

@@ -1,0 +1,9 @@
+[package]
+name = "panic"
+description = "A simple panic example"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
