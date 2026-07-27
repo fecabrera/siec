@@ -130,11 +130,38 @@ def load_program(sources: list[Path], include_paths: list[Path],
     module_bindings = {}
     member_bindings = {}
     member_targets = {}   # (file, binding) -> (module file, member name)
+    binding_sites = {}    # (file, import form, binding) -> (target, first line)
     exported = {}         # file -> its own exportable names
     declared_names = {}   # file -> every name it declares, statics included
     include_targets = {}  # file -> the files it includes
     member_names = {}     # file -> the names its member imports bind
     pending_members = []  # (file, import, target) checked once exports settle
+
+    def claim_binding(file: str, binding: str, target: tuple,
+                      line: int) -> bool:
+        """
+        Claim an import spelling in one file.
+
+        Repeating the exact same import is harmless and binds nothing new.
+        Pointing an existing spelling at another target of the same import
+        form is an error. Module and member imports have distinct uses, so
+        'import errno;' and 'import { errno } from errno;' may coexist.
+        """
+        form, *identity = target
+        key = (file, form, binding)
+        previous = binding_sites.get(key)
+        if previous is None:
+            binding_sites[key] = (identity, line)
+            return True
+
+        previous_target, previous_line = previous
+        if previous_target == identity:
+            return False
+
+        error = NameError(f"line {line}: import binding {binding!r} is "
+                          f"already declared at line {previous_line}")
+        error.sie_file = file
+        raise error
 
     def declared(program: Program, with_statics: bool) -> set[str]:
         # the names a file declares: every top-level declaration, an '@if'
@@ -315,11 +342,17 @@ def load_program(sources: list[Path], include_paths: list[Path],
                 # membership is checked once every export set has settled
                 pending_members.append((str(file), imp, target))
                 for name, binding in imp.members:
+                    if not claim_binding(str(file), binding,
+                                         ("member", target, name), imp.line):
+                        continue
+
                     member_bindings[(str(file), binding)] = name
                     member_targets[(str(file), binding)] = (target, name)
                     member_names.setdefault(str(file), set()).add(binding)
             else:
-                module_bindings[(str(file), imp.alias or imp.path)] = target
+                binding = imp.alias or imp.path
+                if claim_binding(str(file), binding, ("module", target), imp.line):
+                    module_bindings[(str(file), binding)] = target
 
         tag(program, str(file))
 

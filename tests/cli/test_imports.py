@@ -77,6 +77,78 @@ def test_module_alias(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_module_alias_cannot_be_rebound(tmp_path, monkeypatch, capsys):
+    """
+    Two imports cannot silently point one module alias at different files.
+    """
+    (tmp_path / "one.sie").write_text("")
+    (tmp_path / "two.sie").write_text("")
+    src = tmp_path / "main.sie"
+    src.write_text(
+        "import one as dep;\n"
+        "import two as dep;\n"
+        "fn main() -> i32 { return 0; }\n")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert ("main.sie at line 2: import binding 'dep' is already declared "
+            "at line 1") in capsys.readouterr().err
+
+
+def test_member_import_alias_cannot_be_rebound(tmp_path, monkeypatch, capsys):
+    """
+    A member binding names exactly one imported declaration in its file.
+    """
+    (tmp_path / "one.sie").write_text("fn first() {}\n")
+    (tmp_path / "two.sie").write_text("fn second() {}\n")
+    src = tmp_path / "main.sie"
+    src.write_text(
+        "import { first as selected } from one;\n"
+        "import { second as selected } from two;\n"
+        "fn main() -> i32 { return 0; }\n")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert ("main.sie at line 2: import binding 'selected' is already "
+            "declared at line 1") in capsys.readouterr().err
+
+
+def test_module_and_member_imports_can_share_a_binding(tmp_path, monkeypatch):
+    """
+    A module prefix and an unqualified member have distinguishable uses.
+    """
+    (tmp_path / "one.sie").write_text(
+        "fn value() -> i32 { return 21; }\n")
+    src = tmp_path / "main.sie"
+    src.write_text(
+        "import one as selected;\n"
+        "import { value as selected } from one;\n"
+        "fn main() -> i32 { return selected.value() + selected(); }\n")
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_repeating_the_same_import_binding_is_idempotent(tmp_path, monkeypatch):
+    """
+    Repeating an identical import does not create an ambiguous binding.
+    """
+    (tmp_path / "answer.sie").write_text(
+        "fn value() -> i32 { return 42; }\n")
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import answer as module;
+        import answer as module;
+        import { value as answer } from answer;
+        import { value as answer } from answer;
+
+        fn main() -> i32 { return module.value() - answer(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0
+
+
 def test_import_cycles_load_once(tmp_path, monkeypatch):
     """
     Two modules importing each other resolve without recursing forever.
