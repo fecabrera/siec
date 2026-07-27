@@ -371,6 +371,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             raise TypeError("'emit' outside a block expression")
 
         slot, end_block, target_name, depth = gen.emit_targets[-1]
+
+        # a 'try' over a result carrying only an error has no value for
+        # its arm to stand in for
+        if slot is None:
+            raise TypeError("nothing here takes a value: the result this "
+                            "'try' unwraps carries only an error")
+
         if target_name is not None:
             value = emit_coerced(gen, builder, stmt.value, target_name, scope)
         else:

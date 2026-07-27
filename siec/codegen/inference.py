@@ -30,6 +30,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    Try,
     TypeId,
     TypeName,
     TypeOf,
@@ -65,6 +66,49 @@ COMPARISONS = {"<", ">", "<=", ">=", "==", "!="}
 OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem",
                     "==": "eq", "!=": "eq",
                     "<": "cmp", ">": "cmp", "<=": "cmp", ">=": "cmp"}
+
+
+def result_arms(name: str | None) -> tuple[str | None, str] | None:
+    """
+    The value and error types a 'Result' spelling carries, or None for
+    any other type. 'Result<E>' has no value, so its value type is None.
+    """
+    from siec.codegen.generics import split_generic
+
+    split = split_generic(strip_const(strip_reference(strip_const(name) or "")))
+    if split is None or split[0] != "Result":
+        return None
+
+    args = split[1]
+    if len(args) == 1:
+        return None, args[0]
+
+    return (args[0], args[1]) if len(args) == 2 else None
+
+
+def try_arms(gen: CodeGenerator, expr: Try, scope: dict) -> tuple[str | None, str]:
+    """
+    The value and error types a 'try' unwraps, or the reason its call
+    gives it nothing to unwrap.
+    """
+    carried = expr_sie_type(gen, expr.call, scope)
+    arms = result_arms(carried)
+    if arms is None:
+        shown = repr(carried) if carried is not None else "nothing"
+        raise TypeError("'try' needs a call that returns a Result; "
+                        f"this one returns {shown}")
+
+    return arms
+
+
+def valueless_try(name: str | None) -> TypeError:
+    """
+    The error a 'try' over a valueless result gives where a value is
+    wanted: 'Result<E>' carries only the error, so there is nothing to
+    take and nothing for its arm to emit.
+    """
+    return TypeError(f"a {strip_const(name)!r} carries no value, so this "
+                     "'try' has none to give: it stands on its own")
 
 
 def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | None:
@@ -308,6 +352,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, AsmBlock):
         expr.return_type = expand_alias(gen, expr.return_type)
         return expr.return_type
+
+    # a 'try' takes the value its call's result carries; one carrying
+    # only an error has none to take
+    if isinstance(expr, Try):
+        arms = result_arms(expr_sie_type(gen, expr.call, scope))
+        return arms[0] if arms is not None else None
 
     # a member access yields the field's type; an aliasing field (a pointer
     # or array) keeps a const base's contract
@@ -565,6 +615,17 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
             return TypeError(f"receiver has no method {expr.method!r}")
 
         return TypeError(f"method {expr.method!r} returns no value")
+
+    # a 'try' types as the value its result carries: it has none when the
+    # call returns no Result, or one carrying only an error
+    if isinstance(expr, Try):
+        try:
+            if try_arms(gen, expr, scope)[0] is None:
+                return valueless_try(expr_sie_type(gen, expr.call, scope))
+        except TypeError as error:
+            return error
+
+        return None
 
     if isinstance(expr, Call) and expr.name in gen.macros:
         if gen.macros[expr.name].body is not None:

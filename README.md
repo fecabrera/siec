@@ -2486,6 +2486,31 @@ use(res.value);     // the tag was written true here
 
 A result no name holds cannot have been checked, so it has to be named first: `divide(1, 0).error` is an error, while binding it and testing `ok` is not. Reading only the tag, `if (divide(1, 0).ok)`, is always fine.
 
+#### Unwrapping with try
+
+`try <call> except (<name>) { ... }` is the check written as one expression: the call runs once, and the whole thing takes the value its result carried. Where an error came back instead, the arm runs with the error bound to the name it asked for.
+
+```
+let value = try divide(10, 2) except (error) { std.io.panic("{}", error); }
+let value = try divide(10, 2) except (error) { return 1; }
+let value = try divide(10, 2) except (error) { emit 0; }
+```
+
+The arm has no value of its own to fall out with, so it must do one of two things: leave, through `return`, `break`, `continue`, or an [`@noreturn`](#noreturn) call; or produce a stand-in with `emit`, exactly as a [block used as a value](#blocks) does. Falling off its end is an error.
+
+The operand is a call, a function's or a method's, returning a `Result`. Anything else is rejected: a `try` over storage that already holds a result would be a check written the long way, which is what `if (res.ok)` is for.
+
+A `Result<E>` carries only an error, so there is nothing to take and nothing for its arm to emit: its `try` stands on its own as a statement.
+
+```
+try file.open() except (error) {
+    std.io.println(std.io.stderr, "{}: {}", path, error);
+    return Error(OpenFailed);
+}
+```
+
+Either way the arm's `}` closes the statement, the way an if's body does, so no `;` follows it.
+
 ## Concepts
 
 ### Scopes

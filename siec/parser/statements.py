@@ -25,17 +25,30 @@ from siec.ast import (
     MethodCall,
     RefAssign,
     Return,
+    Try,
     TypeId,
     UnaryOp,
     Var,
     When,
     While,
 )
-from siec.parser.expressions import parse_asm_tail, parse_expression
+from siec.parser.expressions import parse_asm_tail, parse_expression, parse_try
 from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
 COMPOUND = {"+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "&=", "|=", "^="}
+
+
+def close(ts: TokenStream, value) -> None:
+    """
+    Close a statement with the ';' that terminates it, unless its value
+    is a 'try': the 'except' arm's brace already closed it, the way an
+    if's body closes an if.
+    """
+    if isinstance(value, Try):
+        return
+
+    ts.expect("sym", ";")
 
 
 def parse_pattern(ts: TokenStream) -> list:
@@ -250,7 +263,7 @@ def parse_statement(ts: TokenStream):
 
             ts.expect("sym", "=")
             value = parse_expression(ts)
-            ts.expect("sym", ";")
+            close(ts, value)
             return LetTuple(pattern, value, line=line)
 
         name = ts.expect("ident").value
@@ -269,7 +282,7 @@ def parse_statement(ts: TokenStream):
             raise SyntaxError(f"line {line}: 'let {name}' needs a type or an "
                               "initializer to infer it from")
 
-        ts.expect("sym", ";")
+        close(ts, value)
         return Let(name, var_type, value, line=line)
 
     # 'defer <expr>;' or 'defer { ... }' pushes the statement onto the
@@ -289,7 +302,7 @@ def parse_statement(ts: TokenStream):
         ts.next()
 
         value = parse_expression(ts)
-        ts.expect("sym", ";")
+        close(ts, value)
         return Emit(value, line=line)
 
     # 'break' and 'continue' steer the innermost enclosing loop
@@ -306,12 +319,12 @@ def parse_statement(ts: TokenStream):
         if ts.peek().syntax != ";":
             value = parse_expression(ts)
 
-        ts.expect("sym", ";")
+        close(ts, value)
         return Return(value, line=line)
 
     # otherwise an assignment or expression statement, closed by its ';'
     stmt = parse_step(ts)
-    ts.expect("sym", ";")
+    close(ts, stmt.expr if isinstance(stmt, ExprStmt) else stmt.value)
     return stmt
 
 

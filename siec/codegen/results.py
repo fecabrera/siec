@@ -58,6 +58,7 @@ from siec.ast import (
     Slice,
     Ternary,
     TupleLiteral,
+    Try,
     TypeOf,
     UnaryOp,
     Var,
@@ -66,7 +67,7 @@ from siec.ast import (
 from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable
-from siec.codegen.inference import expr_sie_type, infer_type
+from siec.codegen.inference import expr_sie_type, infer_type, result_arms
 from siec.codegen.types import sized_array, strip_const, strip_reference
 
 # what a condition established about a result's 'ok' tag; a path with no
@@ -178,35 +179,26 @@ def written(node) -> set:
     return names
 
 
-def escapes(stmts: list) -> bool:
+def escapes(node) -> bool:
     """
     Whether a loop body holds a 'break' of its own: a way out that leaves
-    without the loop's condition ever having turned false.
+    without the loop's condition ever having turned false. A nested loop
+    catches its own breaks, so it is not looked into.
     """
-    for stmt in stmts:
-        # a nested loop catches its own breaks
-        if isinstance(stmt, (While, For, Foreach)):
-            continue
+    if isinstance(node, list):
+        return any(escapes(item) for item in node)
 
-        if isinstance(stmt, Break):
-            return True
+    if not dataclasses.is_dataclass(node):
+        return False
 
-        if isinstance(stmt, If):
-            if escapes(stmt.body) or escapes(stmt.orelse or []):
-                return True
-        elif isinstance(stmt, Block):
-            if escapes(stmt.body):
-                return True
-        elif isinstance(stmt, Defer):
-            if escapes([stmt.stmt]):
-                return True
-        elif isinstance(stmt, Case):
-            if any(escapes(arm.body) for arm in stmt.arms):
-                return True
-            if escapes(stmt.orelse or []):
-                return True
+    if isinstance(node, Break):
+        return True
 
-    return False
+    if isinstance(node, (While, For, Foreach)):
+        return False
+
+    return any(escapes(getattr(node, field.name))
+               for field in dataclasses.fields(node))
 
 
 def bool_values(values: list) -> set | None:
@@ -677,6 +669,9 @@ class ResultFlow:
         if isinstance(expr, Member):
             return self.visit_member(expr)
 
+        if isinstance(expr, Try):
+            return self.visit_try(expr)
+
         if isinstance(expr, Call):
             for arg in expr.args:
                 self.check(arg)
@@ -733,6 +728,25 @@ class ResultFlow:
 
         self.visit(expr.left)
         self.visit(expr.right)
+        return {}, {}
+
+    def visit_try(self, expr) -> tuple[dict, dict]:
+        """
+        Walk a 'try': it does its own checking, taking the value only
+        where the tag holds, so all that is left is its arm, where the
+        error binds to the name it asked for.
+        """
+        self.check(expr.call)
+
+        arms = result_arms(self.sie_type(expr.call))
+
+        self.frames.append([])
+        try:
+            self.declare(expr.name, arms[1] if arms is not None else None)
+            self.branch(expr.body, dict(self.state))
+        finally:
+            self.unwind(self.frames.pop())
+
         return {}, {}
 
     def visit_member(self, expr) -> tuple[dict, dict]:

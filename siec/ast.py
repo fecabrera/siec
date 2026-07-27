@@ -277,6 +277,24 @@ class AsmBlock:
 
 
 @dataclass
+class Try:
+    """
+    A 'try f() except (e) { ... }' expression: the call runs once, and
+    the whole thing takes the value its result carried. Where the result
+    carried an error instead, the arm runs with 'e' bound to it.
+
+    The arm has no value of its own to fall out with, so it must leave -
+    returning, breaking, continuing, or calling something '@noreturn' -
+    or produce one with 'emit'. A call returning 'Result<E>' has no value
+    to take, so its 'try' stands as a statement and its arm cannot emit.
+    """
+    call: Expr
+    name: str
+    body: list
+    line: int = _line()
+
+
+@dataclass
 class Return:
     """
     A return statement with an optional value expression.

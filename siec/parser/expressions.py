@@ -23,6 +23,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    Try,
     TypeId,
     TypeName,
     TypeOf,
@@ -114,11 +115,38 @@ def parse_power(ts: TokenStream) -> Expr:
     return left
 
 
+def parse_try(ts: TokenStream, line: int) -> Try:
+    """
+    Parse the tail of 'try <call> except (name) { ... }', the 'try'
+    already consumed: the call whose result is unwrapped, and the arm
+    the error it may carry goes to.
+    """
+    # deferred import: statements and expressions are mutually recursive
+    from siec.parser.statements import parse_block
+
+    call = parse_primary(ts)
+    if not isinstance(call, (Call, MethodCall)):
+        raise SyntaxError(f"line {line}: 'try' takes a call: the result it "
+                          "unwraps comes from a function or a method")
+
+    ts.expect("kw", "except")
+    ts.expect("sym", "(")
+    name = ts.expect("ident").value
+    ts.expect("sym", ")")
+
+    return Try(call, name, parse_block(ts), line=line)
+
+
 def parse_primary(ts: TokenStream) -> Expr:
     """
     Parse a primary expression: an integer literal, string literal, variable, or call.
     """
     tok = ts.next()
+
+    # 'try f() except (e) { ... }' takes the value a call's result
+    # carried, handing the error to its arm
+    if tok.kind == "kw" and tok.value == "try":
+        return parse_try(ts, tok.line)
 
     # prefix '-', '~', 'not', '&', and '*' bind tighter than any binary operator
     if tok.syntax == "-":

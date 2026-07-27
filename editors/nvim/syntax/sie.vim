@@ -15,6 +15,7 @@ syn keyword sieImport import from
 syn keyword sieConditional if else case when
 syn keyword sieRepeat while for foreach
 syn keyword sieStatement return break continue emit defer
+syn keyword sieException try except
 syn keyword sieOperatorWord and or not as
 
 " literals
@@ -77,6 +78,7 @@ hi def link sieImport        Include
 hi def link sieConditional   Conditional
 hi def link sieRepeat        Repeat
 hi def link sieStatement     Statement
+hi def link sieException     Exception
 hi def link sieOperatorWord  Operator
 hi def link sieBoolean       Boolean
 hi def link sieConstant      Constant

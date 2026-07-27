@@ -25,9 +25,10 @@ def test_keywords_and_identifiers():
     """
     Words are split into keywords and identifiers, including underscores and digits.
     """
-    assert kinds("fn foo let x if else return _under score9") == [
+    assert kinds("fn foo let x if else return try except _under score9") == [
         ("kw", "fn"), ("ident", "foo"), ("kw", "let"), ("ident", "x"),
         ("kw", "if"), ("kw", "else"), ("kw", "return"),
+        ("kw", "try"), ("kw", "except"),
         ("ident", "_under"), ("ident", "score9"),
     ]
 

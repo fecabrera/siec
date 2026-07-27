@@ -30,6 +30,7 @@ from siec.ast import (
     StrLiteral,
     Ternary,
     TupleLiteral,
+    Try,
     TypeId,
     TypeName,
     TypeOf,
@@ -40,7 +41,8 @@ from siec.codegen.asm import emit_asm_block
 from siec.codegen.calls import emit_call
 from siec.codegen.coercion import emit_cast, emit_coerced
 from siec.codegen.enums import member_value, resolve_enum
-from siec.codegen.generator import CodeGenerator, entry_alloca, make_volatile
+from siec.codegen.generator import (CodeGenerator, Variable, entry_alloca,
+                                    make_volatile)
 from siec.codegen.sizes import size_of
 from siec.codegen.inference import (
     ARITHMETIC,
@@ -55,7 +57,9 @@ from siec.codegen.inference import (
     member_field,
     numeric_class,
     operator_call,
+    try_arms,
     type_info,
+    valueless_try,
 )
 from siec.codegen.types import (is_array_struct, is_reference, raw_array,
                                 resolve_type, strip_const, strip_reference)
@@ -220,6 +224,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
     if isinstance(expr, BlockExpr):
         return emit_block_expr(gen, builder, expr, expected_type, scope)
+
+    if isinstance(expr, Try):
+        return emit_try(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, ArrayLiteral):
         return emit_array(gen, builder, expr, expected_type, scope)
@@ -1203,6 +1210,89 @@ def emit_block_expr(gen: CodeGenerator, builder: ir.IRBuilder, expr: BlockExpr,
 
     builder.position_at_end(end_block)
     return builder.load(slot)
+
+
+# the name the unwrapped result binds to while a 'try' emits: unspellable,
+# so nothing in the arm can shadow it or reach it
+HOLDER = "try.result"
+
+
+def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
+             expected_type: ir.Type | None, scope: dict):
+    """
+    Emit 'try f() except (e) { ... }': the call runs once, and the value
+    its result carried becomes the expression's, the arm taking over
+    where an error came back instead.
+
+    The arm never falls out, so the value only ever comes from the one
+    path that has it: the arm either leaves the function (or the loop),
+    or 'emit's a stand-in of its own.
+    """
+    # deferred import: statements and expressions are mutually recursive
+    from siec.codegen.statements import emit_block
+
+    result_type = expr_sie_type(gen, expr.call, scope)
+    value_type, error_type = try_arms(gen, expr, scope)
+    if value_type is None and expected_type is not None:
+        raise valueless_try(result_type)
+
+    # the result lands in storage of its own: both arms read it, and the
+    # call must run exactly once
+    result = emit_expression(gen, builder, expr.call, None, scope)
+    holder = entry_alloca(builder, result.type, "try.result")
+    builder.store(result, holder)
+
+    inner = dict(scope)
+    inner[HOLDER] = Variable(holder, result_type)
+
+    # both paths write the value, so its slot is reserved before either
+    # of them opens
+    slot = None
+    if value_type is not None:
+        slot = entry_alloca(builder, resolve_type(value_type, gen.structs),
+                            "try.value")
+
+    ok = emit_bool(gen, builder, Member(Var(HOLDER), "ok"), inner)
+
+    func = builder.function
+    ok_block = func.append_basic_block("try.ok")
+    fail_block = func.append_basic_block("try.fail")
+    end_block = func.append_basic_block("try.end")
+    builder.cbranch(ok, ok_block, fail_block)
+
+    # the value the result carried, taken where its tag says it holds
+    builder.position_at_end(ok_block)
+    if slot is not None:
+        builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "value"),
+                                   value_type, inner), slot)
+
+    builder.branch(end_block)
+
+    # the arm, with the error bound to the name it asked for
+    builder.position_at_end(fail_block)
+    arm = dict(inner)
+    error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
+                              expr.name)
+    builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "error"),
+                               error_type, arm), error_slot)
+    arm[expr.name] = Variable(error_slot, error_type)
+
+    if gen.debug is not None:
+        gen.debug.declare_variable(builder, error_slot, expr.name, error_type,
+                                   expr.line)
+
+    # an 'emit' inside the arm produces the value the ok path would have
+    gen.emit_targets.append((slot, end_block, value_type, len(gen.defer_frames)))
+    emit_block(gen, builder, expr.body, arm)
+    gen.emit_targets.pop()
+
+    if not builder.block.is_terminated:
+        produce = "" if slot is None else ", or 'emit' a value to stand in"
+        raise TypeError(f"the 'except' arm must leave{produce}: it has no "
+                        "value of its own to fall out with")
+
+    builder.position_at_end(end_block)
+    return builder.load(slot) if slot is not None else None
 
 
 def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,

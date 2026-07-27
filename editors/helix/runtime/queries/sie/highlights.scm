@@ -60,6 +60,11 @@
   "defer"
 ] @keyword.control.return
 
+[
+  "try"
+  "except"
+] @keyword.control.exception
+
 "as" @keyword.operator
 
 ; the directives, every one spelled '@name'

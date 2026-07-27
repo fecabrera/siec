@@ -37,6 +37,9 @@ module.exports = grammar({
     [$.aggregate_field, $._expression],
     // 'when name[' opens both an index and a 'char[]'-style type pattern
     [$.type_pattern, $._expression],
+    // '{ try ...' opens both a block holding a try statement and an
+    // aggregate literal holding the same try as a value
+    [$.try_statement, $._expression],
   ],
 
   rules: {
@@ -325,6 +328,7 @@ module.exports = grammar({
         $.continue_statement,
         $.emit_statement,
         $.defer_statement,
+        $.try_statement,
         $.block,
         ";",
       ),
@@ -354,6 +358,23 @@ module.exports = grammar({
     assignment_statement: ($) => seq($._assignment_step, ";"),
 
     expression_statement: ($) => seq($._expression, ";"),
+
+    // a statement whose value is a 'try' is closed by the arm's brace,
+    // the way an if's body closes an if, so it takes no ';' of its own
+    try_statement: ($) =>
+      choice(
+        seq(
+          "let",
+          field("name", $.identifier),
+          optional(seq(":", field("type", $.type))),
+          "=",
+          field("value", $.try_expression),
+        ),
+        seq(field("target", $._expression), "=", field("value", $.try_expression)),
+        seq("emit", field("value", $.try_expression)),
+        seq("return", field("value", $.try_expression)),
+        field("value", $.try_expression),
+      ),
 
     // the dangling 'else' binds to the nearest 'if'
     if_statement: ($) =>
@@ -484,6 +505,7 @@ module.exports = grammar({
         $.ternary_expression,
         $.compile_time_expression,
         $.asm_expression,
+        $.try_expression,
       ),
 
     self: ($) => "self",
@@ -494,6 +516,19 @@ module.exports = grammar({
       seq("(", $._expression, ",", commaSep($._expression), optional(","), ")"),
 
     block_expression: ($) => prec(1, seq("{", repeat1($._statement), "}")),
+
+    // 'try f() except (e) { ... }' takes the value a call's result
+    // carried, its arm taking over where an error came back instead
+    try_expression: ($) =>
+      seq(
+        "try",
+        field("call", $.call_expression),
+        "except",
+        "(",
+        field("error", $.identifier),
+        ")",
+        field("body", $.block),
+      ),
 
     array_literal: ($) => seq("[", commaSep($._expression), optional(","), "]"),
 
