@@ -17,6 +17,9 @@ node_modules/
 # OS
 .DS_Store
 
+# Sie Package Manager
+lib/
+
 # Build
 *.o
 *.so

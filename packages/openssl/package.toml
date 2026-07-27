@@ -1,6 +1,8 @@
 [package]
 name = "openssl"
+description = "Bindings for OpenSSL"
 version = "1.0.0"
+keywords = ["bindings", "openssl", "ssl", "crypto", "encryption", "decryption", "digest"]
 sources = ["src/"]
 libs = ["ssl", "crypto"]
 

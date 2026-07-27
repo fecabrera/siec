@@ -1,6 +1,9 @@
 [package]
 name = "tomlc17"
+description = "Bindings for tomlc17"
 version = "1.0.0"
+license = "BSD-3-Clause"
+keywords = ["bindings", "tomlc17", "toml"]
 sources = ["src/"]
 libs = ["tomlc17"]
 

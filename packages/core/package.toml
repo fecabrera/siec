@@ -1,6 +1,9 @@
 [package]
 name = "core"
+description = "Sie Standard Library"
 version = "1.0.0"
+license = "BSD-3-Clause"
+keywords = ["standard-library", "sie"]
 sources = ["src/"]
 
 [dependencies]

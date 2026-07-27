@@ -1,5 +1,8 @@
 [package]
 name = "zlib"
+description = "Bindings for zlib"
 version = "1.0.0"
+license = "BSD-3-Clause"
+keywords = ["zlib", "libz", "compression"]
 sources = ["src/"]
 libs = ["z"]

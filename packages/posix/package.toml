@@ -1,4 +1,7 @@
 [package]
 name = "posix"
+description = "Bindings for C's POSIX library"
 version = "1.0.0"
+license = "BSD-3-Clause"
+keywords = ["bindings", "posix", "unix", "unistd"]
 sources = ["src/"]

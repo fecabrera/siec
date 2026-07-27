@@ -1,8 +1,11 @@
 [package]
 name = "mpdecimal"
+description = "Bindings for mpdecimal"
 version = "1.0.0"
+license = "BSD-3-Clause"
+keywords = ["bindings", "mpdecimal", "libmpdec", "decimal"]
 libs = ["mpdec"]
-source = ["src/"]
+sources= ["src/"]
 
 [dependencies]
 libc = "~1"

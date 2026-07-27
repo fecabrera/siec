@@ -1,6 +1,6 @@
 # sielang
 
-Sie is a a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for system programming by implementing modern features like defer statements and error handling via tagged unions, plus features from higher-level languages like generics, typed variadics, Any and foreach loops; all while still providing full low-level control of the hardware.
+Sie is a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for system programming by implementing modern features like defer statements and error handling via tagged unions, plus features from higher-level languages like generics, typed variadics, Any and foreach loops; all while still providing full low-level control of the hardware.
 
 ## Hello world
 
@@ -71,14 +71,47 @@ libs = ["ssl", "crypto"]
 libc = "~1"
 ```
 
-It takes the package to act on as its argument, a directory holding a manifest, defaulting to the working directory:
+With no command it takes the package to act on as its argument, a directory holding a manifest, defaulting to the working directory, and prints what that manifest says:
 
 ```
 sie                 # the package here
 sie packages/core   # the one in that directory
 ```
 
-For now it does one thing: read that manifest and print it. Naming a file instead of a directory reads that file as the manifest.
+Naming a file instead of a directory reads that file as the manifest.
+
+### Installing
+
+`sie install` pulls a package from a path, reading its `package.toml`, and copies it into the install root where a build can find it. The path defaults to the working directory, so a package installs itself:
+
+```
+sie install packages/openssl   # the package in that directory
+sie install                    # the package here
+```
+
+The install root is `$SIE_PATH/lib`, `~/.sie/lib` when `SIE_PATH` is unset. A package lands in a directory named for the `name` and `version` its manifest declares, `<name>@<version>`, whatever the directory it was pulled from is called, so two versions of one package sit side by side. A manifest missing either is an error: there would be nowhere to put it.
+
+What is copied is what the manifest declares, and nothing else:
+
+- `package.toml` itself,
+- the file `readme` names, and the files `license-files` names; `license` is the SPDX identifier of the licence, not a path, so it names nothing to copy,
+- every entry of `sources`, a file as a file and a directory whole, each keeping the place it holds inside the package.
+
+An `examples/` directory beside the sources is not part of the package unless `sources` says it is. A file the manifest names but the package does not have is passed over with a warning, as is a manifest that declares no `sources` at all, which is usually a misspelt key. Every entry is named relative to the package, and nothing may reach outside it: an entry that is absolute or climbs through `..` is an error.
+
+Installing over an existing install replaces it. The copy is staged first and only takes the old one's place once it is complete, so an install that fails halfway leaves what was there untouched.
+
+`sie list` says what is in the install root, each package as its spec and what its manifest says it is:
+
+```
+$ sie list
+core@1.0.0       Sie Standard Library
+libc@1.0.0       Bindings for the C Standard Library
+openssl@1.0.0    Bindings for OpenSSL
+zlib@1.0.0       Bindings for zlib
+```
+
+Packages are ordered by name and then by version, versions comparing as numbers so `9.0.0` comes before `10.0.0`. The directory name is the identity, so a package whose manifest has gone missing is still listed, without a description: it is installed, and that is how anyone finds out. Nothing installed is not a failure, and the listing stays empty while the note goes to standard error.
 
 ## The language
 
