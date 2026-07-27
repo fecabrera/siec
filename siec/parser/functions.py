@@ -544,28 +544,36 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         raise SyntaxError(f"line {ts.peek().line}: a '@remove' function "
                           "cannot have a body")
 
+    options = {
+        "is_extern": is_extern,
+        "var_arg": var_arg,
+        "is_inline": is_inline,
+        "is_static": is_static,
+        "symbol": symbol,
+        "clobbers": clobbers,
+        "noreturn": noreturn,
+        "type_params": type_params,
+        "receiver": receiver,
+        "receiver_params": receiver_params,
+        "variadic": variadic,
+        "deprecated": deprecated,
+        "removed": removed,
+        "line": line,
+    }
+
     # an '@asm' function's body is raw assembly, captured whole by the lexer
     if is_asm:
         if ts.peek().kind != "asm":
             raise SyntaxError(f"line {ts.peek().line}: an '@asm' function "
                               "needs an assembly body")
 
-        return Function(name, params, return_type, None, is_extern, var_arg,
-                        is_inline, is_static, symbol, ts.next().value, clobbers,
-                        noreturn, type_params=type_params, receiver=receiver,
-                        receiver_params=receiver_params,
-                        variadic=variadic, deprecated=deprecated,
-                        removed=removed, line=line)
+        return Function(name, params, return_type, None,
+                        asm=ts.next().value, **options)
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
         ts.next()
-        return Function(name, params, return_type, None, is_extern, var_arg,
-                        is_inline, is_static, symbol, noreturn=noreturn,
-                        type_params=type_params, receiver=receiver,
-                        receiver_params=receiver_params,
-                        variadic=variadic, deprecated=deprecated,
-                        removed=removed, line=line)
+        return Function(name, params, return_type, None, **options)
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -573,9 +581,4 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     # the body: statements between braces
     body = parse_block(ts)
 
-    return Function(name, params, return_type, body, is_extern, var_arg,
-                    is_inline, is_static, symbol, noreturn=noreturn,
-                    type_params=type_params, receiver=receiver,
-                    receiver_params=receiver_params,
-                    variadic=variadic, deprecated=deprecated,
-                    removed=removed, line=line)
+    return Function(name, params, return_type, body, **options)

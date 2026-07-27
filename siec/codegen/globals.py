@@ -133,7 +133,7 @@ def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
         stripped = strip_const(sie_type)
         if stripped == "char[]":
             zero = ir.Constant(ir.IntType(32), 0)
-            data = string_constant(gen, expr.value)
+            data = gen.string_constant(expr.value)
             return ir.Constant(type_, [data.gep([zero, zero]),
                                        ir.Constant(ir.IntType(64),
                                                    len(expr.value.encode()))])
@@ -141,7 +141,7 @@ def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
         if stripped != "char*":
             raise TypeError(f"cannot initialize a {sie_type!r} value with a string")
 
-        return string_constant(gen, expr.value).bitcast(type_)
+        return gen.string_constant(expr.value).bitcast(type_)
 
     # anything else must evaluate to an integer at compile time
     return ir.Constant(type_, evaluate(gen, expr))
@@ -189,19 +189,3 @@ def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
                                        fields[index].type)
 
     return ir.Constant(type_, values)
-
-
-def string_constant(gen: CodeGenerator, text: str) -> ir.GlobalVariable:
-    """
-    Store a string's bytes as a private, null-terminated module constant.
-    """
-    data = text.encode() + b"\0"
-    array_type = ir.ArrayType(ir.IntType(8), len(data))
-
-    const = ir.GlobalVariable(gen.module, array_type, name=f".str.{gen.str_count}")
-    const.global_constant = True
-    const.linkage = "private"
-    const.initializer = ir.Constant(array_type, bytearray(data))
-
-    gen.str_count += 1
-    return const

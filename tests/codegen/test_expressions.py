@@ -73,6 +73,20 @@ def test_emit_string_numbers_constants_sequentially(env):
     assert gen.module.get_global(".str.1") is not None
 
 
+def test_emit_string_reuses_a_constant_for_repeated_text(env):
+    """
+    Equal literals share one module global instead of duplicating bytes.
+    """
+    gen, builder = env
+    emit_string(gen, builder, "same")
+    emit_string(gen, builder, "same")
+
+    assert gen.str_count == 1
+    assert [name for name in gen.module.globals if name.startswith(".str.")] == [
+        ".str.0",
+    ]
+
+
 def test_variable_loads_from_its_slot(env):
     """
     A variable reference emits a load from its stack slot.

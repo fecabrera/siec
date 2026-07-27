@@ -1,11 +1,12 @@
 """Code generation state and entry point."""
 
 import copy
+from collections import deque
 from dataclasses import dataclass
 
 from llvmlite import ir
 
-from siec.ast import Field, Program
+from siec.ast import Field, Function, Program
 
 
 def entry_alloca(builder: ir.IRBuilder, type_: ir.Type, name: str) -> ir.Instruction:
@@ -108,6 +109,7 @@ class CodeGenerator:
         self.module = ir.Module(name=module_name, context=ir.Context())
         self.module.triple = self.target
         self.str_count = 0
+        self.string_pool: dict[str, ir.GlobalVariable] = {}
 
         # Code generation's private working AST. Its passes rewrite types,
         # conditionals, and expansions without touching the caller's tree.
@@ -138,7 +140,7 @@ class CodeGenerator:
         self.interfaces: dict = {}
         self.interface_actions: dict = {}
         self.implements: dict[str, set] = {}
-        self.pending_conformance: list = []
+        self.pending_conformance: deque[tuple] = deque()
         self.conformance_ready = False
         # the arrays' '@extend T[]' claims: (element placeholder,
         # interface spelling) pairs, substituted per element on query
@@ -171,7 +173,7 @@ class CodeGenerator:
         # instance once and queue its body for emission
         self.generic_functions: dict = {}
         self.instantiated_functions: set = set()
-        self.pending_functions: list = []
+        self.pending_functions: deque[Function] = deque()
 
         # a generic struct's method templates by (struct, method) name,
         # stamped alongside each 'S<args>' instantiation on first call
@@ -291,6 +293,26 @@ class CodeGenerator:
 
         name = self.member_bindings.get((self.current_file, name), name)
         return self.symbol_names.get(name, name)
+
+    def string_constant(self, text: str) -> ir.GlobalVariable:
+        """
+        Return one private, null-terminated global for a string literal,
+        sharing repeated text throughout the module.
+        """
+        if text in self.string_pool:
+            return self.string_pool[text]
+
+        data = text.encode() + b"\0"
+        array_type = ir.ArrayType(ir.IntType(8), len(data))
+        const = ir.GlobalVariable(self.module, array_type,
+                                  name=f".str.{self.str_count}")
+        const.global_constant = True
+        const.linkage = "private"
+        const.initializer = ir.Constant(array_type, bytearray(data))
+
+        self.str_count += 1
+        self.string_pool[text] = const
+        return const
 
     def resolve_qualified(self, names: list[str]) -> str | None:
         """
@@ -731,7 +753,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # which may queue more: generic functions calling generic functions;
     # their substituted types mix files' names, so no view gates them
     while gen.pending_functions:
-        instance = gen.pending_functions.pop(0)
+        instance = gen.pending_functions.popleft()
         gen.ungated_types += 1
         try:
             emit_function(gen, instance)

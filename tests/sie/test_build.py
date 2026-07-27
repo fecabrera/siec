@@ -218,6 +218,32 @@ def test_dependencies_of_dependencies_come_too(
     assert "mid@1.0.0" in out and "deep@1.0.0" in out
 
 
+def test_dependency_resolution_snapshots_installed_packages_once(
+        home, monkeypatch):  # noqa: F811
+    """
+    Recursive dependency discovery and backtracking share one indexed
+    snapshot of the installation directory.
+    """
+    install(monkeypatch, package(home, "leaf", version="1.0.0",
+                                 files=[("src/leaf.sie", "")]))
+    app = package(home, "app", deps={"leaf": "*"})
+
+    import siec.sie
+
+    real_installed = siec.sie.installed
+    calls = 0
+
+    def counted():
+        nonlocal calls
+        calls += 1
+        return real_installed()
+
+    monkeypatch.setattr(siec.sie, "installed", counted)
+
+    assert run_sie(monkeypatch, "build", app) == 0
+    assert calls == 1
+
+
 def test_the_newest_version_that_answers_is_the_one_used(
         home, monkeypatch, capsys):  # noqa: F811
     """

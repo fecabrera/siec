@@ -16,6 +16,7 @@ import re
 import shutil
 import sys
 import tomllib
+from collections import deque
 from pathlib import Path
 
 from siec.codegen.errors import display_path
@@ -679,11 +680,11 @@ def resolve(root: Resolved) -> list[Resolved]:
         """
         requirements: dict[str, list[tuple[str, str]]] = {}
         order: list[str] = []
-        pending = [root]
+        pending = deque([root])
         expanded = set()
 
         while pending:
-            asker = pending.pop(0)
+            asker = pending.popleft()
             if asker is not root:
                 if asker.name in expanded:
                     continue

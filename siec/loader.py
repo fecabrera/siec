@@ -1,11 +1,38 @@
 """Loading of source files and resolution of includes."""
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from siec.ast import (BinaryOp, BoolLiteral, CharLiteral, CondBlock,
                       IntLiteral, Program, UnaryOp, Var)
 from siec.lexer import lex
 from siec.parser import parse
+
+
+def transitive_closure(graph: dict[str, list[str]],
+                       origins: Iterable[str]) -> dict[str, set[str]]:
+    """
+    Every node reachable from each origin, including the origin itself.
+
+    Each origin walks independently, so cycles cannot leave a memoized
+    partial result whose contents depend on traversal order.
+    """
+    closure = {}
+    for origin in origins:
+        reached = set()
+        pending = [origin]
+
+        while pending:
+            node = pending.pop()
+            if node in reached:
+                continue
+
+            reached.add(node)
+            pending.extend(graph.get(node, ()))
+
+        closure[origin] = reached
+
+    return closure
 
 
 def holds_includes(cond: CondBlock) -> bool:
@@ -183,30 +210,6 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
         return names
 
-    def closure(base: dict) -> dict:
-        # each file's names plus, transitively, its includes': an include
-        # is textual, so the includer sees (and re-offers) what it pulled in
-        memo = {}
-
-        def visit(file: str, active: frozenset) -> set:
-            if file in memo:
-                return memo[file]
-
-            if file in active:
-                return base.get(file, set())
-
-            names = set(base.get(file, set()))
-            for target in include_targets.get(file, ()):
-                names |= visit(target, active | {file})
-
-            memo[file] = names
-            return names
-
-        for file in base:
-            visit(file, frozenset())
-
-        return memo
-
     def tag(program: Program, file: str) -> None:
         # tag each declaration with its file so codegen errors can name
         # it, into '@if' branches and all
@@ -370,9 +373,21 @@ def load_program(sources: list[Path], include_paths: list[Path],
     for source in sources:
         load(source)
 
-    # settle exports and visibility through the include chains
-    module_exports = closure(exported)
-    visible = closure(declared_names)
+    # Calculate the include graph once. Names inherit through the same
+    # reachability relation used later for unit ownership and visibility.
+    include_closure = transitive_closure(include_targets, declared_names)
+
+    def inherited_names(base: dict[str, set[str]]) -> dict[str, set[str]]:
+        inherited = {}
+        for file, included in include_closure.items():
+            names = set()
+            for target in included:
+                names.update(base.get(target, ()))
+            inherited[file] = names
+        return inherited
+
+    module_exports = inherited_names(exported)
+    visible = inherited_names(declared_names)
 
     # a member import must name something its module offers
     for file, imp, target in pending_members:
@@ -396,33 +411,9 @@ def load_program(sources: list[Path], include_paths: list[Path],
     # includes; a file reached only through 'import' sits outside it, so
     # separate compilation can leave its definitions to its own unit
     unit_files = set()
-    stack = [str(source.resolve()) for source in sources]
-    while stack:
-        file = stack.pop()
-        if file not in unit_files:
-            unit_files.add(file)
-            stack.extend(include_targets.get(file, ()))
-
-    # each file with itself and its includes, transitively: the files
-    # whose declarations it uses as its own
-    include_closure = {}
-
-    def close(file: str, active: frozenset) -> set:
-        if file in include_closure:
-            return include_closure[file]
-
-        if file in active:
-            return {file}
-
-        files = {file}
-        for target in include_targets.get(file, ()):
-            files |= close(target, active | {file})
-
-        include_closure[file] = files
-        return files
-
-    for file in declared_names:
-        close(file, frozenset())
+    for source in sources:
+        resolved = str(source.resolve())
+        unit_files.update(include_closure.get(resolved, {resolved}))
 
     merged = Program([], functions, structs, consts, enums, globals_, aliases, conds)
     merged.extends = extends_

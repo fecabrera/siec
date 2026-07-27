@@ -60,6 +60,24 @@ def test_static_global_initializers(compile_source):
     assert "internal global i32 2" in module
 
 
+def test_static_and_runtime_strings_share_the_module_pool(compile_source):
+    """
+    Global initializers and function literals reuse one copy of equal text.
+    """
+    module = compile_source("""
+    @static let first: char* = "same";
+    @static let second: char[] = "same";
+
+    fn main() -> i32 {
+        let local: char* = "same";
+        return 0;
+    }
+    """)
+
+    strings = [name for name in module.globals if name.startswith(".str.")]
+    assert strings == [".str.0"]
+
+
 def test_static_sized_array(run):
     """
     A static 'X[N]' gets N zeroed elements of module storage, writable

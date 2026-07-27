@@ -180,7 +180,7 @@ def run_conformance(gen: CodeGenerator) -> None:
     """
     gen.conformance_ready = True
     while gen.pending_conformance:
-        check_conformance(gen, *gen.pending_conformance.pop(0))
+        check_conformance(gen, *gen.pending_conformance.popleft())
 
 
 def noun(gen: CodeGenerator, name: str) -> str:

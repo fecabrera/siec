@@ -1385,18 +1385,8 @@ def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,
 
 def emit_string(gen: CodeGenerator, builder: ir.IRBuilder, value: str):
     """
-    Emit a string literal as a private global constant and return it as char*.
+    Emit a pooled string literal and return it as char*.
     """
-    # null-terminate the bytes and size the constant array to fit
-    data = value.encode() + b"\0"
-    array_type = ir.ArrayType(ir.IntType(8), len(data))
-
-    # store the data as a uniquely named module-level constant
-    const = ir.GlobalVariable(gen.module, array_type, name=f".str.{gen.str_count}")
-    const.global_constant = True
-    const.linkage = "private"
-    const.initializer = ir.Constant(array_type, bytearray(data))
-
     # hand it back decayed from [N x i8]* to a plain char*
-    gen.str_count += 1
-    return builder.bitcast(const, ir.PointerType(ir.IntType(8)))
+    return builder.bitcast(gen.string_constant(value),
+                           ir.PointerType(ir.IntType(8)))

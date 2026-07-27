@@ -82,6 +82,25 @@ def test_load_survives_include_cycles(tmp_path):
     assert [fn.name for fn in program.functions] == ["b", "a", "main"]
 
 
+def test_include_cycle_visibility_is_complete_from_every_file(tmp_path):
+    """
+    Every member of a branching include cycle sees every transitive member,
+    independent of which path first encountered the cycle.
+    """
+    a = write(tmp_path / "a.sie",
+              '@include("b") @include("c") fn a() {}')
+    b = write(tmp_path / "b.sie", '@include("a") fn b() {}')
+    c = write(tmp_path / "c.sie", '@include("b") fn c() {}')
+
+    program = load_program([a], [])
+    files = {str(path.resolve()) for path in (a, b, c)}
+    names = {"a", "b", "c"}
+
+    for path in files:
+        assert program.include_closure[path] == files
+        assert names <= program.visible[path]
+
+
 def test_load_accepts_multiple_sources(tmp_path):
     """
     Every source file passed in contributes its functions in order.
