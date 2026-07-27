@@ -1,0 +1,5 @@
+import std.io;
+
+fn main(args: char*[]) {
+    std.io.panic("argc = {}, argv = {}", args.length, args);
+}
