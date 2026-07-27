@@ -13,6 +13,7 @@ from siec.codegen.overloads import (
     overload_symbol,
     shown_signature,
 )
+from siec.codegen.results import check_results
 from siec.codegen.statements import emit_block
 from siec.codegen.types import is_reference, resolve_type, strip_const
 
@@ -332,7 +333,12 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                                            param.type, fn.line, arg=position)
 
         # emit the body statements starting from the entry block
+        params = dict(scope)
         emit_block(gen, builder, fn.body, scope)
+
+        # with every type in the body settled, confirm that each read of
+        # a result's members stands where its 'ok' tag allows it
+        check_results(gen, fn, params)
 
         # a void function may fall off the end, and so may main, whose
         # implicit exit code is 0; anything else must return

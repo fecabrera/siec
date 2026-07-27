@@ -2434,6 +2434,58 @@ if (r.ok) {
 let e = Error<i32, MathError>(MathError::OVERFLOW); // no context: spelled out
 ```
 
+#### Checking the tag
+
+Only one member of a result ever holds, so reading the other one reads storage nobody wrote. The compiler tracks what the code has established about each result's `ok` and rejects any read that doesn't stand on it: `value` reads only where the tag is known true, `error` only where it is known false, and neither where it was never checked.
+
+```
+let res = divide(10, 2);
+
+res.value;  // error: 'res.ok' is unchecked, so the result may hold an error
+res.error;  // error: 'res.ok' is unchecked, so the result may hold a value
+```
+
+A condition testing the tag settles it for the branches it decides: the body of an `if (res.ok)` stands where the value holds, its `else` where the error does, and `not`, `and`, `or`, a ternary's arms, a `case` armed on `true` and `false`, and a comparison against `true` or `false` all read the same way.
+
+```
+if (res.ok) {
+    use(res.value);
+    res.error;      // error: 'res.ok' is true here, so the result holds a value
+} else {
+    report(res.error);
+    res.value;      // error: 'res.ok' is false here, so the result holds an error
+}
+```
+
+What a branch settles reaches past it only when the other side cannot arrive there. A branch that leaves (returning, breaking, continuing, or calling an [`@noreturn`](#noreturn) function) hands its knowledge to everything after, which is what makes the early-out shape work; two paths that both fall through meet knowing nothing, and the tag has to be checked again.
+
+```
+if (not res.ok) {
+    report(res.error);
+    return 1;
+}
+
+use(res.value);     // the branch left, so the tag is true from here
+```
+
+```
+if (not res.ok) { report(res.error); }
+
+res.value;          // error: both paths arrive, so 'res.ok' is unchecked again
+```
+
+A check speaks about the storage it named, and only until that storage changes: assigning over the result, or handing out its address, forgets what was known, as does a loop whose passes write it. Copying a result copies what is known about it, `Ok` and `Error` settle the tag as they build it, and writing the tag settles it directly, so a result built right here reads its members as its own writes left them.
+
+```
+let res: Result<i32, MathError>;
+res.ok = true;
+res.value = 42;
+
+use(res.value);     // the tag was written true here
+```
+
+A result no name holds cannot have been checked, so it has to be named first: `divide(1, 0).error` is an error, while binding it and testing `ok` is not. Reading only the tag, `if (divide(1, 0).ok)`, is always fine.
+
 ## Concepts
 
 ### Scopes

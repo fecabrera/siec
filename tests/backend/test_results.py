@@ -50,7 +50,9 @@ def test_result_with_only_an_error(run):
     }
 
     fn main() -> i32 {
-        if (check(3).ok and check(-5).error == 7) { return 0; }
+        let good = check(3);
+        let bad = check(-5);
+        if (good.ok and not bad.ok and bad.error == 7) { return 0; }
         return 1;
     }
     """
@@ -82,7 +84,11 @@ def test_result_flows_through_generics_and_methods(run):
         if (not r.ok or r.value != 41) { return 1; }
 
         let p = Parser();
-        if (p.next().value != 1 or p.next().value != 2) { return 2; }
+        let first = p.next();
+        if (not first.ok or first.value != 1) { return 2; }
+
+        let second = p.next();
+        if (not second.ok or second.value != 2) { return 3; }
         return 0;
     }
     """
@@ -113,9 +119,13 @@ def test_ok_and_error_construct_results(run):
     fn main() -> i32 {
         let good = divide(84, 2);
         if (not good.ok or good.value != 42) { return 1; }
-        if (divide(1, 0).error != 1) { return 2; }
 
-        if (not validate(3).ok or validate(-1).error != 7) { return 3; }
+        let bad = divide(1, 0);
+        if (bad.ok or bad.error != 1) { return 2; }
+
+        let fine = validate(3);
+        let wrong = validate(-1);
+        if (not fine.ok or wrong.ok or wrong.error != 7) { return 3; }
 
         let e = Error<i32, u8>(9);              // explicit spelling
         if (e.ok or e.error != 9) { return 4; }
