@@ -9,6 +9,48 @@ from pathlib import Path
 from llvmlite import binding, ir
 
 
+class TargetError(Exception):
+    """An LLVM target triple that the compiler cannot use."""
+
+
+def _target_machine(target: str | None = None, opt: int = 0,
+                    jit: bool = False):
+    """
+    Create a machine for the requested target, translating LLVM's target
+    lookup failures into a compiler-facing error.
+    """
+    # register the host as the compilation target; a cross target needs
+    # every backend registered, not just the host's; the asm parser
+    # reads '@asm' bodies back into machine code
+    binding.initialize_native_target()
+    binding.initialize_native_asmprinter()
+    binding.initialize_native_asmparser()
+
+    requested = target or binding.get_default_triple()
+
+    try:
+        if target is not None:
+            binding.initialize_all_targets()
+            binding.initialize_all_asmprinters()
+            machine = binding.Target.from_triple(target)
+        else:
+            machine = binding.Target.from_default_triple()
+
+        if jit:
+            return machine.create_target_machine(opt=opt)
+
+        return machine.create_target_machine(opt=opt, reloc="pic",
+                                             codemodel="small")
+    except RuntimeError as error:
+        raise TargetError(f"cannot use target {requested!r}: {error}") from None
+
+
+def validate_target(target: str | None) -> None:
+    """Ensure that an explicitly requested target can generate code."""
+    if target is not None:
+        _target_machine(target)
+
+
 def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None,
                    jit: bool = False) -> tuple:
     """
@@ -23,33 +65,15 @@ def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None,
     'cc' expects when linking a PIE; the JIT keeps LLVM's JIT defaults,
     whose large code model tolerates objects landing anywhere in memory.
     """
-    # register the host as the compilation target; a cross target needs
-    # every backend registered, not just the host's; the asm parser
-    # reads '@asm' bodies back into machine code
-    binding.initialize_native_target()
-    binding.initialize_native_asmprinter()
-    binding.initialize_native_asmparser()
-
-    if target is not None:
-        binding.initialize_all_targets()
-        binding.initialize_all_asmprinters()
-        machine = binding.Target.from_triple(target)
-    else:
-        machine = binding.Target.from_default_triple()
-
-    if jit:
-        target_machine = machine.create_target_machine(opt=opt)
-    else:
-        target_machine = machine.create_target_machine(opt=opt, reloc="pic",
-                                                       codemodel="small")
-    module.triple = target_machine.triple
+    machine = _target_machine(target, opt, jit)
+    module.triple = machine.triple
 
     # round-trip the IR through the LLVM binding and verify it
     llvm_module = binding.parse_assembly(str(module))
     llvm_module.verify()
 
     options = binding.create_pipeline_tuning_options(speed_level=opt)
-    pass_builder = binding.create_pass_builder(target_machine, options)
+    pass_builder = binding.create_pass_builder(machine, options)
 
     if opt > 0:
         pass_builder.getModulePassManager().run(llvm_module, pass_builder)
@@ -61,7 +85,7 @@ def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None,
         manager.add_always_inliner_pass()
         manager.run(llvm_module, pass_builder)
 
-    return target_machine, llvm_module
+    return machine, llvm_module
 
 
 def compile_to_object(module: ir.Module, obj_path: str, opt: int = 0,
@@ -89,6 +113,7 @@ def emit_llvm(module: ir.Module, opt: int = 0, target: str | None = None) -> str
     pipeline otherwise.
     """
     if opt == 0:
+        validate_target(target)
         return str(module)
 
     return str(prepare_module(module, opt, target)[1])

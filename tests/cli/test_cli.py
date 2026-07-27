@@ -757,6 +757,32 @@ def test_target_writes_a_cross_object(tmp_path, monkeypatch):
     assert obj.read_bytes()[:4] == b"\x7fELF"
 
 
+def test_invalid_target_is_a_diagnostic_in_every_output_mode(
+        tmp_path, capsys, monkeypatch):
+    """
+    Unsupported targets fail cleanly before IR, assembly, object, or JIT output.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+    invalid = "definitely-not-a-target"
+    modes = (
+        ("--emit-llvm",),  # specifically exercises the -O0 shortcut
+        ("--emit-asm",),
+        ("-c", "-o", str(tmp_path / "bad.o")),
+        ("-o", str(tmp_path / "bad")),
+        ("--run",),
+    )
+
+    for mode in modes:
+        assert run_cli(monkeypatch, src, "--target", invalid, *mode) == 1
+        err = capsys.readouterr().err
+        assert f"siec: cannot use target {invalid!r}" in err
+        assert "Traceback" not in err
+
+    assert not (tmp_path / "bad.o").exists()
+    assert not (tmp_path / "bad").exists()
+
+
 def test_run_refuses_a_foreign_target(tmp_path, capsys, monkeypatch):
     """
     The JIT runs in-process, so --run only accepts the host's triple.

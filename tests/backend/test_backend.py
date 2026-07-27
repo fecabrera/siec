@@ -4,7 +4,9 @@ Feature behavior is covered by the per-feature files in this directory; these
 tests exercise the backend mechanism itself.
 """
 
-from siec.backend import compile_to_object, link
+import pytest
+
+from siec.backend import TargetError, compile_to_object, emit_llvm, link
 
 SOURCE = "fn main() -> i32 { return 7; }"
 
@@ -25,6 +27,14 @@ def test_compile_to_object_sets_the_host_triple(tmp_path, compile_source):
     module = compile_source(SOURCE)
     compile_to_object(module, str(tmp_path / "m.o"))
     assert module.triple != "unknown-unknown-unknown"
+
+
+def test_emit_llvm_validates_an_explicit_target_at_o0(compile_source):
+    """
+    Raw -O0 IR still rejects a target for which LLVM cannot generate code.
+    """
+    with pytest.raises(TargetError, match="cannot use target"):
+        emit_llvm(compile_source(SOURCE), target="definitely-not-a-target")
 
 
 def test_link_produces_a_runnable_executable(run):

@@ -5,7 +5,15 @@ import re
 import sys
 from pathlib import Path
 
-from siec.backend import compile_to_object, emit_assembly, emit_llvm, link, run_jit
+from siec.backend import (
+    TargetError,
+    compile_to_object,
+    emit_assembly,
+    emit_llvm,
+    link,
+    run_jit,
+    validate_target,
+)
 from siec.codegen import codegen
 from siec.codegen.errors import display_path
 from siec.loader import load_program
@@ -95,6 +103,14 @@ def main(argv: list[str] | None = None) -> int:
     sources = [Path(s) for s in opts.sources if not s.endswith((".o", ".a"))]
     if not sources:
         print("siec: no source files", file=sys.stderr)
+        return 1
+
+    # Reject an unsupported explicit target consistently before the front end
+    # or any output-mode-specific shortcut has a chance to use it.
+    try:
+        validate_target(opts.target)
+    except TargetError as error:
+        print(f"siec: {error}", file=sys.stderr)
         return 1
 
     # 'lib/' next to each source file is always on the include path
