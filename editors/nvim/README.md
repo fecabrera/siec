@@ -43,9 +43,8 @@ including hexadecimal, escapes, and char literals.
 blocks), four-space indentation, and C-style auto-indent. `@` counts as a
 word character, so `*`, `K`, and `gd` take `@sizeof` whole.
 
-**Quickfix**: `:compiler sie` then `:make` builds the current file and
-fills the quickfix list from what `siec` reported, warnings marked as
-warnings.
+**Quickfix**: `:compiler sie` then `:make` fills the quickfix list with
+what the build reported, warnings marked as warnings.
 
 ```vim
 :compiler sie
@@ -53,12 +52,21 @@ warnings.
 :copen
 ```
 
-The `-I` include directories a project needs can ride along:
+Inside a package, anything under a `package.toml`, `:make` runs `sie
+build` on it: the manifest is what knows the include path, its own
+sources and every dependency's, resolved from what `sie install` put
+down. Anywhere else it compiles the current file with `siec`, which
+takes its `-I` directories from the command line and nowhere else, so
+name them there:
 
 ```vim
 :compiler sie
 :setlocal makeprg=siec\ -I\ packages/core/src\ %:S
 ```
+
+A `[library]` is installed rather than built, so `:make` inside one says
+so; compile a file of it with `siec` and its `-I` directories instead,
+or lean on the language server, which analyzes it as you type.
 
 **The language server** gives diagnostics as you type, hover (`K`),
 go-to-definition (`grd`), and the document outline. It ships with the
