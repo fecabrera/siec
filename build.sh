@@ -22,6 +22,8 @@ run_echo cp src/libtomlc17.a ../dist/
 run_echo cd ..
 
 # Build examples
+for dir in examples/*/*; do LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib run_echo sie build $dir; done
+
 for pkg in $(find packages -type d -mindepth 1 -maxdepth 1); do
     mkdir -p dist/$(basename $pkg)/examples/
     for f in $(find $pkg/examples -mindepth 1 -maxdepth 1 -name "*.sie"); do

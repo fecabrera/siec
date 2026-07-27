@@ -1,0 +1,9 @@
+[package]
+name = "string"
+description = "A simple example program"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"

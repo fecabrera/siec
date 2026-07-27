@@ -1,0 +1,10 @@
+[package]
+name = "eq"
+description = "A simple example program"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+decimal = "*"
