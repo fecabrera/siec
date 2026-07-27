@@ -55,15 +55,14 @@ fn absorb(ctx: EVP_MD_CTX*, source: &IOReadable) -> bool {
     let buf: u8[CHUNK];
 
     while (true) {
-        let read = source.read(buf, CHUNK);
-        if (not read.ok) {
-            std.io.println(std.io.stderr, "read: {}", read.error);
+        let read = try source.read(buf, CHUNK) except (err) {
+            std.io.println(std.io.stderr, "read: {}", err);
             return false;
         }
 
-        if (read.value == 0) break;
+        if (read == 0) break;
 
-        if (not EVP_DigestUpdate(ctx, buf, read.value as u64)) {
+        if (not EVP_DigestUpdate(ctx, buf, read as u64)) {
             report("digest");
             return false;
         }
@@ -104,9 +103,8 @@ fn main(args: char*[]) -> i32 {
         let input = File(args[2], FileMode::Read);
         defer input.destroy();
 
-        let opened = input.open();
-        if (not opened.ok) {
-            std.io.println(std.io.stderr, "{}: {}", args[2], opened.error);
+        try input.open() except (err) {
+            std.io.println(std.io.stderr, "{}: {}", args[2], err);
             return 1;
         }
 

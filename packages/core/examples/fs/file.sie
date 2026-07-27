@@ -10,17 +10,15 @@ fn main(args: char*[]) -> i32 {
     let file = File(args[1], FileMode::Read);
     defer file.destroy();
     
-    let open_res = file.open();
-    if (not open_res.ok) {
-        std.io.println(std.io.stderr, "{}: {}", args[1], open_res.error);
+    try file.open() except (err) {
+        std.io.println(std.io.stderr, "{}: {}", args[1], err);
         return 1;
     }
     
     std.io.println("Opened \"{}\"", args[1]);
     
-    let close_res = file.close();
-    if (not close_res.ok) {
-        std.io.println(std.io.stderr, "{}: {}", args[1], close_res.error);
+    try file.close() except (err) {
+        std.io.println(std.io.stderr, "{}: {}", args[1], err);
         return 1;
     }
 
