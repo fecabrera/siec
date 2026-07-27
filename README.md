@@ -2539,6 +2539,37 @@ try file.close() ?? { warn("could not close"); attempts += 1; };
 
 Unlike the `except` arm, a `??` fallback is part of the expression rather than a body closing it, so a statement built on one still takes its `;`, exactly as one built on a block expression does.
 
+#### Handing the error back
+
+A `try` with no arm at all hands the error to the caller: where the call came back with one, the function returns it, and where it came back with a value the `try` is that value.
+
+```
+fn read_config(path: char*) -> Result<Config, IOError> {
+    try file.open();                 // an IOError here returns from read_config
+    let size = try file.size();      // and here, otherwise 'size' is the value
+
+    return Ok(parse(file, size));
+}
+```
+
+The error travels on as it is, so the function must return a `Result` carrying the same error type. Which shape it carries is free: a `Result<E>` call propagates into a `Result<E>` or a `Result<V, E>` just the same, since only the error crosses over.
+
+```
+fn f() -> Result<E> { try g(); return Ok(); }
+fn f() -> Result<T, E> { try g(); return Ok(value); }   // both fine
+fn g() -> Result<E>;
+```
+
+Anything else is a compile-time error: a function returning no `Result` has nowhere to hand it, and one carrying a different error type would have to convert, which a bare `try` never does.
+
+```
+fn main() -> i32 {
+    try open(path);   // error: 'main' must return a Result; it returns 'i32'
+}
+```
+
+Nothing braced closed it, so a bare `try` takes its `;` like any other expression statement.
+
 ## Concepts
 
 ### Scopes

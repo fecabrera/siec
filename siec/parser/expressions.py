@@ -119,9 +119,10 @@ def parse_power(ts: TokenStream) -> Expr:
 def parse_try(ts: TokenStream, line: int) -> Try:
     """
     Parse the tail of a 'try', the keyword already consumed: the call
-    whose result is unwrapped, then either the 'except (name) { ... }'
-    arm the error goes to, or the '?? <fallback>' shorthand, which names
-    no error and stands for the value to take instead.
+    whose result is unwrapped, then the arm the error goes to - the
+    'except (name) { ... }' form, the '?? <fallback>' shorthand, which
+    names no error and stands for the value to take instead, or no arm
+    at all, which hands the error back to the caller.
 
     A braced fallback is the arm itself, so it may do whatever an arm
     does; any other is the value, which is to say the 'emit' of it.
@@ -142,6 +143,10 @@ def parse_try(ts: TokenStream, line: int) -> Try:
 
         return Try(call, None, [Emit(parse_expression(ts), line=line)],
                    braced=False, line=line)
+
+    # no arm: the error goes back to the caller
+    if ts.peek().syntax != "except":
+        return Try(call, None, None, line=line)
 
     ts.expect("kw", "except")
     ts.expect("sym", "(")

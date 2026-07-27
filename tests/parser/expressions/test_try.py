@@ -46,13 +46,27 @@ def test_try_rejects_anything_but_a_call(ts):
         parse_primary(ts("try 1 + 2 except (e) { return 1; }"))
 
 
-def test_try_needs_an_arm_one_way_or_the_other(ts):
+def test_a_try_with_no_arm_propagates(ts):
     """
-    The arm is part of the form: nothing unwraps without one, spelled
-    'except' or '??'.
+    A bare 'try' writes no arm at all: the error goes to the caller, and
+    the node carries neither a name nor a body.
     """
-    with pytest.raises(SyntaxError, match="expected 'except'"):
-        parse_primary(ts("try f();"))
+    bare = parse_primary(ts("try f();"))
+    assert bare == Try(Call("f", []), None, None)
+    assert bare.propagates and not bare.fallback
+
+
+def test_a_bare_try_statement_keeps_its_semicolon(ts):
+    """
+    Nothing braced closed it, so the statement takes its ';' like any
+    other expression statement.
+    """
+    bare = Try(Call("f", []), None, None)
+    assert parse_statement(ts("try f();")) == ExprStmt(bare)
+    assert parse_statement(ts("let v = try f();")) == Let("v", None, bare)
+
+    with pytest.raises(SyntaxError, match="expected ';'"):
+        parse_statement(ts("try f()"))
 
 
 def test_a_try_statement_needs_no_semicolon(ts):

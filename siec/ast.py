@@ -294,10 +294,14 @@ class Try:
     written - a block of its own, or the bare expression whose 'emit'
     the body holds. Either way the arm is part of the expression rather
     than a body closing it, so a statement around it still takes its ';'.
+
+    A 'body' of None is a bare 'try f()', which writes no arm at all: the
+    error goes back to the caller, so the function around it must return
+    a Result carrying the same error type.
     """
     call: Expr
     name: str | None
-    body: list
+    body: list | None
     braced: bool = True
     line: int = _line()
 
@@ -307,7 +311,15 @@ class Try:
         Whether the arm was written as the '?? <fallback>' shorthand,
         which names no error.
         """
-        return self.name is None
+        return self.name is None and self.body is not None
+
+    @property
+    def propagates(self) -> bool:
+        """
+        Whether the error goes back to the caller: a bare 'try', written
+        with no arm to handle it here.
+        """
+        return self.body is None
 
 
 @dataclass

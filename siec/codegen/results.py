@@ -734,9 +734,13 @@ class ResultFlow:
         """
         Walk a 'try': it does its own checking, taking the value only
         where the tag holds, so all that is left is its arm, where the
-        error binds to the name it asked for.
+        error binds to the name it asked for. A bare 'try' writes no arm
+        at all - the error goes straight back to the caller.
         """
         self.check(expr.call)
+
+        if expr.propagates:
+            return {}, {}
 
         arms = result_arms(self.sie_type(expr.call))
 

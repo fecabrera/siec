@@ -494,6 +494,131 @@ def test_a_fallback_keeps_its_semicolon(compile_source, run):
         """)
 
 
+def test_a_bare_try_hands_the_error_to_the_caller(run):
+    """
+    With no arm at all, the error goes back the way it came: the
+    function returns it, and where a value came instead the 'try' is
+    that value.
+    """
+    source = SOURCE + """
+    fn twice(n: i32) -> Result<i32, u8> {
+        let value = try f(n);
+        return Ok(value * 2);
+    }
+
+    fn main() -> i32 {
+        let good = twice(3);
+        if (not good.ok or good.value != 12) { return 1; }
+
+        let bad = twice(-1);
+        if (bad.ok or bad.error != 7) { return 2; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_bare_try_crosses_between_result_shapes(run):
+    """
+    Only the error crosses over, so a valueless result propagates into a
+    function carrying a value and the other way round.
+    """
+    source = SOURCE + """
+    fn tagged(n: i32) -> Result<u8> {
+        try check(n);
+        return Ok();
+    }
+
+    fn valued(n: i32) -> Result<i32, u8> {
+        try check(n);           // 'Result<u8>' into 'Result<i32, u8>'
+        return Ok(5);
+    }
+
+    fn discarding(n: i32) -> Result<u8> {
+        try f(n);               // 'Result<i32, u8>' into 'Result<u8>'
+        return Ok();
+    }
+
+    fn main() -> i32 {
+        if (not tagged(1).ok) { return 1; }
+
+        let bad = tagged(-1);
+        if (bad.ok or bad.error != 9) { return 2; }
+
+        let value = valued(1);
+        if (not value.ok or value.value != 5) { return 3; }
+        if (valued(-1).ok) { return 4; }
+
+        if (not discarding(1).ok) { return 5; }
+
+        let dropped = discarding(-1);
+        if (dropped.ok or dropped.error != 7) { return 6; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_bare_try_needs_a_caller_that_returns_a_result(compile_source):
+    """
+    There is nowhere to hand the error where no result comes back.
+    """
+    with pytest.raises(TypeError, match="a bare 'try' hands its error back to "
+                                        "the caller, so 'main' must return a "
+                                        "Result; it returns 'i32'"):
+        compiles(compile_source, "try check(1); return 0;")
+
+    with pytest.raises(TypeError, match="'side' must return a Result; it "
+                                        "returns nothing"):
+        compile_source(SOURCE + """
+        fn side() { try check(1); }
+        fn main() -> i32 { side(); return 0; }
+        """)
+
+
+def test_a_bare_try_needs_the_same_error_type(compile_source):
+    """
+    The error passes on as it is, so converting it is not on offer.
+    """
+    with pytest.raises(TypeError, match="cannot hand a 'char' error back from "
+                                        r"'wrong', which returns 'Result<u8>'"):
+        compile_source(SOURCE + """
+        fn other(n: i32) -> Result<i64, char> { return Error('x'); }
+        fn wrong(n: i32) -> Result<u8> {
+            try other(n);
+            return Ok();
+        }
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_a_bare_try_flushes_the_scopes_it_leaves(run):
+    """
+    Handing the error back is a return, so the scopes it leaves run
+    their deferred statements on the way out.
+    """
+    source = SOURCE + """
+    @static let closed: i32 = 0;
+
+    fn close() { closed += 1; }
+
+    fn attempt(n: i32) -> Result<i32, u8> {
+        defer close();
+
+        let value = try f(n);
+        return Ok(value);
+    }
+
+    fn main() -> i32 {
+        if (not attempt(3).ok) { return 1; }
+        if (attempt(-1).ok) { return 2; }
+
+        return closed - 2;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_a_defer_still_runs_when_an_arm_leaves(run):
     """
     The arm's return is a return: the scopes it leaves flush on the way

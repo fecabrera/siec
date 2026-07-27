@@ -27,6 +27,7 @@ from siec.ast import (
     Member,
     MethodCall,
     NullLiteral,
+    Return,
     SizeOf,
     Slice,
     StrLiteral,
@@ -59,6 +60,7 @@ from siec.codegen.inference import (
     member_field,
     numeric_class,
     operator_call,
+    result_arms,
     try_arms,
     type_info,
     valueless_try,
@@ -1214,9 +1216,35 @@ def emit_block_expr(gen: CodeGenerator, builder: ir.IRBuilder, expr: BlockExpr,
     return builder.load(slot)
 
 
-# the name the unwrapped result binds to while a 'try' emits: unspellable,
-# so nothing in the arm can shadow it or reach it
+# the names the unwrapped result and the error it carried bind to while a
+# 'try' emits: unspellable, so nothing in the arm can shadow them or
+# reach them
 HOLDER = "try.result"
+ERROR = "try.error"
+
+
+def propagated(gen: CodeGenerator, builder: ir.IRBuilder, error_type: str) -> None:
+    """
+    Confirm that a bare 'try' has somewhere to hand its error: the
+    function around it must return a Result carrying the same one, since
+    the error travels on as it is.
+    """
+    from siec.codegen.overloads import display_name
+
+    returned = gen.return_types.get(builder.function.name)
+    shown = display_name(builder.function.name)
+    arms = result_arms(returned)
+
+    if arms is None:
+        carried = repr(returned) if returned is not None else "nothing"
+        raise TypeError(f"a bare 'try' hands its error back to the caller, so "
+                        f"{shown!r} must return a Result; it returns {carried}")
+
+    if strip_const(arms[1]) != strip_const(error_type):
+        raise TypeError(f"cannot hand a {error_type!r} error back from "
+                        f"{shown!r}, which returns {returned!r}: a bare 'try' "
+                        "passes the error on as it is, so both must carry "
+                        "the same one")
 
 
 def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
@@ -1274,21 +1302,31 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     # shorthand asks for none, and cannot reach it
     builder.position_at_end(fail_block)
     arm = dict(inner)
-    if expr.name is not None:
+    name = expr.name
+    if expr.propagates:
+        name = ERROR
+        propagated(gen, builder, error_type)
+
+    if name is not None:
         error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
-                                  expr.name)
+                                  name)
         builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "error"),
                                    error_type, arm), error_slot)
-        arm[expr.name] = Variable(error_slot, error_type)
+        arm[name] = Variable(error_slot, error_type)
 
-        if gen.debug is not None:
-            gen.debug.declare_variable(builder, error_slot, expr.name,
+        if gen.debug is not None and expr.name is not None:
+            gen.debug.declare_variable(builder, error_slot, name,
                                        error_type, expr.line)
+
+    # with no arm written, the error goes straight back to the caller,
+    # rebuilt as the Result the function around it returns
+    body = expr.body
+    if body is None:
+        body = [Return(Call("Error", [Var(ERROR)]), line=expr.line)]
 
     # a fallback expression is the value to take, so it emits; where the
     # result carries none to take, it is simply run for its effects
-    body = expr.body
-    if slot is None and not expr.braced:
+    elif slot is None and not expr.braced:
         body = [ExprStmt(body[0].value, line=body[0].line)]
 
     # an 'emit' inside the arm produces the value the ok path would have

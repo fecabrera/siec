@@ -43,6 +43,9 @@ module.exports = grammar({
     // 'f<i32>' opens both a call and a bare reference to the instance;
     // the '(' after it decides, one token past the '>'
     [$.call_expression, $.generic_reference],
+    // 'try f()' completes on its own, so what follows the call decides
+    // whether an arm is coming or the whole 'try' is an operand
+    [$.try_expression, $._expression],
   ],
 
   rules: {
@@ -524,16 +527,17 @@ module.exports = grammar({
 
     // 'try f() except (e) { ... }' takes the value a call's result
     // carried, its arm taking over where an error came back instead;
-    // '?? <fallback>' is the same arm with no error to name
+    // '?? <fallback>' is the same arm with no error to name, and no arm
+    // at all hands the error back to the caller
     try_expression: ($) =>
       seq(
         "try",
         field("call", $.call_expression),
-        choice(
+        optional(choice(
           seq("except", "(", field("error", $.identifier), ")",
               field("body", $.block)),
           seq("??", field("fallback", choice($.block, $._expression))),
-        ),
+        )),
       ),
 
     array_literal: ($) => seq("[", commaSep($._expression), optional(","), "]"),

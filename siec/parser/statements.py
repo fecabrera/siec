@@ -47,9 +47,10 @@ def close(ts: TokenStream, value) -> None:
 
     A '?? <fallback>' arm is part of the expression rather than a body
     around it, so a statement built on one still takes its ';', exactly
-    as one built on a block expression does.
+    as one built on a block expression does; a bare 'try', with no arm
+    at all, ends on its call and takes one too.
     """
-    if isinstance(value, Try) and not value.fallback:
+    if isinstance(value, Try) and value.name is not None:
         return
 
     ts.expect("sym", ";")
