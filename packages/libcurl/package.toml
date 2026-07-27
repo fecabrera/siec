@@ -4,6 +4,8 @@ description = "Bindings for libcurl"
 version = "1.0.0"
 license = "BSD-3-Clause"
 keywords = ["bindings", "libcurl", "curl"]
+
+[library]
 sources = ["src/"]
 
 [dependencies]

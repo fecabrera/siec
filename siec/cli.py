@@ -56,9 +56,12 @@ def format_error(source_name: str, error: Exception) -> str:
     return f"{source}: {message}"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """
     Run the compiler: parse arguments, compile the source file, and link it.
+
+    The arguments come from the command line unless a caller passes its
+    own, which is how 'sie build' drives the compiler in process.
     """
     args = argparse.ArgumentParser(prog="siec", description="Sie language compiler")
     args.add_argument("sources", nargs="+")
@@ -84,7 +87,7 @@ def main() -> int:
     args.add_argument("--run", nargs=argparse.REMAINDER,
                       help="jit-run the program instead of building, "
                            "passing along any following arguments")
-    opts = args.parse_args()
+    opts = args.parse_args(argv)
 
     # '.o' objects and '.a' static libraries on the command line skip the
     # front end and join the link

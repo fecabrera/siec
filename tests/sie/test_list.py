@@ -14,7 +14,8 @@ def put(root, name, version, description=None):
 
     said = "" if description is None else f'description = "{description}"\n'
     (package / "package.toml").write_text(
-        f'[package]\nname = "{name}"\nversion = "{version}"\n{said}')
+        f'[package]\nname = "{name}"\nversion = "{version}"\n{said}'
+        '\n[library]\n')
 
     return package
 
@@ -23,7 +24,7 @@ def test_lists_what_was_installed(home, monkeypatch, capsys):  # noqa: F811
     """
     A package shows up under the name and version it was filed as.
     """
-    make_package(home, "zlib", extra='sources = ["src/"]\n',
+    make_package(home, "zlib", made_of='sources = ["src/"]\n',
                  files=[("src/zlib.sie", "")])
 
     assert run_sie(monkeypatch, "install", "zlib") == 0

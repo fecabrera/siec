@@ -23,15 +23,20 @@ def home(tmp_path, monkeypatch):
     return workspace
 
 
-def make_package(root, name, version="1.0.0", extra="", files=()):
+def make_package(root, name, version="1.0.0", about="", made_of="",
+                 kind="library", files=()):
     """
     Lay out a package with a manifest and whatever files it should hold.
+
+    'about' goes under [package], which says who the package is; 'made_of'
+    goes under [app] or [library], which says what it is made of.
     """
     package = root / name
     package.mkdir(parents=True, exist_ok=True)
 
     (package / "package.toml").write_text(
-        f'[package]\nname = "{name}"\nversion = "{version}"\n{extra}')
+        f'[package]\nname = "{name}"\nversion = "{version}"\n{about}'
+        f'\n[{kind}]\n{made_of}')
 
     for path, text in files:
         target = package / path
@@ -46,7 +51,7 @@ def test_installs_the_manifest_and_the_declared_sources(home, monkeypatch):
     An install carries the manifest and every entry of 'sources', each
     keeping the place it held inside the package.
     """
-    make_package(home, "zlib", extra='sources = ["src/"]\n',
+    make_package(home, "zlib", made_of='sources = ["src/"]\n',
                  files=[("src/zlib.sie", "// zlib\n"),
                         ("src/inner/more.sie", "// more\n")])
 
@@ -62,7 +67,7 @@ def test_the_package_is_the_working_directory_by_default(home, monkeypatch):
     """
     With no path, the package installed is the one the command was run in.
     """
-    package = make_package(home, "zlib", extra='sources = ["src/"]\n',
+    package = make_package(home, "zlib", made_of='sources = ["src/"]\n',
                            files=[("src/zlib.sie", "")])
     monkeypatch.chdir(package)
 
@@ -76,10 +81,11 @@ def test_the_path_says_which_package_regardless_of_its_directory_name(
     A package is filed under the name and version its manifest declares,
     not under the directory it was pulled from.
     """
-    package = make_package(home, "checkout", extra='sources = ["src/"]\n',
+    package = make_package(home, "checkout", made_of='sources = ["src/"]\n',
                            files=[("src/a.sie", "")])
     (package / "package.toml").write_text(
-        '[package]\nname = "zlib"\nversion = "2.1.0"\nsources = ["src/"]\n')
+        '[package]\nname = "zlib"\nversion = "2.1.0"\n'
+        '\n[library]\nsources = ["src/"]\n')
 
     assert run_sie(monkeypatch, "install", "checkout") == 0
 
@@ -92,7 +98,7 @@ def test_what_is_not_declared_is_left_behind(home, monkeypatch):
     Only what the manifest names is copied: an examples directory beside
     the sources is not part of the package.
     """
-    make_package(home, "zlib", extra='sources = ["src/"]\n',
+    make_package(home, "zlib", made_of='sources = ["src/"]\n',
                  files=[("src/zlib.sie", ""),
                         ("examples/demo.sie", ""),
                         ("notes.txt", "")])
@@ -108,7 +114,7 @@ def test_a_single_file_source_is_installed_as_one(home, monkeypatch):
     """
     'sources' may name files as well as directories.
     """
-    make_package(home, "tiny", extra='sources = ["tiny.sie"]\n',
+    make_package(home, "tiny", made_of='sources = ["tiny.sie"]\n',
                  files=[("tiny.sie", "// tiny\n")])
 
     assert run_sie(monkeypatch, "install", "tiny") == 0
@@ -121,10 +127,10 @@ def test_the_readme_and_license_files_come_along(home, monkeypatch):
     the SPDX identifier and names no file.
     """
     make_package(home, "core",
-                 extra=('readme = "README.md"\n'
+                 about=('readme = "README.md"\n'
                         'license = "BSD-3-Clause"\n'
-                        'license-files = ["LICENSE", "NOTICE"]\n'
-                        'sources = ["src/"]\n'),
+                        'license-files = ["LICENSE", "NOTICE"]\n'),
+                 made_of='sources = ["src/"]\n',
                  files=[("README.md", "# core\n"),
                         ("LICENSE", "BSD\n"),
                         ("NOTICE", "notices\n"),
@@ -147,9 +153,9 @@ def test_installs_under_name_and_version(home, monkeypatch):
     versions of a package live side by side.
     """
     make_package(home / "old", "libc", version="1.0.0",
-                 extra='sources = ["src/"]\n', files=[("src/a.sie", "one\n")])
+                 made_of='sources = ["src/"]\n', files=[("src/a.sie", "one\n")])
     make_package(home / "new", "libc", version="2.0.0",
-                 extra='sources = ["src/"]\n', files=[("src/a.sie", "two\n")])
+                 made_of='sources = ["src/"]\n', files=[("src/a.sie", "two\n")])
 
     assert run_sie(monkeypatch, "install", "old/libc") == 0
     assert run_sie(monkeypatch, "install", "new/libc") == 0
@@ -164,7 +170,7 @@ def test_the_manifest_arrives_unchanged(home, monkeypatch):
     back exactly as its source did.
     """
     package = make_package(home, "zlib",
-                           extra='sources = ["src/"]\nlibs = ["z"]\n',
+                           made_of='sources = ["src/"]\nlibs = ["z"]\n',
                            files=[("src/zlib.sie", "")])
 
     assert run_sie(monkeypatch, "install", "zlib") == 0
@@ -180,7 +186,7 @@ def test_reinstalling_replaces_what_was_there(home, monkeypatch, capsys):
     A second install of the same name and version takes over, leaving
     nothing of the first behind.
     """
-    make_package(home, "zlib", extra='sources = ["src/"]\n',
+    make_package(home, "zlib", made_of='sources = ["src/"]\n',
                  files=[("src/old.sie", "old\n")])
 
     assert run_sie(monkeypatch, "install", "zlib") == 0
@@ -202,7 +208,7 @@ def test_a_failed_install_leaves_the_previous_one_alone(home, monkeypatch):
     The staged copy only takes the place of the old install once it is
     complete, so a copy that fails halfway does not destroy it.
     """
-    make_package(home, "zlib", extra='sources = ["src/"]\n',
+    make_package(home, "zlib", made_of='sources = ["src/"]\n',
                  files=[("src/good.sie", "good\n")])
 
     assert run_sie(monkeypatch, "install", "zlib") == 0
@@ -267,7 +273,8 @@ def test_a_manifest_without_a_name_or_version_is_reported(
     """
     package = home / "nameless"
     package.mkdir()
-    (package / "package.toml").write_text('[package]\nsources = ["src/"]\n')
+    (package / "package.toml").write_text(
+        '[package]\n\n[library]\nsources = ["src/"]\n')
 
     assert run_sie(monkeypatch, "install", "nameless") == 1
 
@@ -281,7 +288,7 @@ def test_an_entry_reaching_outside_the_package_is_refused(
     """
     A manifest names what is inside its own package and nothing else.
     """
-    make_package(home, "sneaky", extra='sources = ["../elsewhere"]\n')
+    make_package(home, "sneaky", made_of='sources = ["../elsewhere"]\n')
 
     assert run_sie(monkeypatch, "install", "sneaky") == 1
 
@@ -296,7 +303,8 @@ def test_an_entry_the_package_does_not_have_is_skipped(
     over; the rest of the install is still worth having.
     """
     make_package(home, "zlib",
-                 extra='readme = "README.md"\nsources = ["src/"]\n',
+                 about='readme = "README.md"\n',
+                 made_of='sources = ["src/"]\n',
                  files=[("src/zlib.sie", "")])
 
     assert run_sie(monkeypatch, "install", "zlib") == 0
@@ -309,15 +317,15 @@ def test_an_entry_the_package_does_not_have_is_skipped(
 
 def test_a_package_declaring_no_sources_warns(home, monkeypatch, capsys):
     """
-    A manifest with no 'sources' installs nothing to compile against,
+    A [library] with no 'sources' installs nothing to build against,
     which is worth saying out loud: it is usually a misspelt key.
     """
-    make_package(home, "empty", extra='source = ["src/"]\n',
+    make_package(home, "empty", made_of='source = ["src/"]\n',
                  files=[("src/empty.sie", "")])
 
     assert run_sie(monkeypatch, "install", "empty") == 0
 
-    assert "no 'sources'" in capsys.readouterr().err
+    assert "no [library] 'sources'" in capsys.readouterr().err
     assert not (install_root() / "empty@1.0.0" / "src").exists()
 
 
@@ -338,3 +346,47 @@ def test_without_sie_path_the_install_root_is_under_home(monkeypatch):
 
     from pathlib import Path
     assert install_root() == Path.home() / ".sie" / "lib"
+
+
+def test_an_app_is_not_installed(home, monkeypatch, capsys):
+    """
+    An [app] is the end of the line: it is built, and nothing builds
+    against it, so the install root is not where it belongs.
+    """
+    make_package(home, "helloworld", kind="app",
+                 made_of='sources = ["src/"]\n',
+                 files=[("src/main.sie", "")])
+
+    assert run_sie(monkeypatch, "install", "helloworld") == 1
+
+    assert "[app] is built, not installed" in capsys.readouterr().err
+    assert not (install_root() / "helloworld@1.0.0").exists()
+
+
+def test_a_manifest_that_is_neither_is_reported(home, monkeypatch, capsys):
+    """
+    '[package]' says who a package is; one of '[app]' or '[library]' says
+    what it is. Without the second there is nothing to do with it.
+    """
+    package = home / "vague"
+    package.mkdir()
+    (package / "package.toml").write_text(
+        '[package]\nname = "vague"\nversion = "1.0.0"\n')
+
+    assert run_sie(monkeypatch, "install", "vague") == 1
+    assert "neither [app] nor [library]" in capsys.readouterr().err
+
+
+def test_a_manifest_that_is_both_is_reported(home, monkeypatch, capsys):
+    """
+    A package is one or the other, so declaring both says nothing.
+    """
+    package = home / "both"
+    package.mkdir()
+    (package / "package.toml").write_text(
+        '[package]\nname = "both"\nversion = "1.0.0"\n'
+        '\n[app]\nsources = ["src/"]\n'
+        '\n[library]\nsources = ["src/"]\n')
+
+    assert run_sie(monkeypatch, "install", "both") == 1
+    assert "both [app] and [library]" in capsys.readouterr().err

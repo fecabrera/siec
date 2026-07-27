@@ -19,6 +19,7 @@ node_modules/
 
 # Sie Package Manager
 lib/
+build/
 
 # Build
 *.o

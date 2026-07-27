@@ -4,9 +4,9 @@
 `sie-lsp` for an editor: it works from a package's manifest rather than
 from a list of sources.
 
-With no command it reads a package's manifest and shows it; 'install'
-copies a package into the install root, where a build can find it, and
-'list' says what is there.
+With no command it reads a package's manifest and shows it. 'install'
+copies a package into the install root and 'list' says what is there;
+'build' compiles a package against what it finds in the same place.
 """
 
 import argparse
@@ -22,11 +22,18 @@ from siec.codegen.errors import display_path
 
 MANIFEST = "package.toml"
 
+# what a package can be: an app is built, a library installed
+KINDS = ("app", "library")
+
 # where installed packages live, unless SIE_PATH says otherwise
 DEFAULT_SIE_PATH = Path.home() / ".sie"
 
 # an array wider than this is listed an entry per line instead
 INLINE_WIDTH = 72
+
+# how many times resolving may repeat before a dependency tree that
+# keeps changing its mind is called unsettled
+RESOLVE_ROUNDS = 16
 
 
 def manifest_path(target: str) -> Path:
@@ -253,6 +260,31 @@ def listed(value: object) -> list[str]:
     return []
 
 
+def unit(manifest: Path, data: dict) -> tuple[str, dict]:
+    """
+    What kind of thing a manifest describes, and the table saying what it
+    is made of: an '[app]', which is built, or a '[library]', which is
+    installed for other packages to build against.
+
+    '[package]' says who the package is; one of these two says what it is.
+
+    Raises ValueError when a manifest declares both, or neither.
+    """
+    found = [(kind, data[kind]) for kind in KINDS
+             if isinstance(data.get(kind), dict)]
+
+    if len(found) == 1:
+        return found[0]
+
+    where = display_path(str(manifest))
+    if found:
+        raise ValueError(f"{where}: declares both [app] and [library]; "
+                         "a package is one or the other")
+
+    raise ValueError(f"{where}: declares neither [app] nor [library], so "
+                     "there is nothing to build or install")
+
+
 def contents(package: Path, data: dict) -> list[str]:
     """
     What an install carries: the manifest, whatever documents it points
@@ -261,12 +293,14 @@ def contents(package: Path, data: dict) -> list[str]:
     Raises ValueError on an entry that would reach outside the package,
     which no manifest has business naming.
     """
+    manifest = package / MANIFEST
     table = data.get("package") or {}
+    _, made_of = unit(manifest, data)
 
     entries = [MANIFEST]
     entries.extend(listed(table.get("readme")))
     entries.extend(listed(table.get("license-files")))
-    entries.extend(listed(table.get("sources")))
+    entries.extend(listed(made_of.get("sources")))
 
     for entry in entries:
         path = Path(entry)
@@ -363,15 +397,24 @@ def install(argv: list[str]) -> int:
 
     try:
         data = read_manifest(manifest)
+        kind, made_of = unit(manifest, data)
+
+        # an app is the end of the line: it is built, and nothing builds
+        # against it, so there is no reason for it to sit in the lib root
+        if kind != "library":
+            raise ValueError(f"{display_path(str(manifest))}: an [app] is "
+                             "built, not installed")
+
         name, version = identity(manifest, data)
         entries = contents(package, data)
     except ValueError as error:
         print(f"sie: {error}", file=sys.stderr)
         return 1
 
-    if not (data.get("package") or {}).get("sources"):
+    if not made_of.get("sources"):
         print(f"sie: warning: {display_path(str(manifest))} declares no "
-              "'sources', so only its manifest is installed", file=sys.stderr)
+              "[library] 'sources', so only its manifest is installed",
+              file=sys.stderr)
 
     target = install_root() / f"{name}@{version}"
     staging = target.with_name("." + target.name + ".partial")
@@ -398,6 +441,77 @@ def install(argv: list[str]) -> int:
         print(f"    {entry}")
 
     return 0
+
+
+def version_parts(version: str) -> tuple[int, ...]:
+    """
+    A version as the numbers it is made of, so they compare as numbers.
+    Anything that is not a number stops the reading, which is enough to
+    order releases and leaves pre-release tags out of the comparison.
+    """
+    parts = []
+    for piece in re.split(r"[.\-+]", version):
+        if not piece.isdigit():
+            break
+        parts.append(int(piece))
+
+    return tuple(parts)
+
+
+def satisfies(version: str, requirement: str) -> bool:
+    """
+    Whether an installed version answers a dependency's requirement.
+
+    '*' takes anything, '~1' and '~1.2' allow later releases that keep the
+    parts written down, '^1.2' allows anything up to the next version that
+    may break, a comparison compares, and a bare version is that version.
+    """
+    requirement = requirement.strip()
+
+    if not requirement or requirement == "*":
+        return True
+
+    for operator in (">=", "<=", "!=", "==", ">", "<", "="):
+        if requirement.startswith(operator):
+            wanted = version_parts(requirement[len(operator):].strip())
+            found = version_parts(version)
+
+            # compare over as many parts as the requirement writes down, so
+            # '>= 1.2' reads 1.2.7 as 1.2
+            if operator in ("==", "=", "!="):
+                equal = found[:len(wanted)] == wanted
+                return equal if operator != "!=" else not equal
+
+            found = found[:len(wanted)] + (0,) * (len(wanted) - len(found))
+            if operator == ">=":
+                return found >= wanted
+            if operator == "<=":
+                return found <= wanted
+            if operator == ">":
+                return found > wanted
+
+            return found < wanted
+
+    if requirement[0] in "~^":
+        wanted = version_parts(requirement[1:].strip())
+        found = version_parts(version)
+
+        if not wanted:
+            return True
+
+        # a tilde pins the major and the minor, or the major alone when
+        # that is all it names; a caret pins up to the first part that is
+        # not zero: both mean 'newer, but not different'
+        if requirement[0] == "~":
+            pinned = min(len(wanted), 2)
+        else:
+            pinned = next((i + 1 for i, part in enumerate(wanted) if part), len(wanted))
+
+        return found[:pinned] == wanted[:pinned] and found >= wanted
+
+    wanted = version_parts(requirement)
+
+    return version_parts(version)[:len(wanted)] == wanted
 
 
 def natural_key(text: str) -> tuple:
@@ -472,6 +586,244 @@ def listing(argv: list[str]) -> int:
     return 0
 
 
+class Resolved:
+    """
+    One package in a build: where it is, what it declares, and how it was
+    asked for.
+    """
+
+    def __init__(self, name: str, version: str, path: Path, data: dict,
+                 made_of: dict):
+        self.name = name
+        self.version = version
+        self.path = path
+        self.data = data
+
+        # the '[app]' or '[library]' table: what the package is made of
+        self.made_of = made_of
+
+    @property
+    def spec(self) -> str:
+        return f"{self.name}@{self.version}" if self.version else self.name
+
+    def source_dirs(self) -> list[Path]:
+        """
+        The directories this package's modules are imported from: what its
+        'sources' names, which is what a build puts on the include path.
+        """
+        return [self.path / entry for entry in listed(self.made_of.get("sources"))
+                if (self.path / entry).is_dir()]
+
+    def source_files(self) -> list[Path]:
+        """
+        The units to compile: a 'sources' entry that is a file, and the
+        '.sie' files directly inside one that is a directory.
+
+        What sits deeper is reached through an import or an '@include',
+        so compiling it again as its own unit would be wrong.
+        """
+        files = []
+        for entry in listed(self.made_of.get("sources")):
+            path = self.path / entry
+
+            if path.is_file():
+                files.append(path)
+            elif path.is_dir():
+                files.extend(sorted(path.glob("*.sie")))
+
+        return files
+
+    def libs(self) -> list[str]:
+        return listed(self.made_of.get("libs"))
+
+    def dependencies(self) -> dict[str, str]:
+        table = self.data.get("dependencies") or {}
+
+        return {name: requirement for name, requirement in table.items()
+                if isinstance(requirement, str)}
+
+
+def best_installed(name: str, requirements: list[str]) -> tuple[str, Path] | None:
+    """
+    The newest installed version of a package that answers every
+    requirement asked of it, or nothing when none does.
+    """
+    candidates = [(version, path) for found, version, path in installed()
+                  if found == name
+                  and all(satisfies(version, r) for r in requirements)]
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda c: natural_key(c[0]))
+
+
+def resolve(root: Resolved) -> list[Resolved]:
+    """
+    The packages a build needs, in the order they were reached: a package's
+    own dependencies before theirs, so a dependent links ahead of what it
+    depends on.
+
+    A package asked for from two places is resolved once, against every
+    requirement at once, so one build never holds two versions of it.
+
+    Raises LookupError naming what could not be resolved and who wanted it.
+    """
+    requirements: dict[str, list[tuple[str, str]]] = {}
+    order: list[str] = []
+
+    # requirements can narrow as the tree opens up: a version picked early
+    # may not answer one found later, and picking again opens a different
+    # set of dependencies. So the walk repeats until nothing new turns up
+    for _ in range(RESOLVE_ROUNDS):
+        chosen: dict[str, Resolved] = {}
+        pending = [(root, name, req) for name, req in root.dependencies().items()]
+        order = []
+        settled = True
+
+        while pending:
+            asker, name, requirement = pending.pop(0)
+
+            requirements.setdefault(name, [])
+            if (requirement, asker.spec) not in requirements[name]:
+                requirements[name].append((requirement, asker.spec))
+                settled = False
+
+            if name in chosen:
+                continue
+
+            wanted = [r for r, _ in requirements[name]]
+            found = best_installed(name, wanted)
+
+            if found is None:
+                asked = ", ".join(f"{r!r} by {who}" for r, who in requirements[name])
+                have = [v for n, v, _ in installed() if n == name]
+
+                raise LookupError(
+                    f"no installed {name} answers {asked}"
+                    + (f"; installed: {', '.join(have)}" if have
+                       else f"; no {name} is installed"))
+
+            version, path = found
+            try:
+                data = read_manifest(path / MANIFEST)
+                _, made_of = unit(path / MANIFEST, data)
+            except ValueError as error:
+                raise LookupError(str(error)) from error
+
+            package = Resolved(name, version, path, data, made_of)
+            chosen[name] = package
+            order.append(name)
+
+            pending.extend((package, n, r) for n, r in package.dependencies().items())
+
+        if settled:
+            return [chosen[name] for name in order]
+
+    raise LookupError("the dependencies do not settle on one set of versions")
+
+
+def build(argv: list[str]) -> int:
+    """
+    Compile a package against what is installed, into its own build/.
+    """
+    args = argparse.ArgumentParser(
+        prog="sie build",
+        description="Build a package against its installed dependencies")
+    args.add_argument("path", nargs="?", default=".",
+                      help="the package to build (the working directory "
+                           "by default)")
+    args.add_argument("-O", default=0, type=int, choices=[0, 1, 2, 3], dest="opt",
+                      metavar="N", help="optimization level, cc-style (default 0)")
+    args.add_argument("-g", action="store_true", dest="debug",
+                      help="emit DWARF debug info, for source-level debugging")
+    opts = args.parse_args(argv)
+
+    try:
+        manifest = package_manifest(opts.path)
+        data = read_manifest(manifest)
+        kind, made_of = unit(manifest, data)
+
+        # a library has no entry point: it is installed, and an app is
+        # what turns it into something that runs
+        if kind != "app":
+            raise ValueError(f"{display_path(str(manifest))}: a [library] is "
+                             "installed, not built")
+    except (FileNotFoundError, ValueError) as error:
+        print(f"sie: {error}", file=sys.stderr)
+        return 1
+
+    package = manifest.parent
+    table = data.get("package") or {}
+
+    name = table.get("name")
+    if not name:
+        print(f"sie: {display_path(str(manifest))}: [package] declares no "
+              "'name', so the binary has nothing to be called", file=sys.stderr)
+        return 1
+
+    root = Resolved(name, str(table.get("version") or ""), package, data, made_of)
+
+    sources = root.source_files()
+    if not sources:
+        print(f"sie: {display_path(str(manifest))}: no sources to build; "
+              "[app] 'sources' names none", file=sys.stderr)
+        return 1
+
+    try:
+        tree = resolve(root)
+    except LookupError as error:
+        print(f"sie: {error}", file=sys.stderr)
+        return 1
+
+    # the package's own directories come first, so a module of its own wins
+    # over one a dependency happens to publish under the same name
+    includes: list[str] = []
+    libs: list[str] = []
+
+    for member in (root, *tree):
+        for directory in member.source_dirs():
+            if str(directory) not in includes:
+                includes.append(str(directory))
+
+        for lib in member.libs():
+            if lib not in libs:
+                libs.append(lib)
+
+    output = package / "build" / name
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        print(f"sie: {error.filename or output.parent}: {error.strerror}",
+              file=sys.stderr)
+        return 1
+
+    print(f"building {root.spec}")
+    for member in tree:
+        print(f"  {member.spec}")
+
+    command = [str(s) for s in sources]
+    for directory in includes:
+        command += ["-I", directory]
+    for lib in libs:
+        command += ["-l", lib]
+    if opts.opt:
+        command += [f"-O{opts.opt}"]
+    if opts.debug:
+        command += ["-g"]
+    command += ["-o", str(output)]
+
+    from siec.cli import main as compile_main
+
+    status = compile_main(command)
+    if status != 0:
+        return status
+
+    print(f"built {display_path(str(output))}")
+
+    return 0
+
+
 def show(argv: list[str]) -> int:
     """
     Read the selected package's manifest and print it.
@@ -479,6 +831,7 @@ def show(argv: list[str]) -> int:
     args = argparse.ArgumentParser(
         prog="sie", description="Sie package manager",
         epilog="commands:\n"
+               "  build [path]     compile a package into its build/\n"
                "  install [path]   copy a package into $SIE_PATH/lib\n"
                "  list             list what is installed there\n\n"
                "run 'sie <command> --help' for a command's own options",
@@ -505,7 +858,7 @@ def show(argv: list[str]) -> int:
     return 0
 
 
-COMMANDS = {"install": install, "list": listing}
+COMMANDS = {"build": build, "install": install, "list": listing}
 
 
 def main() -> int:

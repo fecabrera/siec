@@ -60,10 +60,14 @@ The `editors/` directory connects it to editors: `editors/vscode/sie` is a VSCod
 
 `sie` is the project-level tool. Where `siec` compiles a list of sources, `sie` works from a package: a directory holding a `package.toml` manifest that names it and says what it is made of.
 
+`[package]` says who a package is, and one of `[app]` or `[library]` says what it is. A **library** is installed, for other packages to build against:
+
 ```
 [package]
 name = "openssl"
 version = "1.0.0"
+
+[library]
 sources = ["src/"]
 libs = ["ssl", "crypto"]
 
@@ -71,7 +75,22 @@ libs = ["ssl", "crypto"]
 libc = "~1"
 ```
 
-With no command it takes the package to act on as its argument, a directory holding a manifest, defaulting to the working directory, and prints what that manifest says:
+An **app** is built, into a binary that runs:
+
+```
+[package]
+name = "helloworld"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+```
+
+The two are exclusive, and one of them is required: a library has no entry point to build, an app is the end of the line and nothing builds against it, and a manifest declaring both says nothing about which it is. `sources` and `libs` belong to whichever it is, since they describe what the package is made of rather than who it is.
+
+With no command `sie` takes the package to act on as its argument, a directory holding a manifest, defaulting to the working directory, and prints what that manifest says:
 
 ```
 sie                 # the package here
@@ -82,7 +101,7 @@ Naming a file instead of a directory reads that file as the manifest.
 
 ### Installing
 
-`sie install` pulls a package from a path, reading its `package.toml`, and copies it into the install root where a build can find it. The path defaults to the working directory, so a package installs itself:
+`sie install` pulls a **library** from a path, reading its `package.toml`, and copies it into the install root where a build can find it. The path defaults to the working directory, so a package installs itself:
 
 ```
 sie install packages/openssl   # the package in that directory
@@ -95,9 +114,9 @@ What is copied is what the manifest declares, and nothing else:
 
 - `package.toml` itself,
 - the file `readme` names, and the files `license-files` names; `license` is the SPDX identifier of the licence, not a path, so it names nothing to copy,
-- every entry of `sources`, a file as a file and a directory whole, each keeping the place it holds inside the package.
+- every entry of the `[library]`'s `sources`, a file as a file and a directory whole, each keeping the place it holds inside the package.
 
-An `examples/` directory beside the sources is not part of the package unless `sources` says it is. A file the manifest names but the package does not have is passed over with a warning, as is a manifest that declares no `sources` at all, which is usually a misspelt key. Every entry is named relative to the package, and nothing may reach outside it: an entry that is absolute or climbs through `..` is an error.
+An `examples/` directory beside the sources is not part of the package unless `sources` says it is. A file the manifest names but the package does not have is passed over with a warning, as is a `[library]` that declares no `sources` at all, which is usually a misspelt key. Pointing `install` at an `[app]` is an error: it is built, not installed. Every entry is named relative to the package, and nothing may reach outside it: an entry that is absolute or climbs through `..` is an error.
 
 Installing over an existing install replaces it. The copy is staged first and only takes the old one's place once it is complete, so an install that fails halfway leaves what was there untouched.
 
@@ -112,6 +131,48 @@ zlib@1.0.0       Bindings for zlib
 ```
 
 Packages are ordered by name and then by version, versions comparing as numbers so `9.0.0` comes before `10.0.0`. The directory name is the identity, so a package whose manifest has gone missing is still listed, without a description: it is installed, and that is how anyone finds out. Nothing installed is not a failure, and the listing stays empty while the note goes to standard error.
+
+### Building
+
+`sie build` compiles an **app** against the libraries that are installed, writing the binary to `<path>/build/<name>`:
+
+```
+$ sie build examples/helloworld
+building helloworld
+  core@1.0.0
+  libc@1.0.0
+  mpdecimal@1.0.0
+  posix@1.0.0
+built examples/helloworld/build/helloworld
+```
+
+The units compiled are the `.sie` files an `[app]` `sources` entry names: the file itself when it names one, and the files directly inside it when it names a directory. What sits deeper is reached through an [import](#imports) or an [`@include`](#include), so compiling it again on its own would be wrong. An app needs a `name`, which is what the binary is called, but no `version`: that only matters to something being installed. Pointing `build` at a `[library]` is an error: it is installed, not built.
+
+Each entry of `[dependencies]` is a package name and the versions of it that will do:
+
+```
+[dependencies]
+core = "*"
+libc = "~1"
+```
+
+`*` takes anything; `~1` takes any 1.x, and `~1.2` any 1.2.x, so a dependency keeps what its requirement wrote down; `^1.2.3` takes anything up to the next version that may break; `>=`, `>`, `<=`, `<` and `!=` compare as numbers; and a bare `1.2` is that version. Where several installed versions answer, the newest wins.
+
+Dependencies resolve against the install root, and so do theirs, the whole tree. Each one's `[library]` `sources` directories become the include path the compiler searches, and every `libs` entry in the tree becomes a library to link against, a dependent's ahead of what it depends on. The package being built comes first, so a module of its own is the one found.
+
+A package reached from two places is resolved once, against every requirement at once, so one build never holds two versions of it. Requirements that no installed version answers together stop the build, naming both the requirements and who asked:
+
+```
+sie: no installed leaf answers '~1' by app, '~2' by mid@1.0.0; installed: 1.0.0, 2.0.0
+```
+
+Library *directories* are not the manifest's business, since they belong to the machine rather than to the package: the linker reads them from `LIBRARY_PATH`, as it does for any C build.
+
+```
+LIBRARY_PATH=$(brew --prefix)/lib sie build examples/helloworld
+```
+
+`-O` and `-g` mean what they do to the compiler and are passed through.
 
 ## The language
 
