@@ -314,6 +314,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_method_call(gen, builder, expr, scope)
 
     if isinstance(expr, Index):
+        from siec.codegen.inference import item_call
+
+        if (rewritten := item_call(gen, expr, scope, "get_item")) is not None:
+            return emit_expression(gen, builder, rewritten, expected_type, scope)
+
         # a tuple's element reads by its constant index
         if strip_const(expr_sie_type(gen, expr.base, scope) or "").startswith("Tuple<"):
             _, index, _ = tuple_element(gen, expr, scope)

@@ -320,10 +320,21 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                                   stmt.line, scope)
             return
 
+        # a struct's indexed assignment is its 'set_item' operator method;
+        # native arrays, pointers, raw arrays, and tuples keep storing
+        # directly into their element slots below
+        from siec.codegen.inference import item_call
+
+        target = Index(stmt.base, stmt.index)
+        if (rewritten := item_call(
+                gen, target, scope, "set_item", stmt.value)) is not None:
+            reject_const_base(gen, scope, stmt.base)
+            emit_expression(gen, builder, rewritten, None, scope)
+            return
+
         # store the value into the element's slot, typed by the element; a
         # write into a '@volatile' struct is a volatile one
         reject_const_base(gen, scope, stmt.base)
-        target = Index(stmt.base, stmt.index)
         slot = emit_lvalue(gen, builder, target, scope)
 
         element_type = expr_sie_type(gen, target, scope)
@@ -495,6 +506,24 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
 
     method = COMPOUND_METHODS.get(stmt.op)
     target_type = strip_const(expr_sie_type(gen, stmt.target, scope) or "")
+
+    # a struct's indexed getter returns a value, not its storage: update
+    # that value through the binary operator, then hand it back to the
+    # indexed setter. Do this before considering V's own in-place method,
+    # which would otherwise try to mutate the temporary get_item returned.
+    if isinstance(stmt.target, Index):
+        from siec.codegen.inference import item_call
+
+        if (item_call(gen, stmt.target, scope, "get_item") is not None
+                and item_call(gen, stmt.target, scope, "set_item",
+                              stmt.value) is not None):
+            emit_statement_body(
+                gen, builder,
+                make_assignment(stmt.target,
+                                BinaryOp(stmt.op, stmt.target, stmt.value),
+                                stmt.line),
+                scope)
+            return
 
     # only a struct or an array carries methods; anything else takes the
     # operator's own instructions

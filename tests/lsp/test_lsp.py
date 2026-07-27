@@ -344,6 +344,39 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 2)]
 
 
+def test_analysis_and_hover_support_index_operator_interfaces(tmp_path):
+    """
+    Editor analysis accepts indexed structs, infers get_item's result,
+    and exposes the two builtin interface declarations to hover.
+    """
+    analysis, src = unit(tmp_path, """\
+struct Table: GetItem<u64, i32>, SetItem<u64, i32> { value: i32; }
+fn Table::get_item(const &self, key: u64) -> i32 { return self.value; }
+fn Table::set_item(&self, key: u64, value: i32) { self.value = value; }
+
+fn main() -> i32 {
+    let table: Table = { 40 };
+    table[0] = 42;
+    let found = table[0];
+    return found;
+}
+""")
+
+    assert analysis.report is None
+
+    get_item = probe(analysis, src, 0, 16)
+    assert get_item.text == "interface GetItem<K, V>;"
+    assert get_item.targets == []
+
+    set_item = probe(analysis, src, 0, 35)
+    assert set_item.text == "interface SetItem<K, V>;"
+    assert set_item.targets == []
+
+    found = probe(analysis, src, 8, 11)
+    assert found.text == "found: i32"
+    assert found.targets == [(str(src.resolve()), 8)]
+
+
 def test_inspect_shows_a_functions_overloads(tmp_path):
     """
     Hovering a function name lists every overload's signature and

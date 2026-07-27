@@ -150,7 +150,7 @@
             "patterns": [
                 {
                     "name": "support.class.builtin.sie",
-                    "match": "\\b(Any|Result|Tuple|Iterator|ConstIterator|Iterable|ArrayIterator|ConstArrayIterator|Enumerated|EnumerateIterator|Add|Sub|Mul|Div|Rem|AddAssign|SubAssign|MulAssign|DivAssign|RemAssign|Eq|Ord)\\b"
+                    "match": "\\b(Any|Result|Tuple|Iterator|ConstIterator|Iterable|ArrayIterator|ConstArrayIterator|Enumerated|EnumerateIterator|Add|Sub|Mul|Div|Rem|AddAssign|SubAssign|MulAssign|DivAssign|RemAssign|Eq|Ord|GetItem|SetItem)\\b"
                 },
                 {
                     "name": "support.function.builtin.sie",

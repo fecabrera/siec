@@ -143,6 +143,33 @@ def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | N
     return call
 
 
+def item_call(gen: "CodeGenerator", expr: Index, scope: dict,
+              method: str, value: Expr | None = None) -> MethodCall | None:
+    """
+    Rewrite indexed access on a struct into its operator method:
+    'a[key]' is 'a.get_item(key)', and 'a[key] = value' asks for
+    'a.set_item(key, value)'.
+
+    Arrays, pointers, raw arrays, and tuples have native storage indexing
+    and never take this path.
+    """
+    name = strip_const(strip_reference(
+        expr_sie_type(gen, expr.base, scope) or ""))
+    if (not name or name.startswith("Tuple<")
+            or raw_array(name) is not None
+            or name.endswith("[]") or name.endswith("*")
+            or name not in gen.structs):
+        return None
+
+    from siec.codegen.methods import resolve_method
+
+    if resolve_method(gen, name, method) is None:
+        return None
+
+    args = [expr.index] if value is None else [expr.index, value]
+    return MethodCall(expr.base, method, args)
+
+
 def is_float(type_: ir.Type) -> bool:
     """
     Whether an LLVM type is a floating-point scalar.
@@ -396,6 +423,9 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # element keeps a const base's contract; a tuple's element follows its
     # constant index
     if isinstance(expr, Index):
+        if (rewritten := item_call(gen, expr, scope, "get_item")) is not None:
+            return expr_sie_type(gen, rewritten, scope)
+
         base = expr_sie_type(gen, expr.base, scope)
         if base is None:
             return None

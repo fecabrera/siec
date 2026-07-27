@@ -2,8 +2,9 @@
 
 Syntax highlighting for the Sie programming language: keywords, decorators
 (`@extern`, `@asm`, ...), builtin types and the prelude names (`Result`,
-`Ok`, `Error`, the iteration interfaces), strings with escapes, numbers,
-enum members, methods, and `@asm` bodies.
+`Ok`, `Error`, the iteration and operator interfaces, including `GetItem`
+and `SetItem`), strings with escapes, numbers, enum members, methods, and
+`@asm` bodies.
 
 With the `sie-lsp` language server it also serves diagnostics as you
 type, the document outline, hover, and go-to-definition, compiled and

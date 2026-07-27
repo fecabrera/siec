@@ -987,6 +987,33 @@ struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64>, AddAssign<i64>,
 
 The shorthand itself is structural, like `foreach` and `iterator()`: any struct with the method takes the operator, claimed or not. The interfaces are there to declare the contract and to bound generics.
 
+#### Indexed operators
+
+Indexing has the same shorthand for structs. `a[key]` is `a.get_item(key)`, while `a[key] = value` is `a.set_item(key, value)`. The key and value types come from the selected overload, and a compound assignment reads, applies the binary operator, then writes the result back: `a[key] += value` is `a.set_item(key, a.get_item(key) + value)`.
+
+```
+struct Table : GetItem<u64, i32>, SetItem<u64, i32> {
+    values: i32[];
+}
+
+fn Table::get_item(const &self, key: u64) -> i32 {
+    return self.values[key];
+}
+
+fn Table::set_item(&self, key: u64, value: i32) {
+    self.values[key] = value;
+}
+
+let table: Table = { [10, 20, 30] };
+let first = table[0];  // table.get_item(0)
+table[1] = 40;         // table.set_item(1, 40)
+table[2] += 12;        // get_item, '+', then set_item
+```
+
+The prelude's `GetItem<K, V>` requires `get_item(const &self, key: K) -> V`; `SetItem<K, V>` requires `set_item(&self, key: K, value: V)`. A type may claim only the read capability, or both when it also writes. As with the other operator interfaces, the shorthand is structural, while a claim enforces the method's signature and lets the capability bound an interface parameter.
+
+Native arrays, raw arrays, pointers, and tuples keep their built-in storage indexing: their `[]` never routes through these methods.
+
 #### Generic functions
 
 Functions are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.

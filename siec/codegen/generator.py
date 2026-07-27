@@ -412,7 +412,8 @@ class CodeGenerator:
 # value or an error behind its 'ok' tag, 'Result<E>' only the error, and
 # 'Ok'/'Error' construct them - usually inferred from the expected type;
 # 'Iterator<T>' and 'Iterable<T>' are the interfaces iteration speaks,
-# and 'Add<S, T>' and its siblings the ones the binary operators do
+# and 'Add<S, T>' and its siblings the ones the binary operators do;
+# 'GetItem<K, V>' and 'SetItem<K, V>' describe indexed access
 PRELUDE = """
 interface Iterator<T>;
 
@@ -489,6 +490,17 @@ fn Eq<T>::eq(&self, value: T) -> bool;
 interface Ord<T>;
 
 fn Ord<T>::cmp(&self, value: T) -> i32;
+
+// indexed access: 'a[key]' is 'a.get_item(key)' on a struct, and
+// 'a[key] = value' is 'a.set_item(key, value)'; native arrays, pointers,
+// and tuples keep their built-in indexing
+interface GetItem<K, V>;
+
+fn GetItem<K, V>::get_item(const &self, key: K) -> V;
+
+interface SetItem<K, V>;
+
+fn SetItem<K, V>::set_item(&self, key: K, value: V);
 
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];
@@ -683,7 +695,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
-                              "ConstIterator",
+                              "ConstIterator", "GetItem", "SetItem",
                               "ArrayIterator", "ConstArrayIterator",
                               "Enumerated", "EnumerateIterator", "__enumerate",
                               "Tuple", "Any"))
