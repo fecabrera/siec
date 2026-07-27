@@ -31,11 +31,6 @@ DEFAULT_SIE_PATH = Path.home() / ".sie"
 # an array wider than this is listed an entry per line instead
 INLINE_WIDTH = 72
 
-# how many times resolving may repeat before a dependency tree that
-# keeps changing its mind is called unsettled
-RESOLVE_ROUNDS = 16
-
-
 def manifest_path(target: str) -> Path:
     """
     The manifest a path selects: the file itself when one is named, and
@@ -643,21 +638,6 @@ class Resolved:
                 if isinstance(requirement, str)}
 
 
-def best_installed(name: str, requirements: list[str]) -> tuple[str, Path] | None:
-    """
-    The newest installed version of a package that answers every
-    requirement asked of it, or nothing when none does.
-    """
-    candidates = [(version, path) for found, version, path in installed()
-                  if found == name
-                  and all(satisfies(version, r) for r in requirements)]
-
-    if not candidates:
-        return None
-
-    return max(candidates, key=lambda c: natural_key(c[0]))
-
-
 def resolve(root: Resolved) -> list[Resolved]:
     """
     The packages a build needs, in the order they were reached: a package's
@@ -669,58 +649,121 @@ def resolve(root: Resolved) -> list[Resolved]:
 
     Raises LookupError naming what could not be resolved and who wanted it.
     """
-    requirements: dict[str, list[tuple[str, str]]] = {}
-    order: list[str] = []
+    available: dict[str, list[tuple[str, Path]]] = {}
+    for name, version, path in installed():
+        available.setdefault(name, []).append((version, path))
 
-    # requirements can narrow as the tree opens up: a version picked early
-    # may not answer one found later, and picking again opens a different
-    # set of dependencies. So the walk repeats until nothing new turns up
-    for _ in range(RESOLVE_ROUNDS):
-        chosen: dict[str, Resolved] = {}
-        pending = [(root, name, req) for name, req in root.dependencies().items()]
-        order = []
-        settled = True
+    for choices in available.values():
+        choices.sort(key=lambda choice: natural_key(choice[0]), reverse=True)
+
+    loaded: dict[Path, Resolved] = {}
+
+    def package(name: str, version: str, path: Path) -> Resolved:
+        if path in loaded:
+            return loaded[path]
+
+        try:
+            data = read_manifest(path / MANIFEST)
+            _, made_of = unit(path / MANIFEST, data)
+        except ValueError as error:
+            raise LookupError(str(error)) from error
+
+        loaded[path] = Resolved(name, version, path, data, made_of)
+        return loaded[path]
+
+    def live_graph(chosen: dict[str, Resolved]):
+        """
+        Requirements and discovery order reachable through the versions
+        currently chosen. Dependencies of an abandoned version disappear
+        because that package is no longer traversed.
+        """
+        requirements: dict[str, list[tuple[str, str]]] = {}
+        order: list[str] = []
+        pending = [root]
+        expanded = set()
 
         while pending:
-            asker, name, requirement = pending.pop(0)
+            asker = pending.pop(0)
+            if asker is not root:
+                if asker.name in expanded:
+                    continue
+                expanded.add(asker.name)
 
-            requirements.setdefault(name, [])
-            if (requirement, asker.spec) not in requirements[name]:
-                requirements[name].append((requirement, asker.spec))
-                settled = False
+            for name, requirement in asker.dependencies().items():
+                if name not in requirements:
+                    requirements[name] = []
+                    order.append(name)
 
-            if name in chosen:
-                continue
+                request = (requirement, asker.spec)
+                if request not in requirements[name]:
+                    requirements[name].append(request)
 
-            wanted = [r for r, _ in requirements[name]]
-            found = best_installed(name, wanted)
+                if name in chosen and name not in expanded:
+                    pending.append(chosen[name])
 
-            if found is None:
-                asked = ", ".join(f"{r!r} by {who}" for r, who in requirements[name])
-                have = [v for n, v, _ in installed() if n == name]
+        return requirements, order
 
-                raise LookupError(
-                    f"no installed {name} answers {asked}"
-                    + (f"; installed: {', '.join(have)}" if have
-                       else f"; no {name} is installed"))
+    seen = set()
+    failure = None
 
-            version, path = found
-            try:
-                data = read_manifest(path / MANIFEST)
-                _, made_of = unit(path / MANIFEST, data)
-            except ValueError as error:
-                raise LookupError(str(error)) from error
+    def search(chosen: dict[str, Resolved]) -> list[Resolved] | None:
+        nonlocal failure
 
-            package = Resolved(name, version, path, data, made_of)
-            chosen[name] = package
-            order.append(name)
+        requirements, order = live_graph(chosen)
 
-            pending.extend((package, n, r) for n, r in package.dependencies().items())
+        # Unreachable choices belong to a version branch already abandoned;
+        # pruning them keeps their dependency sets out of subsequent states.
+        chosen = {name: chosen[name] for name in order if name in chosen}
+        state = tuple((name, chosen[name].version, chosen[name].path)
+                      for name in order if name in chosen)
+        if state in seen:
+            return None
+        seen.add(state)
 
-        if settled:
+        # Reconsider a selected package before resolving its descendants when
+        # a newly discovered requirement no longer accepts its version.
+        unresolved = next((
+            name for name in order
+            if name not in chosen
+            or not all(satisfies(chosen[name].version, requirement)
+                       for requirement, _ in requirements[name])
+        ), None)
+
+        if unresolved is None:
             return [chosen[name] for name in order]
 
-    raise LookupError("the dependencies do not settle on one set of versions")
+        requests = requirements[unresolved]
+        wanted = [requirement for requirement, _ in requests]
+        candidates = [
+            (version, path)
+            for version, path in available.get(unresolved, ())
+            if all(satisfies(version, requirement) for requirement in wanted)
+        ]
+
+        if not candidates:
+            failure = unresolved, requests
+            return None
+
+        for version, path in candidates:
+            attempt = dict(chosen)
+            attempt[unresolved] = package(unresolved, version, path)
+            if (resolved := search(attempt)) is not None:
+                return resolved
+
+        return None
+
+    if (resolved := search({})) is not None:
+        return resolved
+
+    name, requests = failure
+    asked = ", ".join(f"{requirement!r} by {who}"
+                      for requirement, who in requests)
+    have = sorted((version for version, _ in available.get(name, ())),
+                  key=natural_key)
+    raise LookupError(
+        f"no installed {name} answers {asked}"
+        + (f"; installed: {', '.join(have)}" if have
+           else f"; no {name} is installed"))
 
 
 def build(argv: list[str]) -> int:

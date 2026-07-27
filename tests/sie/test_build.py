@@ -276,6 +276,37 @@ def test_one_version_of_a_package_answers_every_requirement_for_it(
     assert "leaf@2.0.0" not in out
 
 
+def test_dependencies_of_a_discarded_version_do_not_constrain_the_build(
+        home, monkeypatch, capsys):  # noqa: F811
+    """
+    Backtracking from a newer package version removes the dependencies that
+    only that abandoned version introduced.
+    """
+    for version in ("1.0.0", "2.0.0"):
+        install(monkeypatch, package(home, "leaf", version=version,
+                                     files=[("src/leaf.sie", "")]))
+
+    install(monkeypatch, package(home, "choice", version="1.0.0",
+                                 files=[("src/choice.sie", "")]))
+    install(monkeypatch, package(home, "choice", version="2.0.0",
+                                 deps={"leaf": "2"},
+                                 files=[("src/choice.sie", "")]))
+    install(monkeypatch, package(home, "narrow", version="1.0.0",
+                                 deps={"choice": "<2", "leaf": "1"},
+                                 files=[("src/narrow.sie", "")]))
+
+    app = package(home, "app", deps={"choice": "*", "narrow": "*"})
+    capsys.readouterr()
+
+    assert run_sie(monkeypatch, "build", app) == 0
+
+    out = capsys.readouterr().out
+    assert "choice@1.0.0" in out
+    assert "choice@2.0.0" not in out
+    assert "leaf@1.0.0" in out
+    assert "leaf@2.0.0" not in out
+
+
 def test_requirements_that_cannot_be_met_together_are_reported(
         home, monkeypatch, capsys):  # noqa: F811
     """
