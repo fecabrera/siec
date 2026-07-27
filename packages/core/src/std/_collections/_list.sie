@@ -4,6 +4,8 @@ import { malloc, realloc, free } from stdlib;
 
 struct List<T>:
     Iterable<T>,
+    GetItem<u64, T>,
+    SetItem<u64, T>,
     Add<List<T>, Iterable<T>>,
     Add<List<T>, T>,
     AddAssign<Iterable<T>>,
@@ -84,8 +86,29 @@ fn List<T>::assign(&self, str: const &Iterable<char>) {
  * @param index The index of the element to get.
  * @return The element at the given index.
  */
+@deprecated("use operator [], get_item() or set_item()")
 fn List<T>::get(&self, index: u64) -> &T {
     return self.data[index];
+}
+
+/**
+ * Get the element at the given index.
+ *
+ * @param index The index of the element to get.
+ * @return The element at the given index.
+ */
+fn List<T>::get_item(&self, index: u64) -> T {
+    return self.data[index];
+}
+
+/**
+ * Set the element at the given index.
+ *
+ * @param index The index of the element to set.
+ * @param value The value to set at the given index.
+ */
+fn List<T>::set_item(&self, index: u64, value: T) {
+    self.data[index] = value;
 }
 
 /**
