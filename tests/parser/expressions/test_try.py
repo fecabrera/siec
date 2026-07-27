@@ -1,9 +1,9 @@
-"""Tests for parsing 'try <call> except (e) { ... }'."""
+"""Tests for parsing 'try <call> except (e) { ... }' and its '??' shorthand."""
 
 import pytest
 
-from siec.ast import (Assign, Call, Emit, ExprStmt, IntLiteral, Let, MethodCall,
-                      Return, Try, Var)
+from siec.ast import (Assign, BinaryOp, Call, Emit, ExprStmt, IntLiteral, Let,
+                      MethodCall, Return, Try, Var)
 from siec.parser.expressions import parse_primary
 from siec.parser.statements import parse_statement
 
@@ -46,9 +46,10 @@ def test_try_rejects_anything_but_a_call(ts):
         parse_primary(ts("try 1 + 2 except (e) { return 1; }"))
 
 
-def test_try_needs_its_except_arm(ts):
+def test_try_needs_an_arm_one_way_or_the_other(ts):
     """
-    The arm is part of the form: nothing unwraps without one.
+    The arm is part of the form: nothing unwraps without one, spelled
+    'except' or '??'.
     """
     with pytest.raises(SyntaxError, match="expected 'except'"):
         parse_primary(ts("try f();"))
@@ -71,6 +72,52 @@ def test_a_try_statement_needs_no_semicolon(ts):
     assert parse_statement(ts("return try f() except (e) { return 1; }")) == \
         Return(arm)
     assert parse_statement(ts("emit try f() except (e) { return 1; }")) == Emit(arm)
+
+
+def test_a_fallback_stands_for_the_emit_of_it(ts):
+    """
+    '?? v' parses to an arm binding no error, whose body emits v.
+    """
+    assert parse_primary(ts("try f() ?? 0")) == Try(
+        Call("f", []), None, [Emit(IntLiteral(0))], braced=False)
+
+
+def test_a_fallback_takes_the_whole_expression_after_it(ts):
+    """
+    The fallback runs to the end of the expression, so an operator in
+    it belongs to the fallback rather than to the 'try'.
+    """
+    assert parse_primary(ts("try f() ?? a + b")) == Try(
+        Call("f", []), None,
+        [Emit(BinaryOp("+", Var("a"), Var("b")))], braced=False)
+
+
+def test_a_braced_fallback_is_the_arm_itself(ts):
+    """
+    Braces make the fallback the arm's own statements, emitted or not.
+    """
+    assert parse_primary(ts("try f() ?? { g(); emit 0; }")) == Try(
+        Call("f", []), None,
+        [ExprStmt(Call("g", [])), Emit(IntLiteral(0))])
+
+
+def test_a_fallback_statement_keeps_its_semicolon(ts):
+    """
+    A '??' arm is part of the expression, so the statement around it
+    closes the way any other expression statement does.
+    """
+    fallback = Try(Call("f", []), None, [Emit(IntLiteral(0))], braced=False)
+    assert parse_statement(ts("let v = try f() ?? 0;")) == Let("v", None, fallback)
+
+    braced = Try(Call("f", []), None, [Emit(IntLiteral(0))])
+    assert parse_statement(ts("let v = try f() ?? { emit 0; };")) == \
+        Let("v", None, braced)
+
+    with pytest.raises(SyntaxError, match="expected ';'"):
+        parse_statement(ts("let v = try f() ?? 0"))
+
+    with pytest.raises(SyntaxError, match="expected ';'"):
+        parse_statement(ts("let v = try f() ?? { emit 0; }"))
 
 
 def test_a_statement_on_anything_else_still_needs_its_semicolon(ts):

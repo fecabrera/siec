@@ -318,6 +318,182 @@ def test_the_call_runs_exactly_once(run):
     assert run(source).returncode == 0
 
 
+def test_a_fallback_stands_in_for_the_value(run):
+    """
+    '?? v' is the arm with no error to name: v is what the 'try' takes
+    where the call came back with an error instead.
+    """
+    source = SOURCE + """
+    fn low() -> i32 { return 1; }
+    fn high() -> i32 { return 2; }
+
+    fn main() -> i32 {
+        if ((try f(3) ?? 0) != 6) { return 1; }
+        if ((try f(-1) ?? 0) != 0) { return 2; }
+        if ((try f(-1) ?? low() + high()) != 3) { return 3; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_fallback_runs_only_where_the_tag_is_false(run):
+    """
+    The fallback sits on the error path, so a call inside it is spent
+    only there, never on the way to a value the result already had.
+    """
+    source = SOURCE + """
+    @static let recoveries: i32 = 0;
+
+    fn recover() -> i32 {
+        recoveries += 1;
+        return -1;
+    }
+
+    fn main() -> i32 {
+        if ((try f(3) ?? recover()) != 6) { return 1; }
+        if (recoveries != 0) { return 2; }
+
+        if ((try f(-1) ?? recover()) != -1) { return 3; }
+        return recoveries - 1;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_braced_fallback_is_the_arm_itself(run):
+    """
+    Braces make the fallback an arm: statements first, then 'emit', or
+    a way out instead.
+    """
+    source = SOURCE + """
+    @static let reports: i32 = 0;
+
+    fn report() { reports += 1; }
+
+    fn recovered(n: i32) -> i32 {
+        let value = try f(n) ?? { report(); emit -1; };
+        return value;
+    }
+
+    fn early(n: i32) -> i32 {
+        let value = try f(n) ?? { return -2; };
+        return value;
+    }
+
+    fn main() -> i32 {
+        if (recovered(3) != 6 or reports != 0) { return 1; }
+        if (recovered(-1) != -1 or reports != 1) { return 2; }
+        if (early(3) != 6) { return 3; }
+        if (early(-1) != -2) { return 4; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_fallback_over_a_valueless_result_is_simply_run(run):
+    """
+    'Result<E>' has no value to stand in for, so the fallback runs for
+    its effects and control carries on past it.
+    """
+    source = SOURCE + """
+    @static let warnings: i32 = 0;
+
+    fn warn() { warnings += 1; }
+
+    fn main() -> i32 {
+        try check(1) ?? warn();
+        if (warnings != 0) { return 1; }
+
+        try check(-1) ?? warn();
+        if (warnings != 1) { return 2; }
+
+        try check(-1) ?? { warn(); warn(); };
+        return warnings - 3;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_valueless_arm_may_fall_out(run):
+    """
+    An 'except' arm owes a value only where the result carries one:
+    over a 'Result<E>' there is nothing to owe, so handling the error
+    and carrying on is enough.
+    """
+    source = SOURCE + """
+    @static let seen: i32 = 0;
+
+    fn main() -> i32 {
+        try check(-1) except (error) { seen = error as i32; }
+        return seen - 9;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_fallback_owing_a_value_cannot_fall_out(compile_source):
+    """
+    Where the result carries a value, a braced fallback is an arm like
+    any other: it emits a stand-in or leaves.
+    """
+    with pytest.raises(TypeError, match="the fallback must leave, or 'emit' "
+                                        "a value to stand in"):
+        compiles(compile_source, """
+        let value = try f(1) ?? { let missing = 0; };
+        return value;
+        """)
+
+    with pytest.raises(TypeError, match="nothing here takes a value: the "
+                                        "result this 'try' unwraps carries "
+                                        "only an error"):
+        compiles(compile_source, """
+        try check(1) ?? { emit 0; };
+        return 0;
+        """)
+
+
+def test_a_fallback_names_no_error(compile_source):
+    """
+    The shorthand trades the binding for the brevity: nothing in the
+    fallback can reach the error.
+    """
+    with pytest.raises(NameError, match="undefined variable 'error'"):
+        compiles(compile_source, """
+        let value = try f(1) ?? (error as i32);
+        return value;
+        """)
+
+
+def test_a_fallback_keeps_its_semicolon(compile_source, run):
+    """
+    The fallback is part of the expression, not a body around it, so a
+    statement built on one closes with ';' like any other, braced or not.
+    """
+    assert run(SOURCE + """
+    fn main() -> i32 {
+        let value = try f(1) ?? 0;
+        value = try f(2) ?? { emit 0; };
+        try check(1) ?? { };
+
+        return value - 4;
+    }
+    """).returncode == 0
+
+    with pytest.raises(SyntaxError, match="expected ';'"):
+        compiles(compile_source, """
+        let value = try f(1) ?? 0
+        return value;
+        """)
+
+    with pytest.raises(SyntaxError, match="expected ';'"):
+        compiles(compile_source, """
+        let value = try f(1) ?? { emit 0; }
+        return value;
+        """)
+
+
 def test_a_defer_still_runs_when_an_arm_leaves(run):
     """
     The arm's return is a return: the scopes it leaves flush on the way

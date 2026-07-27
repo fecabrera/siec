@@ -40,6 +40,9 @@ module.exports = grammar({
     // '{ try ...' opens both a block holding a try statement and an
     // aggregate literal holding the same try as a value
     [$.try_statement, $._expression],
+    // 'f<i32>' opens both a call and a bare reference to the instance;
+    // the '(' after it decides, one token past the '>'
+    [$.call_expression, $.generic_reference],
   ],
 
   rules: {
@@ -359,8 +362,10 @@ module.exports = grammar({
 
     expression_statement: ($) => seq($._expression, ";"),
 
-    // a statement whose value is a 'try' is closed by the arm's brace,
-    // the way an if's body closes an if, so it takes no ';' of its own
+    // a statement whose value is a 'try' with an 'except' arm is closed
+    // by the arm's brace, the way an if's body closes an if, so it takes
+    // no ';' of its own; a '??' fallback is part of the expression, and
+    // an expression_statement covers it
     try_statement: ($) =>
       choice(
         seq(
@@ -518,16 +523,17 @@ module.exports = grammar({
     block_expression: ($) => prec(1, seq("{", repeat1($._statement), "}")),
 
     // 'try f() except (e) { ... }' takes the value a call's result
-    // carried, its arm taking over where an error came back instead
+    // carried, its arm taking over where an error came back instead;
+    // '?? <fallback>' is the same arm with no error to name
     try_expression: ($) =>
       seq(
         "try",
         field("call", $.call_expression),
-        "except",
-        "(",
-        field("error", $.identifier),
-        ")",
-        field("body", $.block),
+        choice(
+          seq("except", "(", field("error", $.identifier), ")",
+              field("body", $.block)),
+          seq("??", field("fallback", choice($.block, $._expression))),
+        ),
       ),
 
     array_literal: ($) => seq("[", commaSep($._expression), optional(","), "]"),

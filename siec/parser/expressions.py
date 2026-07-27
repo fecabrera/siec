@@ -10,6 +10,7 @@ from siec.ast import (
     Call,
     Cast,
     CharLiteral,
+    Emit,
     EnumMember,
     Expr,
     FloatLiteral,
@@ -117,9 +118,13 @@ def parse_power(ts: TokenStream) -> Expr:
 
 def parse_try(ts: TokenStream, line: int) -> Try:
     """
-    Parse the tail of 'try <call> except (name) { ... }', the 'try'
-    already consumed: the call whose result is unwrapped, and the arm
-    the error it may carry goes to.
+    Parse the tail of a 'try', the keyword already consumed: the call
+    whose result is unwrapped, then either the 'except (name) { ... }'
+    arm the error goes to, or the '?? <fallback>' shorthand, which names
+    no error and stands for the value to take instead.
+
+    A braced fallback is the arm itself, so it may do whatever an arm
+    does; any other is the value, which is to say the 'emit' of it.
     """
     # deferred import: statements and expressions are mutually recursive
     from siec.parser.statements import parse_block
@@ -128,6 +133,15 @@ def parse_try(ts: TokenStream, line: int) -> Try:
     if not isinstance(call, (Call, MethodCall)):
         raise SyntaxError(f"line {line}: 'try' takes a call: the result it "
                           "unwraps comes from a function or a method")
+
+    if ts.peek().syntax == "??":
+        ts.next()
+
+        if ts.peek().syntax == "{":
+            return Try(call, None, parse_block(ts), line=line)
+
+        return Try(call, None, [Emit(parse_expression(ts), line=line)],
+                   braced=False, line=line)
 
     ts.expect("kw", "except")
     ts.expect("sym", "(")

@@ -35,10 +35,18 @@ def test_parser_takes_each_multi_character_symbol_whole():
     """
     Every multi-character symbol parses as itself.
     """
-    for sym in ("->", "...", "==", "!=", "<=", ">=", "**", "<<", ">>",
+    for sym in ("->", "...", "==", "!=", "<=", ">=", "**", "<<", ">>", "??",
                 "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
                 "**=", "<<=", ">>="):
         assert SymbolRule().parse(Cursor(sym)).value == sym
+
+
+def test_a_double_question_mark_lexes_whole():
+    """
+    '??' is one symbol; a lone '?' still opens a ternary.
+    """
+    assert SymbolRule().parse(Cursor("??")).value == "??"
+    assert SymbolRule().parse(Cursor("? a : b")).value == "?"
 
 
 def test_parser_prefers_the_longest_symbol():

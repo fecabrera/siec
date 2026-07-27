@@ -2496,11 +2496,11 @@ let value = try divide(10, 2) except (error) { return 1; }
 let value = try divide(10, 2) except (error) { emit 0; }
 ```
 
-The arm has no value of its own to fall out with, so it must do one of two things: leave, through `return`, `break`, `continue`, or an [`@noreturn`](#noreturn) call; or produce a stand-in with `emit`, exactly as a [block used as a value](#blocks) does. Falling off its end is an error.
+The arm owes the value the ok path would have had, and has none of its own to fall out with, so it must do one of two things: leave, through `return`, `break`, `continue`, or an [`@noreturn`](#noreturn) call; or produce a stand-in with `emit`, exactly as a [block used as a value](#blocks) does. Falling off its end is an error.
 
 The operand is a call, a function's or a method's, returning a `Result`. Anything else is rejected: a `try` over storage that already holds a result would be a check written the long way, which is what `if (res.ok)` is for.
 
-A `Result<E>` carries only an error, so there is nothing to take and nothing for its arm to emit: its `try` stands on its own as a statement.
+A `Result<E>` carries only an error, so there is nothing to take and nothing for its arm to emit: its `try` stands on its own as a statement. Nothing is owed there, so its arm may simply fall out.
 
 ```
 try file.open() except (error) {
@@ -2509,7 +2509,35 @@ try file.open() except (error) {
 }
 ```
 
-Either way the arm's `}` closes the statement, the way an if's body does, so no `;` follows it.
+The arm's `}` closes the statement, the way an if's body does, so no `;` follows it.
+
+#### The fallback shorthand
+
+`try <call> ?? <fallback>` is the same arm with no error to name: the fallback is what the `try` takes where the call came back with one.
+
+```
+let value = try divide(10, 2) ?? 0;
+let value = try divide(10, 2) ?? low + high;
+let value = try divide(10, 2) ?? recover();   // only called where the tag is false
+```
+
+The fallback is evaluated only on that path, never on the way to a value the call already had.
+
+Braces make it the arm itself, free to do whatever an arm does: run statements first, `emit` the stand-in, or leave instead.
+
+```
+let value = try divide(10, 2) ?? { report(); emit 0; };
+let value = try divide(10, 2) ?? { std.io.panic("no"); };
+```
+
+Where the result carries no value to stand in for, the fallback is simply run:
+
+```
+try file.close() ?? warn("could not close");
+try file.close() ?? { warn("could not close"); attempts += 1; };
+```
+
+Unlike the `except` arm, a `??` fallback is part of the expression rather than a body closing it, so a statement built on one still takes its `;`, exactly as one built on a block expression does.
 
 ## Concepts
 

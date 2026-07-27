@@ -42,10 +42,14 @@ COMPOUND = {"+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", "&=", "|=", "^="}
 def close(ts: TokenStream, value) -> None:
     """
     Close a statement with the ';' that terminates it, unless its value
-    is a 'try': the 'except' arm's brace already closed it, the way an
-    if's body closes an if.
+    is a 'try' with an 'except' arm: the arm's brace already closed it,
+    the way an if's body closes an if.
+
+    A '?? <fallback>' arm is part of the expression rather than a body
+    around it, so a statement built on one still takes its ';', exactly
+    as one built on a block expression does.
     """
-    if isinstance(value, Try):
+    if isinstance(value, Try) and not value.fallback:
         return
 
     ts.expect("sym", ";")

@@ -17,8 +17,10 @@ from siec.ast import (
     Call,
     Cast,
     CharLiteral,
+    Emit,
     EnumMember,
     Expr,
+    ExprStmt,
     FloatLiteral,
     Index,
     IntLiteral,
@@ -1268,28 +1270,42 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
 
     builder.branch(end_block)
 
-    # the arm, with the error bound to the name it asked for
+    # the arm, with the error bound to the name it asked for; the '??'
+    # shorthand asks for none, and cannot reach it
     builder.position_at_end(fail_block)
     arm = dict(inner)
-    error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
-                              expr.name)
-    builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "error"),
-                               error_type, arm), error_slot)
-    arm[expr.name] = Variable(error_slot, error_type)
+    if expr.name is not None:
+        error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
+                                  expr.name)
+        builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "error"),
+                                   error_type, arm), error_slot)
+        arm[expr.name] = Variable(error_slot, error_type)
 
-    if gen.debug is not None:
-        gen.debug.declare_variable(builder, error_slot, expr.name, error_type,
-                                   expr.line)
+        if gen.debug is not None:
+            gen.debug.declare_variable(builder, error_slot, expr.name,
+                                       error_type, expr.line)
+
+    # a fallback expression is the value to take, so it emits; where the
+    # result carries none to take, it is simply run for its effects
+    body = expr.body
+    if slot is None and not expr.braced:
+        body = [ExprStmt(body[0].value, line=body[0].line)]
 
     # an 'emit' inside the arm produces the value the ok path would have
     gen.emit_targets.append((slot, end_block, value_type, len(gen.defer_frames)))
-    emit_block(gen, builder, expr.body, arm)
+    emit_block(gen, builder, body, arm)
     gen.emit_targets.pop()
 
+    # an arm owing a value must leave rather than fall out without one;
+    # where the result carries none, there is nothing to owe
     if not builder.block.is_terminated:
-        produce = "" if slot is None else ", or 'emit' a value to stand in"
-        raise TypeError(f"the 'except' arm must leave{produce}: it has no "
-                        "value of its own to fall out with")
+        if slot is not None:
+            written = "fallback" if expr.fallback else "'except' arm"
+            raise TypeError(f"the {written} must leave, or 'emit' a value to "
+                            "stand in: it has no value of its own to fall "
+                            "out with")
+
+        builder.branch(end_block)
 
     builder.position_at_end(end_block)
     return builder.load(slot) if slot is not None else None

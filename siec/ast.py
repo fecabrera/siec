@@ -286,12 +286,28 @@ class Try:
     The arm has no value of its own to fall out with, so it must leave -
     returning, breaking, continuing, or calling something '@noreturn' -
     or produce one with 'emit'. A call returning 'Result<E>' has no value
-    to take, so its 'try' stands as a statement and its arm cannot emit.
+    to take, so its 'try' stands as a statement, its arm cannot emit, and
+    it may simply fall out.
+
+    A 'name' of None is the 'try f() ?? v' shorthand instead: the arm is
+    the fallback, binding no error, and 'braced' says which way it was
+    written - a block of its own, or the bare expression whose 'emit'
+    the body holds. Either way the arm is part of the expression rather
+    than a body closing it, so a statement around it still takes its ';'.
     """
     call: Expr
-    name: str
+    name: str | None
     body: list
+    braced: bool = True
     line: int = _line()
+
+    @property
+    def fallback(self) -> bool:
+        """
+        Whether the arm was written as the '?? <fallback>' shorthand,
+        which names no error.
+        """
+        return self.name is None
 
 
 @dataclass

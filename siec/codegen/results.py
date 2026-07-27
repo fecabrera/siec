@@ -742,7 +742,9 @@ class ResultFlow:
 
         self.frames.append([])
         try:
-            self.declare(expr.name, arms[1] if arms is not None else None)
+            if expr.name is not None:
+                self.declare(expr.name, arms[1] if arms is not None else None)
+
             self.branch(expr.body, dict(self.state))
         finally:
             self.unwind(self.frames.pop())
