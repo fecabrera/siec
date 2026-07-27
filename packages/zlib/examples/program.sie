@@ -68,9 +68,8 @@ fn main(argc: i32, argv: char**) -> i32 {
     let input = File(input_path, FileMode::Read);
     defer input.destroy();
     
-    let in_res = input.open();
-    if (not in_res.ok) {
-        std.io.println(std.io.stderr, "{}: {}", input_path, in_res.error);
+    try input.open() except (err) {
+        std.io.println(std.io.stderr, "{}: {}", input_path, err);
         return 1;
     }
     defer input.close();
@@ -78,16 +77,14 @@ fn main(argc: i32, argv: char**) -> i32 {
     let output = File(output_path, FileMode::Write | FileMode::Create);
     defer output.destroy();
     
-    let out_res = output.open();
-    if (not out_res.ok) {
-        std.io.println(std.io.stderr, "{}: {}", output_path, out_res.error);
+    try output.open() except (err) {
+        std.io.println(std.io.stderr, "{}: {}", output_path, err);
         return 1;
     }
     defer output.close();
 
-    let result = fnc(input, output);
-    if (not result.ok) {
-        std.io.println(std.io.stderr, "{}", result.error);
+    try fnc(input, output) except (err) {
+        std.io.println(std.io.stderr, "{}", err);
         return 1;
     }
 
@@ -114,15 +111,14 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
     defer zlib.deflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
-        let res = src.read(next_in, CHUNK);
-        if (not res.ok) {
-            std.io.println(std.io.stderr, "read(): {}", res.error);
+        let n = try src.read(next_in, CHUNK) except (err) {
+            std.io.println(std.io.stderr, "read(): {}", err);
             return Error(ProgramError::ReadError);
         }
 
-        strm.avail_in = res.value as u32;
+        strm.avail_in = n as u32;
 
-        flush = res.value ? zlib.z_flush::Z_NO_FLUSH : zlib.z_flush::Z_FINISH;
+        flush = n ? zlib.z_flush::Z_NO_FLUSH : zlib.z_flush::Z_FINISH;
 
         strm.next_in = next_in;
 
@@ -133,13 +129,12 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
             ret = zlib.deflate(&strm, flush);
             have = CHUNK as u64 - strm.avail_out;
 
-            let res = dst.write(next_out, have);
-            if (not res.ok) {
-                std.io.println(std.io.stderr, "write(): {}", res.error);
+            let n = try dst.write(next_out, have) except (err) {
+                std.io.println(std.io.stderr, "write(): {}", err);
                 return Error(ProgramError::WriteError);
             }
             
-            if (res.value as u64 != have)
+            if (n as u64 != have)
                 return Error(ProgramError::ShortWrite);
 
             if (strm.avail_out) break; // write done
@@ -170,12 +165,11 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
     defer zlib.inflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
-        let res = src.read(next_in, CHUNK);
-        if (not res.ok) {
-            std.io.println(std.io.stderr, "read(): {}", res.error);
+        let n = try src.read(next_in, CHUNK) except (err) {
+            std.io.println(std.io.stderr, "read(): {}", err);
             return Error(ProgramError::ReadError);
         }
-        strm.avail_in = res.value as u32;
+        strm.avail_in = n as u32;
 
         if (strm.avail_in == 0) break; // input exhausted
         strm.next_in = next_in;
@@ -196,13 +190,12 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
 
             have = CHUNK as u64 - strm.avail_out;
 
-            let res = dst.write(next_out, have);
-            if (not res.ok) {
-                std.io.println(std.io.stderr, "write(): {}", res.error);
+            let n = try dst.write(next_out, have) except (err) {
+                std.io.println(std.io.stderr, "write(): {}", err);
                 return Error(ProgramError::WriteError);
             }
             
-            if (res.value as u64 != have)
+            if (n as u64 != have)
                 return Error(ProgramError::ShortWrite);
 
             if (strm.avail_out) break; // write done
