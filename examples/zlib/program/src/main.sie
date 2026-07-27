@@ -29,6 +29,7 @@ enum ProgramError {
     ShortWrite,
     InitError,
     InflateError,
+    DeflateError,
 }
 
 @extend ProgramError: Formattable;
@@ -45,6 +46,8 @@ fn ProgramError::format(const &self, modifiers: const &char[]) -> String {
         return String("Init error");
     when ProgramError::InflateError:
         return String("Inflate error");
+    when ProgramError::DeflateError:
+        return String("Deflate error");
     else:
         return String("Unknown error");
     }
@@ -122,14 +125,14 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
     defer deflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
-        let n = try src.read(next_in, CHUNK) except (err) {
+        let read = try src.read(next_in, CHUNK) except (err) {
             std.io.println(std.io.stderr, "read(): {}", err);
             return Error(ProgramError::ReadError);
         }
 
-        strm.avail_in = n as u32;
+        strm.avail_in = read as u32;
 
-        flush = n ? z_flush::Z_NO_FLUSH : z_flush::Z_FINISH;
+        flush = read ? z_flush::Z_NO_FLUSH : z_flush::Z_FINISH;
 
         strm.next_in = next_in;
 
@@ -138,14 +141,19 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
             strm.next_out = next_out;
 
             ret = deflate(&strm, flush);
+            if (ret != z_status::Z_OK) {
+                std.io.println(std.io.stderr, "deflate() returned {}", ret);
+                return Error(ProgramError::DeflateError);
+            }
+
             have = CHUNK as u64 - strm.avail_out;
 
-            let n = try dst.write(next_out, have) except (err) {
+            let written = try dst.write(next_out, have) except (err) {
                 std.io.println(std.io.stderr, "write(): {}", err);
                 return Error(ProgramError::WriteError);
             }
             
-            if (n as u64 != have)
+            if (written as u64 != have)
                 return Error(ProgramError::ShortWrite);
 
             if (strm.avail_out) break; // write done
@@ -176,11 +184,11 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
     defer inflateEnd(&strm); // cleanup on every exit path
 
     while (true) {
-        let n = try src.read(next_in, CHUNK) except (err) {
+        let read = try src.read(next_in, CHUNK) except (err) {
             std.io.println(std.io.stderr, "read(): {}", err);
             return Error(ProgramError::ReadError);
         }
-        strm.avail_in = n as u32;
+        strm.avail_in = read as u32;
 
         if (strm.avail_in == 0) break; // input exhausted
         strm.next_in = next_in;
@@ -201,12 +209,12 @@ fn decompress_file(src: &File, dst: &File) -> Result<ProgramError> {
 
             have = CHUNK as u64 - strm.avail_out;
 
-            let n = try dst.write(next_out, have) except (err) {
+            let written = try dst.write(next_out, have) except (err) {
                 std.io.println(std.io.stderr, "write(): {}", err);
                 return Error(ProgramError::WriteError);
             }
             
-            if (n as u64 != have)
+            if (written as u64 != have)
                 return Error(ProgramError::ShortWrite);
 
             if (strm.avail_out) break; // write done
