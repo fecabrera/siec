@@ -118,11 +118,15 @@ def parse_power(ts: TokenStream) -> Expr:
 
 def parse_try(ts: TokenStream, line: int) -> Try:
     """
-    Parse the tail of a 'try', the keyword already consumed: the call
-    whose result is unwrapped, then the arm the error goes to - the
-    'except (name) { ... }' form, the '?? <fallback>' shorthand, which
-    names no error and stands for the value to take instead, or no arm
-    at all, which hands the error back to the caller.
+    Parse the tail of a 'try', the keyword already consumed: the result
+    it unwraps, then the arm the error goes to - the 'except (name)
+    { ... }' form, the '?? <fallback>' shorthand, which names no error
+    and stands for the value to take instead, or no arm at all, which
+    hands the error back to the caller.
+
+    The result is a primary, so a call's return and a variable read
+    alike; an operator around it applies to what the 'try' gives back,
+    not to the result it takes.
 
     A braced fallback is the arm itself, so it may do whatever an arm
     does; any other is the value, which is to say the 'emit' of it.
@@ -130,30 +134,27 @@ def parse_try(ts: TokenStream, line: int) -> Try:
     # deferred import: statements and expressions are mutually recursive
     from siec.parser.statements import parse_block
 
-    call = parse_primary(ts)
-    if not isinstance(call, (Call, MethodCall)):
-        raise SyntaxError(f"line {line}: 'try' takes a call: the result it "
-                          "unwraps comes from a function or a method")
+    result = parse_primary(ts)
 
     if ts.peek().syntax == "??":
         ts.next()
 
         if ts.peek().syntax == "{":
-            return Try(call, None, parse_block(ts), line=line)
+            return Try(result, None, parse_block(ts), line=line)
 
-        return Try(call, None, [Emit(parse_expression(ts), line=line)],
+        return Try(result, None, [Emit(parse_expression(ts), line=line)],
                    braced=False, line=line)
 
     # no arm: the error goes back to the caller
     if ts.peek().syntax != "except":
-        return Try(call, None, None, line=line)
+        return Try(result, None, None, line=line)
 
     ts.expect("kw", "except")
     ts.expect("sym", "(")
     name = ts.expect("ident").value
     ts.expect("sym", ")")
 
-    return Try(call, name, parse_block(ts), line=line)
+    return Try(result, name, parse_block(ts), line=line)
 
 
 def parse_primary(ts: TokenStream) -> Expr:

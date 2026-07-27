@@ -2488,7 +2488,7 @@ A result no name holds cannot have been checked, so it has to be named first: `d
 
 #### Unwrapping with try
 
-`try <call> except (<name>) { ... }` is the check written as one expression: the call runs once, and the whole thing takes the value its result carried. Where an error came back instead, the arm runs with the error bound to the name it asked for.
+`try <result> except (<name>) { ... }` is the check written as one expression: the result is taken once, and the whole thing becomes the value it carried. Where it carried an error instead, the arm runs with the error bound to the name it asked for.
 
 ```
 let value = try divide(10, 2) except (error) { std.io.panic("{}", error); }
@@ -2498,7 +2498,27 @@ let value = try divide(10, 2) except (error) { emit 0; }
 
 The arm owes the value the ok path would have had, and has none of its own to fall out with, so it must do one of two things: leave, through `return`, `break`, `continue`, or an [`@noreturn`](#noreturn) call; or produce a stand-in with `emit`, exactly as a [block used as a value](#blocks) does. Falling off its end is an error.
 
-The operand is a call, a function's or a method's, returning a `Result`. Anything else is rejected: a `try` over storage that already holds a result would be a check written the long way, which is what `if (res.ok)` is for.
+What a `try` unwraps is the result, not the call: any expression carrying one stands there, a call's return and a stored result alike.
+
+```
+let res = divide(10, 2);
+
+try res;                                        // hands the error back
+let value = try res ?? 0;
+let value = try res except (error) { return 1; }
+let value = try held.results[i] ?? 0;
+```
+
+The result binds as tightly as a name or a call does, so an operator around a `try` applies to the value it gives back rather than joining what it takes: `try res + 1` adds one to the unwrapped value.
+
+Over a result the code named, the `try` *is* the check: what continues past it took the ok path, so `res.value` reads there, and its arm stands where the tag is false, so `res.error` reads inside. A fallback hands control back too, though, and those two paths meet knowing nothing.
+
+```
+let res = divide(10, 2);
+try res except (error) { return -1; }
+
+use(res.value);     // the arm left, so the tag is true from here
+```
 
 A `Result<E>` carries only an error, so there is nothing to take and nothing for its arm to emit: its `try` stands on its own as a statement. Nothing is owed there, so its arm may simply fall out.
 
@@ -2539,7 +2559,7 @@ try file.close() ?? { warn("could not close"); attempts += 1; };
 
 Unlike the `except` arm, a `??` fallback is part of the expression rather than a body closing it, so a statement built on one still takes its `;`, exactly as one built on a block expression does.
 
-#### Handing the error back
+#### Error propagation
 
 A `try` with no arm at all hands the error to the caller: where the call came back with one, the function returns it, and where it came back with a value the `try` is that value.
 

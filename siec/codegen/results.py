@@ -252,6 +252,7 @@ class ResultFlow:
         self.types = dict(scope)
         self.state: dict = {}
         self.frames: list = []
+        self.emitted: list = []
 
     # scope
 
@@ -441,6 +442,12 @@ class ResultFlow:
             return False
         elif isinstance(stmt, Emit):
             self.check(stmt.value)
+
+            # an 'emit' ends its block and rejoins right after it, so
+            # what it knew meets whatever the other paths there know
+            if self.emitted:
+                self.emitted[-1].append(dict(self.state))
+
             return False
         elif isinstance(stmt, (Break, Continue)):
             return False
@@ -695,7 +702,12 @@ class ResultFlow:
         elif isinstance(expr, TypeOf):
             self.check(expr.value)
         elif isinstance(expr, BlockExpr):
-            self.block(expr.body)
+            # its 'emit's produce its own value, not an enclosing arm's
+            self.emitted.append([])
+            try:
+                self.block(expr.body)
+            finally:
+                self.emitted.pop()
 
         return {}, {}
 
@@ -732,26 +744,56 @@ class ResultFlow:
 
     def visit_try(self, expr) -> tuple[dict, dict]:
         """
-        Walk a 'try': it does its own checking, taking the value only
-        where the tag holds, so all that is left is its arm, where the
-        error binds to the name it asked for. A bare 'try' writes no arm
-        at all - the error goes straight back to the caller.
+        Walk a 'try': it is the check, taking the value only where the
+        tag holds, so what continues past it took the ok path and its
+        arm stands where the tag is false. A bare 'try' writes no arm at
+        all - the error goes straight back to the caller.
+
+        Over a result the code named, that settles the tag the same way
+        an if would, and everything after the 'try' can read from it.
         """
-        self.check(expr.call)
+        self.check(expr.result)
+
+        tracked = (path_of(expr.result)
+                   if self.result_type(expr.result) is not None else None)
+
+        def taken() -> dict:
+            state = dict(self.state)
+            if tracked is not None:
+                state[tracked] = OK
+
+            return state
 
         if expr.propagates:
+            self.state = taken()
             return {}, {}
 
-        arms = result_arms(self.sie_type(expr.call))
+        arms = result_arms(self.sie_type(expr.result))
 
         self.frames.append([])
+        self.emitted.append([])
         try:
             if expr.name is not None:
                 self.declare(expr.name, arms[1] if arms is not None else None)
 
-            self.branch(expr.body, dict(self.state))
+            handled = dict(self.state)
+            if tracked is not None:
+                handled[tracked] = ERR
+
+            end, falls = self.branch(expr.body, handled)
         finally:
+            rejoined = self.emitted.pop()
             self.unwind(self.frames.pop())
+
+        # every way the arm hands control back - falling out of a
+        # valueless one, or emitting a stand-in - meets what the ok path
+        # knows here
+        if falls:
+            rejoined.append(end)
+
+        self.state = taken()
+        for other in rejoined:
+            self.state = merge(self.state, other)
 
         return {}, {}
 

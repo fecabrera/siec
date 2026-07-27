@@ -525,14 +525,20 @@ module.exports = grammar({
 
     block_expression: ($) => prec(1, seq("{", repeat1($._statement), "}")),
 
-    // 'try f() except (e) { ... }' takes the value a call's result
-    // carried, its arm taking over where an error came back instead;
+    // 'try res except (e) { ... }' takes the value a result carried,
+    // its arm taking over where an error came back instead; what it
+    // unwraps is the result, a call's return or a stored one alike.
     // '?? <fallback>' is the same arm with no error to name, and no arm
     // at all hands the error back to the caller
     try_expression: ($) =>
       seq(
         "try",
-        field("call", $.call_expression),
+        field(
+          "result",
+          choice($.identifier, $.call_expression, $.field_expression,
+                 $.arrow_expression, $.index_expression, $.scoped_identifier,
+                 $.generic_reference, $.parenthesized_expression),
+        ),
         optional(choice(
           seq("except", "(", field("error", $.identifier), ")",
               field("body", $.block)),

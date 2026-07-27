@@ -279,9 +279,12 @@ class AsmBlock:
 @dataclass
 class Try:
     """
-    A 'try f() except (e) { ... }' expression: the call runs once, and
-    the whole thing takes the value its result carried. Where the result
-    carried an error instead, the arm runs with 'e' bound to it.
+    A 'try f() except (e) { ... }' expression: the result is taken once,
+    and the whole thing becomes the value it carried. Where it carried
+    an error instead, the arm runs with 'e' bound to it.
+
+    The operand is any expression holding a Result, a call's return or a
+    variable alike: what a 'try' unwraps is the result, not the call.
 
     The arm has no value of its own to fall out with, so it must leave -
     returning, breaking, continuing, or calling something '@noreturn' -
@@ -299,7 +302,7 @@ class Try:
     error goes back to the caller, so the function around it must return
     a Result carrying the same error type.
     """
-    call: Expr
+    result: Expr
     name: str | None
     body: list | None
     braced: bool = True

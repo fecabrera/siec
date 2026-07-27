@@ -88,15 +88,18 @@ def result_arms(name: str | None) -> tuple[str | None, str] | None:
 
 def try_arms(gen: CodeGenerator, expr: Try, scope: dict) -> tuple[str | None, str]:
     """
-    The value and error types a 'try' unwraps, or the reason its call
+    The value and error types a 'try' unwraps, or the reason its operand
     gives it nothing to unwrap.
     """
-    carried = expr_sie_type(gen, expr.call, scope)
+    carried = expr_sie_type(gen, expr.result, scope)
     arms = result_arms(carried)
     if arms is None:
-        shown = repr(carried) if carried is not None else "nothing"
-        raise TypeError("'try' needs a call that returns a Result; "
-                        f"this one returns {shown}")
+        if carried is None:
+            raise TypeError("'try' takes a Result to unwrap; this "
+                            "expression has no value")
+
+        raise TypeError(f"'try' takes a Result to unwrap; this one "
+                        f"is {carried!r}")
 
     return arms
 
@@ -356,7 +359,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a 'try' takes the value its call's result carries; one carrying
     # only an error has none to take
     if isinstance(expr, Try):
-        arms = result_arms(expr_sie_type(gen, expr.call, scope))
+        arms = result_arms(expr_sie_type(gen, expr.result, scope))
         return arms[0] if arms is not None else None
 
     # a member access yields the field's type; an aliasing field (a pointer
@@ -621,7 +624,7 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
     if isinstance(expr, Try):
         try:
             if try_arms(gen, expr, scope)[0] is None:
-                return valueless_try(expr_sie_type(gen, expr.call, scope))
+                return valueless_try(expr_sie_type(gen, expr.result, scope))
         except TypeError as error:
             return error
 

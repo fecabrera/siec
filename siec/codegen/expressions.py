@@ -1261,14 +1261,14 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     # deferred import: statements and expressions are mutually recursive
     from siec.codegen.statements import emit_block
 
-    result_type = expr_sie_type(gen, expr.call, scope)
+    result_type = expr_sie_type(gen, expr.result, scope)
     value_type, error_type = try_arms(gen, expr, scope)
     if value_type is None and expected_type is not None:
         raise valueless_try(result_type)
 
     # the result lands in storage of its own: both arms read it, and the
     # call must run exactly once
-    result = emit_expression(gen, builder, expr.call, None, scope)
+    result = emit_expression(gen, builder, expr.result, None, scope)
     holder = entry_alloca(builder, result.type, "try.result")
     builder.store(result, holder)
 

@@ -160,33 +160,84 @@ def test_the_error_name_lives_only_in_its_arm(compile_source):
         """)
 
 
-def test_a_try_needs_a_call(compile_source):
+def test_a_try_unwraps_a_result_wherever_it_sits(run):
     """
-    A result already sitting in a variable was there to be checked; a
-    'try' unwraps what a call just handed back.
+    What a 'try' takes is the result, not the call: one already sitting
+    in a variable, in a field, or in an element unwraps the same way.
     """
-    with pytest.raises(SyntaxError, match="'try' takes a call: the result it "
-                                          "unwraps comes from a function or "
-                                          "a method"):
+    source = SOURCE + """
+    struct Holder { res: Result<i32, u8>; }
+
+    fn main() -> i32 {
+        let res = f(21);
+        let value = try res except (error) { return 1; }
+        if (value != 42) { return 2; }
+
+        let held: Holder;
+        held.res = f(-1);
+        if ((try held.res ?? -7) != -7) { return 3; }
+
+        let all: Result<i32, u8>[2];
+        all[0] = f(3);
+        if ((try all[0] ?? 0) != 6) { return 4; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_a_stored_result_settles_its_tag_where_the_try_passes(run, compile_source):
+    """
+    The 'try' is the check, so what continues past it took the ok path
+    and the arm stands where the tag is false: both sides can read the
+    member their own side holds.
+    """
+    assert run(SOURCE + """
+    fn main() -> i32 {
+        let res = f(21);
+        try res except (error) { return -(res.error as i32); }
+
+        // the arm left, so the tag is true from here
+        return res.value - 42;
+    }
+    """).returncode == 0
+
+    with pytest.raises(TypeError, match="cannot read 'res.value': 'res.ok' "
+                                        "is false here"):
         compiles(compile_source, """
         let res = f(1);
-        let value = try res except (error) { return 1; }
-        return value;
+        try res except (error) { return res.value; }
+        return 0;
+        """)
+
+    # a fallback hands control back, so the two paths meet knowing nothing
+    with pytest.raises(TypeError, match="cannot read 'res.value': 'res.ok' "
+                                        "is unchecked"):
+        compiles(compile_source, """
+        let res = f(1);
+        let value = try res ?? 0;
+        return res.value;
         """)
 
 
-def test_a_try_needs_a_call_that_returns_a_result(compile_source):
+def test_a_try_needs_a_result_to_unwrap(compile_source):
     """
-    There is nothing to unwrap where no result comes back.
+    There is nothing to unwrap where the expression is not a result, or
+    carries no value at all.
     """
-    with pytest.raises(TypeError, match="'try' needs a call that returns a "
-                                        "Result; this one returns 'i32'"):
+    with pytest.raises(TypeError, match="'try' takes a Result to unwrap; "
+                                        "this one is 'i32'"):
+        compiles(compile_source, """
+        let n = 1;
+        let value = try n except (error) { return 1; }
+        return value;
+        """)
+
+    with pytest.raises(TypeError, match="'try' takes a Result to unwrap; "
+                                        "this expression has no value"):
         compile_source(SOURCE + """
-        fn plain(n: i32) -> i32 { return n; }
-        fn main() -> i32 {
-            let value = try plain(1) except (error) { return 1; }
-            return value;
-        }
+        fn side() {}
+        fn main() -> i32 { try side(); return 0; }
         """)
 
 

@@ -2,9 +2,9 @@
 
 import pytest
 
-from siec.ast import (Assign, BinaryOp, Call, Emit, ExprStmt, IntLiteral, Let,
-                      MethodCall, Return, Try, Var)
-from siec.parser.expressions import parse_primary
+from siec.ast import (Assign, BinaryOp, Call, Emit, ExprStmt, Index, IntLiteral,
+                      Let, Member, MethodCall, Return, Try, Var)
+from siec.parser.expressions import parse_expression, parse_primary
 from siec.parser.statements import parse_statement
 
 
@@ -34,16 +34,26 @@ def test_try_records_its_source_line(ts):
     assert parse_primary(ts("\n\ntry f() except (e) { return 1; }")).line == 3
 
 
-def test_try_rejects_anything_but_a_call(ts):
+def test_try_takes_any_result_bearing_primary(ts):
     """
-    A result already in a variable was there to be checked; a 'try'
-    unwraps what a call just handed back.
+    What a 'try' unwraps is the result, so a variable, a field, and an
+    element all stand where a call does.
     """
-    with pytest.raises(SyntaxError, match="'try' takes a call"):
-        parse_primary(ts("try res except (e) { return 1; }"))
+    for source, result in (("try res", Var("res")),
+                           ("try held.res", Member(Var("held"), "res")),
+                           ("try all[0]", Index(Var("all"), IntLiteral(0)))):
+        assert parse_primary(ts(f"{source} except (e) {{ return 1; }}")) == \
+            Try(result, "e", [Return(IntLiteral(1))])
 
-    with pytest.raises(SyntaxError, match="'try' takes a call"):
-        parse_primary(ts("try 1 + 2 except (e) { return 1; }"))
+
+def test_an_operator_around_a_try_applies_to_its_value(ts):
+    """
+    The result is a primary, so '+' after a bare 'try' adds to what the
+    'try' gives back rather than joining what it unwraps.
+    """
+    assert parse_primary(ts("try res")) == Try(Var("res"), None, None)
+    assert parse_expression(ts("try res + 1")) == BinaryOp(
+        "+", Try(Var("res"), None, None), IntLiteral(1))
 
 
 def test_a_try_with_no_arm_propagates(ts):
