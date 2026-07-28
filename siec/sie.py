@@ -14,6 +14,7 @@ import argparse
 import datetime
 import os
 import re
+import secrets
 import shutil
 import sys
 import tomllib
@@ -455,20 +456,44 @@ def replace(staging: Path, target: Path) -> None:
     The old one only goes once the new one is complete, so a copy that
     fails halfway leaves the previous install untouched.
     """
-    previous = target.with_name(target.name + ".replaced")
-    shutil.rmtree(previous, ignore_errors=True)
-
+    previous = None
     if target.exists():
+        while previous is None:
+            candidate = target.with_name(
+                f"{target.name}.backup-{secrets.token_hex(16)}")
+            if not candidate.exists() and not candidate.is_symlink():
+                previous = candidate
+
         target.rename(previous)
 
     try:
         staging.rename(target)
     except OSError:
-        if previous.exists():
+        if previous is not None and previous.exists():
             previous.rename(target)
         raise
 
-    shutil.rmtree(previous, ignore_errors=True)
+    if previous is not None:
+        shutil.rmtree(previous, ignore_errors=True)
+
+
+def install_details(manifest: Path) -> tuple[dict, dict, str, str, list[str]]:
+    """
+    Validate a library package and return everything installation needs.
+
+    This runs both on the source and on the completed staging copy, so the
+    installed version is never moved aside for content that changed or became
+    invalid while it was being copied.
+    """
+    data = read_manifest(manifest)
+    kind, made_of = unit(manifest, data)
+    if kind != "library":
+        raise ValueError(f"{display_path(str(manifest))}: an [app] is "
+                         "built, not installed")
+
+    name, version = identity(manifest, data)
+    entries = contents(manifest.parent, data)
+    return data, made_of, name, version, entries
 
 
 def install(argv: list[str]) -> int:
@@ -499,17 +524,7 @@ def install(argv: list[str]) -> int:
     package = manifest.parent
 
     try:
-        data = read_manifest(manifest)
-        kind, made_of = unit(manifest, data)
-
-        # an app is the end of the line: it is built, and nothing builds
-        # against it, so there is no reason for it to sit in the lib root
-        if kind != "library":
-            raise ValueError(f"{display_path(str(manifest))}: an [app] is "
-                             "built, not installed")
-
-        name, version = identity(manifest, data)
-        entries = contents(package, data)
+        data, made_of, name, version, entries = install_details(manifest)
         target = contained_path(install_root(), f"{name}@{version}", manifest)
     except ValueError as error:
         print(f"sie: {error}", file=sys.stderr)
@@ -523,13 +538,30 @@ def install(argv: list[str]) -> int:
     staging = target.with_name("." + target.name + ".partial")
 
     try:
+        # Manifest and path validation have completed above. Build the new
+        # install in full before replace() moves the currently installed one.
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir()
 
         copied = copy_into(package, entries, staging)
+
+        # Validate what was actually copied, not only the source snapshot
+        # read above. A concurrently changed or corrupted manifest never
+        # reaches replace(), so the installed version remains in place.
+        _, _, staged_name, staged_version, _ = install_details(
+            staging / MANIFEST)
+        if (staged_name, staged_version) != (name, version):
+            raise ValueError(
+                f"{display_path(str(staging / MANIFEST))}: package identity "
+                "changed while staging")
+
         replaced = target.exists()
         replace(staging, target)
+    except ValueError as error:
+        shutil.rmtree(staging, ignore_errors=True)
+        print(f"sie: {error}", file=sys.stderr)
+        return 1
     except OSError as error:
         shutil.rmtree(staging, ignore_errors=True)
         print(f"sie: {error.filename or target}: {error.strerror}",

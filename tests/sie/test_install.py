@@ -203,6 +203,136 @@ def test_reinstalling_replaces_what_was_there(home, monkeypatch, capsys):
     assert not (installed / "src" / "old.sie").exists()
 
 
+def test_reinstall_backup_does_not_collide_with_another_version(
+        home, monkeypatch):
+    """
+    A reinstall's backup is unique to that operation: a version whose
+    install path matches the old deterministic backup survives untouched.
+    """
+    sibling = make_package(
+        home / "sibling", "zlib", version="1.0.0.replaced",
+        made_of='sources = ["src/"]\n',
+        files=[("src/sibling.sie", "sibling\n")])
+    package = make_package(
+        home / "current", "zlib", version="1.0.0",
+        made_of='sources = ["src/"]\n',
+        files=[("src/current.sie", "old\n")])
+
+    assert run_sie(monkeypatch, "install", sibling) == 0
+    assert run_sie(monkeypatch, "install", package) == 0
+
+    (package / "src" / "current.sie").write_text("new\n")
+    assert run_sie(monkeypatch, "install", package) == 0
+
+    installed = install_root()
+    assert (installed / "zlib@1.0.0" / "src" / "current.sie"
+            ).read_text() == "new\n"
+    assert (installed / "zlib@1.0.0.replaced" / "src" / "sibling.sie"
+            ).read_text() == "sibling\n"
+    assert list(installed.glob("zlib@1.0.0.backup-*")) == []
+
+
+def test_a_failed_replacement_restores_from_its_unique_backup(
+        home, monkeypatch):
+    """
+    If staging cannot take the target's place, the exact random backup
+    made by this operation is restored and then disappears.
+    """
+    from pathlib import Path
+
+    from siec.sie import replace
+
+    target = home / "zlib@1.0.0"
+    staging = home / ".zlib@1.0.0.partial"
+    target.mkdir()
+    staging.mkdir()
+    (target / "value").write_text("old\n")
+    (staging / "value").write_text("new\n")
+
+    original = Path.rename
+    destinations = []
+
+    def fail_staging(self, destination):
+        destinations.append(Path(destination))
+        if self == staging:
+            raise OSError(5, "Input/output error")
+        return original(self, destination)
+
+    monkeypatch.setattr(Path, "rename", fail_staging)
+
+    with pytest.raises(OSError, match="Input/output error"):
+        replace(staging, target)
+
+    assert (target / "value").read_text() == "old\n"
+    assert (staging / "value").read_text() == "new\n"
+    assert destinations[0].name.startswith("zlib@1.0.0.backup-")
+    assert list(home.glob("zlib@1.0.0.backup-*")) == []
+
+
+def test_an_invalid_reinstall_leaves_the_installed_package_untouched(
+        home, monkeypatch, capsys):
+    """
+    The replacement is not moved or deleted until the new package passes
+    manifest validation and finishes staging.
+    """
+    package = make_package(
+        home, "zlib", made_of='sources = ["src/"]\n',
+        files=[("src/value.sie", "installed\n")])
+    assert run_sie(monkeypatch, "install", package) == 0
+
+    installed = install_root() / "zlib@1.0.0"
+    before_manifest = (installed / "package.toml").read_bytes()
+    before_source = (installed / "src" / "value.sie").read_bytes()
+
+    (package / "package.toml").write_text(
+        '[package]\nname = "zlib"\nversion = "1.0.0"\n'
+        '\n[app]\nsources = ["src/"]\n')
+    (package / "src" / "value.sie").write_text("invalid replacement\n")
+
+    assert run_sie(monkeypatch, "install", package) == 1
+
+    assert "[app] is built, not installed" in capsys.readouterr().err
+    assert (installed / "package.toml").read_bytes() == before_manifest
+    assert (installed / "src" / "value.sie").read_bytes() == before_source
+    assert list(install_root().glob("zlib@1.0.0.backup-*")) == []
+
+
+def test_an_invalid_staged_reinstall_restores_the_old_package(
+        home, monkeypatch, capsys):
+    """
+    The completed staging tree is validated before replacement; corruption
+    during copying reports an error and leaves the old install in place.
+    """
+    package = make_package(
+        home, "zlib", made_of='sources = ["src/"]\n',
+        files=[("src/value.sie", "installed\n")])
+    assert run_sie(monkeypatch, "install", package) == 0
+
+    installed = install_root() / "zlib@1.0.0"
+    before_manifest = (installed / "package.toml").read_bytes()
+    before_source = (installed / "src" / "value.sie").read_bytes()
+    (package / "src" / "value.sie").write_text("replacement\n")
+
+    import siec.sie
+
+    original = siec.sie.copy_into
+
+    def corrupt_manifest(source, entries, staging):
+        copied = original(source, entries, staging)
+        (staging / "package.toml").write_text("[invalid")
+        return copied
+
+    monkeypatch.setattr(siec.sie, "copy_into", corrupt_manifest)
+
+    assert run_sie(monkeypatch, "install", package) == 1
+
+    err = capsys.readouterr().err
+    assert "package.toml" in err
+    assert (installed / "package.toml").read_bytes() == before_manifest
+    assert (installed / "src" / "value.sie").read_bytes() == before_source
+    assert list(install_root().glob("zlib@1.0.0.backup-*")) == []
+
+
 def test_a_failed_install_leaves_the_previous_one_alone(home, monkeypatch):
     """
     The staged copy only takes the place of the old install once it is
