@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from siec.ast import Function, Let, Program
+from siec.ast import Body, For, Function, Let, Program
 from siec.cli import error_parts
 from siec.codegen import CodeGenerator, codegen
 from siec.codegen.generator import Variable
@@ -370,34 +370,40 @@ def token_chain(tokens: list[Token], line: int, col: int):
     return parts, seps, tokens[at], following
 
 
-def enclosing_function(program: Program, file: str, line: int) -> Function | None:
+def span_contains(body: list, line: int, col: int) -> bool:
     """
-    The defined function whose body the 1-based line sits in: the last
-    one starting at or before it, unless another declaration starts
-    between them, which puts the line past the body's end.
+    Whether a 1-based source position is inside a parsed statement body.
+    Body spans are half-open, so an adjacent `else` or following declaration
+    does not belong to the body ending immediately before it.
     """
-    best = None
-    for fn in program.functions:
-        if fn.file == file and fn.body is not None and fn.line <= line:
-            if best is None or fn.line > best.line:
-                best = fn
+    span = getattr(body, "span", None)
+    if span is None:
+        return False
 
-    if best is None:
-        return None
-
-    for decl in (*program.functions, *program.structs, *program.enums,
-                 *program.consts, *program.globals, *program.aliases):
-        if decl.file == file and best.line < decl.line <= line:
-            return None
-
-    return best
+    start_line, start_col, end_line, end_col = span
+    return (start_line, start_col) <= (line, col) < (end_line, end_col)
 
 
-def local_scope(gen: CodeGenerator, fn: Function, line: int):
+def enclosing_function(program: Program, file: str, line: int,
+                       col: int = 0) -> Function | None:
+    """
+    The defined function whose body contains the 1-based source position.
+    """
+    return next((
+        fn for fn in program.functions
+        if fn.file == file and fn.body is not None
+        and span_contains(fn.body, line, col)
+    ), None)
+
+
+def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
     """
     The names in scope at a 1-based line of a function's body, each with
-    its declared or inferred type and its declaring line. Source order
-    approximates block scope: every 'let' at or above the line counts.
+    its declared or inferred type and its declaring line.
+
+    Only declarations in the lexical body chain containing the cursor
+    count. A nested body's locals therefore disappear at its closing brace,
+    while declarations in its ancestors remain visible.
     """
     from dataclasses import fields as dataclass_fields, is_dataclass
 
@@ -410,30 +416,60 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int):
         scope[param.name] = Variable(None, param.type)
         lines[param.name] = fn.line
 
-    def walk(node) -> None:
+    def declare(node: Let) -> None:
+        type_ = node.type
+        if type_ is None and node.value is not None:
+            try:
+                type_ = infer_type(gen, node.value, dict(scope))
+            except (TypeError, NameError):
+                type_ = None
+
+        if type_ is not None:
+            scope[node.name] = Variable(None, type_)
+
+        lines[node.name] = node.line
+
+    def active_body(node) -> Body | None:
+        """
+        The immediate nested body containing the cursor, wherever a
+        statement carries it: control flow, a try arm, or a block expression.
+        """
+        if isinstance(node, Body):
+            return node if span_contains(node, line, col) else None
+
         if isinstance(node, (list, tuple)):
             for item in node:
-                walk(item)
-            return
+                if (found := active_body(item)) is not None:
+                    return found
+            return None
 
         if not is_dataclass(node):
-            return
+            return None
 
-        if isinstance(node, Let) and node.line and node.line <= line:
-            type_ = node.type
-            if type_ is None and node.value is not None:
-                try:
-                    type_ = infer_type(gen, node.value, dict(scope))
-                except (TypeError, NameError):
-                    type_ = None
+        for field_ in dataclass_fields(node):
+            if (found := active_body(getattr(node, field_.name))) is not None:
+                return found
 
-            if type_ is not None:
-                scope[node.name] = Variable(None, type_)
+        return None
 
-            lines[node.name] = node.line
+    def walk(body: Body) -> None:
+        for statement in body:
+            nested = active_body(statement)
+            if nested is not None:
+                # A for initializer belongs to its condition, step, and body,
+                # but not to the surrounding body after the loop.
+                if isinstance(statement, For) and isinstance(statement.init, Let):
+                    declare(statement.init)
 
-        for f in dataclass_fields(node):
-            walk(getattr(node, f.name))
+                walk(nested)
+                return
+
+            # A direct declaration enters this body after its initializer.
+            # The line check retains the previous same-line approximation;
+            # the body's span now supplies the missing lexical boundary.
+            if (isinstance(statement, Let) and statement.line
+                    and statement.line <= line):
+                declare(statement)
 
     walk(fn.body)
     return scope, lines
@@ -567,8 +603,10 @@ def inspect(analysis: Analysis, text: str, line: int, col: int) -> Finding | Non
     gen = analysis.gen
     gen.current_file = analysis.path
 
-    fn = enclosing_function(analysis.program, analysis.path, token.line)
-    scope, lines = local_scope(gen, fn, token.line) if fn else ({}, {})
+    fn = enclosing_function(analysis.program, analysis.path,
+                            token.line, token.col)
+    scope, lines = (local_scope(gen, fn, token.line, token.col)
+                    if fn else ({}, {}))
     sites = declaration_sites(analysis.program)
 
     try:

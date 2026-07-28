@@ -5,6 +5,7 @@ from siec.ast import (
     ArrayLiteral,
     AsmBlock,
     BinaryOp,
+    Body,
     BlockExpr,
     BoolLiteral,
     Call,
@@ -305,9 +306,11 @@ def parse_primary(ts: TokenStream) -> Expr:
         body = []
         while ts.peek().syntax != "}":
             body.append(parse_statement(ts))
-        ts.expect("sym", "}")
+        closed = ts.expect("sym", "}")
 
-        return parse_postfix(ts, BlockExpr(body))
+        span = (tok.line, tok.col,
+                closed.line, closed.col + len(closed.value))
+        return parse_postfix(ts, BlockExpr(Body(body, span)))
 
     # '[a, b, ...]' is an array literal, building a fat array from its elements
     if tok.syntax == "[":

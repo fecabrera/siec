@@ -3,6 +3,20 @@
 from dataclasses import dataclass, field
 
 
+class Body(list):
+    """
+    A statement list with its source extent.
+
+    It remains a list so parsing, transformations, and code generation keep
+    their existing behavior. The LSP uses the half-open span to follow only
+    the lexical bodies containing the cursor.
+    """
+
+    def __init__(self, values=(), span: tuple[int, int, int, int] | None = None):
+        super().__init__(values)
+        self.span = span
+
+
 @dataclass
 class IntLiteral:
     """

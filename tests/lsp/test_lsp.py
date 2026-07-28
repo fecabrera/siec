@@ -344,6 +344,50 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 2)]
 
 
+def test_inspect_does_not_leak_a_local_past_its_block(tmp_path):
+    """
+    A declaration inside an if is absent after its closing brace, even
+    though its source line precedes the cursor.
+    """
+    analysis, src = unit(tmp_path, """\
+fn main() -> i32 {
+    if (true) {
+        let hidden: i32 = 42;
+    }
+    return hidden;
+}
+""")
+
+    assert analysis.report is not None
+    assert "undefined variable 'hidden'" in analysis.report.message
+    assert probe(analysis, src, 4, 11) is None
+
+
+def test_inspect_uses_only_the_cursor_lexical_ancestor_chain(tmp_path):
+    """
+    An inner declaration shadows its outer sibling only inside that block;
+    the outer declaration is restored afterward.
+    """
+    analysis, src = unit(tmp_path, """\
+fn main() -> i32 {
+    let value: i32 = 1;
+    if (true) {
+        let value: u64 = 2;
+        let inside = value;
+    }
+    return value;
+}
+""")
+
+    inside = probe(analysis, src, 4, 21)
+    assert inside.text == "value: u64"
+    assert inside.targets == [(str(src.resolve()), 4)]
+
+    outside = probe(analysis, src, 6, 11)
+    assert outside.text == "value: i32"
+    assert outside.targets == [(str(src.resolve()), 2)]
+
+
 def test_analysis_and_hover_support_index_operator_interfaces(tmp_path):
     """
     Editor analysis accepts indexed structs, infers get_item's result,

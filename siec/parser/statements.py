@@ -4,6 +4,7 @@ from siec.ast import (
     Assign,
     BinaryOp,
     Block,
+    Body,
     Break,
     Call,
     Case,
@@ -89,14 +90,15 @@ def parse_block(ts: TokenStream) -> list:
     """
     Parse a brace-enclosed list of statements.
     """
-    ts.expect("sym", "{")
+    opened = ts.expect("sym", "{")
 
     body = []
     while ts.peek().syntax != "}":
         body.append(parse_statement(ts))
 
-    ts.expect("sym", "}")
-    return body
+    closed = ts.expect("sym", "}")
+    return Body(body, (opened.line, opened.col,
+                       closed.line, closed.col + len(closed.value)))
 
 
 def parse_body(ts: TokenStream) -> list:
@@ -107,7 +109,10 @@ def parse_body(ts: TokenStream) -> list:
     if ts.peek().syntax == "{":
         return parse_block(ts)
 
-    return [parse_statement(ts)]
+    start = ts.peek()
+    statement = parse_statement(ts)
+    end = ts.peek()
+    return Body([statement], (start.line, start.col, end.line, end.col))
 
 
 def parse_arm_value(ts: TokenStream):
@@ -133,11 +138,13 @@ def parse_arm(ts: TokenStream) -> list:
     Parse one case arm's body: statements up to the next 'when', 'else',
     or the closing brace.
     """
+    start = ts.peek()
     body = []
     while ts.peek().syntax not in ("when", "else", "}"):
         body.append(parse_statement(ts))
 
-    return body
+    end = ts.peek()
+    return Body(body, (start.line, start.col, end.line, end.col))
 
 
 def parse_statement(ts: TokenStream):
