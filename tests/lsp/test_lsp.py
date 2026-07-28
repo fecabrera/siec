@@ -2,7 +2,8 @@
 
 import asyncio
 
-from siec.lsp import Report, analyze, outline, search_paths
+from siec.lsp import (Report, SearchPathCache, UnitAnalysisCache, analyze,
+                      compile_unit, dependent_uris, outline, search_paths)
 
 
 def write(path, text):
@@ -55,6 +56,143 @@ def test_analyze_prefers_overlay_text(tmp_path):
     fixed = "fn main() -> i32 { return 0; }"
 
     assert analyze(src, [], {str(src.resolve()): fixed}) is None
+
+
+def test_compile_unit_reuses_unchanged_sources_and_complete_analysis(
+        tmp_path, monkeypatch):
+    """
+    An edit reparses only the changed file. Repeating the same inputs then
+    returns the complete cached semantic analysis without parsing again.
+    """
+    import siec.loader as loader
+
+    dependency = write(
+        tmp_path / "util.sie",
+        "fn answer() -> i32 { return 42; }",
+    )
+    src = write(
+        tmp_path / "main.sie",
+        "import util;\nfn main() -> i32 { return 0; }",
+    )
+    original_parse = loader.parse
+    calls = 0
+
+    def counted_parse(tokens):
+        nonlocal calls
+        calls += 1
+        return original_parse(tokens)
+
+    monkeypatch.setattr(loader, "parse", counted_parse)
+    cache = UnitAnalysisCache()
+
+    first = compile_unit(src, [], cache=cache)
+    assert first.report is None
+    assert calls == 2
+    assert first.files == frozenset({
+        str(src.resolve()),
+        str(dependency.resolve()),
+    })
+
+    changed_main = {
+        str(src.resolve()):
+            "import util;\nfn main() -> i32 { return 1; }",
+    }
+    second = compile_unit(src, [], changed_main, cache)
+    assert second.report is None
+    assert second is not first
+    assert calls == 3
+
+    repeated = compile_unit(src, [], changed_main, cache)
+    assert repeated is second
+    assert calls == 3
+
+    changed_dependency = {
+        **changed_main,
+        str(dependency.resolve()):
+            "fn answer() -> i32 { return 43; }",
+    }
+    refreshed = compile_unit(src, [], changed_dependency, cache)
+    assert refreshed.report is None
+    assert refreshed is not second
+    assert calls == 4
+
+    broken_main = {
+        **changed_dependency,
+        str(src.resolve()):
+            'import util;\nfn main() -> i32 { return "wrong"; }',
+    }
+    broken = compile_unit(src, [], broken_main, cache)
+    assert broken.report is not None
+    assert calls == 5
+
+    repeated_error = compile_unit(src, [], broken_main, cache)
+    assert repeated_error is broken
+    assert calls == 5
+
+
+def test_dependent_uris_follow_the_loaded_source_graph(tmp_path):
+    """An imported file edit identifies every open unit that loaded it."""
+    dependency = write(tmp_path / "util.sie", "fn answer() -> i32 { return 42; }")
+    one = write(
+        tmp_path / "one.sie",
+        "import util;\nfn one() -> i32 { return 1; }",
+    )
+    two = write(tmp_path / "two.sie", "fn two() -> i32 { return 2; }")
+
+    loaded_files = {
+        "file:///one.sie": compile_unit(one, []).files,
+        "file:///two.sie": compile_unit(two, []).files,
+    }
+
+    assert dependent_uris(loaded_files, dependency) == ["file:///one.sie"]
+
+
+def test_compile_cache_tracks_missing_and_shadowing_import_candidates(tmp_path):
+    """
+    A missing import may be cached, but creating it invalidates the failure.
+    Likewise, a new local module invalidates an include-path resolution that
+    it now shadows.
+    """
+    cache = UnitAnalysisCache()
+    missing_main = write(
+        tmp_path / "missing" / "main.sie",
+        "import absent;\nfn main() -> i32 { return 0; }",
+    )
+
+    missing = compile_unit(missing_main, [], cache=cache)
+    assert missing.report is not None
+    assert compile_unit(missing_main, [], cache=cache) is missing
+
+    absent = write(
+        missing_main.parent / "absent.sie",
+        "fn available() -> i32 { return 1; }",
+    )
+    recovered = compile_unit(missing_main, [], cache=cache)
+    assert recovered.report is None
+    assert recovered is not missing
+    assert str(absent.resolve()) in recovered.files
+
+    installed = write(
+        tmp_path / "include" / "util.sie",
+        "fn installed() -> i32 { return 1; }",
+    )
+    shadow_main = write(
+        tmp_path / "shadow" / "main.sie",
+        "import util;\nfn main() -> i32 { return 0; }",
+    )
+    initial = compile_unit(shadow_main, [installed.parent], cache=cache)
+    assert initial.report is None
+    binding = (str(shadow_main.resolve()), "util")
+    assert initial.program.module_bindings[binding] == str(installed.resolve())
+
+    local = write(
+        shadow_main.parent / "util.sie",
+        "fn local() -> i32 { return 2; }",
+    )
+    shadowed = compile_unit(shadow_main, [installed.parent], cache=cache)
+    assert shadowed.report is None
+    assert shadowed is not initial
+    assert shadowed.program.module_bindings[binding] == str(local.resolve())
 
 
 def test_analyze_blames_an_imported_modules_file(tmp_path):
@@ -212,6 +350,40 @@ def test_search_paths_read_the_project_config(tmp_path):
         str(tmp_path),
         str(tmp_path / "lib"),
     ]
+
+
+def test_search_paths_cache_manifest_resolution_until_an_input_changes(
+        tmp_path, monkeypatch):
+    """
+    Repeated validation does not reread a stable manifest; rewriting it
+    invalidates the path result without restarting the server.
+    """
+    import siec.lsp as lsp
+
+    manifest = write(
+        tmp_path / "package.toml",
+        '[package]\ninclude = ["first"]\n',
+    )
+    original = lsp.config_paths
+    calls = 0
+
+    def counted_config_paths(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(lsp, "config_paths", counted_config_paths)
+    cache = SearchPathCache()
+
+    first = search_paths(tmp_path, [], tmp_path, cache)
+    repeated = search_paths(tmp_path, [], tmp_path, cache)
+    assert repeated == first
+    assert calls == 1
+
+    manifest.write_text('[package]\ninclude = ["second-longer"]\n')
+    changed = search_paths(tmp_path, [], tmp_path, cache)
+    assert calls == 2
+    assert tmp_path / "second-longer" in changed
 
 
 def test_search_paths_prefer_the_nearest_config(tmp_path):

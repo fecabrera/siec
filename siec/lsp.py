@@ -22,7 +22,7 @@ from siec.codegen import CodeGenerator, codegen
 from siec.codegen.generator import Variable
 from siec.codegen.types import is_reference, strip_const, strip_reference
 from siec.lexer import Token, lex
-from siec.loader import load_program
+from siec.loader import ParsedProgramCache, load_program
 from siec.parser import parse
 
 
@@ -50,6 +50,132 @@ class Analysis:
     program: Program | None = None
     gen: CodeGenerator | None = None
     overlays: dict[str, str] | None = None
+    files: frozenset[str] = frozenset()
+
+
+@dataclass
+class _CachedAnalysis:
+    """One reusable full-unit analysis and the inputs that produced it."""
+    paths: tuple[str, ...]
+    stamps: dict[str, tuple]
+    analysis: Analysis
+
+
+class UnitAnalysisCache:
+    """
+    LSP front-end and full-unit cache.
+
+    Parsed dependencies are shared across recompilations. A complete analysis
+    is reused only while its include path and every resolution-input stamp match.
+    """
+
+    def __init__(self, max_units: int = 256):
+        self.max_units = max(1, max_units)
+        self.parsed = ParsedProgramCache()
+        self.units: dict[str, _CachedAnalysis] = {}
+
+    @staticmethod
+    def path_key(paths: list[Path]) -> tuple[str, ...]:
+        return tuple(str(path.resolve()) for path in paths)
+
+    def stamps(self, files, overlays: dict[str, str] | None):
+        found = {}
+        for file in files:
+            path = Path(file)
+            overlay = overlays.get(file) if overlays else None
+            try:
+                found[file] = self.parsed.stamp(path, overlay)
+            except FileNotFoundError:
+                found[file] = ("missing",)
+            except OSError:
+                return None
+
+        return found
+
+    def get(self, path: Path, paths: list[Path],
+            overlays: dict[str, str] | None) -> Analysis | None:
+        cached = self.units.get(str(path))
+        if cached is None or cached.paths != self.path_key(paths):
+            return None
+
+        current = self.stamps(cached.stamps, overlays)
+        if current != cached.stamps:
+            return None
+
+        self.units[str(path)] = self.units.pop(str(path))
+        return cached.analysis
+
+    def put(self, path: Path, paths: list[Path],
+            overlays: dict[str, str] | None, analysis: Analysis) -> None:
+        stamps = self.stamps(analysis.files, overlays)
+        if stamps is not None:
+            self.units.pop(str(path), None)
+            self.units[str(path)] = _CachedAnalysis(
+                self.path_key(paths), stamps, analysis)
+            while len(self.units) > self.max_units:
+                self.units.pop(next(iter(self.units)))
+        else:
+            self.units.pop(str(path), None)
+
+    def discard(self, path: Path) -> None:
+        self.units.pop(str(path.resolve()), None)
+
+
+@dataclass
+class _CachedPaths:
+    """Resolved include paths and the filesystem entries that selected them."""
+    watched: dict[Path, tuple | None]
+    paths: list[Path]
+
+
+class SearchPathCache:
+    """Cache manifest/package resolution until any relevant entry changes."""
+
+    def __init__(self, max_entries: int = 256):
+        self.max_entries = max(1, max_entries)
+        self.entries: dict[tuple, _CachedPaths] = {}
+
+    @staticmethod
+    def stamp(path: Path) -> tuple | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+
+        return (stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+
+    @staticmethod
+    def key(root: Path | None, extra: list[str],
+            file_dir: Path | None) -> tuple:
+        from siec.sie import install_root
+
+        return (
+            str(root.resolve()) if root is not None else None,
+            tuple(extra),
+            str(file_dir.resolve()) if file_dir is not None else None,
+            str(install_root().resolve()),
+        )
+
+    def get(self, root: Path | None, extra: list[str],
+            file_dir: Path | None) -> list[Path]:
+        key = self.key(root, extra, file_dir)
+        cached = self.entries.get(key)
+        if cached is not None:
+            current = {path: self.stamp(path) for path in cached.watched}
+            if current == cached.watched:
+                self.entries[key] = self.entries.pop(key)
+                return list(cached.paths)
+
+        watched: set[Path] = set()
+        paths = _search_paths(root, extra, file_dir, watched)
+        self.entries.pop(key, None)
+        self.entries[key] = _CachedPaths(
+            {path: self.stamp(path) for path in watched},
+            list(paths),
+        )
+        while len(self.entries) > self.max_entries:
+            self.entries.pop(next(iter(self.entries)))
+        return paths
 
 
 @dataclass
@@ -153,7 +279,8 @@ class _ValidationDebouncer:
             task.cancel()
 
 
-def package_paths(base: Path, data: dict) -> list[Path]:
+def package_paths(base: Path, data: dict,
+                  watched: set[Path] | None = None) -> list[Path]:
     """
     The include path a package's own manifest implies: the directories
     its sources sit in, then those of every dependency resolved from
@@ -163,7 +290,8 @@ def package_paths(base: Path, data: dict) -> list[Path]:
     the editor still analyzes what it can, and the unresolved import
     reports itself.
     """
-    from siec.sie import Resolved, resolve, unit
+    from siec.sie import (MANIFEST, Resolved, install_root, installed, resolve,
+                          unit)
 
     try:
         made_of = unit(base / "package.toml", data)[1]
@@ -171,6 +299,12 @@ def package_paths(base: Path, data: dict) -> list[Path]:
         # neither an app nor a library: a project's own configuration,
         # which speaks through '[package] include' instead
         return []
+
+    if watched is not None:
+        # Package selection changes when versions are added or removed, and
+        # dependency graphs change when any installed manifest is rewritten.
+        watched.add(install_root())
+        watched.update(path / MANIFEST for _, _, path in installed())
 
     table = data.get("package") or {}
     root = Resolved(str(table.get("name") or base.name),
@@ -183,6 +317,8 @@ def package_paths(base: Path, data: dict) -> list[Path]:
 
     paths: list[Path] = []
     for member in (root, *tree):
+        if watched is not None:
+            watched.add(member.path / MANIFEST)
         for directory in member.source_dirs():
             if directory not in paths:
                 paths.append(directory)
@@ -190,7 +326,8 @@ def package_paths(base: Path, data: dict) -> list[Path]:
     return paths
 
 
-def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
+def config_paths(file_dir: Path | None, root: Path | None,
+                 watched: set[Path] | None = None) -> list[Path]:
     """
     Include paths from the project's 'package.toml' files: the nearest
     one walking up from the edited file, then the workspace root's.
@@ -211,6 +348,8 @@ def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
 
     def take(base: Path) -> None:
         toml = base / "package.toml"
+        if watched is not None:
+            watched.add(toml)
         if not toml.is_file() or toml in read:
             return
 
@@ -223,11 +362,14 @@ def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
         for entry in data.get("package", {}).get("include") or ():
             configured.append((base / entry).resolve())
 
-        packaged.extend(package_paths(base, data))
+        packaged.extend(package_paths(base, data, watched))
 
     if file_dir is not None:
         for base in (file_dir, *file_dir.parents):
-            if (base / "package.toml").is_file():
+            manifest = base / "package.toml"
+            if watched is not None:
+                watched.add(manifest)
+            if manifest.is_file():
                 take(base)
                 break
 
@@ -240,15 +382,12 @@ def config_paths(file_dir: Path | None, root: Path | None) -> list[Path]:
     return [*configured, *packaged]
 
 
-def search_paths(root: Path | None, extra: list[str],
-                 file_dir: Path | None = None) -> list[Path]:
-    """
-    The include path for analysis: the configured directories first, the
-    project's 'package.toml' entries next, and the workspace root with
-    its 'lib/', mirroring the compiler's own search.
-    """
+def _search_paths(root: Path | None, extra: list[str],
+                  file_dir: Path | None = None,
+                  watched: set[Path] | None = None) -> list[Path]:
+    """Uncached include-path resolution, recording its filesystem inputs."""
     paths = [Path(p) for p in extra]
-    paths.extend(config_paths(file_dir, root))
+    paths.extend(config_paths(file_dir, root, watched))
 
     if root is not None:
         paths.extend((root, root / "lib"))
@@ -256,8 +395,23 @@ def search_paths(root: Path | None, extra: list[str],
     return paths
 
 
+def search_paths(root: Path | None, extra: list[str],
+                 file_dir: Path | None = None,
+                 cache: SearchPathCache | None = None) -> list[Path]:
+    """
+    The include path for analysis: the configured directories first, the
+    project's 'package.toml' entries next, and the workspace root with
+    its 'lib/', mirroring the compiler's own search.
+    """
+    if cache is not None:
+        return cache.get(root, extra, file_dir)
+
+    return _search_paths(root, extra, file_dir)
+
+
 def compile_unit(path: Path, include_paths: list[Path],
-                 overlays: dict[str, str] | None = None) -> Analysis:
+                 overlays: dict[str, str] | None = None,
+                 cache: UnitAnalysisCache | None = None) -> Analysis:
     """
     Compile one file as its own unit, keeping whatever the front end
     built: the merged program, the generator, and the first error.
@@ -267,12 +421,23 @@ def compile_unit(path: Path, include_paths: list[Path],
     """
     path = path.resolve()
     paths = [*include_paths, path.parent / "lib"]
+    if cache is not None:
+        cached = cache.get(path, paths, overlays)
+        if cached is not None:
+            return cached
 
     gen = CodeGenerator(str(path))
     program = None
     report = None
+    dependencies: set[str] = set()
     try:
-        program = load_program([path], paths, overlays=overlays)
+        program = load_program(
+            [path],
+            paths,
+            overlays=overlays,
+            cache=cache.parsed if cache is not None else None,
+            dependencies=dependencies,
+        )
         codegen(program, str(path), define_imports=False, gen=gen)
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:
         file, line, message = error_parts(error)
@@ -281,8 +446,24 @@ def compile_unit(path: Path, include_paths: list[Path],
     # Codegen owns a rewritten clone of the parsed AST. Keep that semantic
     # view for hover/navigation while leaving the loader's tree untouched.
     analyzed = gen.program if gen.program is not None else program
-    return Analysis(str(path), report, analyzed,
-                    gen if analyzed is not None else None, overlays)
+    analysis = Analysis(
+        str(path),
+        report,
+        analyzed,
+        gen if analyzed is not None else None,
+        dict(overlays or {}),
+        frozenset(dependencies),
+    )
+    if cache is not None:
+        cache.put(path, paths, overlays, analysis)
+    return analysis
+
+
+def dependent_uris(loaded_files: dict[str, frozenset[str]],
+                   changed_path: Path) -> list[str]:
+    """Open units whose source-resolution inputs contain the changed file."""
+    changed = str(changed_path.resolve())
+    return [uri for uri, files in loaded_files.items() if changed in files]
 
 
 def analyze(path: Path, include_paths: list[Path],
@@ -893,6 +1074,9 @@ def create_server():
     workspace = {"root": None, "extra": []}
     outlines: dict[str, list[Symbol]] = {}
     analyses: dict[str, Analysis] = {}
+    loaded_files: dict[str, frozenset[str]] = {}
+    analysis_cache = UnitAnalysisCache()
+    path_cache = SearchPathCache()
 
     def document_path(uri: str) -> Path:
         return Path(to_fs_path(uri)).resolve()
@@ -923,10 +1107,16 @@ def create_server():
         overlays = {str(document_path(d.uri)): d.source
                     for d in server.workspace.text_documents.values()}
 
-        # the include path recomputes per edit: 'package.toml' changes
-        # and new packages apply without a restart
-        paths = search_paths(workspace["root"], workspace["extra"], path.parent)
-        analysis = compile_unit(path, paths, overlays)
+        # Manifest and package resolution is reused until a watched manifest
+        # or the installed-package directory changes.
+        paths = search_paths(
+            workspace["root"],
+            workspace["extra"],
+            path.parent,
+            path_cache,
+        )
+        analysis = compile_unit(path, paths, overlays, analysis_cache)
+        loaded_files[uri] = analysis.files
         if analysis.program is not None:
             analyses[uri] = analysis
 
@@ -961,6 +1151,18 @@ def create_server():
 
     debounce = _ValidationDebouncer(validate)
 
+    def affected(uri: str) -> set[str]:
+        """The changed document and every open unit whose inputs contain it."""
+        return {uri, *dependent_uris(loaded_files, document_path(uri))}
+
+    def validate_affected(uri: str) -> None:
+        for affected_uri in affected(uri):
+            validate(affected_uri)
+
+    def schedule_affected(uri: str) -> None:
+        for affected_uri in affected(uri):
+            debounce.schedule(affected_uri)
+
     @server.feature(types.INITIALIZE)
     def initialize(params: types.InitializeParams) -> None:
         if params.root_uri is not None:
@@ -971,26 +1173,32 @@ def create_server():
 
     @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
     def did_open(params: types.DidOpenTextDocumentParams) -> None:
-        validate(params.text_document.uri)
+        validate_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_SAVE)
     def did_save(params: types.DidSaveTextDocumentParams) -> None:
-        validate(params.text_document.uri)
+        validate_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
     async def did_change(params: types.DidChangeTextDocumentParams) -> None:
         # let the keystrokes settle, then recompile; a newer change
         # cancels a wait still in flight
-        debounce.schedule(params.text_document.uri)
+        schedule_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_CLOSE)
     def did_close(params: types.DidCloseTextDocumentParams) -> None:
         uri = params.text_document.uri
+        dependants = set(dependent_uris(loaded_files, document_path(uri)))
+        dependants.discard(uri)
         debounce.cancel(uri)
         outlines.pop(uri, None)
         analyses.pop(uri, None)
+        loaded_files.pop(uri, None)
+        analysis_cache.discard(document_path(uri))
         server.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(uri=uri, diagnostics=[]))
+        for dependant in dependants:
+            debounce.schedule(dependant)
 
     @server.feature(types.TEXT_DOCUMENT_HOVER)
     def hover(params: types.HoverParams) -> types.Hover | None:

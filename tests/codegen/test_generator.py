@@ -1,6 +1,7 @@
 """Tests for siec.codegen.generator."""
 
 import copy
+import importlib
 
 from llvmlite import ir
 
@@ -78,6 +79,37 @@ def test_codegen_can_reuse_the_same_program_without_mutating_it():
 
     assert tree == original
     assert str(first) == str(second)
+
+
+def test_builtin_prelude_is_parsed_once_and_cloned(monkeypatch):
+    """
+    Repeated compilations reuse one parsed prelude template, while each caller
+    gets a private AST that registration may safely rewrite.
+    """
+    generator = importlib.import_module("siec.codegen.generator")
+    parser = importlib.import_module("siec.parser")
+    original_parse = parser.parse
+    calls = 0
+
+    def counted_parse(tokens):
+        nonlocal calls
+        calls += 1
+        return original_parse(tokens)
+
+    monkeypatch.setattr(parser, "parse", counted_parse)
+    generator._prelude_template.cache_clear()
+    try:
+        first = generator.parse_prelude()
+        first.functions.clear()
+        second = generator.parse_prelude()
+
+        assert calls == 1
+        assert second.functions
+        assert first is not second
+    finally:
+        # Do not leave a template produced through a patched parser shared
+        # with later tests.
+        generator._prelude_template.cache_clear()
 
 
 def test_codegen_merges_forward_declaration_and_definition():

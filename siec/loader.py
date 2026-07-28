@@ -1,12 +1,55 @@
 """Loading of source files and resolution of includes."""
 
+import copy
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from siec.ast import (BinaryOp, BoolLiteral, CharLiteral, CondBlock,
                       IntLiteral, Program, UnaryOp, Var)
 from siec.lexer import lex
 from siec.parser import parse
+
+
+@dataclass
+class ParsedProgramCache:
+    """
+    Parsed source templates keyed by path and source identity.
+
+    Loader tagging mutates declarations, so callers receive deep copies of
+    cached templates. Unsaved overlays key by their exact text; files key by
+    metadata that changes on normal writes and atomic replacements.
+    """
+    max_entries: int = 2048
+    entries: dict[str, tuple[tuple, Program]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.max_entries = max(1, self.max_entries)
+
+    @staticmethod
+    def stamp(path: Path, overlay: str | None = None) -> tuple:
+        if overlay is not None:
+            return ("overlay", overlay)
+
+        stat = path.stat()
+        return ("file", stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
+
+    def read(self, path: Path, overlay: str | None = None) -> Program:
+        path = path.resolve()
+        key = str(path)
+        stamp = self.stamp(path, overlay)
+        cached = self.entries.get(key)
+        if cached is not None and cached[0] == stamp:
+            self.entries[key] = self.entries.pop(key)
+            return copy.deepcopy(cached[1])
+
+        text = overlay if overlay is not None else path.read_text()
+        program = parse(lex(text))
+        self.entries.pop(key, None)
+        self.entries[key] = (stamp, program)
+        while len(self.entries) > self.max_entries:
+            self.entries.pop(next(iter(self.entries)))
+        return copy.deepcopy(program)
 
 
 def transitive_closure(graph: dict[str, list[str]],
@@ -99,13 +142,16 @@ def evaluate_directive(expr, lookup, chain=()) -> int:
                     "loaded can appear")
 
 
-def resolve_include(path: str, includer_dir: Path, include_paths: list[Path]) -> Path:
+def resolve_include(path: str, includer_dir: Path, include_paths: list[Path],
+                    dependencies: set[str] | None = None) -> Path:
     """
     Find the file for an include path, searching the includer's directory then the include paths.
     """
     # try each search root in order; the first hit wins
     for base in [includer_dir, *include_paths]:
         candidate = base / f"{path}.sie"
+        if dependencies is not None:
+            dependencies.add(str(candidate.resolve()))
 
         if candidate.is_file():
             return candidate
@@ -113,7 +159,8 @@ def resolve_include(path: str, includer_dir: Path, include_paths: list[Path]) ->
     raise FileNotFoundError(f"cannot resolve include {path!r}")
 
 
-def resolve_module(path: str, importer_dir: Path, include_paths: list[Path]) -> Path:
+def resolve_module(path: str, importer_dir: Path, include_paths: list[Path],
+                   dependencies: set[str] | None = None) -> Path:
     """
     Find the file for an import's dotted path: 'a.b' names 'a/b.sie',
     searched for in the importing file's directory, then the working
@@ -123,6 +170,8 @@ def resolve_module(path: str, importer_dir: Path, include_paths: list[Path]) -> 
 
     for base in [importer_dir, Path.cwd(), *include_paths]:
         candidate = base / relative
+        if dependencies is not None:
+            dependencies.add(str(candidate.resolve()))
 
         if candidate.is_file():
             return candidate
@@ -132,7 +181,9 @@ def resolve_module(path: str, importer_dir: Path, include_paths: list[Path]) -> 
 
 def load_program(sources: list[Path], include_paths: list[Path],
                  target: str | None = None,
-                 overlays: dict[str, str] | None = None) -> Program:
+                 overlays: dict[str, str] | None = None,
+                 cache: ParsedProgramCache | None = None,
+                 dependencies: set[str] | None = None) -> Program:
     """
     Parse source files and their includes (recursively) into a single merged Program.
 
@@ -141,6 +192,10 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
     An overlay maps a file's resolved path to text that stands in for its
     on-disk contents: an editor's unsaved buffer, for a language server.
+
+    When supplied, dependencies collects loaded files and every import/include
+    candidate tested, including missing candidates that could later shadow the
+    selected source.
     """
     functions = []
     structs = []
@@ -251,12 +306,16 @@ def load_program(sources: list[Path], include_paths: list[Path],
             return
         
         visited.add(file)
+        if dependencies is not None:
+            dependencies.add(str(file))
 
         # parse the file - its overlay text standing in when one is given -
         # tagging any lexer or parser error with its source
         text = overlays.get(str(file)) if overlays else None
         try:
-            program = parse(lex(text if text is not None else file.read_text()))
+            program = (cache.read(file, text) if cache is not None
+                       else parse(lex(text if text is not None
+                                      else file.read_text())))
         except (SyntaxError, TypeError, NameError) as error:
             if getattr(error, "sie_file", None) is None:
                 error.sie_file = str(file)
@@ -271,7 +330,12 @@ def load_program(sources: list[Path], include_paths: list[Path],
         # includers; a failing one blames the file that wrote it
         def pull(inc):
             try:
-                found = resolve_include(inc.path, file.parent, include_paths)
+                found = resolve_include(
+                    inc.path,
+                    file.parent,
+                    include_paths,
+                    dependencies,
+                )
             except FileNotFoundError:
                 error = FileNotFoundError(f"line {inc.line}: cannot resolve "
                                           f"include {inc.path!r}")
@@ -331,7 +395,12 @@ def load_program(sources: list[Path], include_paths: list[Path],
         # failing one blames the file that wrote it
         for imp in program.imports:
             try:
-                target = resolve_module(imp.path, file.parent, include_paths)
+                target = resolve_module(
+                    imp.path,
+                    file.parent,
+                    include_paths,
+                    dependencies,
+                )
             except FileNotFoundError:
                 error = FileNotFoundError(f"line {imp.line}: cannot resolve "
                                           f"import {imp.path!r}")

@@ -3,6 +3,7 @@
 import copy
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
 
 from llvmlite import ir
 
@@ -627,14 +628,25 @@ fn Error<E>(e: E) -> Result<E> {
 """
 
 
-def parse_prelude() -> Program:
+@lru_cache(maxsize=1)
+def _prelude_template() -> Program:
     """
-    Parse the builtin prelude into its declarations.
+    Parse the builtin prelude once into an immutable template.
     """
     from siec.lexer import lex
     from siec.parser import parse
 
     return parse(lex(PRELUDE))
+
+
+def parse_prelude() -> Program:
+    """
+    A private working copy of the cached builtin prelude.
+
+    Registration mutates type spellings and generic templates, so each
+    compilation receives its own clone while lexing and parsing happen once.
+    """
+    return copy.deepcopy(_prelude_template())
 
 
 def codegen(program: Program, module_name: str, target: str | None = None,
