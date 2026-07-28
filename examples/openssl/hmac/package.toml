@@ -1,0 +1,10 @@
+[package]
+name = "hmac"
+description = "A simple example program"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+openssl = "*"
