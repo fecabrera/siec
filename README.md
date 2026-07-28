@@ -120,6 +120,24 @@ An `examples/` directory beside the sources is not part of the package unless `s
 
 Installing over an existing install replaces it. The copy is staged first and only takes the old one's place once it is complete, so an install that fails halfway leaves what was there untouched.
 
+### Uninstalling
+
+`sie uninstall <name>` removes a package when exactly one version of it is installed:
+
+```
+$ sie uninstall zlib
+uninstalled zlib@1.0.0
+```
+
+When several versions are installed, a bare name removes nothing and lists the choices. Name the exact one with `<name>@<version>`, or pass `-a`/`--all` to remove every installed version:
+
+```
+sie uninstall zlib@1.0.0
+sie uninstall --all zlib
+```
+
+An exact spec removes only that version. `--all` takes a bare package name and leaves other packages untouched.
+
 `sie list` says what is in the install root, each package as its spec and what its manifest says it is:
 
 ```

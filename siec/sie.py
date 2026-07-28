@@ -5,8 +5,9 @@
 from a list of sources.
 
 With no command it reads a package's manifest and shows it. 'install'
-copies a package into the install root and 'list' says what is there;
-'build' compiles a package against what it finds in the same place.
+copies a package into the install root, 'uninstall' removes one, and
+'list' says what is there; 'build' compiles a package against what it
+finds in the same place.
 """
 
 import argparse
@@ -582,6 +583,74 @@ def listing(argv: list[str]) -> int:
     return 0
 
 
+def uninstall(argv: list[str]) -> int:
+    """
+    Remove an installed package, one version by an exact spec or every
+    version by '--all'. A bare name is unambiguous only when one version
+    of it is installed.
+    """
+    args = argparse.ArgumentParser(
+        prog="sie uninstall",
+        description="Remove packages from $SIE_PATH/lib")
+    args.add_argument("package", metavar="name[@version]",
+                      help="the installed package to remove")
+    args.add_argument("-a", "--all", action="store_true",
+                      help="remove every installed version of the package")
+    opts = args.parse_args(argv)
+
+    name, separator, version = opts.package.partition("@")
+    if not name or (separator and not version):
+        print(f"sie: invalid package spec {opts.package!r}: expected "
+              "'name' or 'name@version'", file=sys.stderr)
+        return 1
+
+    if opts.all and separator:
+        print("sie: '--all' takes a package name, not 'name@version'",
+              file=sys.stderr)
+        return 1
+
+    matches = [package for package in installed() if package[0] == name]
+    if separator:
+        selected = [package for package in matches if package[1] == version]
+        if not selected:
+            print(f"sie: {name}@{version} is not installed", file=sys.stderr)
+            return 1
+    elif opts.all:
+        selected = matches
+        if not selected:
+            print(f"sie: no {name} is installed", file=sys.stderr)
+            return 1
+    else:
+        if not matches:
+            print(f"sie: no {name} is installed", file=sys.stderr)
+            return 1
+
+        if len(matches) > 1:
+            print("sie: multiple versions detected, specify one:",
+                  file=sys.stderr)
+            for installed_name, installed_version, _ in matches:
+                print(f"  {installed_name}@{installed_version}", file=sys.stderr)
+            return 1
+
+        selected = matches
+
+    for installed_name, installed_version, path in selected:
+        try:
+            # Never follow an install-root symlink while removing it.
+            if path.is_symlink():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
+        except OSError as error:
+            print(f"sie: {error.filename or path}: {error.strerror}",
+                  file=sys.stderr)
+            return 1
+
+        print(f"uninstalled {installed_name}@{installed_version}")
+
+    return 0
+
+
 class Resolved:
     """
     One package in a build: where it is, what it declares, and how it was
@@ -877,7 +946,8 @@ def show(argv: list[str]) -> int:
         epilog="commands:\n"
                "  build [path]     compile a package into its build/\n"
                "  install [path]   copy a package into $SIE_PATH/lib\n"
-               "  list             list what is installed there\n\n"
+               "  list             list what is installed there\n"
+               "  uninstall <name> remove an installed package\n\n"
                "run 'sie <command> --help' for a command's own options",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     args.add_argument("path", nargs="?", default=".",
@@ -902,7 +972,8 @@ def show(argv: list[str]) -> int:
     return 0
 
 
-COMMANDS = {"build": build, "install": install, "list": listing}
+COMMANDS = {"build": build, "install": install, "list": listing,
+            "uninstall": uninstall}
 
 
 def main() -> int:
