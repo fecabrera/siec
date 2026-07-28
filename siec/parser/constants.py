@@ -6,12 +6,15 @@ from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
 
-def parse_const(ts: TokenStream) -> Const:
+def parse_const(ts: TokenStream, *, is_private: bool = False,
+                has_at: bool = True) -> Const:
     """
-    Parse '@const name[: T] = <value>;', the type annotation optional.
+    Parse '@const name[: T] = <value>;', including after a caller has
+    consumed the '@private' prefix.
     """
     line = ts.peek().line
-    ts.expect("sym", "@")
+    if has_at:
+        ts.expect("sym", "@")
     ts.expect("ident", "const")
     name = ts.expect("ident").value
 
@@ -24,7 +27,7 @@ def parse_const(ts: TokenStream) -> Const:
     value = parse_expression(ts)
     ts.expect("sym", ";")
 
-    return Const(name, type_, value, line=line)
+    return Const(name, type_, value, is_private=is_private, line=line)
 
 
 def parse_macro(ts: TokenStream) -> Const:

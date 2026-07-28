@@ -478,8 +478,30 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "@const"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "@const"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "FIELD",
+                  "name": "visibility",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "attribute"
+                  }
+                },
+                {
+                  "type": "STRING",
+                  "value": "@const"
+                }
+              ]
+            }
+          ]
         },
         {
           "type": "FIELD",
@@ -1146,6 +1168,13 @@
     "enum_declaration": {
       "type": "SEQ",
       "members": [
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "attribute"
+          }
+        },
         {
           "type": "STRING",
           "value": "enum"

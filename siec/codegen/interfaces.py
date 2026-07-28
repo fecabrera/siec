@@ -8,6 +8,7 @@ interface. There is no runtime dispatch; everything monomorphizes.
 """
 
 import re
+from contextlib import contextmanager
 
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
@@ -20,6 +21,16 @@ from siec.codegen.types import (
 )
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+@contextmanager
+def declaration_view(gen: CodeGenerator, file: str):
+    """Resolve a declaration-time check in the declaration's own file."""
+    previous, gen.current_file = gen.current_file, file
+    try:
+        yield
+    finally:
+        gen.current_file = previous
 
 
 def find_interface_spelling(gen: CodeGenerator, text: str | None):
@@ -212,7 +223,7 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
     Check one struct against every interface it claims: the fields
     declared, the actions provided with matching signatures.
     """
-    with source_location(line=line, file=file):
+    with source_location(line=line, file=file), declaration_view(gen, file):
         info = gen.structs.get(name)
         fields = info.fields if info is not None else None
 

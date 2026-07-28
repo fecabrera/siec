@@ -1,0 +1,41 @@
+====================
+Private declarations
+====================
+
+@private @const C = 0;
+@private fn func();
+@private fn S::func();
+@private struct S;
+@private enum E { A }
+
+---
+
+(source_file
+  (const_declaration
+    visibility: (attribute
+      name: (attribute_name))
+    name: (identifier)
+    value: (integer_literal))
+  (function_declaration
+    (attribute
+      name: (attribute_name))
+    name: (function_name
+      name: (identifier))
+    parameters: (parameters))
+  (function_declaration
+    (attribute
+      name: (attribute_name))
+    name: (function_name
+      name: (identifier)
+      method: (identifier))
+    parameters: (parameters))
+  (struct_declaration
+    (attribute
+      name: (attribute_name))
+    name: (identifier))
+  (enum_declaration
+    (attribute
+      name: (attribute_name))
+    name: (identifier)
+    (enum_member
+      name: (identifier))))

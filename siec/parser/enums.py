@@ -6,7 +6,7 @@ from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type
 
 
-def parse_enum(ts: TokenStream) -> Enum:
+def parse_enum(ts: TokenStream, *, is_private: bool = False) -> Enum:
     """
     Parse 'enum Name[: T] { A, B = <value>, ... }' into an Enum node.
 
@@ -39,4 +39,4 @@ def parse_enum(ts: TokenStream) -> Enum:
             ts.expect("sym", ",")
 
     ts.expect("sym", "}")
-    return Enum(name, backing, members, line=line)
+    return Enum(name, backing, members, is_private=is_private, line=line)

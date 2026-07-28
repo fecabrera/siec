@@ -36,6 +36,16 @@ def test_forward_declaration_has_no_fields(ts):
     assert parse_struct(ts("struct Handle;")) == Struct("Handle", None)
 
 
+def test_private_forward_declaration(ts):
+    """
+    '@private struct S;' records import visibility on an opaque type.
+    """
+    struct = parse_struct(ts("@private struct Handle;"))
+    assert struct.name == "Handle"
+    assert struct.fields is None
+    assert struct.is_private
+
+
 def test_forward_declaration_consumes_its_semicolon(ts):
     """
     A forward declaration consumes its ';', leaving following tokens untouched.

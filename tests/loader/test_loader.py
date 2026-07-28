@@ -111,6 +111,65 @@ def test_load_accepts_multiple_sources(tmp_path):
     assert [fn.name for fn in program.functions] == ["one", "two"]
 
 
+def test_private_names_are_textual_but_never_exported(tmp_path):
+    """
+    An includer sees private declarations without adding them to its module
+    surface.
+    """
+    private = write(
+        tmp_path / "private.sie",
+        "@private @const C = 1; @private fn helper(); "
+        "@private struct Hidden; @private enum State { Ready }")
+    facade = write(
+        tmp_path / "facade.sie",
+        '@include("private") fn public();')
+
+    program = load_program([facade], [])
+    facade_file = str(facade.resolve())
+    private_file = str(private.resolve())
+
+    private_names = {"C", "helper", "Hidden", "State"}
+    assert private_names <= program.visible[facade_file]
+    assert private_names <= program.visible[private_file]
+    assert program.module_exports[facade_file] == {"public"}
+
+
+def test_private_names_do_not_cross_between_entry_sources(tmp_path):
+    """
+    C-style entry-source sharing excludes private names; only an include
+    joins their textual module.
+    """
+    one = write(
+        tmp_path / "one.sie",
+        "@private fn hidden(); fn public();")
+    two = write(tmp_path / "two.sie", "fn other();")
+
+    program = load_program([one, two], [])
+    one_file = str(one.resolve())
+    two_file = str(two.resolve())
+
+    assert "hidden" in program.visible[one_file]
+    assert "hidden" not in program.visible[two_file]
+    assert "public" in program.visible[two_file]
+
+
+def test_private_names_flow_through_a_whole_textual_module(tmp_path):
+    """
+    Included declarations share private names with their root and siblings,
+    matching the one textual declaration stream they form.
+    """
+    root = write(
+        tmp_path / "root.sie",
+        '@include("one") @include("two") @private fn from_root();')
+    one = write(tmp_path / "one.sie", "@private fn from_one();")
+    two = write(tmp_path / "two.sie", "@private fn from_two();")
+
+    program = load_program([root], [])
+    names = {"from_root", "from_one", "from_two"}
+    for file in (root, one, two):
+        assert names <= program.visible[str(file.resolve())]
+
+
 def test_load_dedupes_repeated_sources(tmp_path):
     """
     Passing the same file twice includes it once.

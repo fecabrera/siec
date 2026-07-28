@@ -30,6 +30,9 @@ def register_method(gen: CodeGenerator, fn) -> None:
     from siec.codegen.overloads import overload_key, shown_signature
 
     with source_location(line=fn.line, file=fn.file):
+        if fn.is_private:
+            gen.private_methods.setdefault(fn.name, set()).add(fn.file)
+
         if fn.receiver_params is not None:
             # a removed template has nothing left to stamp: its name is
             # recorded so uses of it fail with the advice
@@ -75,6 +78,9 @@ def register_method(gen: CodeGenerator, fn) -> None:
             previous, gen.current_file = gen.current_file, fn.file
             try:
                 join_canonical_receiver(gen, fn)
+                if fn.is_private:
+                    gen.private_methods.setdefault(
+                        fn.name, set()).add(fn.file)
                 fn.return_type = expand_alias(gen, fn.return_type)
                 for param in fn.params:
                     param.type = expand_alias(gen, param.type)
@@ -109,9 +115,21 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
     templates = gen.generic_methods.get((parts[0], method)) if parts else None
 
+    # A method bypasses module-qualified lookup because its receiver carries
+    # the type. Keep private methods within the same textual include module.
+    private_templates = [
+        template for template in (templates or ()) if template.is_private
+    ]
+    if (private_templates
+            and not any(gen.sees_private_from(template.file)
+                        for template in private_templates)):
+        return None
+
     if not templates or symbol in gen.instantiated_functions:
         if (symbol in gen.generic_functions or symbol in gen.overloads
                 or isinstance(gen.module.globals.get(symbol), ir.Function)):
+            if not gen.sees_method(symbol):
+                return None
             return symbol
 
         return None
@@ -122,6 +140,9 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     # the method's overloads stamp together, joining one set under
     # the instantiated symbol for calls to pick among
     for template in templates:
+        if template.is_private:
+            gen.private_methods.setdefault(symbol, set()).add(template.file)
+
         instance = copy.deepcopy(template)
         instance.name = symbol
         instance.receiver = instance.receiver_params = None

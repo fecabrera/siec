@@ -600,6 +600,7 @@ class Function:
     variadic: bool = False  # 'args...': the last param is an 'Any[]' sugar
     deprecated: str | None = None  # '@deprecated("...")': the advice its uses warn with
     removed: str | None = None  # '@remove("...")': the advice its uses fail with
+    is_private: bool = False  # '@private': visible textually, never through import
     line: int = _line()
     file: str = _file()
 
@@ -634,6 +635,7 @@ class Struct:
     is_interface: bool = False  # 'interface I': an abstract type, no storage
     interfaces: list[str] | None = None  # 'struct S: I, J': what it implements
     actions: list = field(default_factory=list)  # an interface body's 'fn' signatures
+    is_private: bool = False  # '@private': visible textually, never through import
     line: int = _line()
     file: str = _file()
 
@@ -673,6 +675,7 @@ class Enum:
     name: str
     type: str
     members: list[Variant]
+    is_private: bool = False  # '@private': visible textually, never through import
     line: int = _line()
     file: str = _file()
 
@@ -694,6 +697,7 @@ class Const:
     params: list[str] | None = None
     body: list | None = None
     is_macro: bool = False
+    is_private: bool = False  # '@private @const': not offered by the module
     line: int = _line()
     file: str = _file()
 

@@ -68,6 +68,8 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     C-level (i32, char**) signature underneath.
     """
     join_canonical_receiver(gen, fn)
+    if fn.receiver is not None and fn.is_private:
+        gen.private_methods.setdefault(fn.name, set()).add(fn.file)
 
     fn.return_type = expand_alias(gen, fn.return_type)
     for param in fn.params:

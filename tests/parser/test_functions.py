@@ -32,6 +32,18 @@ def test_static_decorator(ts):
     assert parse_function(ts("@static fn f() {}")).is_static
 
 
+def test_private_function_and_method_decorators(ts):
+    """
+    '@private' marks both free functions and receiver methods.
+    """
+    fn = parse_function(ts("@private fn helper();"))
+    method = parse_function(ts("@private fn S::helper();"))
+
+    assert fn.is_private
+    assert method.is_private
+    assert method.receiver == "S"
+
+
 def test_decorators_stack(ts):
     """
     '@static @inline' applies both markings.

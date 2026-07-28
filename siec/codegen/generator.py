@@ -184,6 +184,10 @@ class CodeGenerator:
         # a generic struct's method templates by (struct, method) name,
         # stamped alongside each 'S<args>' instantiation on first call
         self.generic_methods: dict = {}
+        # '@private' methods by canonical 'Type::method' name. Method
+        # lookup starts from a carried receiver type rather than an import
+        # spelling, so it needs an explicit textual-module visibility gate.
+        self.private_methods: dict[str, set[str]] = {}
 
         # nonzero while expanding names the compiler wrote itself
         # (substituted generics), which no file's view should gate
@@ -380,6 +384,27 @@ class CodeGenerator:
         """
         names = self.visible.get(self.current_file)
         return names is None or name in names or name in self.builtin_names
+
+    def sees_private_from(self, file: str | None) -> bool:
+        """
+        Whether the current file and a declaration belong to one textual
+        module: the same file, or files joined under an '@include' root.
+        """
+        if (file is None or not self.current_file
+                or not self.include_closure
+                or file == self.current_file):
+            return True
+
+        return any(
+            file in closure and self.current_file in closure
+            for closure in self.include_closure.values()
+        )
+
+    def sees_method(self, symbol: str) -> bool:
+        """Whether a resolved method name is public or textually private."""
+        origins = self.private_methods.get(symbol)
+        return (not origins
+                or any(self.sees_private_from(file) for file in origins))
 
     def resolve_callee(self, name: str) -> str | None:
         """

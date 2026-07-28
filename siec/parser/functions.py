@@ -61,13 +61,21 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.conds.append(parse_cond(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "const":
             program.consts.append(parse_const(ts))
+        elif (ts.peek().value == "@" and ts.peek(1).value == "private"
+              and ts.peek(2).value == "@"
+              and ts.peek(3).value == "const"):
+            ts.next()
+            ts.next()
+            ts.next()
+            program.consts.append(
+                parse_const(ts, is_private=True, has_at=False))
         elif ts.peek().value == "@" and ts.peek(1).value == "macro":
             program.consts.append(parse_macro(ts))
         elif (ts.peek().value == "@" and ts.peek(1).value in ("extern", "static", "symbol")
               and declares_global(ts)):
             program.globals.append(parse_global(ts))
         elif ts.peek().value in ("struct", "union", "interface") or (
-                ts.peek().value == "@" and ts.peek(1).value in ("packed", "align", "volatile")):
+                ts.peek().value == "@" and declares_struct(ts)):
             struct = parse_struct(ts)
             program.structs.append(struct)
 
@@ -76,6 +84,11 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.functions.extend(struct.actions)
         elif ts.peek().value == "enum":
             program.enums.append(parse_enum(ts))
+        elif (ts.peek().value == "@" and ts.peek(1).value == "private"
+              and ts.peek(2).value == "enum"):
+            ts.next()
+            ts.next()
+            program.enums.append(parse_enum(ts, is_private=True))
         elif ts.peek().value == "@" and ts.peek(1).value == "type":
             program.aliases.append(parse_alias(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "extend":
@@ -296,6 +309,28 @@ def declares_global(ts: TokenStream) -> bool:
     return i < len(tokens) and tokens[i].value == "let"
 
 
+def declares_struct(ts: TokenStream) -> bool:
+    """
+    Whether the decorator run at the cursor leads to a type declaration.
+
+    This distinguishes the shared '@private' decorator on a struct from
+    '@private fn', while still allowing it to stack with layout decorators.
+    """
+    i = ts.pos
+    tokens = ts.tokens
+
+    while i < len(tokens) and tokens[i].value == "@":
+        i += 2
+        if i < len(tokens) and tokens[i].value == "(":
+            while i < len(tokens) and tokens[i].value != ")":
+                i += 1
+
+            i += 1
+
+    return (i < len(tokens)
+            and tokens[i].value in ("struct", "union", "interface"))
+
+
 def parse_global(ts: TokenStream) -> Global:
     """
     Parse a module-level variable: '@extern let name: T;', whose storage
@@ -344,7 +379,7 @@ def parse_global(ts: TokenStream) -> Global:
     return Global(name, var_type, kind == "static", value, symbol, line=line)
 
 
-DECORATORS = {"extern", "inline", "static", "asm", "noreturn"}
+DECORATORS = {"extern", "inline", "static", "asm", "noreturn", "private"}
 
 
 
@@ -419,6 +454,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     is_extern = "extern" in decorators
     is_inline = "inline" in decorators
     is_static = "static" in decorators
+    is_private = "private" in decorators
     is_asm = "asm" in decorators
     noreturn = "noreturn" in decorators
 
@@ -573,6 +609,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         "variadic": variadic,
         "deprecated": deprecated,
         "removed": removed,
+        "is_private": is_private,
         "line": line,
     }
 

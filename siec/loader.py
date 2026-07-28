@@ -215,9 +215,11 @@ def load_program(sources: list[Path], include_paths: list[Path],
     binding_sites = {}    # (file, import form, binding) -> (target, first line)
     exported = {}         # file -> its own exportable names
     declared_names = {}   # file -> every name it declares, statics included
+    shared_names = {}     # file -> declarations shared across entry sources
     include_targets = {}  # file -> the files it includes
     member_names = {}     # file -> the names its member imports bind
     pending_members = []  # (file, import, target) checked once exports settle
+    imported_roots = set()  # module files that start their own textual unit
 
     def claim_binding(file: str, binding: str, target: tuple,
                       line: int) -> bool:
@@ -245,23 +247,29 @@ def load_program(sources: list[Path], include_paths: list[Path],
         error.sie_file = file
         raise error
 
-    def declared(program: Program, with_statics: bool) -> set[str]:
+    def declared(program: Program, with_statics: bool,
+                 with_private: bool = True) -> set[str]:
         # the names a file declares: every top-level declaration, an '@if'
-        # branch's counting whichever arm compilation later picks; statics
-        # stay its own unless asked for
+        # branch's counting whichever arm compilation later picks. Statics
+        # and private declarations stay out of module exports unless asked
+        # for, while textual includes retain both.
         names = ({fn.name for fn in program.functions
-                  if with_statics or not fn.is_static}
+                  if (with_statics or not fn.is_static)
+                  and (with_private or not fn.is_private)}
                  | {glob.name for glob in program.globals
                     if with_statics or not glob.is_static}
-                 | {const.name for const in program.consts}
-                 | {struct.name for struct in program.structs}
-                 | {enum.name for enum in program.enums}
+                 | {const.name for const in program.consts
+                    if with_private or not const.is_private}
+                 | {struct.name for struct in program.structs
+                    if with_private or not struct.is_private}
+                 | {enum.name for enum in program.enums
+                    if with_private or not enum.is_private}
                  | {alias.name for alias in program.aliases})
 
         for cond in program.conds:
-            names |= declared(cond.then, with_statics)
+            names |= declared(cond.then, with_statics, with_private)
             if cond.orelse is not None:
-                names |= declared(cond.orelse, with_statics)
+                names |= declared(cond.orelse, with_statics, with_private)
 
         return names
 
@@ -323,8 +331,11 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
         # record what the module offers before resolving its own imports,
         # so import cycles find it in place
-        exported[str(file)] = declared(program, with_statics=False)
+        exported[str(file)] = declared(
+            program, with_statics=False, with_private=False)
         declared_names[str(file)] = declared(program, with_statics=True)
+        shared_names[str(file)] = declared(
+            program, with_statics=True, with_private=False)
 
         # load includes depth-first so included declarations precede their
         # includers; a failing one blames the file that wrote it
@@ -409,6 +420,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
             load(target)
             target = str(target.resolve())
+            imported_roots.add(target)
 
             if imp.members is not None:
                 # membership is checked once every export set has settled
@@ -457,6 +469,26 @@ def load_program(sources: list[Path], include_paths: list[Path],
 
     module_exports = inherited_names(exported)
     visible = inherited_names(declared_names)
+    shared = inherited_names(shared_names)
+
+    # Private declarations flow throughout one textual module, in both
+    # directions: an included file may use its includer's or a sibling
+    # include's private name just as the root may use the included one's.
+    # Imported module roots form their own groups and never join the caller.
+    textual_roots = imported_roots | {
+        str(source.resolve()) for source in sources
+    }
+    for root in textual_roots:
+        files = include_closure.get(root, {root})
+        private_names = set()
+        for file in files:
+            private_names.update(
+                declared_names.get(file, set())
+                - shared_names.get(file, set())
+            )
+
+        for file in files:
+            visible.setdefault(file, set()).update(private_names)
 
     # a member import must name something its module offers
     for file, imp, target in pending_members:
@@ -471,7 +503,7 @@ def load_program(sources: list[Path], include_paths: list[Path],
     # form one compilation unit, their names in view everywhere, C-style
     entry_names = set()
     for source in sources:
-        entry_names |= visible.get(str(source.resolve()), set())
+        entry_names |= shared.get(str(source.resolve()), set())
 
     for file in visible:
         visible[file] |= member_names.get(file, set()) | entry_names

@@ -11,14 +11,15 @@ def parse_struct(ts: TokenStream) -> Struct:
     Parse a struct declaration: 'struct Name { a: A; b: B; }', with an optional
     trailing ';', or a bodiless forward declaration 'struct Name;'.
 
-    '@packed', '@align(N)', and '@volatile' decorators may precede the
-    keyword, in any order.
+    '@packed', '@align(N)', '@volatile', and '@private' decorators may
+    precede the keyword, in any order.
     """
     line = ts.peek().line
 
     packed = False
     align = None
     volatile = False
+    is_private = False
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
@@ -28,6 +29,8 @@ def parse_struct(ts: TokenStream) -> Struct:
             packed = True
         elif decorator == "volatile":
             volatile = True
+        elif decorator == "private":
+            is_private = True
         elif decorator == "align":
             ts.expect("sym", "(")
             align = int_value(ts.expect("int").value)
@@ -90,6 +93,7 @@ def parse_struct(ts: TokenStream) -> Struct:
         return Struct(name, [] if is_interface else None, packed, align,
                       volatile, is_union, params=params,
                       is_interface=is_interface, interfaces=interfaces,
+                      is_private=is_private,
                       line=line)
 
     ts.expect("sym", "{")
@@ -143,4 +147,5 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     return Struct(name, fields, packed, align, volatile, is_union,
                   params=params, is_interface=is_interface,
-                  interfaces=interfaces, actions=actions, line=line)
+                  interfaces=interfaces, actions=actions,
+                  is_private=is_private, line=line)

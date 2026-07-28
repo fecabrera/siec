@@ -278,6 +278,197 @@ def test_included_names_stay_in_view(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def write_private_module(tmp_path):
+    """
+    Lay out a module containing every declaration supported by '@private'.
+    """
+    (tmp_path / "private_api.sie").write_text("""
+        @private @const BASE = 20;
+
+        @private fn hidden_add(n: i32) -> i32 {
+            return BASE + n;
+        }
+
+        @private struct Hidden {
+            value: i32;
+        }
+
+        @private enum HiddenState {
+            Ready = 1,
+        }
+
+        @private fn Hidden::read(const &self) -> i32 {
+            return self.value + HiddenState::Ready - 1;
+        }
+
+        struct Public {
+            value: i32;
+        }
+
+        @private fn Public::read(const &self) -> i32 {
+            return self.value;
+        }
+
+        struct Box<T> {
+            value: T;
+        }
+
+        @private fn Box<T>::read(const &self) -> T {
+            return self.value;
+        }
+
+        fn answer() -> i32 {
+            let hidden: Hidden = { hidden_add(1) };
+            let public: Public = { 21 };
+            return hidden.read() + public.read();
+        }
+    """)
+
+
+def test_private_declarations_remain_usable_inside_their_module(
+        tmp_path, monkeypatch):
+    """
+    Privacy changes the module surface, not uses within the defining module.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import private_api;
+        fn main() -> i32 { return private_api.answer(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
+@pytest.mark.parametrize("body, missing", [
+    ("return private_api.BASE;", "BASE"),
+    ("return private_api.hidden_add(1);", "hidden_add"),
+    ("let value: private_api.Hidden; return 0;", "Hidden"),
+    ("return private_api.HiddenState::Ready;", "HiddenState"),
+])
+def test_private_names_are_absent_from_module_imports(
+        tmp_path, monkeypatch, capsys, body, missing):
+    """
+    Qualified imports cannot reach private constants, functions, or structs.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text(f"""
+        import private_api;
+        fn main() -> i32 {{ {body} }}
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert f"module 'private_api' has no member '{missing}'" in capsys.readouterr().err
+
+
+def test_private_names_are_absent_from_member_imports(
+        tmp_path, monkeypatch, capsys):
+    """
+    A private declaration is rejected directly by a member import.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { hidden_add } from private_api;
+        fn main() -> i32 { return 0; }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "module 'private_api' has no member 'hidden_add'" in capsys.readouterr().err
+
+
+def test_private_methods_are_not_reached_through_imported_types(
+        tmp_path, monkeypatch, capsys):
+    """
+    Receiver-based lookup cannot bypass a private method's module boundary.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import private_api;
+
+        fn main() -> i32 {
+            let value: private_api.Public = { 42 };
+            return value.read();
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "undefined function 'value.read'" in capsys.readouterr().err
+
+
+def test_private_generic_methods_are_not_reached_through_imported_types(
+        tmp_path, monkeypatch, capsys):
+    """
+    Instantiating a public generic receiver does not expose private templates.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import private_api;
+
+        fn main() -> i32 {
+            let value: private_api.Box<i32> = { 42 };
+            return value.read();
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "undefined function 'value.read'" in capsys.readouterr().err
+
+
+def test_include_can_access_private_declarations(tmp_path, monkeypatch):
+    """
+    '@include' is textual, so all private declaration forms remain in view.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        @include("private_api")
+
+        fn main() -> i32 {
+            let hidden: Hidden = { hidden_add(1) };
+            let public: Public = { BASE + 1 };
+            let box: Box<i32> = { 42 };
+            if (box.read() != 42) { return 1; }
+            if (HiddenState::Ready != 1) { return 2; }
+            return hidden.read() + public.read();
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_included_files_share_private_names_both_ways(tmp_path, monkeypatch):
+    """
+    Textual visibility also lets included code use root and sibling privates.
+    """
+    (tmp_path / "one.sie").write_text("""
+        fn combined() -> i32 { return from_root() + from_two(); }
+    """)
+    (tmp_path / "two.sie").write_text("""
+        @private fn from_two() -> i32 { return 2; }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        @include("one")
+        @include("two")
+
+        @private fn from_root() -> i32 { return 40; }
+        fn main() -> i32 { return combined(); }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_a_modules_failing_import_names_the_module(tmp_path, monkeypatch, capsys):
     """
     When an imported module's own import or include fails, the error

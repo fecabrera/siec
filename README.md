@@ -227,7 +227,7 @@ import module.submodule as sub;
 
 Every file is a module: `import a.b` names the file `a/b.sie`, searched for in the importing file's directory first, then the working directory, and finally the include path. Each file loads once however many times it's imported, so import cycles are fine.
 
-A module offers every one of its top-level declarations except its `@static` ones, which stay its own; importing a name it doesn't offer is an error. What it imports is not re-offered: when `b` imports `a`, `b.func` does not name `a`'s function, and `import { func } from b` fails the same way. Only `@include` composes a module's surface, being textual: an including module offers what it pulled in as its own. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
+A module offers every one of its top-level declarations except its `@static` and `@private` ones; importing a name it doesn't offer is an error. A private declaration remains available through `@include`, whose composition is textual, but it is not added to the including module's export surface. What a module imports is not re-offered either: when `b` imports `a`, `b.func` does not name `a`'s function, and `import { func } from b` fails the same way. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
 
 An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
 
@@ -1182,6 +1182,24 @@ fn bump() -> i32 {
     return count;
 }
 ```
+
+#### Private
+
+`@private` keeps a declaration out of its module's import surface without
+changing its symbol or textual visibility. The defining file and files joined
+to it through `@include` may still use it. Qualified imports and member imports
+cannot.
+
+```
+@private @const DEFAULT = 0;
+@private fn helper();
+@private fn Parser::advance(&self);
+@private struct State;
+```
+
+This differs from `@static`: a static function has file-local linkage and is
+visible only in its own file, while a private declaration remains shared across
+a textual include module.
 
 #### Noreturn
 

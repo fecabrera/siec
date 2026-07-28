@@ -139,7 +139,7 @@ module.exports = grammar({
 
     const_declaration: ($) =>
       seq(
-        "@const",
+        choice("@const", seq(field("visibility", $.attribute), "@const")),
         field("name", $.identifier),
         optional(seq(":", field("type", $.type))),
         "=",
@@ -232,6 +232,7 @@ module.exports = grammar({
 
     enum_declaration: ($) =>
       seq(
+        repeat($.attribute),
         "enum",
         field("name", $.identifier),
         optional(seq(":", field("type", $.type))),

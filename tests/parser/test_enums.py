@@ -4,6 +4,7 @@ import pytest
 
 from siec.ast import BinaryOp, Enum, EnumMember, IntLiteral, Variant
 from siec.parser.enums import parse_enum
+from siec.parser.functions import parse_program
 
 
 def test_enum_declaration(ts):
@@ -20,6 +21,15 @@ def test_enum_backing_type(ts):
     """
     assert parse_enum(ts("enum Flags: u8 { POS }")).type == "u8"
     assert parse_enum(ts("enum Color { RED }")).type == "i32"
+
+
+def test_private_enum_decorator(ts):
+    """
+    '@private enum' records that the type is absent from module exports.
+    """
+    enum = parse_program(ts("@private enum State { Ready }")).enums[0]
+    assert enum.name == "State"
+    assert enum.is_private
 
 
 def test_enum_member_values(ts):
