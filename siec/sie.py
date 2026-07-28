@@ -31,6 +31,12 @@ KINDS = ("app", "library")
 # filename. Keep it portable and unambiguous in '<name>@<version>' specs.
 PACKAGE_COMPONENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._+\-]*")
 
+# A dependency requirement is one operator and a dotted numeric version.
+# '*' is handled separately as the only wildcard.
+REQUIREMENT = re.compile(
+    r"(?P<operator>>=|<=|!=|==|>|<|=|~|\^)?\s*"
+    r"(?P<version>\d+(?:\.\d+)*)")
+
 # where installed packages live, unless SIE_PATH says otherwise
 DEFAULT_SIE_PATH = Path.home() / ".sie"
 
@@ -348,7 +354,69 @@ def contents(package: Path, data: dict) -> list[str]:
     for entry in entries:
         seen.setdefault(entry.rstrip("/") or entry, None)
 
+    for entry in seen:
+        validate_content_path(package, package / entry)
+
     return list(seen)
+
+
+def validate_content_path(package: Path, path: Path) -> None:
+    """
+    Ensure a declared path and every path below it stay in the package.
+
+    Internal symlinks are allowed and copied as their contents. Broken
+    links, cycles, and links resolving outside the package are rejected
+    before a staging directory is created.
+    """
+    try:
+        root = package.resolve(strict=True)
+    except OSError as error:
+        raise ValueError(f"{display_path(str(package))}: "
+                         f"{error.strerror}") from error
+
+    active: set[Path] = set()
+
+    def walk(current: Path) -> None:
+        try:
+            current.lstat()
+        except FileNotFoundError:
+            # Missing ordinary entries retain copy_into()'s warning-and-skip
+            # behavior. A broken symlink has an lstat entry and is rejected
+            # when it is resolved below.
+            return
+        except OSError as error:
+            raise ValueError(
+                f"{display_path(str(current))}: {error.strerror}") from error
+
+        try:
+            resolved = current.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            detail = getattr(error, "strerror", None) or str(error)
+            raise ValueError(f"{display_path(str(current))}: invalid package "
+                             f"symlink: {detail}") from error
+
+        if not resolved.is_relative_to(root):
+            raise ValueError(f"{display_path(str(current))}: symlink reaches "
+                             "outside the package")
+
+        if not resolved.is_dir():
+            return
+
+        if resolved in active:
+            raise ValueError(f"{display_path(str(current))}: package symlink "
+                             "forms a directory cycle")
+
+        active.add(resolved)
+        try:
+            for child in resolved.iterdir():
+                walk(child)
+        except OSError as error:
+            raise ValueError(
+                f"{display_path(str(current))}: {error.strerror}") from error
+        finally:
+            active.remove(resolved)
+
+    walk(path)
 
 
 def copy_into(package: Path, entries: list[str], target: Path) -> list[str]:
@@ -493,6 +561,27 @@ def version_parts(version: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def parse_requirement(requirement: str) -> tuple[str, tuple[int, ...]]:
+    """
+    Parse one dependency requirement.
+
+    Raises ValueError rather than allowing a misspelling to become an empty
+    numeric prefix that happens to match every installed version.
+    """
+    requirement = requirement.strip()
+    if requirement == "*":
+        return "*", ()
+
+    match = REQUIREMENT.fullmatch(requirement)
+    if match is None:
+        raise ValueError(f"invalid version requirement {requirement!r}; "
+                         "expected '*', a dotted numeric version, or one "
+                         "preceded by ~, ^, or a comparison operator")
+
+    parts = tuple(int(piece) for piece in match["version"].split("."))
+    return match["operator"] or "", parts
+
+
 def satisfies(version: str, requirement: str) -> bool:
     """
     Whether an installed version answers a dependency's requirement.
@@ -501,52 +590,43 @@ def satisfies(version: str, requirement: str) -> bool:
     parts written down, '^1.2' allows anything up to the next version that
     may break, a comparison compares, and a bare version is that version.
     """
-    requirement = requirement.strip()
-
-    if not requirement or requirement == "*":
+    operator, wanted = parse_requirement(requirement)
+    if operator == "*":
         return True
 
-    for operator in (">=", "<=", "!=", "==", ">", "<", "="):
-        if requirement.startswith(operator):
-            wanted = version_parts(requirement[len(operator):].strip())
-            found = version_parts(version)
+    found = version_parts(version)
 
-            # compare over as many parts as the requirement writes down, so
-            # '>= 1.2' reads 1.2.7 as 1.2
-            if operator in ("==", "=", "!="):
-                equal = found[:len(wanted)] == wanted
-                return equal if operator != "!=" else not equal
+    if operator in (">=", "<=", "!=", "==", ">", "<", "="):
+        # compare over as many parts as the requirement writes down, so
+        # '>= 1.2' reads 1.2.7 as 1.2
+        if operator in ("==", "=", "!="):
+            equal = found[:len(wanted)] == wanted
+            return equal if operator != "!=" else not equal
 
-            found = found[:len(wanted)] + (0,) * (len(wanted) - len(found))
-            if operator == ">=":
-                return found >= wanted
-            if operator == "<=":
-                return found <= wanted
-            if operator == ">":
-                return found > wanted
+        found = found[:len(wanted)] + (0,) * (len(wanted) - len(found))
+        if operator == ">=":
+            return found >= wanted
+        if operator == "<=":
+            return found <= wanted
+        if operator == ">":
+            return found > wanted
 
-            return found < wanted
+        return found < wanted
 
-    if requirement[0] in "~^":
-        wanted = version_parts(requirement[1:].strip())
+    if operator in ("~", "^"):
         found = version_parts(version)
-
-        if not wanted:
-            return True
 
         # a tilde pins the major and the minor, or the major alone when
         # that is all it names; a caret pins up to the first part that is
         # not zero: both mean 'newer, but not different'
-        if requirement[0] == "~":
+        if operator == "~":
             pinned = min(len(wanted), 2)
         else:
             pinned = next((i + 1 for i, part in enumerate(wanted) if part), len(wanted))
 
         return found[:pinned] == wanted[:pinned] and found >= wanted
 
-    wanted = version_parts(requirement)
-
-    return version_parts(version)[:len(wanted)] == wanted
+    return found[:len(wanted)] == wanted
 
 
 def natural_key(text: str) -> tuple:
@@ -740,10 +820,29 @@ class Resolved:
         return listed(self.made_of.get("libs"))
 
     def dependencies(self) -> dict[str, str]:
-        table = self.data.get("dependencies") or {}
+        table = self.data.get("dependencies")
+        where = display_path(str(self.path / MANIFEST))
 
-        return {name: requirement for name, requirement in table.items()
-                if isinstance(requirement, str)}
+        if table is None:
+            return {}
+        if not isinstance(table, dict):
+            raise ValueError(f"{where}: [dependencies] must be a table")
+
+        dependencies = {}
+        for name, requirement in table.items():
+            if not isinstance(requirement, str):
+                raise ValueError(f"{where}: dependency {name!r} requirement "
+                                 "must be a string")
+
+            try:
+                parse_requirement(requirement)
+            except ValueError as error:
+                raise ValueError(f"{where}: dependency {name!r}: "
+                                 f"{error}") from error
+
+            dependencies[name] = requirement
+
+        return dependencies
 
 
 def resolve(root: Resolved) -> list[Resolved]:
@@ -860,7 +959,12 @@ def resolve(root: Resolved) -> list[Resolved]:
 
         return None
 
-    if (resolved := search({})) is not None:
+    try:
+        resolved = search({})
+    except ValueError as error:
+        raise LookupError(str(error)) from error
+
+    if resolved is not None:
         return resolved
 
     name, requests = failure

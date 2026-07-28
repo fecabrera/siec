@@ -300,6 +300,40 @@ def test_compile_only_honors_the_output_path(tmp_path, monkeypatch):
     assert obj.exists()
 
 
+def test_compile_only_output_path_failure_is_a_diagnostic(
+        tmp_path, capsys, monkeypatch):
+    """
+    An object output error is reported without exposing a Python traceback.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+    obj = tmp_path / "missing" / "p.o"
+
+    assert run_cli(monkeypatch, src, "-c", "-o", obj) == 1
+
+    err = capsys.readouterr().err
+    assert err.startswith("siec: ")
+    assert "No such file or directory" in err
+    assert "Traceback" not in err
+
+
+def test_link_output_path_failure_is_a_diagnostic(
+        tmp_path, capsys, monkeypatch):
+    """
+    The temporary object written before linking gets the same CLI handling.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+    output = tmp_path / "missing" / "p"
+
+    assert run_cli(monkeypatch, src, "-o", output) == 1
+
+    err = capsys.readouterr().err
+    assert err.startswith("siec: ")
+    assert "No such file or directory" in err
+    assert "Traceback" not in err
+
+
 def test_constants_resolve_across_included_files(tmp_path, monkeypatch):
     """
     An '@const' declared in an included file substitutes in the includer.

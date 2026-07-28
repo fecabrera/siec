@@ -95,6 +95,22 @@ def test_a_requirement_says_which_versions_answer_it(
     assert satisfies(version, requirement) is expected
 
 
+@pytest.mark.parametrize("requirement", [
+    "",
+    "banana",
+    "~",
+    ">=",
+    "1..2",
+    "1.2beta",
+])
+def test_a_malformed_requirement_is_rejected(requirement):
+    """
+    Only '*' is a wildcard; typos must not match an empty version prefix.
+    """
+    with pytest.raises(ValueError, match="invalid version requirement"):
+        satisfies("1.2.3", requirement)
+
+
 #
 # Building
 #
@@ -389,6 +405,41 @@ def test_a_dependency_that_is_not_installed_is_reported(
 
     err = capsys.readouterr().err
     assert "missing" in err
+    assert not (app / "build" / "app").exists()
+
+
+def test_a_malformed_dependency_requirement_is_reported(
+        home, monkeypatch, capsys):  # noqa: F811
+    """
+    A manifest typo is a package error, not a requirement matching all
+    installed versions.
+    """
+    install(monkeypatch, package(home, "leaf", version="1.0.0",
+                                 files=[("src/leaf.sie", "")]))
+    app = package(home, "app", deps={"leaf": "banana"})
+    capsys.readouterr()
+
+    assert run_sie(monkeypatch, "build", app) == 1
+
+    err = capsys.readouterr().err
+    assert "dependency 'leaf'" in err
+    assert "invalid version requirement 'banana'" in err
+    assert not (app / "build" / "app").exists()
+
+
+def test_a_non_string_dependency_requirement_is_reported(
+        home, monkeypatch, capsys):  # noqa: F811
+    """
+    Invalid dependency values are diagnosed instead of silently omitted.
+    """
+    app = package(home, "app")
+    with (app / "package.toml").open("a") as manifest:
+        manifest.write("\n[dependencies]\nleaf = 1\n")
+
+    assert run_sie(monkeypatch, "build", app) == 1
+
+    err = capsys.readouterr().err
+    assert "dependency 'leaf' requirement must be a string" in err
     assert not (app / "build" / "app").exists()
 
 

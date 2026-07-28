@@ -320,6 +320,47 @@ def test_an_entry_reaching_outside_the_package_is_refused(
     assert not (install_root() / "sneaky@1.0.0").exists()
 
 
+def test_a_source_symlink_reaching_outside_the_package_is_refused(
+        home, monkeypatch, capsys):
+    """
+    A local-looking source entry cannot use a symlink to copy another
+    directory into the installed package.
+    """
+    outside = home / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.sie").write_text("secret\n")
+
+    package = make_package(home, "sneaky",
+                           made_of='sources = ["src/"]\n')
+    (package / "src").symlink_to(outside, target_is_directory=True)
+
+    assert run_sie(monkeypatch, "install", "sneaky") == 1
+
+    assert "symlink reaches outside the package" in capsys.readouterr().err
+    assert not (install_root() / "sneaky@1.0.0").exists()
+
+
+def test_a_nested_source_symlink_reaching_outside_is_refused(
+        home, monkeypatch, capsys):
+    """
+    The complete declared tree is checked, not only its top-level entry.
+    """
+    outside = home / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.sie").write_text("secret\n")
+
+    package = make_package(home, "sneaky",
+                           made_of='sources = ["src/"]\n',
+                           files=[("src/public.sie", "public\n")])
+    (package / "src" / "nested").symlink_to(outside,
+                                             target_is_directory=True)
+
+    assert run_sie(monkeypatch, "install", "sneaky") == 1
+
+    assert "symlink reaches outside the package" in capsys.readouterr().err
+    assert not (install_root() / "sneaky@1.0.0").exists()
+
+
 def test_an_entry_the_package_does_not_have_is_skipped(
         home, monkeypatch, capsys):
     """

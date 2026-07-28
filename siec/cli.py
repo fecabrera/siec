@@ -140,20 +140,25 @@ def main(argv: list[str] | None = None) -> int:
         print(format_error(str(sources[0]), error), file=sys.stderr)
         return 1
 
-    if opts.emit_llvm:
-        print(emit_llvm(module, opts.opt, opts.target))
-        return 0
+    try:
+        if opts.emit_llvm:
+            print(emit_llvm(module, opts.opt, opts.target))
+            return 0
 
-    if opts.emit_asm:
-        print(emit_assembly(module, opts.opt, opts.target), end="")
-        return 0
+        if opts.emit_asm:
+            print(emit_assembly(module, opts.opt, opts.target), end="")
+            return 0
 
-    # '-c' stops after native code generation, leaving only the object file,
-    # named after the first source, cc-style, unless '-o' says otherwise
-    if opts.compile_only:
-        compile_to_object(module, opts.output or str(Path(sources[0].name).with_suffix(".o")),
-                          opts.opt, opts.target)
-        return 0
+        # '-c' stops after native code generation, leaving only the object
+        # file, named after the first source, cc-style, unless '-o' says
+        # otherwise
+        if opts.compile_only:
+            output = opts.output or str(Path(sources[0].name).with_suffix(".o"))
+            compile_to_object(module, output, opts.opt, opts.target)
+            return 0
+    except (OSError, TargetError) as error:
+        print(f"siec: {error}", file=sys.stderr)
+        return 1
 
     # jit-run in place of building, exiting with the program's own code;
     # the program's argv is the source path plus the arguments after --run
@@ -170,16 +175,19 @@ def main(argv: list[str] | None = None) -> int:
         except NameError as error:
             print(format_error(str(sources[0]), error), file=sys.stderr)
             return 1
+        except (OSError, TargetError) as error:
+            print(f"siec: {error}", file=sys.stderr)
+            return 1
 
     # back end: LLVM module -> object file -> executable, joined by the
     # object files given on the command line
     output = opts.output or "a.out"
     obj_path = output + ".o"
-    compile_to_object(module, obj_path, opts.opt, opts.target)
 
     try:
+        compile_to_object(module, obj_path, opts.opt, opts.target)
         link([obj_path, *objects], output, opts.libs, opts.lib_dirs)
-    except OSError as error:
+    except (OSError, TargetError) as error:
         print(f"siec: {error}", file=sys.stderr)
         return 1
 
