@@ -15,6 +15,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from siec.ast import Body, For, Function, Let, Program
 from siec.cli import error_parts
@@ -24,6 +25,9 @@ from siec.codegen.types import is_reference, strip_const, strip_reference
 from siec.lexer import Token, lex
 from siec.loader import ParsedProgramCache, load_program
 from siec.parser import parse
+
+if TYPE_CHECKING:
+    from siec.sie import PackageManifest
 
 
 @dataclass
@@ -279,7 +283,7 @@ class _ValidationDebouncer:
             task.cancel()
 
 
-def package_paths(base: Path, data: dict,
+def package_paths(root: "PackageManifest",
                   watched: set[Path] | None = None) -> list[Path]:
     """
     The include path a package's own manifest implies: the directories
@@ -290,14 +294,11 @@ def package_paths(base: Path, data: dict,
     the editor still analyzes what it can, and the unresolved import
     reports itself.
     """
-    from siec.sie import (MANIFEST, Resolved, install_root, installed, resolve,
-                          unit)
+    from siec.sie import MANIFEST, install_root, installed, resolve
 
-    try:
-        made_of = unit(base / "package.toml", data)[1]
-    except ValueError:
-        # neither an app nor a library: a project's own configuration,
-        # which speaks through '[package] include' instead
+    # Neither an app nor a library: a project's own configuration, which
+    # speaks through '[package] include' instead.
+    if root.kind is None:
         return []
 
     if watched is not None:
@@ -305,10 +306,6 @@ def package_paths(base: Path, data: dict,
         # dependency graphs change when any installed manifest is rewritten.
         watched.add(install_root())
         watched.update(path / MANIFEST for _, _, path in installed())
-
-    table = data.get("package") or {}
-    root = Resolved(str(table.get("name") or base.name),
-                    str(table.get("version") or ""), base, data, made_of)
 
     try:
         tree = resolve(root)
@@ -340,7 +337,7 @@ def config_paths(file_dir: Path | None, root: Path | None,
     'include' entry is a deliberate override, so a checkout pointing at
     its own packages wins over the copies a dependency resolves to.
     """
-    import tomllib
+    from siec.sie import load_package
 
     configured: list[Path] = []
     packaged: list[Path] = []
@@ -355,14 +352,14 @@ def config_paths(file_dir: Path | None, root: Path | None,
 
         read.add(toml)
         try:
-            data = tomllib.loads(toml.read_text())
-        except (OSError, tomllib.TOMLDecodeError):
+            model = load_package(toml)
+        except ValueError:
             return
 
-        for entry in data.get("package", {}).get("include") or ():
-            configured.append((base / entry).resolve())
+        for entry in model.includes:
+            configured.append((model.path / entry).resolve())
 
-        packaged.extend(package_paths(base, data, watched))
+        packaged.extend(package_paths(model, watched))
 
     if file_dir is not None:
         for base in (file_dir, *file_dir.parents):

@@ -19,6 +19,7 @@ import shutil
 import sys
 import tomllib
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 
 from siec.codegen.errors import display_path
@@ -235,24 +236,26 @@ def install_root() -> Path:
     return base / "lib"
 
 
-def package_component(manifest: Path, key: str, value: object) -> str:
+def manifest_component(manifest: Path, location: str,
+                       value: object) -> str:
     """
-    A manifest identity component safe to use as one filename.
-
-    Names and versions become install paths, and names also become build
-    outputs. Restrict them before any filesystem operation rather than
-    trying to clean a path after it has already escaped its root.
+    A manifest value that is safe to use as one filename component.
     """
     if not isinstance(value, str) or not PACKAGE_COMPONENT.fullmatch(value):
-        raise ValueError(f"{display_path(str(manifest))}: [package] {key!r} "
+        raise ValueError(f"{display_path(str(manifest))}: {location} "
                          "must be a non-empty filename component containing "
                          "only letters, digits, '.', '_', '+', or '-'")
 
     if "@" in value or value in (".", ".."):
-        raise ValueError(f"{display_path(str(manifest))}: [package] {key!r} "
+        raise ValueError(f"{display_path(str(manifest))}: {location} "
                          "must not contain '@' or name '.' or '..'")
 
     return value
+
+
+def package_component(manifest: Path, key: str, value: object) -> str:
+    """A safe package identity component, retained as the public helper."""
+    return manifest_component(manifest, f"[package] {key!r}", value)
 
 
 def contained_path(root: Path, component: str, manifest: Path) -> Path:
@@ -268,97 +271,253 @@ def contained_path(root: Path, component: str, manifest: Path) -> Path:
     return target
 
 
-def identity(manifest: Path, data: dict) -> tuple[str, str]:
+@dataclass(frozen=True)
+class Requirement:
+    """One dependency requirement, parsed once at manifest validation."""
+    text: str
+    operator: str
+    version: tuple[int, ...]
+
+    def __repr__(self) -> str:
+        return repr(self.text)
+
+
+@dataclass(frozen=True)
+class PackageManifest:
     """
-    The name and version a manifest declares, which is what an install is
-    filed under.
+    The normalized, validated interpretation of one package manifest.
 
-    Raises ValueError when either is missing: without both there is no
-    directory to install into.
+    Optional identity components remain optional because an app needs no
+    version and a configuration-only manifest needs neither. Commands apply
+    their contextual requirements through require_identity().
     """
-    table = data.get("package") or {}
+    manifest: Path
+    name: str | None
+    version: str | None
+    kind: str | None
+    sources: tuple[str, ...]
+    documents: tuple[str, ...]
+    includes: tuple[str, ...]
+    requirements: dict[str, Requirement]
+    libraries: tuple[str, ...]
+    description: str
 
-    missing = [key for key in ("name", "version") if not table.get(key)]
-    if missing:
-        raise ValueError(f"{display_path(str(manifest))}: "
-                         f"[package] declares no "
-                         + " or ".join(repr(key) for key in missing))
+    @property
+    def path(self) -> Path:
+        return self.manifest.parent
 
-    return (package_component(manifest, "name", table["name"]),
-            package_component(manifest, "version", table["version"]))
+    @property
+    def spec(self) -> str:
+        if self.name is None:
+            return self.path.name
+        return f"{self.name}@{self.version}" if self.version else self.name
+
+    def require_identity(self, *, version: bool) -> tuple[str, str | None]:
+        """Require the identity components needed by the calling command."""
+        missing = []
+        if self.name is None:
+            missing.append("name")
+        if version and self.version is None:
+            missing.append("version")
+
+        if missing:
+            raise ValueError(f"{display_path(str(self.manifest))}: "
+                             f"[package] declares no "
+                             + " or ".join(repr(key) for key in missing))
+
+        return self.name, self.version
+
+    def require_kind(self) -> str:
+        """Require an actionable app or library declaration."""
+        if self.kind is None:
+            raise ValueError(
+                f"{display_path(str(self.manifest))}: declares neither "
+                "[app] nor [library], so there is nothing to build or install")
+        return self.kind
+
+    def source_dirs(self) -> list[Path]:
+        """Existing source directories exported on the include path."""
+        return [self.path / entry for entry in self.sources
+                if (self.path / entry).is_dir()]
+
+    def source_files(self) -> list[Path]:
+        """Compilation units named directly by the normalized sources."""
+        files = []
+        for entry in self.sources:
+            path = self.path / entry
+            if path.is_file():
+                files.append(path)
+            elif path.is_dir():
+                files.extend(sorted(path.glob("*.sie")))
+
+        return files
+
+    def libs(self) -> tuple[str, ...]:
+        return self.libraries
+
+    def dependencies(self) -> dict[str, Requirement]:
+        return self.requirements
+
+    def content_entries(self) -> list[str]:
+        """The unique paths copied by installation, in manifest order."""
+        return list(dict.fromkeys((MANIFEST, *self.documents, *self.sources)))
 
 
-def listed(value: object) -> list[str]:
-    """
-    A manifest entry that may be written as one string or as a list of
-    them, as a list either way.
-    """
+def manifest_table(manifest: Path, data: dict, name: str,
+                   *, optional: bool = True) -> dict:
+    """A TOML table with a consistent diagnostic when its type is wrong."""
+    value = data.get(name)
+    if value is None and optional:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{display_path(str(manifest))}: [{name}] "
+                         "must be a table")
+    return value
+
+
+def manifest_list(manifest: Path, section: str, key: str,
+                  value: object) -> tuple[str, ...]:
+    """A string-or-string-array manifest field, normalized and deduplicated."""
+    if value is None:
+        return ()
     if isinstance(value, str):
-        return [value]
+        values = [value]
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        values = value
+    else:
+        raise ValueError(f"{display_path(str(manifest))}: [{section}] "
+                         f"{key!r} must be a string or a list of strings")
 
-    if isinstance(value, list):
-        return [entry for entry in value if isinstance(entry, str)]
+    if any(not item for item in values):
+        raise ValueError(f"{display_path(str(manifest))}: [{section}] "
+                         f"{key!r} entries must not be empty")
 
-    return []
+    return tuple(dict.fromkeys(values))
+
+
+def manifest_paths(manifest: Path, section: str, key: str,
+                   value: object) -> tuple[str, ...]:
+    """Normalized package-relative paths from a manifest list field."""
+    normalized = []
+    for entry in manifest_list(manifest, section, key, value):
+        path = Path(entry)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"{display_path(str(manifest))}: "
+                             f"{entry!r} reaches outside the package")
+
+        normalized.append(path.as_posix().rstrip("/") or ".")
+
+    return tuple(dict.fromkeys(normalized))
+
+
+def validate_manifest(manifest: Path, data: dict) -> PackageManifest:
+    """Validate raw TOML once and return its normalized package model."""
+    package = manifest_table(manifest, data, "package")
+    kinds = []
+    for kind in KINDS:
+        if kind not in data:
+            continue
+        table = manifest_table(manifest, data, kind, optional=False)
+        kinds.append((kind, table))
+
+    if len(kinds) > 1:
+        raise ValueError(f"{display_path(str(manifest))}: declares both "
+                         "[app] and [library]; a package is one or the other")
+
+    kind, made_of = kinds[0] if kinds else (None, {})
+
+    name = package.get("name")
+    if name is not None:
+        name = package_component(manifest, "name", name)
+
+    version = package.get("version")
+    if version is not None:
+        version = package_component(manifest, "version", version)
+
+    description = package.get("description")
+    if description is None:
+        description = ""
+    elif not isinstance(description, str):
+        raise ValueError(f"{display_path(str(manifest))}: [package] "
+                         "'description' must be a string")
+
+    sources = manifest_paths(
+        manifest, kind or "package", "sources", made_of.get("sources"))
+    readme = manifest_paths(
+        manifest, "package", "readme", package.get("readme"))
+    licenses = manifest_paths(
+        manifest, "package", "license-files",
+        package.get("license-files"))
+    includes = manifest_paths(
+        manifest, "package", "include", package.get("include"))
+    libraries = manifest_list(
+        manifest, kind or "package", "libs", made_of.get("libs"))
+
+    dependencies = manifest_table(manifest, data, "dependencies")
+    requirements = {}
+    for dependency, requirement in dependencies.items():
+        dependency = manifest_component(
+            manifest, f"dependency name {dependency!r}", dependency)
+        if not isinstance(requirement, str):
+            raise ValueError(f"{display_path(str(manifest))}: dependency "
+                             f"{dependency!r} requirement must be a string")
+        try:
+            operator, wanted = parse_requirement(requirement)
+        except ValueError as error:
+            raise ValueError(f"{display_path(str(manifest))}: dependency "
+                             f"{dependency!r}: {error}") from error
+        requirements[dependency] = Requirement(requirement, operator, wanted)
+
+    return PackageManifest(
+        manifest.resolve(),
+        name,
+        version,
+        kind,
+        sources,
+        tuple(dict.fromkeys((*readme, *licenses))),
+        includes,
+        requirements,
+        libraries,
+        description,
+    )
+
+
+def load_package(manifest: Path) -> PackageManifest:
+    """Read and validate a package manifest through the shared boundary."""
+    return validate_manifest(manifest, read_manifest(manifest))
+
+
+def install_entries(package: PackageManifest) -> list[str]:
+    """
+    Validate the physical content selected by a package and return what
+    installation copies.
+    """
+    entries = package.content_entries()
+    for entry in entries:
+        validate_content_path(package.path, package.path / entry)
+
+    return entries
+
+
+def identity(manifest: Path, data: dict) -> tuple[str, str]:
+    """Compatibility wrapper around centralized manifest validation."""
+    package = validate_manifest(manifest, data)
+    name, version = package.require_identity(version=True)
+    return name, version
 
 
 def unit(manifest: Path, data: dict) -> tuple[str, dict]:
-    """
-    What kind of thing a manifest describes, and the table saying what it
-    is made of: an '[app]', which is built, or a '[library]', which is
-    installed for other packages to build against.
-
-    '[package]' says who the package is; one of these two says what it is.
-
-    Raises ValueError when a manifest declares both, or neither.
-    """
-    found = [(kind, data[kind]) for kind in KINDS
-             if isinstance(data.get(kind), dict)]
-
-    if len(found) == 1:
-        return found[0]
-
-    where = display_path(str(manifest))
-    if found:
-        raise ValueError(f"{where}: declares both [app] and [library]; "
-                         "a package is one or the other")
-
-    raise ValueError(f"{where}: declares neither [app] nor [library], so "
-                     "there is nothing to build or install")
+    """Compatibility wrapper returning the selected raw kind table."""
+    package = validate_manifest(manifest, data)
+    kind = package.require_kind()
+    return kind, data[kind]
 
 
 def contents(package: Path, data: dict) -> list[str]:
-    """
-    What an install carries: the manifest, whatever documents it points
-    at, and the sources it declares.
-
-    Raises ValueError on an entry that would reach outside the package,
-    which no manifest has business naming.
-    """
-    manifest = package / MANIFEST
-    table = data.get("package") or {}
-    _, made_of = unit(manifest, data)
-
-    entries = [MANIFEST]
-    entries.extend(listed(table.get("readme")))
-    entries.extend(listed(table.get("license-files")))
-    entries.extend(listed(made_of.get("sources")))
-
-    for entry in entries:
-        path = Path(entry)
-        if path.is_absolute() or ".." in path.parts:
-            raise ValueError(f"{display_path(str(package / MANIFEST))}: "
-                             f"{entry!r} reaches outside the package")
-
-    # a name repeated across the keys is still copied once
-    seen: dict[str, None] = {}
-    for entry in entries:
-        seen.setdefault(entry.rstrip("/") or entry, None)
-
-    for entry in seen:
-        validate_content_path(package, package / entry)
-
-    return list(seen)
+    """Compatibility wrapper returning validated install entries."""
+    model = validate_manifest(package / MANIFEST, data)
+    model.require_kind()
+    return install_entries(model)
 
 
 def validate_content_path(package: Path, path: Path) -> None:
@@ -477,7 +636,7 @@ def replace(staging: Path, target: Path) -> None:
         shutil.rmtree(previous, ignore_errors=True)
 
 
-def install_details(manifest: Path) -> tuple[dict, dict, str, str, list[str]]:
+def install_details(manifest: Path) -> tuple[PackageManifest, list[str]]:
     """
     Validate a library package and return everything installation needs.
 
@@ -485,15 +644,13 @@ def install_details(manifest: Path) -> tuple[dict, dict, str, str, list[str]]:
     installed version is never moved aside for content that changed or became
     invalid while it was being copied.
     """
-    data = read_manifest(manifest)
-    kind, made_of = unit(manifest, data)
-    if kind != "library":
+    package = load_package(manifest)
+    if package.require_kind() != "library":
         raise ValueError(f"{display_path(str(manifest))}: an [app] is "
                          "built, not installed")
 
-    name, version = identity(manifest, data)
-    entries = contents(manifest.parent, data)
-    return data, made_of, name, version, entries
+    package.require_identity(version=True)
+    return package, install_entries(package)
 
 
 def install(argv: list[str]) -> int:
@@ -524,13 +681,14 @@ def install(argv: list[str]) -> int:
     package = manifest.parent
 
     try:
-        data, made_of, name, version, entries = install_details(manifest)
+        model, entries = install_details(manifest)
+        name, version = model.require_identity(version=True)
         target = contained_path(install_root(), f"{name}@{version}", manifest)
     except ValueError as error:
         print(f"sie: {error}", file=sys.stderr)
         return 1
 
-    if not made_of.get("sources"):
+    if not model.sources:
         print(f"sie: warning: {display_path(str(manifest))} declares no "
               "[library] 'sources', so only its manifest is installed",
               file=sys.stderr)
@@ -549,9 +707,8 @@ def install(argv: list[str]) -> int:
         # Validate what was actually copied, not only the source snapshot
         # read above. A concurrently changed or corrupted manifest never
         # reaches replace(), so the installed version remains in place.
-        _, _, staged_name, staged_version, _ = install_details(
-            staging / MANIFEST)
-        if (staged_name, staged_version) != (name, version):
+        staged, _ = install_details(staging / MANIFEST)
+        if (staged.name, staged.version) != (name, version):
             raise ValueError(
                 f"{display_path(str(staging / MANIFEST))}: package identity "
                 "changed while staging")
@@ -614,7 +771,7 @@ def parse_requirement(requirement: str) -> tuple[str, tuple[int, ...]]:
     return match["operator"] or "", parts
 
 
-def satisfies(version: str, requirement: str) -> bool:
+def satisfies(version: str, requirement: str | Requirement) -> bool:
     """
     Whether an installed version answers a dependency's requirement.
 
@@ -622,7 +779,10 @@ def satisfies(version: str, requirement: str) -> bool:
     parts written down, '^1.2' allows anything up to the next version that
     may break, a comparison compares, and a bare version is that version.
     """
-    operator, wanted = parse_requirement(requirement)
+    if isinstance(requirement, Requirement):
+        operator, wanted = requirement.operator, requirement.version
+    else:
+        operator, wanted = parse_requirement(requirement)
     if operator == "*":
         return True
 
@@ -702,11 +862,17 @@ def description(package: Path) -> str:
     does not say or cannot be read.
     """
     try:
-        data = read_manifest(package / MANIFEST)
+        model = load_package(package / MANIFEST)
+        if model.require_kind() != "library":
+            return ""
+        identity = model.require_identity(version=True)
+        name, separator, version = package.name.partition("@")
+        if not separator or identity != (name, version):
+            return ""
     except ValueError:
         return ""
 
-    return str((data.get("package") or {}).get("description") or "")
+    return model.description
 
 
 def listing(argv: list[str]) -> int:
@@ -801,83 +967,7 @@ def uninstall(argv: list[str]) -> int:
     return 0
 
 
-class Resolved:
-    """
-    One package in a build: where it is, what it declares, and how it was
-    asked for.
-    """
-
-    def __init__(self, name: str, version: str, path: Path, data: dict,
-                 made_of: dict):
-        self.name = name
-        self.version = version
-        self.path = path
-        self.data = data
-
-        # the '[app]' or '[library]' table: what the package is made of
-        self.made_of = made_of
-
-    @property
-    def spec(self) -> str:
-        return f"{self.name}@{self.version}" if self.version else self.name
-
-    def source_dirs(self) -> list[Path]:
-        """
-        The directories this package's modules are imported from: what its
-        'sources' names, which is what a build puts on the include path.
-        """
-        return [self.path / entry for entry in listed(self.made_of.get("sources"))
-                if (self.path / entry).is_dir()]
-
-    def source_files(self) -> list[Path]:
-        """
-        The units to compile: a 'sources' entry that is a file, and the
-        '.sie' files directly inside one that is a directory.
-
-        What sits deeper is reached through an import or an '@include',
-        so compiling it again as its own unit would be wrong.
-        """
-        files = []
-        for entry in listed(self.made_of.get("sources")):
-            path = self.path / entry
-
-            if path.is_file():
-                files.append(path)
-            elif path.is_dir():
-                files.extend(sorted(path.glob("*.sie")))
-
-        return files
-
-    def libs(self) -> list[str]:
-        return listed(self.made_of.get("libs"))
-
-    def dependencies(self) -> dict[str, str]:
-        table = self.data.get("dependencies")
-        where = display_path(str(self.path / MANIFEST))
-
-        if table is None:
-            return {}
-        if not isinstance(table, dict):
-            raise ValueError(f"{where}: [dependencies] must be a table")
-
-        dependencies = {}
-        for name, requirement in table.items():
-            if not isinstance(requirement, str):
-                raise ValueError(f"{where}: dependency {name!r} requirement "
-                                 "must be a string")
-
-            try:
-                parse_requirement(requirement)
-            except ValueError as error:
-                raise ValueError(f"{where}: dependency {name!r}: "
-                                 f"{error}") from error
-
-            dependencies[name] = requirement
-
-        return dependencies
-
-
-def resolve(root: Resolved) -> list[Resolved]:
+def resolve(root: PackageManifest) -> list[PackageManifest]:
     """
     The packages a build needs, in the order they were reached: a package's
     own dependencies before theirs, so a dependent links ahead of what it
@@ -895,28 +985,37 @@ def resolve(root: Resolved) -> list[Resolved]:
     for choices in available.values():
         choices.sort(key=lambda choice: natural_key(choice[0]), reverse=True)
 
-    loaded: dict[Path, Resolved] = {}
+    loaded: dict[Path, PackageManifest] = {}
 
-    def package(name: str, version: str, path: Path) -> Resolved:
+    def package(name: str, version: str, path: Path) -> PackageManifest:
         if path in loaded:
             return loaded[path]
 
         try:
-            data = read_manifest(path / MANIFEST)
-            _, made_of = unit(path / MANIFEST, data)
+            model = load_package(path / MANIFEST)
+            if model.kind != "library":
+                raise ValueError(
+                    f"{display_path(str(model.manifest))}: an installed "
+                    "dependency must declare [library]")
+            found_name, found_version = model.require_identity(version=True)
+            if (found_name, found_version) != (name, version):
+                raise ValueError(
+                    f"{display_path(str(model.manifest))}: package identity "
+                    f"{model.spec!r} does not match installed directory "
+                    f"{name}@{version!s}")
         except ValueError as error:
             raise LookupError(str(error)) from error
 
-        loaded[path] = Resolved(name, version, path, data, made_of)
+        loaded[path] = model
         return loaded[path]
 
-    def live_graph(chosen: dict[str, Resolved]):
+    def live_graph(chosen: dict[str, PackageManifest]):
         """
         Requirements and discovery order reachable through the versions
         currently chosen. Dependencies of an abandoned version disappear
         because that package is no longer traversed.
         """
-        requirements: dict[str, list[tuple[str, str]]] = {}
+        requirements: dict[str, list[tuple[Requirement, str]]] = {}
         order: list[str] = []
         pending = deque([root])
         expanded = set()
@@ -945,7 +1044,8 @@ def resolve(root: Resolved) -> list[Resolved]:
     seen = set()
     failure = None
 
-    def search(chosen: dict[str, Resolved]) -> list[Resolved] | None:
+    def search(chosen: dict[str, PackageManifest]
+               ) -> list[PackageManifest] | None:
         nonlocal failure
 
         requirements, order = live_graph(chosen)
@@ -1028,35 +1128,25 @@ def build(argv: list[str]) -> int:
 
     try:
         manifest = package_manifest(opts.path)
-        data = read_manifest(manifest)
-        kind, made_of = unit(manifest, data)
+        root = load_package(manifest)
 
         # a library has no entry point: it is installed, and an app is
         # what turns it into something that runs
-        if kind != "app":
+        if root.require_kind() != "app":
             raise ValueError(f"{display_path(str(manifest))}: a [library] is "
                              "installed, not built")
+        name, _ = root.require_identity(version=False)
     except (FileNotFoundError, ValueError) as error:
         print(f"sie: {error}", file=sys.stderr)
         return 1
 
     package = manifest.parent
-    table = data.get("package") or {}
-
-    name = table.get("name")
-    if not name:
-        print(f"sie: {display_path(str(manifest))}: [package] declares no "
-              "'name', so the binary has nothing to be called", file=sys.stderr)
-        return 1
 
     try:
-        name = package_component(manifest, "name", name)
         output = contained_path(package / "build", name, manifest)
     except ValueError as error:
         print(f"sie: {error}", file=sys.stderr)
         return 1
-
-    root = Resolved(name, str(table.get("version") or ""), package, data, made_of)
 
     sources = root.source_files()
     if not sources:

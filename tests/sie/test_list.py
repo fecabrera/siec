@@ -74,6 +74,21 @@ def test_a_package_without_a_description_lists_as_its_spec(
     assert capsys.readouterr().out == "zlib@1.0.0\n"
 
 
+def test_invalid_manifest_metadata_is_not_shown(
+        home, monkeypatch, capsys):  # noqa: F811
+    """
+    Listing keeps a corrupt install removable and visible by directory
+    identity, but does not present unvalidated metadata as trustworthy.
+    """
+    package = put(install_root(), "zlib", "1.0.0", "misleading")
+    (package / "package.toml").write_text(
+        '[package]\nname = "other"\nversion = "1.0.0"\n'
+        'description = "misleading"\n\n[library]\n')
+
+    assert run_sie(monkeypatch, "list") == 0
+    assert capsys.readouterr().out == "zlib@1.0.0\n"
+
+
 def test_versions_of_one_package_are_listed_in_order(
         home, monkeypatch, capsys):  # noqa: F811
     """
