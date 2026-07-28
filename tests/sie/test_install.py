@@ -283,6 +283,30 @@ def test_a_manifest_without_a_name_or_version_is_reported(
     assert not install_root().exists()
 
 
+@pytest.mark.parametrize("name,version", [
+    ('"../outside"', '"1.0.0"'),
+    ('"/absolute"', '"1.0.0"'),
+    ('"bad@name"', '"1.0.0"'),
+    ('"safe"', '"../outside"'),
+    ("7", '"1.0.0"'),
+])
+def test_package_identity_is_a_safe_filename_component(
+        home, monkeypatch, capsys, name, version):
+    """
+    Manifest identity values become install directory names, so they must
+    neither escape the root nor make '<name>@<version>' ambiguous.
+    """
+    package = home / "unsafe"
+    package.mkdir()
+    (package / "package.toml").write_text(
+        f"[package]\nname = {name}\nversion = {version}\n"
+        "\n[library]\nsources = [\"src/\"]\n")
+
+    assert run_sie(monkeypatch, "install", package) == 1
+    assert "[package]" in capsys.readouterr().err
+    assert not install_root().exists()
+
+
 def test_an_entry_reaching_outside_the_package_is_refused(
         home, monkeypatch, capsys):
     """

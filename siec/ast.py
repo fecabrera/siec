@@ -231,6 +231,17 @@ class BinaryOp:
 
 
 @dataclass
+class CachedExpr:
+    """
+    A codegen-only expression evaluated once and reused in the same
+    statement. Parsing never creates one; compound indexed assignment uses
+    it to pass one evaluated key to both get_item and set_item.
+    """
+    expr: object
+    value: object = field(default=None, compare=False, repr=False)
+
+
+@dataclass
 class Ternary:
     """
     A conditional expression 'cond ? then : orelse': only the chosen arm
@@ -243,7 +254,8 @@ class Ternary:
 
 Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | CharLiteral
         | AggregateLiteral | BlockExpr | ArrayLiteral | Var | EnumMember | Call
-        | Index | Slice | Member | Cast | UnaryOp | BinaryOp | Ternary)
+        | Index | Slice | Member | Cast | UnaryOp | BinaryOp | CachedExpr
+        | Ternary)
 
 
 def _line():

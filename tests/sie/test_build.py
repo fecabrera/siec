@@ -136,6 +136,26 @@ def test_a_package_needs_no_version_to_be_built(home, monkeypatch):  # noqa: F81
     assert (app / "build" / "app").is_file()
 
 
+def test_an_app_name_cannot_escape_the_build_directory(
+        home, monkeypatch, capsys):  # noqa: F811
+    """
+    The package name becomes the binary filename and must remain one safe
+    component below build/.
+    """
+    app = home / "unsafe-app"
+    app.mkdir()
+    (app / "src").mkdir()
+    (app / "src" / "main.sie").write_text(HELLO)
+    (app / "package.toml").write_text(
+        '[package]\nname = "../escaped"\n'
+        '\n[app]\nsources = ["src/"]\n')
+
+    assert run_sie(monkeypatch, "build", app) == 1
+    assert "[package] 'name'" in capsys.readouterr().err
+    assert not (app / "escaped").exists()
+    assert not (app / "build").exists()
+
+
 def test_every_source_file_of_the_package_is_compiled(
         home, monkeypatch):  # noqa: F811
     """

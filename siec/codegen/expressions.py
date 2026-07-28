@@ -14,6 +14,7 @@ from siec.ast import (
     Block,
     BlockExpr,
     BoolLiteral,
+    CachedExpr,
     Call,
     Cast,
     CharLiteral,
@@ -74,6 +75,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     """
     Emit an expression, coercing literals to expected_type when given.
     """
+    # A compound indexed assignment shares this wrapper between its getter
+    # and setter. The first typed argument context evaluates it; the second
+    # receives the exact same SSA value.
+    if isinstance(expr, CachedExpr):
+        if expr.value is None:
+            expr.value = emit_expression(gen, builder, expr.expr,
+                                         expected_type, scope)
+        return expr.value
+
     # dispatch on the node type; each branch returns an LLVM value
     if isinstance(expr, IntLiteral):
         # integer literals take the type of their context, defaulting to
@@ -242,8 +252,9 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # variables load their current value from their stack slot; a
         # '@volatile' struct's loads are never elided or reordered
         if expr.name in scope:
-            load = builder.load(scope[expr.name].slot, name=expr.name)
-            if gen.volatile_struct(load.type):
+            variable = scope[expr.name]
+            load = builder.load(variable.slot, name=expr.name)
+            if variable.volatile or gen.volatile_struct(load.type):
                 make_volatile(load)
 
             return load

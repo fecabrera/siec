@@ -63,3 +63,53 @@ def test_compound_assignment_on_a_struct_field(run):
     }
     """
     assert run(source).returncode == 30
+
+
+def test_compound_index_evaluates_its_target_once(run):
+    """
+    The address used to load and store an indexed element is stabilized:
+    a side-effecting index runs once, as it does for a plain assignment.
+    """
+    source = """
+    @static let calls: i32 = 0;
+
+    fn next() -> u64 {
+        calls += 1;
+        return 0;
+    }
+
+    fn main() -> i32 {
+        let values: i32[] = [40];
+        values[next()] += 2;
+
+        if (calls != 1) { return 1; }
+        return values[0];
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_compound_member_evaluates_its_base_once(run):
+    """
+    A reference-returning call at the root of a member target is evaluated
+    once before the old value is read and the new one stored.
+    """
+    source = """
+    @static let calls: i32 = 0;
+
+    struct Counter { value: i32; }
+
+    fn locate(counter: &Counter) -> &Counter {
+        calls += 1;
+        return counter;
+    }
+
+    fn main() -> i32 {
+        let counter: Counter = { 40 };
+        locate(counter).value += 2;
+
+        if (calls != 1) { return 1; }
+        return counter.value;
+    }
+    """
+    assert run(source).returncode == 42

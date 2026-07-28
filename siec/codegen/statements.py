@@ -7,6 +7,7 @@ from siec.ast import (
     BinaryOp,
     Block,
     Break,
+    CachedExpr,
     Call,
     Case,
     CompoundAssign,
@@ -260,8 +261,12 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             raise TypeError(f"cannot assign to const variable {stmt.name!r}")
 
         # assigning to a '&T' reference writes the T it aliases
-        volatile_store(gen, builder.store(emit_coerced(
-            gen, builder, stmt.value, strip_reference(var_type), scope), slot))
+        store = builder.store(emit_coerced(
+            gen, builder, stmt.value, strip_reference(var_type), scope), slot)
+        if stmt.name in scope and scope[stmt.name].volatile:
+            make_volatile(store)
+        else:
+            volatile_store(gen, store)
     elif isinstance(stmt, MemberAssign):
         # store the value into the field's slot, typed by the field; a
         # write into a '@volatile' struct is a volatile one
@@ -502,10 +507,27 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
     'dec = dec + 1', the way every numeric target works.
     """
     from siec.codegen.methods import resolve_method
-    from siec.parser.statements import make_assignment
-
     method = COMPOUND_METHODS.get(stmt.op)
-    target_type = strip_const(expr_sie_type(gen, stmt.target, scope) or "")
+    declared_type = expr_sie_type(gen, stmt.target, scope)
+    target_type = strip_const(declared_type or "")
+
+    # A compound write has the same mutability requirements as a plain one,
+    # including before an in-place operator method is considered.
+    if isinstance(stmt.target, Member):
+        field_type = member_field(gen, stmt.target, scope)[1]
+        if is_const(field_type):
+            raise TypeError(f"cannot assign to const field "
+                            f"{stmt.target.field!r}")
+        reject_const_base(gen, scope, stmt.target.base)
+    elif isinstance(stmt.target, Index):
+        reject_const_base(gen, scope, stmt.target.base)
+    elif isinstance(stmt.target, UnaryOp) and stmt.target.op == "*":
+        reject_const_base(gen, scope, stmt.target.operand)
+    elif is_const(declared_type):
+        if isinstance(stmt.target, Var):
+            raise TypeError(f"cannot assign to const variable "
+                            f"{stmt.target.name!r}")
+        raise TypeError(f"cannot assign through a {declared_type!r} reference")
 
     # a struct's indexed getter returns a value, not its storage: update
     # that value through the binary operator, then hand it back to the
@@ -514,15 +536,18 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
     if isinstance(stmt.target, Index):
         from siec.codegen.inference import item_call
 
-        if (item_call(gen, stmt.target, scope, "get_item") is not None
-                and item_call(gen, stmt.target, scope, "set_item",
-                              stmt.value) is not None):
-            emit_statement_body(
-                gen, builder,
-                make_assignment(stmt.target,
-                                BinaryOp(stmt.op, stmt.target, stmt.value),
-                                stmt.line),
-                scope)
+        getter = item_call(gen, stmt.target, scope, "get_item")
+        setter = item_call(gen, stmt.target, scope, "set_item", stmt.value)
+        if getter is not None and setter is not None:
+            stable_scope = dict(scope)
+            base = stable_lvalue(gen, builder, stmt.target.base,
+                                 stable_scope, "item.base")
+            key = CachedExpr(stmt.target.index)
+            target = Index(base, key)
+            getter = item_call(gen, target, stable_scope, "get_item")
+            updated = BinaryOp(stmt.op, getter, stmt.value)
+            setter = item_call(gen, target, stable_scope, "set_item", updated)
+            emit_expression(gen, builder, setter, None, stable_scope)
             return
 
     # only a struct or an array carries methods; anything else takes the
@@ -536,11 +561,37 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
                                          line=stmt.line), scope)
             return
 
-    emit_statement_body(gen, builder,
-                        make_assignment(stmt.target,
-                                        BinaryOp(stmt.op, stmt.target,
-                                                 stmt.value), stmt.line),
-                        scope)
+    # The fallback reads and writes through one stabilized slot. Complex
+    # targets therefore evaluate once instead of being duplicated as
+    # 'target = target <op> value'.
+    stable_scope = dict(scope)
+    target = stable_lvalue(gen, builder, stmt.target, stable_scope,
+                           "compound.target")
+    emit_statement_body(
+        gen, builder,
+        Assign(target.name, BinaryOp(stmt.op, target, stmt.value),
+               line=stmt.line),
+        stable_scope)
+
+
+def stable_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr,
+                  scope: dict, label: str) -> Var:
+    """
+    Bind a hidden name to an lvalue's already-evaluated address.
+
+    The name cannot collide with source identifiers because it contains
+    dots. Volatility follows the original access chain through the alias.
+    """
+    type_name = expr_sie_type(gen, expr, scope)
+    if type_name is None:
+        raise TypeError("cannot determine the type of compound assignment "
+                        "target")
+
+    slot = emit_lvalue(gen, builder, expr, scope)
+    name = f".{label}.{gen.temporary_count}"
+    gen.temporary_count += 1
+    scope[name] = Variable(slot, type_name, volatile_chain(gen, expr, scope))
+    return Var(name)
 
 
 def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,

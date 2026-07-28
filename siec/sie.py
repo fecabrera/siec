@@ -27,6 +27,10 @@ MANIFEST = "package.toml"
 # what a package can be: an app is built, a library installed
 KINDS = ("app", "library")
 
+# A package identity becomes a directory name and, for an app, an output
+# filename. Keep it portable and unambiguous in '<name>@<version>' specs.
+PACKAGE_COMPONENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._+\-]*")
+
 # where installed packages live, unless SIE_PATH says otherwise
 DEFAULT_SIE_PATH = Path.home() / ".sie"
 
@@ -224,6 +228,39 @@ def install_root() -> Path:
     return base / "lib"
 
 
+def package_component(manifest: Path, key: str, value: object) -> str:
+    """
+    A manifest identity component safe to use as one filename.
+
+    Names and versions become install paths, and names also become build
+    outputs. Restrict them before any filesystem operation rather than
+    trying to clean a path after it has already escaped its root.
+    """
+    if not isinstance(value, str) or not PACKAGE_COMPONENT.fullmatch(value):
+        raise ValueError(f"{display_path(str(manifest))}: [package] {key!r} "
+                         "must be a non-empty filename component containing "
+                         "only letters, digits, '.', '_', '+', or '-'")
+
+    if "@" in value or value in (".", ".."):
+        raise ValueError(f"{display_path(str(manifest))}: [package] {key!r} "
+                         "must not contain '@' or name '.' or '..'")
+
+    return value
+
+
+def contained_path(root: Path, component: str, manifest: Path) -> Path:
+    """
+    Join a validated component below a root, defending the filesystem
+    boundary even when an existing path is a symlink.
+    """
+    target = root / component
+    if not target.resolve().is_relative_to(root.resolve()):
+        raise ValueError(f"{display_path(str(manifest))}: package path "
+                         f"{component!r} reaches outside {root}")
+
+    return target
+
+
 def identity(manifest: Path, data: dict) -> tuple[str, str]:
     """
     The name and version a manifest declares, which is what an install is
@@ -240,7 +277,8 @@ def identity(manifest: Path, data: dict) -> tuple[str, str]:
                          f"[package] declares no "
                          + " or ".join(repr(key) for key in missing))
 
-    return table["name"], table["version"]
+    return (package_component(manifest, "name", table["name"]),
+            package_component(manifest, "version", table["version"]))
 
 
 def listed(value: object) -> list[str]:
@@ -404,6 +442,7 @@ def install(argv: list[str]) -> int:
 
         name, version = identity(manifest, data)
         entries = contents(package, data)
+        target = contained_path(install_root(), f"{name}@{version}", manifest)
     except ValueError as error:
         print(f"sie: {error}", file=sys.stderr)
         return 1
@@ -413,7 +452,6 @@ def install(argv: list[str]) -> int:
               "[library] 'sources', so only its manifest is installed",
               file=sys.stderr)
 
-    target = install_root() / f"{name}@{version}"
     staging = target.with_name("." + target.name + ".partial")
 
     try:
@@ -875,6 +913,13 @@ def build(argv: list[str]) -> int:
               "'name', so the binary has nothing to be called", file=sys.stderr)
         return 1
 
+    try:
+        name = package_component(manifest, "name", name)
+        output = contained_path(package / "build", name, manifest)
+    except ValueError as error:
+        print(f"sie: {error}", file=sys.stderr)
+        return 1
+
     root = Resolved(name, str(table.get("version") or ""), package, data, made_of)
 
     sources = root.source_files()
@@ -903,7 +948,6 @@ def build(argv: list[str]) -> int:
             if lib not in libs:
                 libs.append(lib)
 
-    output = package / "build" / name
     try:
         output.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:

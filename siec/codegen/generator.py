@@ -36,6 +36,7 @@ class Variable:
     """
     slot: ir.Instruction
     type: str
+    volatile: bool = False
 
 
 def make_volatile(inst: ir.Instruction) -> ir.Instruction:
@@ -109,6 +110,7 @@ class CodeGenerator:
         self.module = ir.Module(name=module_name, context=ir.Context())
         self.module.triple = self.target
         self.str_count = 0
+        self.temporary_count = 0
         self.string_pool: dict[str, ir.GlobalVariable] = {}
         # Unchosen '@if' branch spans, by source file, for editor semantic
         # highlighting. Code generation records the same choices it compiles.

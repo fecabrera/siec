@@ -13,6 +13,7 @@ from siec.ast import (
     Block,
     BlockExpr,
     BoolLiteral,
+    CachedExpr,
     Call,
     Cast,
     CharLiteral,
@@ -181,6 +182,9 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     Infer the Sie type name of an expression; None when it has no fixed one.
     """
+    if isinstance(expr, CachedExpr):
+        return expr_sie_type(gen, expr.expr, scope)
+
     # a string or array literal is the fat array it builds; only an
     # explicit pointer context takes it as a bare pointer instead
     if isinstance(expr, StrLiteral):
@@ -559,6 +563,9 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     Infer the Sie type an unannotated 'let' adopts from its initializer;
     None when the expression doesn't pin one down.
     """
+    if isinstance(expr, CachedExpr):
+        return infer_type(gen, expr.expr, scope)
+
     # named values, calls, casts, members, and the rest carry declared types;
     # a copy of a non-aliasing const value is an independent, mutable value
     declared = expr_sie_type(gen, expr, scope)
@@ -786,6 +793,9 @@ def signedness(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     Infer the signedness of an expression; None when it has no fixed one.
     """
+    if isinstance(expr, CachedExpr):
+        return signedness(gen, expr.expr, scope)
+
     # named values take the signedness of their declared Sie type; an
     # enum-typed value takes its backing type's
     if isinstance(expr, (Var, Call, Member, Index, EnumMember)):
