@@ -790,3 +790,9 @@ class CondBlock:
     orelse: Program | None = None
     line: int = _line()
     file: str = _file()
+    # Source spans are (start line, start column, end line, end column),
+    # 1-based by line and 0-based/end-exclusive by column. Branch spans
+    # cover their contents; the whole span includes the directive and braces.
+    then_span: tuple[int, int, int, int] | None = None
+    orelse_span: tuple[int, int, int, int] | None = None
+    span: tuple[int, int, int, int] | None = None

@@ -8,7 +8,8 @@ and `SetItem`), strings with escapes, numbers, enum members, methods, and
 
 With the `sie-lsp` language server it also serves diagnostics as you
 type, the document outline, hover, and go-to-definition, compiled and
-typed by the real compiler front end.
+typed by the real compiler front end. Branches rejected by compile-time
+`@if` conditions are dimmed through semantic highlighting.
 
 ## Install
 

@@ -110,6 +110,9 @@ class CodeGenerator:
         self.module.triple = self.target
         self.str_count = 0
         self.string_pool: dict[str, ir.GlobalVariable] = {}
+        # Unchosen '@if' branch spans, by source file, for editor semantic
+        # highlighting. Code generation records the same choices it compiles.
+        self.inactive_regions: dict[str, list[tuple[int, int, int, int]]] = {}
 
         # Code generation's private working AST. Its passes rewrite types,
         # conditionals, and expansions without touching the caller's tree.

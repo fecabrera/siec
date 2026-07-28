@@ -45,7 +45,12 @@ def resolve_conditionals(gen: CodeGenerator, program: Program) -> None:
         with source_location(line=cond.line, file=cond.file):
             # the condition's names resolve in its own file's view
             gen.current_file = cond.file
-            branch = cond.then if evaluate(gen, cond.condition) else cond.orelse
+            chosen_then = bool(evaluate(gen, cond.condition))
+            branch = cond.then if chosen_then else cond.orelse
+
+        inactive = cond.orelse_span if chosen_then else cond.then_span
+        if inactive is not None and cond.file:
+            gen.inactive_regions.setdefault(cond.file, []).append(inactive)
 
         if branch is None:
             continue

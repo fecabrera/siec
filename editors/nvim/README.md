@@ -3,6 +3,10 @@
 Syntax highlighting, filetype settings, quickfix integration, and the
 `sie-lsp` language server for `.sie` files.
 
+The language server marks branches rejected by compile-time `@if`
+conditions as inactive semantic tokens, so they follow the editor's
+subdued comment highlighting.
+
 ## Install
 
 The directory is a plugin as it stands: point a plugin manager at it, or

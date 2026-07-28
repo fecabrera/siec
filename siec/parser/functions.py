@@ -203,7 +203,8 @@ def parse_cond(ts: TokenStream) -> CondBlock:
     Parse an '@if (cond) { ... }' block, with an optional '@else { ... }'
     or a chained '@else @if (...)'.
     """
-    line = ts.peek().line
+    start = ts.peek()
+    line = start.line
     ts.expect("sym", "@")
     ts.expect("kw", "if")
 
@@ -211,11 +212,16 @@ def parse_cond(ts: TokenStream) -> CondBlock:
     condition = parse_expression(ts)
     ts.expect("sym", ")")
 
-    ts.expect("sym", "{")
+    then_open = ts.expect("sym", "{")
     then = parse_declarations(ts)
-    ts.expect("sym", "}")
+    then_close = ts.expect("sym", "}")
+    then_span = (then_open.line, then_open.col + 1,
+                 then_close.line, then_close.col)
 
     orelse = None
+    orelse_span = None
+    end_line = then_close.line
+    end_col = then_close.col + len(then_close.value)
     if ts.peek().value == "@" and ts.peek(1).value == "else":
         ts.next()
         ts.next()
@@ -223,13 +229,22 @@ def parse_cond(ts: TokenStream) -> CondBlock:
         # '@else @if' chains: the else arm holds the next condition alone
         if ts.peek().value == "@" and ts.peek(1).value == "if":
             orelse = Program([], [])
-            orelse.conds.append(parse_cond(ts))
+            nested = parse_cond(ts)
+            orelse.conds.append(nested)
+            orelse_span = nested.span
+            end_line, end_col = nested.span[2:]
         else:
-            ts.expect("sym", "{")
+            else_open = ts.expect("sym", "{")
             orelse = parse_declarations(ts)
-            ts.expect("sym", "}")
+            else_close = ts.expect("sym", "}")
+            orelse_span = (else_open.line, else_open.col + 1,
+                           else_close.line, else_close.col)
+            end_line = else_close.line
+            end_col = else_close.col + len(else_close.value)
 
-    return CondBlock(condition, then, orelse, line=line)
+    span = (start.line, start.col, end_line, end_col)
+    return CondBlock(condition, then, orelse, line=line,
+                     then_span=then_span, orelse_span=orelse_span, span=span)
 
 
 def parse_alias(ts: TokenStream) -> TypeAlias:

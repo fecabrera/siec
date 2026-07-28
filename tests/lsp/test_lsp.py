@@ -377,6 +377,77 @@ fn main() -> i32 {
     assert found.targets == [(str(src.resolve()), 8)]
 
 
+def test_inactive_conditional_arms_are_comment_semantic_tokens(tmp_path):
+    """
+    The compiler's rejected @if arms become line-split 'comment' tokens,
+    while the selected arm and the directives themselves stay active.
+    """
+    from siec.lsp import inactive_semantic_tokens
+
+    analysis, src = unit(tmp_path, """\
+@if (false) {
+    @const OFF = 1;
+} @else {
+    @const ON = 1;
+}
+
+fn main() -> i32 { return ON; }
+""")
+
+    text = src.read_text()
+    encoded = inactive_semantic_tokens(analysis, text)
+    assert encoded == [1, 0, len("    @const OFF = 1;"), 0, 0]
+
+
+def test_inactive_conditional_tokens_follow_else_if_chains(tmp_path):
+    """
+    A selected nested @else @if dims the earlier body and the final else,
+    without dimming the selected middle body.
+    """
+    from siec.lsp import inactive_semantic_tokens
+
+    analysis, src = unit(tmp_path, """\
+@const PICK = 2;
+@if (PICK == 1) {
+    @const FIRST = 1;
+} @else @if (PICK == 2) {
+    @const CHOSEN = 2;
+} @else {
+    @const LAST = 3;
+}
+
+fn main() -> i32 { return CHOSEN - 2; }
+""")
+
+    encoded = inactive_semantic_tokens(analysis, src.read_text())
+
+    # Decode only the line numbers; one token is emitted per visible line
+    # of inactive source.
+    lines = []
+    line = 0
+    for offset in range(0, len(encoded), 5):
+        line += encoded[offset]
+        lines.append(line)
+
+    assert lines == [2, 6]
+
+
+def test_server_advertises_comment_semantic_tokens():
+    """
+    Every LSP client sees a full-document semantic-token provider whose
+    only token type is the standard, theme-portable 'comment'.
+    """
+    from lsprotocol import types
+
+    from siec.lsp import create_server
+
+    server = create_server()
+    options = server.protocol.fm.feature_options[
+        types.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL]
+    assert options == types.SemanticTokensLegend(
+        token_types=["comment"], token_modifiers=[])
+
+
 def test_inspect_shows_a_functions_overloads(tmp_path):
     """
     Hovering a function name lists every overload's signature and

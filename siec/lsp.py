@@ -75,6 +75,54 @@ class Symbol:
     line: int
 
 
+def inactive_semantic_tokens(analysis: Analysis, text: str) -> list[int]:
+    """
+    Encode unchosen '@if' branch contents as LSP semantic tokens.
+
+    They use the standard 'comment' token type (legend index zero), which
+    editors and themes already render as subdued text. LSP positions count
+    UTF-16 code units, while the parser's columns count Python characters.
+    """
+    if analysis.gen is None:
+        return []
+
+    # Never paint stale spans over a buffer newer than its analysis.
+    analyzed = (analysis.overlays or {}).get(analysis.path)
+    if analyzed is not None and analyzed != text:
+        return []
+
+    lines = text.splitlines()
+    tokens = []
+    for start_line, start_col, end_line, end_col in (
+            analysis.gen.inactive_regions.get(analysis.path, ())):
+        for line_number in range(start_line, end_line + 1):
+            if not 1 <= line_number <= len(lines):
+                continue
+
+            line = lines[line_number - 1]
+            begin = start_col if line_number == start_line else 0
+            end = end_col if line_number == end_line else len(line)
+            begin = min(begin, len(line))
+            end = min(max(end, begin), len(line))
+            if begin == end:
+                continue
+
+            utf16_begin = len(line[:begin].encode("utf-16-le")) // 2
+            utf16_length = len(line[begin:end].encode("utf-16-le")) // 2
+            tokens.append((line_number - 1, utf16_begin, utf16_length))
+
+    # Semantic tokens delta-encode their line and start column.
+    encoded = []
+    previous_line = previous_start = 0
+    for line, start, length in sorted(tokens):
+        delta_line = line - previous_line
+        delta_start = start - previous_start if delta_line == 0 else start
+        encoded.extend((delta_line, delta_start, length, 0, 0))
+        previous_line, previous_start = line, start
+
+    return encoded
+
+
 class _ValidationDebouncer:
     """Own and retire delayed validation tasks, one per document URI."""
 
@@ -865,6 +913,14 @@ def create_server():
         server.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics))
 
+        # A debounced analysis may finish after the client's automatic
+        # request for this edit. Ask capable clients to repaint the branch
+        # choices now that they match the compiler's latest state.
+        workspace_caps = getattr(server.client_capabilities, "workspace", None)
+        semantic_caps = getattr(workspace_caps, "semantic_tokens", None)
+        if getattr(semantic_caps, "refresh_support", False):
+            server.workspace_semantic_tokens_refresh(None)
+
     debounce = _ValidationDebouncer(validate)
 
     @server.feature(types.INITIALIZE)
@@ -907,6 +963,20 @@ def create_server():
         content = types.MarkupContent(kind=types.MarkupKind.Markdown,
                                       value=f"```sie\n{finding.text}\n```")
         return types.Hover(contents=content)
+
+    @server.feature(
+        types.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL,
+        types.SemanticTokensLegend(token_types=["comment"],
+                                   token_modifiers=[]))
+    def semantic_tokens(
+            params: types.SemanticTokensParams) -> types.SemanticTokens:
+        analysis = analyses.get(params.text_document.uri)
+        if analysis is None:
+            return types.SemanticTokens(data=[])
+
+        doc = server.workspace.get_text_document(params.text_document.uri)
+        return types.SemanticTokens(
+            data=inactive_semantic_tokens(analysis, doc.source))
 
     @server.feature(types.TEXT_DOCUMENT_DEFINITION)
     def definition(params: types.DefinitionParams) -> list:
