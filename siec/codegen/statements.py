@@ -7,7 +7,6 @@ from siec.ast import (
     BinaryOp,
     Block,
     Break,
-    CachedExpr,
     Call,
     Case,
     CompoundAssign,
@@ -38,7 +37,7 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.enums import evaluate_size
 from siec.codegen.errors import source_location
-from siec.codegen.macros import emit_macro_assignment, macro_place
+from siec.codegen.macros import emit_macro_assignment, macro_place, macro_view
 from siec.codegen.expressions import (
     emit_bool,
     emit_expression,
@@ -46,9 +45,7 @@ from siec.codegen.expressions import (
 )
 from siec.codegen.inference import (
     expr_sie_type,
-    fold_qualified,
     infer_type,
-    member_field,
     untyped_reason,
 )
 from siec.codegen.generator import (
@@ -57,8 +54,8 @@ from siec.codegen.generator import (
     entry_alloca,
     make_volatile,
 )
+from siec.codegen.lvalues import ItemLValue, resolve_lvalue
 from siec.codegen.types import (
-    is_const,
     is_reference,
     resolve_type,
     sized_array,
@@ -113,53 +110,12 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
         gen.flushing_defers -= 1
 
 
-def volatile_chain(gen: CodeGenerator, expr, scope: dict) -> bool:
-    """
-    Whether an lvalue chain passes through a '@volatile' struct: any link
-    whose type names one, directly or behind pointers and arrays.
-    """
-    node = expr
-    while True:
-        name = strip_const(expr_sie_type(gen, node, scope)) or ""
-        while name.endswith("*") or name.endswith("[]"):
-            name = name.removesuffix("[]").rstrip("*")
-
-        info = gen.structs.get(name)
-        if info is not None and info.volatile:
-            return True
-
-        if isinstance(node, (Member, Index)):
-            node = node.base
-        elif isinstance(node, UnaryOp) and node.op == "*":
-            node = node.operand
-        else:
-            return False
-
-
 def volatile_store(gen: CodeGenerator, store) -> None:
     """
     Mark a store volatile when it writes a '@volatile' struct value.
     """
     if gen.volatile_struct(store.operands[0].type):
         make_volatile(store)
-
-
-def reject_const_base(gen: CodeGenerator, scope: dict, base) -> None:
-    """
-    Reject assignment through anything 'const': every link of the target's
-    base chain must be mutable, since the contract follows the value.
-    """
-    while True:
-        base_type = expr_sie_type(gen, base, scope)
-        if is_const(base_type):
-            raise TypeError(f"cannot mutate a {base_type!r} value")
-
-        if isinstance(base, (Member, Index)):
-            base = base.base
-        elif isinstance(base, UnaryOp) and base.op == "*":
-            base = base.operand
-        else:
-            return
 
 
 def emit_statement(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: dict) -> None:
@@ -233,124 +189,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         emit_let_tuple(gen, builder, stmt, scope)
     elif isinstance(stmt, CompoundAssign):
         emit_compound_assign(gen, builder, stmt, scope)
-    elif isinstance(stmt, Assign):
-        # an object-like macro's name assigns through its expansion,
-        # 'errno = EINVAL;'-style; a scope variable shadows it
-        if not stmt.qualified and (place := macro_place(gen, Var(stmt.name), scope)):
-            name, expansion = place
-            emit_macro_assignment(gen, builder, name, expansion, stmt.value,
-                                  stmt.line, scope)
-            return
-
-        # store the value into the variable's existing stack slot, typed by
-        # the slot; a global's slot is its module-level storage, if this
-        # file sees it
-        if stmt.name in scope:
-            var = scope[stmt.name]
-            slot, var_type = var.slot, var.type
-        elif not stmt.qualified and not gen.sees(stmt.name):
-            raise NameError(f"undefined variable {stmt.name!r}")
-        elif (symbol := gen.resolve_symbol(stmt.name)) in gen.globals:
-            slot, var_type = gen.module.globals[symbol], gen.globals[symbol]
-        elif stmt.name in gen.constants:
-            raise TypeError(f"cannot reassign constant {stmt.name!r}")
-        else:
-            raise NameError(f"undefined variable {stmt.name!r}")
-
-        if is_const(var_type):
-            raise TypeError(f"cannot assign to const variable {stmt.name!r}")
-
-        # assigning to a '&T' reference writes the T it aliases
-        store = builder.store(emit_coerced(
-            gen, builder, stmt.value, strip_reference(var_type), scope), slot)
-        if stmt.name in scope and scope[stmt.name].volatile:
-            make_volatile(store)
-        else:
-            volatile_store(gen, store)
-    elif isinstance(stmt, MemberAssign):
-        # store the value into the field's slot, typed by the field; a
-        # write into a '@volatile' struct is a volatile one
-        member = Member(stmt.base, stmt.field)
-
-        # a qualified 'a.b.G = v' assigns the module's global, not a field
-        if (folded := fold_qualified(gen, member, scope)) is not None:
-            emit_statement_body(gen, builder,
-                                Assign(folded.name, stmt.value, qualified=True,
-                                       line=stmt.line), scope)
-            return
-
-        # a macro base expands first: 'origin.x = v' writes the member of
-        # the place the expansion names
-        if (place := macro_place(gen, stmt.base, scope)) is not None:
-            name, expansion = place
-            emit_macro_assignment(gen, builder, name,
-                                  Member(expansion, stmt.field), stmt.value,
-                                  stmt.line, scope)
-            return
-
-        field_type = member_field(gen, member, scope)[1]
-        if is_const(field_type):
-            raise TypeError(f"cannot assign to const field {stmt.field!r}")
-
-        reject_const_base(gen, scope, stmt.base)
-        slot = emit_lvalue(gen, builder, member, scope)
-        store = builder.store(emit_coerced(gen, builder, stmt.value, field_type, scope), slot)
-        if volatile_chain(gen, member, scope):
-            make_volatile(store)
-    elif isinstance(stmt, RefAssign):
-        # a function-like macro's call expands first: 'at(a, i) = v'
-        # writes the place the expansion names
-        if (place := macro_place(gen, stmt.target, scope)) is not None:
-            name, expansion = place
-            emit_macro_assignment(gen, builder, name, expansion, stmt.value,
-                                  stmt.line, scope)
-            return
-
-        # store through the reference the call returns, typed by the
-        # referenced value
-        target_type = expr_sie_type(gen, stmt.target, scope)
-        if is_const(target_type):
-            raise TypeError(f"cannot assign through a {target_type!r} reference")
-
-        slot = emit_lvalue(gen, builder, stmt.target, scope)
-        volatile_store(gen, builder.store(
-            emit_coerced(gen, builder, stmt.value, target_type, scope), slot))
-    elif isinstance(stmt, IndexAssign):
-        # a macro base expands first: 'row[i] = v' writes the element of
-        # the place the expansion names
-        if (place := macro_place(gen, stmt.base, scope)) is not None:
-            name, expansion = place
-            emit_macro_assignment(gen, builder, name,
-                                  Index(expansion, stmt.index), stmt.value,
-                                  stmt.line, scope)
-            return
-
-        # a struct's indexed assignment is its 'set_item' operator method;
-        # native arrays, pointers, raw arrays, and tuples keep storing
-        # directly into their element slots below
-        from siec.codegen.inference import item_call
-
-        target = Index(stmt.base, stmt.index)
-        if (rewritten := item_call(
-                gen, target, scope, "set_item", stmt.value)) is not None:
-            reject_const_base(gen, scope, stmt.base)
-            emit_expression(gen, builder, rewritten, None, scope)
-            return
-
-        # store the value into the element's slot, typed by the element; a
-        # write into a '@volatile' struct is a volatile one
-        reject_const_base(gen, scope, stmt.base)
-        slot = emit_lvalue(gen, builder, target, scope)
-
-        element_type = expr_sie_type(gen, target, scope)
-        if element_type is not None:
-            value = emit_coerced(gen, builder, stmt.value, element_type, scope)
-        else:
-            value = emit_expression(gen, builder, stmt.value, slot.type.pointee, scope)
-
-        store = builder.store(value, slot)
-        if volatile_chain(gen, target, scope):
-            make_volatile(store)
+    elif isinstance(stmt, (Assign, MemberAssign, RefAssign, IndexAssign)):
+        emit_assignment(gen, builder, stmt, scope)
     elif isinstance(stmt, Block):
         # a block runs in a child scope: writes to outer variables persist
         # through their shared slots, while inner declarations end with it
@@ -496,6 +336,40 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         raise TypeError(f"cannot generate code for statement {stmt!r}")
 
 
+def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
+                    stmt, scope: dict) -> None:
+    """
+    Emit every plain assignment through the shared lvalue abstraction.
+
+    Statement-specific AST shapes are converted back to their expression
+    target once; type checks, address resolution, coercion, and volatility
+    then follow one path.
+    """
+    if isinstance(stmt, Assign):
+        target = Var(stmt.name, qualified=stmt.qualified)
+    elif isinstance(stmt, MemberAssign):
+        target = Member(stmt.base, stmt.field)
+    elif isinstance(stmt, RefAssign):
+        target = stmt.target
+    elif isinstance(stmt, IndexAssign):
+        target = Index(stmt.base, stmt.index)
+    else:
+        raise TypeError(f"not an assignment statement: {stmt!r}")
+
+    # A complete macro place expands before resolution. Members and indices
+    # rooted in a macro remain normal lvalue chains; emit_lvalue expands their
+    # base at the point its address is needed.
+    place = (None if isinstance(target, Var) and target.qualified
+             else macro_place(gen, target, scope))
+    if place is not None:
+        name, expansion = place
+        emit_macro_assignment(
+            gen, builder, name, expansion, stmt.value, stmt.line, scope)
+        return
+
+    resolve_lvalue(gen, builder, target, scope).store(stmt.value)
+
+
 def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
                          stmt, scope: dict) -> None:
     """
@@ -507,48 +381,31 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
     'dec = dec + 1', the way every numeric target works.
     """
     from siec.codegen.methods import resolve_method
-    method = COMPOUND_METHODS.get(stmt.op)
-    declared_type = expr_sie_type(gen, stmt.target, scope)
-    target_type = strip_const(declared_type or "")
 
-    # A compound write has the same mutability requirements as a plain one,
-    # including before an in-place operator method is considered.
-    if isinstance(stmt.target, Member):
-        field_type = member_field(gen, stmt.target, scope)[1]
-        if is_const(field_type):
-            raise TypeError(f"cannot assign to const field "
-                            f"{stmt.target.field!r}")
-        reject_const_base(gen, scope, stmt.target.base)
-    elif isinstance(stmt.target, Index):
-        reject_const_base(gen, scope, stmt.target.base)
-    elif isinstance(stmt.target, UnaryOp) and stmt.target.op == "*":
-        reject_const_base(gen, scope, stmt.target.operand)
-    elif is_const(declared_type):
-        if isinstance(stmt.target, Var):
-            raise TypeError(f"cannot assign to const variable "
-                            f"{stmt.target.name!r}")
-        raise TypeError(f"cannot assign through a {declared_type!r} reference")
+    if (macro := macro_place(gen, stmt.target, scope)) is not None:
+        name, expansion = macro
+        with macro_view(gen, name):
+            emit_compound_assign(
+                gen,
+                builder,
+                CompoundAssign(expansion, stmt.op, stmt.value, line=stmt.line),
+                scope,
+            )
+        return
+
+    place = resolve_lvalue(
+        gen, builder, stmt.target, scope, item_mode="update")
+    method = COMPOUND_METHODS.get(stmt.op)
+    target_type = strip_const(place.type or "")
 
     # a struct's indexed getter returns a value, not its storage: update
     # that value through the binary operator, then hand it back to the
     # indexed setter. Do this before considering V's own in-place method,
     # which would otherwise try to mutate the temporary get_item returned.
-    if isinstance(stmt.target, Index):
-        from siec.codegen.inference import item_call
-
-        getter = item_call(gen, stmt.target, scope, "get_item")
-        setter = item_call(gen, stmt.target, scope, "set_item", stmt.value)
-        if getter is not None and setter is not None:
-            stable_scope = dict(scope)
-            base = stable_lvalue(gen, builder, stmt.target.base,
-                                 stable_scope, "item.base")
-            key = CachedExpr(stmt.target.index)
-            target = Index(base, key)
-            getter = item_call(gen, target, stable_scope, "get_item")
-            updated = BinaryOp(stmt.op, getter, stmt.value)
-            setter = item_call(gen, target, stable_scope, "set_item", updated)
-            emit_expression(gen, builder, setter, None, stable_scope)
-            return
+    if isinstance(place, ItemLValue):
+        place.stabilize()
+        place.store(BinaryOp(stmt.op, place.cached_load(), stmt.value))
+        return
 
     # only a struct or an array carries methods; anything else takes the
     # operator's own instructions
@@ -556,42 +413,18 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
                                or target_type.endswith("[]")):
         if resolve_method(gen, target_type, method) is not None:
             emit_statement_body(gen, builder,
-                                ExprStmt(MethodCall(stmt.target, method,
+                                ExprStmt(MethodCall(place.target, method,
                                                     [stmt.value]),
                                          line=stmt.line), scope)
             return
 
-    # The fallback reads and writes through one stabilized slot. Complex
-    # targets therefore evaluate once instead of being duplicated as
-    # 'target = target <op> value'.
-    stable_scope = dict(scope)
-    target = stable_lvalue(gen, builder, stmt.target, stable_scope,
-                           "compound.target")
-    emit_statement_body(
-        gen, builder,
-        Assign(target.name, BinaryOp(stmt.op, target, stmt.value),
-               line=stmt.line),
-        stable_scope)
-
-
-def stable_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr,
-                  scope: dict, label: str) -> Var:
-    """
-    Bind a hidden name to an lvalue's already-evaluated address.
-
-    The name cannot collide with source identifiers because it contains
-    dots. Volatility follows the original access chain through the alias.
-    """
-    type_name = expr_sie_type(gen, expr, scope)
-    if type_name is None:
+    if place.type is None:
         raise TypeError("cannot determine the type of compound assignment "
                         "target")
 
-    slot = emit_lvalue(gen, builder, expr, scope)
-    name = f".{label}.{gen.temporary_count}"
-    gen.temporary_count += 1
-    scope[name] = Variable(slot, type_name, volatile_chain(gen, expr, scope))
-    return Var(name)
+    # The address is emitted by cached_load() and retained for store(), so a
+    # complex target is evaluated exactly once without a synthetic scope name.
+    place.store(BinaryOp(stmt.op, place.cached_load(), stmt.value))
 
 
 def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,

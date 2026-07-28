@@ -131,6 +131,41 @@ def test_compound_item_assignment_evaluates_its_key_once(run):
     assert run(source).returncode == 42
 
 
+def test_compound_item_assignment_evaluates_its_receiver_once(run):
+    """
+    GetItem and SetItem also share one evaluated receiver during an update.
+    """
+    source = """
+    @static let calls: i32 = 0;
+
+    struct Table: GetItem<u64, i32>, SetItem<u64, i32> {
+        value: i32;
+    }
+
+    fn Table::get_item(const &self, key: u64) -> i32 {
+        return self.value;
+    }
+
+    fn Table::set_item(&self, key: u64, value: i32) {
+        self.value = value;
+    }
+
+    fn locate(table: &Table) -> &Table {
+        calls += 1;
+        return table;
+    }
+
+    fn main() -> i32 {
+        let table: Table = { 40 };
+        locate(table)[0] += 2;
+
+        if (calls != 1) { return 1; }
+        return table.value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_item_interface_claims_check_the_operator_methods(compile_source):
     """
     GetItem and SetItem claims require their corresponding method shapes.

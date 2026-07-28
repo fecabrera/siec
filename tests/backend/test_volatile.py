@@ -29,6 +29,21 @@ def test_volatile_marks_every_access(compile_source):
     assert module.count("load volatile") >= 2
 
 
+def test_compound_assignment_preserves_volatile_accesses(compile_source):
+    """
+    A shared lvalue retains volatility for both halves of a read-modify-write.
+    """
+    module = str(compile_source(REG + """
+    fn main() -> i32 {
+        let r: Reg = { 1, 40 };
+        r.data += 2;
+        return r.data as i32;
+    }
+    """))
+    assert "load volatile i32" in module
+    assert "store volatile i32" in module
+
+
 def test_plain_structs_stay_non_volatile(compile_source):
     """
     Only decorated structs pay the volatile cost.
