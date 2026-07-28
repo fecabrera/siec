@@ -11,8 +11,13 @@ import re
 
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.generics import split_generic, substitute
-from siec.codegen.types import SCALAR_TYPES, strip_const, strip_reference
+from siec.codegen.generics import split_generic, substitute, unify
+from siec.codegen.types import (
+    SCALAR_TYPES,
+    is_const,
+    strip_const,
+    strip_reference,
+)
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -134,9 +139,12 @@ def register_action(gen: CodeGenerator, fn) -> None:
         # a name may overload, each signature its own requirement;
         # respelling one is the error it always was
         key = (fn.receiver, fn.name.partition("::")[2])
-        signature = [p.type for p in fn.params[1:]]
+        start = 1 if takes_self(fn) else 0
+        signature = (takes_self(fn), *(p.type for p in fn.params[start:]))
         overloads = gen.interface_actions.setdefault(key, [])
-        if any([p.type for p in other.params[1:]] == signature
+        if any((takes_self(other),
+                *(p.type for p in other.params[
+                    1 if takes_self(other) else 0:])) == signature
                for other in overloads):
             raise TypeError(f"action {fn.name!r} is declared more than once")
 
@@ -265,8 +273,11 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
     def bare(param: str) -> str:
         return strip_const(strip_reference(strip_const(param)))
 
+    required_instance = takes_self(action)
+    required_const = required_instance and is_const(action.params[0].type)
+    required_start = 1 if required_instance else 0
     required = [expand_lax(gen, substitute(p.type, mapping))
-                for p in action.params[1:]]
+                for p in action.params[required_start:]]
     required_ret = action.return_type and expand_lax(
         gen, substitute(action.return_type, mapping))
 
@@ -279,13 +290,43 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
                         f"{spelling!r}: it is missing the method '{wanted}'")
 
     shape_matched = False
+    receiver_kind_mismatch = False
+    receiver_const_mismatch = False
+    receiver_kind_matched = False
+    receiver_matched = False
+
+    def receiver_matches(params: list[str]) -> bool:
+        """
+        Whether a candidate has the receiver kind and const capability
+        promised by the action.
+        """
+        nonlocal receiver_kind_mismatch, receiver_const_mismatch
+        nonlocal receiver_kind_matched, receiver_matched
+
+        first = params[0] if params else None
+        instance = first is not None and strip_const(first) == f"&{name}"
+        if instance != required_instance:
+            receiver_kind_mismatch = True
+            return False
+
+        receiver_kind_matched = True
+        if required_const and not is_const(first):
+            receiver_const_mismatch = True
+            return False
+
+        receiver_matched = True
+        return True
+
     for candidate in [s for _, s in gen.overloads.get(symbol, ())] or [symbol]:
-        # a still-generic method matches by existence
         have_params = gen.param_types.get(candidate)
         if have_params is None:
-            return
+            continue
 
-        if [bare(p) for p in have_params[1:]] != [bare(p) for p in required]:
+        if not receiver_matches(have_params):
+            continue
+
+        have_values = have_params[1 if required_instance else 0:]
+        if [bare(p) for p in have_values] != [bare(p) for p in required]:
             continue
 
         shape_matched = True
@@ -293,26 +334,59 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
                                 required_ret):
             return
 
-    # an interface-taking overload lives on as a template, its parameters
-    # respelled as constrained placeholders; the constraints substitute
-    # back to compare its true shape
+    # A generic overload is checked as the instance the action would call.
+    # Interface-adapted placeholders respell to their constraints; ordinary
+    # type parameters unify with the required parameter and return types.
     for template in [t for t in (gen.generic_functions.get(symbol),
                                  *gen.generic_overloads.get(symbol, ()))
                      if t is not None]:
-        constraints = template.constraints or {}
-        if any(p not in constraints for p in template.type_params or ()):
-            return  # a still-generic method matches by existence
+        bindings = dict(template.constraints or {})
+        type_params = [p for p in template.type_params or ()
+                       if p not in bindings]
+        initial = [expand_lax(gen, substitute(p.type, bindings))
+                   for p in template.params]
+        if not receiver_matches(initial):
+            continue
 
-        have = [expand_lax(gen, substitute(p.type, constraints))
-                for p in template.params[1:]]
+        start = 1 if required_instance else 0
+        patterns = [substitute(p.type, bindings)
+                    for p in template.params[start:]]
+        if len(patterns) != len(required):
+            continue
+
+        try:
+            for pattern, concrete in zip(patterns, required):
+                unify(pattern, concrete, type_params, bindings)
+            pattern_ret = (substitute(template.return_type, bindings)
+                           if template.return_type is not None else None)
+            unify(pattern_ret, required_ret, type_params, bindings)
+        except TypeError:
+            continue
+
+        if any(param not in bindings for param in type_params):
+            continue
+
+        have = [expand_lax(gen, substitute(pattern, bindings))
+                for pattern in patterns]
         if [bare(p) for p in have] != [bare(p) for p in required]:
             continue
 
         shape_matched = True
-        ret = template.return_type and expand_lax(
-            gen, substitute(template.return_type, constraints))
+        ret = pattern_ret and expand_lax(gen, pattern_ret)
         if implements_or_equals(gen, ret, required_ret):
             return
+
+    if receiver_const_mismatch and not receiver_matched:
+        raise TypeError(
+            f"{noun(gen, template_base)} {template_base!r} does not implement "
+            f"{spelling!r}: method {method!r} must take a "
+            "'const &self' receiver")
+
+    if receiver_kind_mismatch and not receiver_kind_matched:
+        kind = "an instance" if required_instance else "a static"
+        raise TypeError(
+            f"{noun(gen, template_base)} {template_base!r} does not implement "
+            f"{spelling!r}: method {method!r} must be {kind} method")
 
     if shape_matched:
         raise TypeError(f"{noun(gen, template_base)} {template_base!r} does not implement "

@@ -326,6 +326,129 @@ def test_conformance_is_checked(compile_source):
         """)
 
 
+def test_interface_actions_require_the_same_receiver_kind(compile_source):
+    """
+    An instance action needs an instance method, and a static action needs
+    a static method; parameter zero is a receiver only in the former.
+    """
+    with pytest.raises(TypeError, match="method 'value' must be an "
+                                        "instance method"):
+        compile_source("""
+        interface Value {
+            fn value(const &self) -> i32;
+        }
+
+        struct P: Value {}
+        fn P::value() -> i32 { return 1; }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="method 'make' must be a static "
+                                        "method"):
+        compile_source("""
+        interface Factory {
+            fn make(value: i32) -> i32;
+        }
+
+        struct P: Factory {}
+        fn P::make(&self, value: i32) -> i32 { return value; }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+    compile_source("""
+    interface Factory {
+        fn make(value: i32) -> i32;
+    }
+
+    struct P: Factory {}
+    fn P::make(value: i32) -> i32 { return value; }
+
+    fn main() -> i32 { return 0; }
+    """)
+
+
+def test_const_interface_receiver_requires_a_const_capable_method(
+        compile_source):
+    """
+    A mutable receiver cannot answer an action callable through a const
+    interface value; a const method can still answer a mutable action.
+    """
+    with pytest.raises(TypeError, match="method 'value' must take a "
+                                        "'const &self' receiver"):
+        compile_source("""
+        interface Value {
+            fn value(const &self) -> i32;
+        }
+
+        struct P: Value { value: i32; }
+        fn P::value(&self) -> i32 { return self.value; }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+    compile_source("""
+    interface Value {
+        fn value(&self) -> i32;
+    }
+
+    struct P: Value { value: i32; }
+    fn P::value(const &self) -> i32 { return self.value; }
+
+    fn main() -> i32 { return 0; }
+    """)
+
+
+def test_generic_method_conformance_checks_the_substituted_signature(
+        compile_source):
+    """
+    A generic method satisfies the concrete action only when inference
+    produces the required parameters and return type.
+    """
+    with pytest.raises(TypeError, match="method 'convert' must return 'i32'"):
+        compile_source("""
+        interface Converter {
+            fn convert(&self, value: i32) -> i32;
+        }
+
+        struct P: Converter {}
+        fn P::convert<T>(&self, value: T) -> u8 { return 1; }
+
+        fn main() -> i32 { return 0; }
+        """)
+
+    compile_source("""
+    interface Converter {
+        fn convert(&self, value: i32) -> i32;
+    }
+
+    struct P: Converter {}
+    fn P::convert<T>(&self, value: T) -> T { return value; }
+
+    fn main() -> i32 { return 0; }
+    """)
+
+
+def test_constrained_void_method_satisfies_an_interface_action(compile_source):
+    """
+    An interface-valued parameter adapts its method into a constrained
+    generic template; a void return remains a valid matching return.
+    """
+    compile_source("""
+    interface Named;
+
+    interface Sink<T> {
+        fn put(&self, value: const T);
+    }
+
+    struct P: Sink<Named> {}
+    fn P::put(&self, value: const Named) {}
+
+    fn main() -> i32 { return 0; }
+    """)
+
+
 def test_interface_misuse_is_rejected(compile_source):
     """
     Only a parameter can take an interface: a non-implementing argument,

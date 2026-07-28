@@ -433,7 +433,7 @@ struct mpd_spec {
 @extern fn mpd_shift(result: mpd*, a: const mpd*, b: const mpd*, ctx: mpd_context*);
 @extern fn mpd_xor(result: mpd*, a: const mpd*, b: const mpd*, ctx: mpd_context*);
 @extern fn mpd_abs(result: mpd*, a: const mpd*, ctx: mpd_context*);
-@extern fn mpd_cmp(a: mpd*, b: const mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_cmp(a: const mpd*, b: const mpd*, ctx: const mpd_context*) -> i32;
 @extern fn mpd_compare(result: mpd*, a: const mpd*, b: mpd*, ctx: mpd_context*) -> i32;
 @extern fn mpd_compare_signal(result: mpd*, a: const mpd*, b: const mpd*, ctx: mpd_context*) -> i32;
 @extern fn mpd_add(result: mpd*, a: const mpd*, b: const mpd*, ctx: mpd_context*);

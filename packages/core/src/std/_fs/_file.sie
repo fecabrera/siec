@@ -25,7 +25,7 @@ enum OpenError {
 
 @extend OpenError: Formattable;
 
-fn OpenError::format(&self, modifiers: const &char[]) -> String {
+fn OpenError::format(const &self, modifiers: const &char[]) -> String {
     case (self) {
     when OpenError::SystemError:
         return String("System error");

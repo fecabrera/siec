@@ -443,69 +443,69 @@ fn Iterable<T>::const_iterator(const &self) -> ConstIterator<T>;
 // shorthand, and claiming 'Add<S, T>' declares that shorthand's contract
 interface Add<S, T>;
 
-fn Add<S, T>::add(&self, value: T) -> S;
+fn Add<S, T>::add(&self, value: const T) -> S;
 
 interface Sub<S, T>;
 
-fn Sub<S, T>::sub(&self, value: T) -> S;
+fn Sub<S, T>::sub(&self, value: const T) -> S;
 
 interface Mul<S, T>;
 
-fn Mul<S, T>::mul(&self, value: T) -> S;
+fn Mul<S, T>::mul(&self, value: const T) -> S;
 
 interface Div<S, T>;
 
-fn Div<S, T>::div(&self, value: T) -> S;
+fn Div<S, T>::div(&self, value: const T) -> S;
 
 interface Rem<S, T>;
 
-fn Rem<S, T>::rem(&self, value: T) -> S;
+fn Rem<S, T>::rem(&self, value: const T) -> S;
 
 // the compound assignment interfaces: 'a += b' on a struct operand is
 // the 'a.add_assign(b)' shorthand, which updates 'a' in place instead of
 // assigning an operator's result back over it
 interface AddAssign<T>;
 
-fn AddAssign<T>::add_assign(&self, value: T);
+fn AddAssign<T>::add_assign(&self, value: const T);
 
 interface SubAssign<T>;
 
-fn SubAssign<T>::sub_assign(&self, value: T);
+fn SubAssign<T>::sub_assign(&self, value: const T);
 
 interface MulAssign<T>;
 
-fn MulAssign<T>::mul_assign(&self, value: T);
+fn MulAssign<T>::mul_assign(&self, value: const T);
 
 interface DivAssign<T>;
 
-fn DivAssign<T>::div_assign(&self, value: T);
+fn DivAssign<T>::div_assign(&self, value: const T);
 
 interface RemAssign<T>;
 
-fn RemAssign<T>::rem_assign(&self, value: T);
+fn RemAssign<T>::rem_assign(&self, value: const T);
 
 // equality: 'a == b' on a struct operand is the 'a.eq(b)' shorthand,
 // and 'a != b' its negation; claiming 'Eq<T>' declares the contract
 interface Eq<T>;
 
-fn Eq<T>::eq(&self, value: T) -> bool;
+fn Eq<T>::eq(const &self, value: const T) -> bool;
 
 // ordering: one 'cmp' serves '<', '>', '<=', and '>=', each comparing
 // its sign: 'a < b' is 'a.cmp(b) < 0'; claiming 'Ord<T>' declares it
 interface Ord<T>;
 
-fn Ord<T>::cmp(&self, value: T) -> i32;
+fn Ord<T>::cmp(const &self, value: const T) -> i32;
 
 // indexed access: 'a[key]' is 'a.get_item(key)' on a struct, and
 // 'a[key] = value' is 'a.set_item(key, value)'; native arrays, pointers,
 // and tuples keep their built-in indexing
 interface GetItem<K, V>;
 
-fn GetItem<K, V>::get_item(const &self, key: K) -> V;
+fn GetItem<K, V>::get_item(const &self, key: const K) -> V;
 
 interface SetItem<K, V>;
 
-fn SetItem<K, V>::set_item(&self, key: K, value: V);
+fn SetItem<K, V>::set_item(&self, key: const K, value: V);
 
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];

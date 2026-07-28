@@ -117,7 +117,7 @@ fn Decimal::to_string(const &self) -> String {
  *
  * @param value The value to set the Decimal to.
  */
-fn Decimal::assign(&self, value: i64) {
+fn Decimal::assign(&self, value: const i64) {
     mpdecimal.mpd_set_i64(self.mpd, value, self.ctx);
 }
 
@@ -126,7 +126,7 @@ fn Decimal::assign(&self, value: i64) {
  *
  * @param value The value to set the Decimal to.
  */
-fn Decimal::assign(&self, value: u64) {
+fn Decimal::assign(&self, value: const u64) {
     mpdecimal.mpd_set_u64(self.mpd, value, self.ctx);
 }
 
@@ -166,7 +166,7 @@ fn Decimal::add(&self, dec: const &Decimal) -> Decimal {
  * @param num The value to add to the current Decimal.
  * @return The result of the addition.
  */
-fn Decimal::add(&self, num: i64) -> Decimal {
+fn Decimal::add(&self, num: const i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_add_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -202,7 +202,7 @@ fn Decimal::sub(&self, dec: const &Decimal) -> Decimal {
  * @param num The value to subtract from the current Decimal.
  * @return The result of the subtraction.
  */
-fn Decimal::sub(&self, num: i64) -> Decimal {
+fn Decimal::sub(&self, num: const i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sub_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -214,7 +214,7 @@ fn Decimal::sub(&self, num: i64) -> Decimal {
  * @param num The value to subtract from the current Decimal.
  * @return The result of the subtraction.
  */
-fn Decimal::sub(&self, num: u64) -> Decimal {
+fn Decimal::sub(&self, num: const u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_sub_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -238,7 +238,7 @@ fn Decimal::mul(&self, dec: const &Decimal) -> Decimal {
  * @param num The value to multiply the current Decimal by.
  * @return The result of the multiplication.
  */
-fn Decimal::mul(&self, num: i64) -> Decimal {
+fn Decimal::mul(&self, num: const i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_mul_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -250,7 +250,7 @@ fn Decimal::mul(&self, num: i64) -> Decimal {
  * @param num The value to multiply the current Decimal by.
  * @return The result of the multiplication.
  */
-fn Decimal::mul(&self, num: u64) -> Decimal {
+fn Decimal::mul(&self, num: const u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_mul_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -274,7 +274,7 @@ fn Decimal::div(&self, dec: const &Decimal) -> Decimal {
  * @param num The value to divide the current Decimal by.
  * @return The result of the division.
  */
-fn Decimal::div(&self, num: i64) -> Decimal {
+fn Decimal::div(&self, num: const i64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_div_i64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -286,7 +286,7 @@ fn Decimal::div(&self, num: i64) -> Decimal {
  * @param num The value to divide the current Decimal by.
  * @return The result of the division.
  */
-fn Decimal::div(&self, num: u64) -> Decimal {
+fn Decimal::div(&self, num: const u64) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_div_u64(result.mpd, self.mpd, num, self.ctx);
     return result;
@@ -308,7 +308,7 @@ fn Decimal::add_assign(&self, dec: const &Decimal) {
  * @param num The value to add to the current Decimal.
  * @return The result of the addition.
  */
-fn Decimal::add_assign(&self, num: i64) {
+fn Decimal::add_assign(&self, num: const i64) {
     mpdecimal.mpd_add_i64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -317,7 +317,7 @@ fn Decimal::add_assign(&self, num: i64) {
  *
  * @param num The value to add to the current Decimal.
  */
-fn Decimal::add_assign(&self, num: u64) {
+fn Decimal::add_assign(&self, num: const u64) {
     mpdecimal.mpd_add_u64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -337,7 +337,7 @@ fn Decimal::sub_assign(&self, dec: const &Decimal) {
  * @param num The value to add to the current Decimal.
  * @return The result of the addition.
  */
-fn Decimal::sub_assign(&self, num: i64) {
+fn Decimal::sub_assign(&self, num: const i64) {
     mpdecimal.mpd_sub_i64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -346,7 +346,7 @@ fn Decimal::sub_assign(&self, num: i64) {
  *
  * @param num The value to add to the current Decimal.
  */
-fn Decimal::sub_assign(&self, num: u64) {
+fn Decimal::sub_assign(&self, num: const u64) {
     mpdecimal.mpd_sub_u64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -366,7 +366,7 @@ fn Decimal::mul_assign(&self, dec: const &Decimal) {
  * @param num The value to add to the current Decimal.
  * @return The result of the addition.
  */
-fn Decimal::mul_assign(&self, num: i64) {
+fn Decimal::mul_assign(&self, num: const i64) {
     mpdecimal.mpd_mul_i64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -395,7 +395,7 @@ fn Decimal::div_assign(&self, dec: const &Decimal) {
  * @param num The value to add to the current Decimal.
  * @return The result of the addition.
  */
-fn Decimal::div_assign(&self, num: i64) {
+fn Decimal::div_assign(&self, num: const i64) {
     mpdecimal.mpd_div_i64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -404,7 +404,7 @@ fn Decimal::div_assign(&self, num: i64) {
  *
  * @param num The value to add to the current Decimal.
  */
-fn Decimal::div_assign(&self, num: u64) {
+fn Decimal::div_assign(&self, num: const u64) {
     mpdecimal.mpd_div_u64(self.mpd, self.mpd, num, self.ctx);
 }
 
@@ -417,7 +417,7 @@ fn Decimal::div_assign(&self, num: u64) {
  *         > 0 if the value of the Decimal is greater than the given Decimal,
  *         < 0 if the value of the Decimal is less than the given Decimal.
  */
-fn Decimal::cmp(&self, dec: const &Decimal) -> i32 {
+fn Decimal::cmp(const &self, dec: const &Decimal) -> i32 {
     return mpdecimal.mpd_cmp(self.mpd, dec.mpd, self.ctx);
 }
 
@@ -427,7 +427,7 @@ fn Decimal::cmp(&self, dec: const &Decimal) -> i32 {
  * @param dec The Decimal to compare the current Decimal to.
  * @return True if the value of the Decimal is equal to the given Decimal, false otherwise.
  */
-fn Decimal::eq(&self, dec: const &Decimal) -> bool {
+fn Decimal::eq(const &self, dec: const &Decimal) -> bool {
     return self.cmp(dec) == 0;
 }
 
@@ -437,7 +437,7 @@ fn Decimal::eq(&self, dec: const &Decimal) -> bool {
  * @param dec The Decimal to compare the current Decimal to.
  * @return True if the value of the Decimal is greater than the given Decimal, false otherwise.
  */
-fn Decimal::gt(&self, dec: const &Decimal) -> bool {
+fn Decimal::gt(const &self, dec: const &Decimal) -> bool {
     return self.cmp(dec) > 0;
 }
 
@@ -447,7 +447,7 @@ fn Decimal::gt(&self, dec: const &Decimal) -> bool {
  * @param dec The Decimal to compare the current Decimal to.
  * @return True if the value of the Decimal is greater than or equal to the given Decimal, false otherwise.
  */
-fn Decimal::gte(&self, dec: const &Decimal) -> bool {
+fn Decimal::gte(const &self, dec: const &Decimal) -> bool {
     return self.cmp(dec) >= 0;
 }
 
@@ -457,7 +457,7 @@ fn Decimal::gte(&self, dec: const &Decimal) -> bool {
  * @param dec The Decimal to compare the current Decimal to.
  * @return True if the value of the Decimal is less than the given Decimal, false otherwise.
  */
-fn Decimal::lt(&self, dec: const &Decimal) -> bool {
+fn Decimal::lt(const &self, dec: const &Decimal) -> bool {
     return self.cmp(dec) < 0;
 }
 
@@ -467,7 +467,7 @@ fn Decimal::lt(&self, dec: const &Decimal) -> bool {
  * @param dec The Decimal to compare the current Decimal to.
  * @return True if the value of the Decimal is less than or equal to the given Decimal, false otherwise.
  */
-fn Decimal::lte(&self, dec: const &Decimal) -> bool {
+fn Decimal::lte(const &self, dec: const &Decimal) -> bool {
     return self.cmp(dec) <= 0;
 }
 
@@ -583,6 +583,6 @@ fn Decimal::ceil(&self) -> Decimal {
 }
 
 @inline
-fn Decimal::format(const &self, modifiers: const &Iterable<T>) -> String {
+fn Decimal::format(const &self, modifiers: const &char[]) -> String {
     return self.to_string();
 }

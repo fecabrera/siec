@@ -5,7 +5,7 @@ import pytest
 ARRAY_EQ = """
 @extend T[]: Eq<T[]>;
 
-fn T[]::eq(&self, arr: const T[]) -> bool {
+fn T[]::eq(const &self, arr: const T[]) -> bool {
     if (self.length != arr.length)
         return false;
 
@@ -88,7 +88,7 @@ def test_extend_adds_claims_to_a_struct(run):
 
     @type P = Point;
 
-    fn P::eq(&self, o: const &P) -> bool { return self.x == o.x; }
+    fn P::eq(const &self, o: const &P) -> bool { return self.x == o.x; }
 
     @extend P: Eq<Point>;
 
@@ -110,7 +110,7 @@ def test_extend_carries_to_template_instances(run):
     source = """
     struct Box<T> { value: T; }
 
-    fn Box<T>::eq(&self, v: T) -> bool { return self.value == v; }
+    fn Box<T>::eq(const &self, v: const T) -> bool { return self.value == v; }
 
     @extend Box<E>: Eq<E>;
 
@@ -132,7 +132,7 @@ def test_extend_conformance_is_checked(compile_source):
     An '@extend' claim without the method is the conformance error the
     declaration's own claim would be.
     """
-    with pytest.raises(TypeError, match=r"missing the method 'eq\(P\) -> bool'"):
+    with pytest.raises(TypeError, match=r"missing the method 'eq\(const P\) -> bool'"):
         compile_source("""
         struct P { x: i32; }
 
@@ -146,7 +146,7 @@ def test_array_extend_needs_the_template(compile_source):
     """
     '@extend T[]' checks each action has its 'T[]::m' template.
     """
-    with pytest.raises(TypeError, match=r"missing the method 'eq\(T\[\]\) -> bool'"):
+    with pytest.raises(TypeError, match=r"missing the method 'eq\(const T\[\]\) -> bool'"):
         compile_source("""
         @extend T[]: Eq<T[]>;
 

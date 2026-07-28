@@ -87,7 +87,7 @@ fn List<T>::assign(&self, str: const &Iterable<char>) {
  * @return The element at the given index.
  */
 @deprecated("use operator [], get_item() or set_item()")
-fn List<T>::get(&self, index: u64) -> &T {
+fn List<T>::get(&self, index: const u64) -> &T {
     return self.data[index];
 }
 
@@ -97,7 +97,7 @@ fn List<T>::get(&self, index: u64) -> &T {
  * @param index The index of the element to get.
  * @return The element at the given index.
  */
-fn List<T>::get_item(&self, index: u64) -> T {
+fn List<T>::get_item(const &self, index: const u64) -> T {
     return self.data[index];
 }
 
@@ -107,7 +107,7 @@ fn List<T>::get_item(&self, index: u64) -> T {
  * @param index The index of the element to set.
  * @param value The value to set at the given index.
  */
-fn List<T>::set_item(&self, index: u64, value: T) {
+fn List<T>::set_item(&self, index: const u64, value: T) {
     self.data[index] = value;
 }
 
@@ -175,7 +175,7 @@ fn List<T>::append(&self, arr: const T*, n: u64) {
  * @param value The element to add to the List.
  * @return A new List with the given element added.
  */
-fn List<T>::add(&self, value: T) -> List<T> {
+fn List<T>::add(&self, value: const T) -> List<T> {
     let result = List<T>(self);
     result.push(value);
     return result;
@@ -188,7 +188,7 @@ fn List<T>::add(&self, value: T) -> List<T> {
  * @return A new List with the given element added.
  */
 @inline
-fn List<T>::add_assign(&self, value: T) {
+fn List<T>::add_assign(&self, value: const T) {
     self.push(value);
 }
 
@@ -246,7 +246,7 @@ fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
  * @param arr The array to check if the List is equal to.
  * @return True if the List is equal to the given array, false otherwise.
  */
-fn List<T>::eq(&self, arr: const T[]) -> bool {
+fn List<T>::eq(const &self, arr: const &T[]) -> bool {
     if (self.length != arr.length)
         return false;
 
@@ -291,7 +291,7 @@ fn T[]::add(&self, it: const &Iterable<T>) -> List<T> {
  * @param arr The array to check if the array is equal to.
  * @return True if the array is equal to the given array, false otherwise.
  */
-fn T[]::eq(const &self, arr: const T[]) -> bool {
+fn T[]::eq(const &self, arr: const &T[]) -> bool {
     if (self.length != arr.length)
         return false;
 

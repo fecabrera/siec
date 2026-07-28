@@ -150,7 +150,7 @@ def test_claim_without_the_method_is_an_error(compile_source):
     """
     Claiming 'Add<S, T>' without a matching 'add' fails conformance.
     """
-    with pytest.raises(TypeError, match=r"missing the method 'add\(P\) -> P'"):
+    with pytest.raises(TypeError, match=r"missing the method 'add\(const P\) -> P'"):
         compile_source("""
         struct P : Add<P, P> { x: i32; }
 
@@ -163,7 +163,7 @@ def test_claim_matches_its_own_overload(compile_source):
     Each 'Add<S, T>' claim checks against the overload taking T; a claim
     no overload takes names the required shape.
     """
-    with pytest.raises(TypeError, match="method 'add' must take \\(f64\\)"):
+    with pytest.raises(TypeError, match="method 'add' must take \\(const f64\\)"):
         compile_source(MONEY.replace(
             "Add<Money, Money>, Add<Money, i64>",
             "Add<Money, Money>, Add<Money, i64>, Add<Money, f64>") + """
@@ -194,11 +194,11 @@ struct Pair : Eq<Pair>, Eq<i64> {
     b: i64;
 }
 
-fn Pair::eq(&self, o: const &Pair) -> bool {
+fn Pair::eq(const &self, o: const &Pair) -> bool {
     return self.a == o.a and self.b == o.b;
 }
 
-fn Pair::eq(&self, n: i64) -> bool {
+fn Pair::eq(const &self, n: const i64) -> bool {
     return self.a == n and self.b == n;
 }
 """
@@ -295,11 +295,11 @@ struct Version : Ord<Version>, Ord<i64> {
     major: i64;
 }
 
-fn Version::cmp(&self, o: const &Version) -> i32 {
+fn Version::cmp(const &self, o: const &Version) -> i32 {
     return (self.major - o.major) as i32;
 }
 
-fn Version::cmp(&self, n: i64) -> i32 {
+fn Version::cmp(const &self, n: const i64) -> i32 {
     return (self.major - n) as i32;
 }
 """
