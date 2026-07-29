@@ -489,6 +489,24 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
     return found
 
 
+def claimed_interfaces(gen: CodeGenerator, concrete: str) -> set[str]:
+    """
+    The concrete interface spellings a type claims, including an array
+    family's claims with its element substituted.
+    """
+    concrete = strip_const(concrete)
+    claims = set(gen.implements.get(concrete, set()))
+
+    if concrete.endswith("[]"):
+        element = concrete[:-2]
+        claims.update(
+            canonical_interface(gen, substitute(claim, {param: element}))
+            for param, claim in gen.array_claims
+        )
+
+    return claims
+
+
 def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     """
     Whether a concrete type implements an interface: by its declared
@@ -496,13 +514,7 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     element substituted in. A free placeholder in the requirement -
     'Iterable<T>' with no T bound - matches any claim that spells it.
     """
-    concrete = strip_const(concrete)
-    claims = set(gen.implements.get(concrete, set()))
-
-    if concrete.endswith("[]"):
-        elem = concrete[:-2]
-        claims.update(canonical_interface(gen, substitute(s, {param: elem}))
-                      for param, s in gen.array_claims)
+    claims = claimed_interfaces(gen, concrete)
 
     if required in claims:
         return True

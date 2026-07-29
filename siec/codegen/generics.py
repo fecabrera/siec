@@ -446,6 +446,8 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
                 bindings[placeholder] = f"{family[family_param]}[]"
                 break
 
+    infer_constraint_arguments(gen, template, bindings)
+
     missing = [p for p in template.type_params if p not in bindings]
     if missing:
         named = ", ".join(map(repr, missing))
@@ -454,6 +456,59 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
                         f"them explicitly, '{template.name}<...>(...)'")
 
     return [bindings[p] for p in template.type_params]
+
+
+def infer_constraint_arguments(gen: CodeGenerator, template,
+                               bindings: dict) -> None:
+    """
+    Infer free type arguments from a bound constrained parameter.
+
+    Interface adaptation turns ``Iterable<T>`` into a concrete placeholder
+    constrained by ``Iterable<T>``. If that placeholder binds to ``char[]``,
+    its concrete ``Iterable<char>`` claim supplies the otherwise-hidden
+    ``T = char`` binding.
+    """
+    from siec.codegen.interfaces import claimed_interfaces
+
+    constraints = template.constraints or {}
+    while True:
+        before = dict(bindings)
+
+        for placeholder, constraint in constraints.items():
+            concrete = bindings.get(placeholder)
+            if concrete is None:
+                continue
+
+            required = substitute(constraint, bindings)
+            required_base = (split_generic(required) or (required, []))[0]
+            possibilities = []
+
+            for claim in claimed_interfaces(gen, concrete):
+                claim_base = (split_generic(claim) or (claim, []))[0]
+                if claim_base != required_base:
+                    continue
+
+                trial = dict(bindings)
+                try:
+                    unify(required, claim, template.type_params, trial)
+                except TypeError:
+                    continue
+
+                additions = {
+                    name: trial[name]
+                    for name in template.type_params
+                    if name not in bindings and name in trial
+                }
+                if additions not in possibilities:
+                    possibilities.append(additions)
+
+            # A type may claim several instantiations of one interface. Only
+            # infer when those claims agree; otherwise the call must spell T.
+            if len(possibilities) == 1:
+                bindings.update(possibilities[0])
+
+        if bindings == before:
+            return
 
 
 def accepts_arity(template, count: int) -> bool:
@@ -523,8 +578,9 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
 
     # several resolve: a typed context picks the templates whose returns
     # produce it, then the arguments' concrete types rank the substituted
-    # signatures like any overload; a tie, or no ranked fit at all,
-    # keeps declaration order
+    # signatures like any overload. At equal conversion strength, the more
+    # constrained template is the more specific one; a remaining tie, or no
+    # ranked fit at all, keeps declaration order.
     if resolved:
         if expected is not None:
             matching = [entry for entry in resolved
@@ -532,10 +588,13 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
             resolved = matching or resolved
 
         strength = {"exact": 0, "implicit": 1, "adopt": 2}
-        ranked = [(strength[fit], entry) for entry in resolved
-                  if (fit := generic_fit(gen, *entry, call, scope)) is not None]
+        ranked = [
+            (strength[fit], -len(entry[0].constraints or {}), entry)
+            for entry in resolved
+            if (fit := generic_fit(gen, *entry, call, scope)) is not None
+        ]
         if ranked:
-            return min(ranked, key=lambda pair: pair[0])[1]
+            return min(ranked, key=lambda candidate: candidate[:2])[2]
 
         return resolved[0]
 

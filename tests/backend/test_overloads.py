@@ -545,3 +545,26 @@ def test_forward_declared_overloads_define_later(run):
     fn pick(f: f64) -> i32 { return 2; }
     """
     assert run(source).returncode == 12
+
+
+def test_constrained_generic_infers_from_claim_and_beats_catch_all(run):
+    """
+    A concrete interface claim supplies free generic arguments hidden behind
+    an adapted interface parameter. The constrained overload is more specific
+    than an exact catch-all, regardless of declaration order.
+    """
+    source = """
+    fn hash<T>(value: const &T) -> u64 {
+        return value as u64;
+    }
+
+    fn hash<T>(value: const &Iterable<T>) -> u64 {
+        return @sizeof(T);
+    }
+
+    fn main() -> i32 {
+        let chars: const char[] = "abc";
+        return hash(chars) as i32;
+    }
+    """
+    assert run(source).returncode == 1
