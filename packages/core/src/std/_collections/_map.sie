@@ -1,5 +1,7 @@
 import { panic } from std;
+import { format } from std.format;
 import { hash } from std.hashing;
+import { String } from std.collections;
 import { malloc, realloc, free } from stdlib;
 
 @private @const DEFAULT_MAP_CAPACITY = 2;
@@ -28,7 +30,8 @@ struct MapEntry<K, V> {
 }
 
 struct Map<K, V>:
-    Iterable<KeyValuePair<K, V>> {
+    Iterable<KeyValuePair<K, V>>,
+    Formattable {
     entries: MapEntry<K, V>*;
     size: u64;
     capacity: u64;
@@ -70,6 +73,20 @@ fn Map<K, V>::destroy(&self) {
     self.capacity = 0;
 }
 
+fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
+    let str = String();
+    str += "{ ";
+    foreach (entry : enumerate(self)) {
+        if (entry.index) str += ", ";
+        let tmp = format("{}: {}", entry.value.key, entry.value.value);
+        defer tmp.destroy();
+        str += tmp;
+    }
+    str += "}";
+
+    return str;
+}
+
 /**
  * Gets the used entry for the given key.
  *
@@ -100,6 +117,9 @@ fn Map<K, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V
  */
 @private
 fn Map<K, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
+    if (self.size * 10 >= self.capacity * 7)
+        self.grow();
+    
     let slot = hash(key) % self.capacity;
 
     while (self.entries[slot].state != MapEntryState::Empty) {
@@ -136,9 +156,6 @@ fn Map<K, V>::get(const &self, key: const &K, out: &V) -> Result<MapIndexError> 
  * @param value The value to set.
  */
 fn Map<K, V>::set(&self, key: const &K, value: V) {
-    if (self.size * 10 >= self.capacity * 7)
-        self.grow();
-
     self.get_entry(key) = {
         state = MapEntryState::Used,
         key = key,

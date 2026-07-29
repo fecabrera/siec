@@ -6,12 +6,8 @@ fn main() -> i32 {
     map.set("abc", 1);
     map.set("def", 2);
     map.set("ghi", 3);
-
-    foreach (entry : map) {
-        std.io.println("{}: {}", entry.key, entry.value);
-    }
     
-    std.io.println("map: {}", map);
+    std.io.println("{}", map);
 
     return 0;
 }
