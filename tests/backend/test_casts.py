@@ -137,6 +137,31 @@ def test_pointer_casts_between_pointer_types(run):
     assert run(source).returncode == 0
 
 
+def test_struct_cast_reinterprets_place_and_value_assignment_copies(run):
+    """
+    A struct cast can provide a retyped place to a reference return. Reading
+    that same cast into a variable copies the reinterpreted value.
+    """
+    source = """
+    struct Entry { key: i32; value: i32; state: i32; }
+    struct Pair { key: i32; value: i32; }
+
+    fn pair(entry: &Entry) -> &Pair {
+        return entry as Pair;
+    }
+
+    fn main() -> i32 {
+        let entry: Entry = { 40, 2, 1 };
+        let copied = entry as Pair;
+        entry.key = 0;
+
+        if (copied.key + copied.value != 42) { return 1; }
+        return pair(entry).key;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_pointer_casts_keep_const(compile_source):
     """
     A pointer cast cannot shed a 'const' contract.

@@ -43,7 +43,8 @@ from siec.ast import (
 )
 from siec.codegen.asm import emit_asm_block
 from siec.codegen.calls import emit_call
-from siec.codegen.coercion import emit_cast, emit_coerced
+from siec.codegen.coercion import (emit_cast, emit_coerced,
+                                   emit_reinterpret_address)
 from siec.codegen.enums import member_value, resolve_enum
 from siec.codegen.generator import (CodeGenerator, Variable, entry_alloca,
                                     make_volatile)
@@ -444,6 +445,8 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             while True:
                 if isinstance(root, (Member, Index)):
                     root = root.base
+                elif isinstance(root, Cast):
+                    root = root.operand
                 elif isinstance(root, UnaryOp) and root.op == "*":
                     root = root.operand
                 else:
@@ -566,6 +569,11 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         from siec.codegen.methods import emit_method_call
 
         return emit_method_call(gen, builder, expr, scope, as_address=True)
+
+    # an addressable cast is the same storage viewed through its target type;
+    # a value context loads through this address and therefore makes a copy
+    if isinstance(expr, Cast):
+        return emit_reinterpret_address(gen, builder, expr, scope)
 
     if isinstance(expr, Member):
         # a pure name chain may be a module's member, spelled qualified

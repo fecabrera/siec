@@ -5,7 +5,8 @@ from typing import Protocol
 
 from llvmlite import ir
 
-from siec.ast import CachedExpr, Call, Index, Member, MethodCall, UnaryOp, Var
+from siec.ast import (CachedExpr, Call, Cast, Index, Member, MethodCall,
+                      UnaryOp, Var)
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
 from siec.codegen.inference import (expr_sie_type, fold_qualified, item_call,
                                     member_field)
@@ -47,6 +48,8 @@ def volatile_chain(gen: CodeGenerator, expr, scope: dict) -> bool:
 
         if isinstance(node, (Member, Index)):
             node = node.base
+        elif isinstance(node, Cast):
+            node = node.operand
         elif isinstance(node, UnaryOp) and node.op == "*":
             node = node.operand
         else:
@@ -64,6 +67,8 @@ def reject_const_base(gen: CodeGenerator, scope: dict, base) -> None:
 
         if isinstance(base, (Member, Index)):
             base = base.base
+        elif isinstance(base, Cast):
+            base = base.operand
         elif isinstance(base, UnaryOp) and base.op == "*":
             base = base.operand
         else:
@@ -246,6 +251,11 @@ def resolve_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, target,
                 False, volatile, getter is not None, True)
 
     elif isinstance(target, UnaryOp) and target.op == "*":
+        reject_const_base(gen, scope, target.operand)
+
+    elif isinstance(target, Cast):
+        if is_const(declared_type):
+            raise TypeError("cannot assign through a const cast")
         reject_const_base(gen, scope, target.operand)
 
     elif isinstance(target, (Call, MethodCall)):

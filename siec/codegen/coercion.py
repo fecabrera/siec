@@ -50,6 +50,35 @@ def emit_opaque_pointer(builder: ir.IRBuilder, value: ir.Value, target_type: ir.
     return None
 
 
+def emit_reinterpret_address(gen: CodeGenerator, builder: ir.IRBuilder,
+                             expr: Cast, scope: dict, *,
+                             allow_const_copy: bool = False):
+    """
+    Retype an addressable operand's storage without reading it.
+
+    A cast remains a place while an address is wanted: ``y as T`` points at
+    the same bytes as ``y``, viewed as ``T``.  Reading the cast loads a T
+    value from this address, so an initializer still receives an independent
+    value copy.
+    """
+    from siec.codegen.expressions import emit_lvalue
+
+    if not getattr(expr, "expanded", False):
+        expr.type = expand_alias(gen, expr.type)
+        expr.expanded = True
+
+    operand_name = expr_sie_type(gen, expr.operand, scope)
+    if (not allow_const_copy and is_const(operand_name)
+            and not is_const(expr.type)):
+        raise TypeError(
+            f"cannot cast away 'const': {operand_name!r} to {expr.type!r}")
+
+    address = emit_lvalue(gen, builder, expr.operand, scope)
+    target = resolve_type(expr.type, gen.structs)
+    return builder.bitcast(
+        address, ir.PointerType(target), name="reinterpret.addr")
+
+
 def emit_any_wrap(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast,
                   scope: dict):
     """
@@ -178,6 +207,15 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         # value is the address
         if isinstance(target_type, ir.PointerType) and isinstance(value.type, ir.IntType):
             return builder.inttoptr(value, target_type)
+
+        # represented aggregates reinterpret an addressable operand's bytes;
+        # loading through the retyped place makes this expression a value copy
+        if type_info(gen, expr.type) is not None:
+            return builder.load(
+                emit_reinterpret_address(
+                    gen, builder, expr, scope, allow_const_copy=True),
+                name="reinterpret.value",
+            )
 
         raise TypeError(f"cannot cast to non-numeric type {expr.type!r}")
 
