@@ -1,0 +1,196 @@
+import { panic } from std;
+import { hash } from std.hashing;
+import { malloc, realloc, free } from stdlib;
+
+@private @const DEFAULT_MAP_CAPACITY = 2;
+
+@private
+enum MapEntryState {
+    Empty,
+    Used,
+    Tombstone,
+}
+
+enum MapIndexError {
+    NotFound,
+}
+
+struct KeyValuePair<K, V> {
+    key: const K;
+    value: V;
+}
+
+@private
+struct MapEntry<K, V> {
+    key: const K;
+    value: V;
+    state: MapEntryState;
+}
+
+struct Map<K, V>:
+    Iterable<KeyValuePair<K, V>> {
+    entries: MapEntry<K, V>*;
+    size: u64;
+    capacity: u64;
+}
+
+struct MapIterator<K, V>: Iterator<KeyValuePair<K, V>> {
+    entries: MapEntry<K, V>[];
+    index: u64;
+}
+
+struct ConstMapIterator<K, V>: ConstIterator<KeyValuePair<K, V>> {
+    entries: const MapEntry<K, V>[];
+    index: u64;
+}
+
+fn Map<K, V>::init(&self, capacity: u64 = DEFAULT_MAP_CAPACITY) {
+    self.entries = malloc(capacity * @sizeof(MapEntry<K, V>)) as MapEntry<K, V>*;
+    self.size = 0;
+    self.capacity = capacity;
+
+    for (let i: u64 = 0; i < capacity; i += 1) {
+        self.entries[i].state = MapEntryState::Empty;
+    }
+}
+
+fn Map<K, V>::destroy(&self) {
+    free(self.entries);
+
+    self.entries = null;
+    self.size = 0;
+    self.capacity = 0;
+}
+
+@private
+fn Map<K, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V>*, MapIndexError> {
+    let slot = hash(key) % self.capacity;
+
+    while (self.entries[slot].state != MapEntryState::Empty) {
+        if (self.entries[slot].state == MapEntryState::Used) {
+            if (self.entries[slot].key == key) {
+                return Ok(self.entries[slot]);
+            }
+        }
+        slot = (slot + 1) % self.capacity;
+    }
+
+    return Error(MapIndexError::NotFound);
+}
+
+@private
+fn Map<K, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
+    let slot = hash(key) % self.capacity;
+
+    while (self.entries[slot].state != MapEntryState::Empty) {
+        if (self.entries[slot].state == MapEntryState::Used) {
+            if (self.entries[slot].key == key)
+                return self.entries[slot];
+        } else {
+            return self.entries[slot];
+        }
+
+        slot = (slot + 1) % self.capacity;
+    }
+
+    return self.entries[slot];
+}
+
+fn Map<K, V>::get(const &self, key: const &K, out: &V) -> Result<MapIndexError> {
+    let entry = try self.get_used_entry(key, entry);
+    out = entry->value;
+    return Ok();
+}
+
+fn Map<K, V>::set(&self, key: const &K, value: V) {
+    if (self.size * 10 >= self.capacity * 7)
+        self.grow();
+
+    self.get_entry(key) = {
+        state = MapEntryState::Used,
+        key = key,
+        value = value,
+    };
+    
+    self.size += 1;
+}
+
+fn Map<K, V>::remove(&self, key: const &K) -> Result<MapIndexError> {
+    let entry = try self.get_used_entry(key, entry);
+    entry->state = MapEntryState::Tombstone;
+    self.size -= 1;
+    return Ok();
+}
+
+@private
+fn Map<K, V>::grow(&self) {
+    let tmp = Map<K, V>(2 * self.capacity);
+
+    foreach (entry : self) {
+        tmp.set(entry.key, entry.value);
+    }
+    
+    self.destroy();
+    
+    self = tmp;
+}
+
+fn Map<K, V>::iterator(&self) -> MapIterator<K, V> {
+    return MapIterator<K, V>({self.entries, self.capacity});
+}
+
+fn Map<K, V>::const_iterator(const &self) -> ConstMapIterator<K, V> {
+    return ConstMapIterator<K, V>({self.entries, self.capacity});
+}
+
+fn MapIterator<K, V>::init(&self, entries: MapEntry<K, V>[]) {
+    self = {entries, 0};
+}
+
+fn MapIterator<K, V>::has_next(&self) -> bool {
+    while (self.index < self.entries.length) {
+        if (self.entries[self.index].state == MapEntryState::Used)
+            return true;
+
+        self.index += 1;
+    }
+
+    return false;
+}
+
+fn MapIterator<K, V>::next(&self) -> &KeyValuePair<K, V> {
+    while (self.index < self.entries.length) {
+        defer self.index += 1;
+        
+        if (self.entries[self.index].state == MapEntryState::Used)
+            return self.entries[self.index] as KeyValuePair<K, V>;
+    }
+
+    panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
+}
+
+fn ConstMapIterator<K, V>::init(&self, entries: const MapEntry<K, V>[]) {
+    self = {entries, 0};
+}
+
+fn ConstMapIterator<K, V>::has_next(&self) -> bool {
+    while (self.index < self.entries.length) {
+        if (self.entries[self.index].state == MapEntryState::Used)
+            return true;
+        
+        self.index += 1;
+    }
+
+    return false;
+}
+
+fn ConstMapIterator<K, V>::next(&self) -> const &KeyValuePair<K, V> {
+    while (self.index < self.entries.length) {
+        defer self.index += 1;
+
+        if (self.entries[self.index].state == MapEntryState::Used)
+            return self.entries[self.index] as const KeyValuePair<K, V>;
+    }
+
+    panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
+}

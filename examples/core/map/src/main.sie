@@ -1,0 +1,15 @@
+import std.io;
+import { Map } from std.collections;
+
+fn main() -> i32 {
+    let map = Map<char[], i32>();
+    map.set("abc", 1);
+    map.set("def", 2);
+    map.set("ghi", 3);
+
+    foreach (entry : map) {
+        std.io.println("{}: {}", entry.key, entry.value);
+    }
+
+    return 0;
+}

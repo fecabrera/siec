@@ -1,6 +1,6 @@
 import { malloc, realloc, free } from stdlib;
 
-@const DEFAULT_LIST_CAPACITY = 2;
+@private @const DEFAULT_LIST_CAPACITY = 2;
 
 struct List<T>:
     Iterable<T>,
@@ -43,6 +43,10 @@ fn List<T>::init(&self, arr: const &Iterable<T>) {
  */
 fn List<T>::destroy(&self) {
     free(self.data);
+
+    self.data = null;
+    self.length = 0;
+    self.capacity = 0;
 }
 
 /**
@@ -97,7 +101,7 @@ fn List<T>::get(&self, index: const u64) -> &T {
  * @param index The index of the element to get.
  * @return The element at the given index.
  */
-fn List<T>::get_item(const &self, index: const u64) -> T {
+fn List<T>::get_item(const &self, index: const u64) -> const T {
     return self.data[index];
 }
 
@@ -261,6 +265,7 @@ fn List<T>::eq(const &self, arr: const &T[]) -> bool {
 /**
  * Grow the List.
  */
+@private
 fn List<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
     self.data = realloc(self.data, capacity * @sizeof(T)) as T*;

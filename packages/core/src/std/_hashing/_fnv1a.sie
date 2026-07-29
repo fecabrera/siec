@@ -8,10 +8,10 @@
  *
  * @return hash of the slice's contents
  */
-fn fnv1a<T>(keys: T[]) -> u64 {
+fn fnv1a<T>(keys: const &Iterable<T>) -> u64 {
     let hash: u64 = 14695981039346656037;
-    for (let i: u64; i < keys.length; i += 1) {
-        fnv1a_k(hash, keys[i] as u64);
+    foreach (key : keys) {
+        fnv1a_k(hash, key as u64);
     }
     return hash;
 }
