@@ -44,6 +44,11 @@ struct ConstMapIterator<K, V>: ConstIterator<KeyValuePair<K, V>> {
     index: u64;
 }
 
+/**
+ * Initializes a new map with the given capacity.
+ *
+ * @param capacity The initial capacity of the map.
+ */
 fn Map<K, V>::init(&self, capacity: u64 = DEFAULT_MAP_CAPACITY) {
     self.entries = malloc(capacity * @sizeof(MapEntry<K, V>)) as MapEntry<K, V>*;
     self.size = 0;
@@ -54,6 +59,9 @@ fn Map<K, V>::init(&self, capacity: u64 = DEFAULT_MAP_CAPACITY) {
     }
 }
 
+/**
+ * Destroys the map and frees the memory.
+ */
 fn Map<K, V>::destroy(&self) {
     free(self.entries);
 
@@ -62,6 +70,12 @@ fn Map<K, V>::destroy(&self) {
     self.capacity = 0;
 }
 
+/**
+ * Gets the used entry for the given key.
+ *
+ * @param key The key to get the entry for.
+ * @return The entry for the given key.
+ */
 @private
 fn Map<K, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V>*, MapIndexError> {
     let slot = hash(key) % self.capacity;
@@ -78,6 +92,12 @@ fn Map<K, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V
     return Error(MapIndexError::NotFound);
 }
 
+/**
+ * Gets the entry for the given key.
+ *
+ * @param key The key to get the entry for.
+ * @return The entry for the given key.
+ */
 @private
 fn Map<K, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
     let slot = hash(key) % self.capacity;
@@ -96,12 +116,25 @@ fn Map<K, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
     return self.entries[slot];
 }
 
+/**
+ * Gets the value for the given key.
+ *
+ * @param key The key to get the value for.
+ * @param out The output value.
+ * @return The result of the operation.
+ */
 fn Map<K, V>::get(const &self, key: const &K, out: &V) -> Result<MapIndexError> {
     let entry = try self.get_used_entry(key, entry);
     out = entry->value;
     return Ok();
 }
 
+/**
+ * Sets the value for the given key.
+ *
+ * @param key The key to set the value for.
+ * @param value The value to set.
+ */
 fn Map<K, V>::set(&self, key: const &K, value: V) {
     if (self.size * 10 >= self.capacity * 7)
         self.grow();
@@ -115,6 +148,12 @@ fn Map<K, V>::set(&self, key: const &K, value: V) {
     self.size += 1;
 }
 
+/**
+ * Removes the value for the given key.
+ *
+ * @param key The key to remove the value for.
+ * @return The result of the operation.
+ */
 fn Map<K, V>::remove(&self, key: const &K) -> Result<MapIndexError> {
     let entry = try self.get_used_entry(key, entry);
     entry->state = MapEntryState::Tombstone;
@@ -122,6 +161,9 @@ fn Map<K, V>::remove(&self, key: const &K) -> Result<MapIndexError> {
     return Ok();
 }
 
+/**
+ * Grows the capacity of the map to the next power of two.
+ */
 @private
 fn Map<K, V>::grow(&self) {
     let tmp = Map<K, V>(2 * self.capacity);
@@ -135,18 +177,38 @@ fn Map<K, V>::grow(&self) {
     self = tmp;
 }
 
+/**
+ * Gets the iterator for the map.
+ *
+ * @return The iterator for the map.
+ */
 fn Map<K, V>::iterator(&self) -> MapIterator<K, V> {
     return MapIterator<K, V>({self.entries, self.capacity});
 }
 
+/**
+ * Gets the const iterator for the map.
+ *
+ * @return The const iterator for the map.
+ */
 fn Map<K, V>::const_iterator(const &self) -> ConstMapIterator<K, V> {
     return ConstMapIterator<K, V>({self.entries, self.capacity});
 }
 
+/**
+ * Initializes the iterator with the given entries.
+ *
+ * @param entries The entries to initialize the iterator with.
+ */
 fn MapIterator<K, V>::init(&self, entries: MapEntry<K, V>[]) {
     self = {entries, 0};
 }
 
+/**
+ * Checks if the iterator has a next element.
+ *
+ * @return True if the iterator has a next element, false otherwise.
+ */
 fn MapIterator<K, V>::has_next(&self) -> bool {
     while (self.index < self.entries.length) {
         if (self.entries[self.index].state == MapEntryState::Used)
@@ -158,6 +220,11 @@ fn MapIterator<K, V>::has_next(&self) -> bool {
     return false;
 }
 
+/**
+ * Gets the next element from the iterator.
+ *
+ * @return The next element from the iterator.
+ */
 fn MapIterator<K, V>::next(&self) -> &KeyValuePair<K, V> {
     while (self.index < self.entries.length) {
         defer self.index += 1;
@@ -169,10 +236,20 @@ fn MapIterator<K, V>::next(&self) -> &KeyValuePair<K, V> {
     panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
 }
 
+/**
+ * Initializes the const iterator with the given entries.
+ *
+ * @param entries The entries to initialize the const iterator with.
+ */
 fn ConstMapIterator<K, V>::init(&self, entries: const MapEntry<K, V>[]) {
     self = {entries, 0};
 }
 
+/**
+ * Checks if the const iterator has a next element.
+ *
+ * @return True if the const iterator has a next element, false otherwise.
+ */
 fn ConstMapIterator<K, V>::has_next(&self) -> bool {
     while (self.index < self.entries.length) {
         if (self.entries[self.index].state == MapEntryState::Used)
@@ -184,6 +261,11 @@ fn ConstMapIterator<K, V>::has_next(&self) -> bool {
     return false;
 }
 
+/**
+ * Gets the next element from the const iterator.
+ *
+ * @return The next element from the const iterator.
+ */
 fn ConstMapIterator<K, V>::next(&self) -> const &KeyValuePair<K, V> {
     while (self.index < self.entries.length) {
         defer self.index += 1;

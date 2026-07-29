@@ -1,5 +1,6 @@
 import { malloc, free } from stdlib;
 
+@private
 struct QueueNode<T> {
     value: T;
     next: QueueNode<T>* = null;

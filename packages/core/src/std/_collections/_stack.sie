@@ -74,7 +74,8 @@ fn Stack<T>::is_empty(const &self) -> bool {
 /**
  * Grow the Stack.
  */
-fn stack<T>::grow(&self) {
+@private
+fn Stack<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
     self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
     self.capacity = capacity;
