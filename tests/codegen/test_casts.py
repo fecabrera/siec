@@ -121,21 +121,23 @@ def test_literal_casts_as_a_signed_integer(env):
     assert value.type == ir.IntType(64)
 
 
-def test_cast_to_non_numeric_type_is_an_error(env):
+def test_integer_casts_to_bool_representation(env):
     """
-    Casting to a non-numeric type is rejected.
+    Bool is an integer representation even though it is not arithmetic.
     """
     gen, builder = env
     scope = var(builder, "a", "i32", ir.IntType(32))
-    with pytest.raises(TypeError, match="cannot cast to non-numeric type"):
-        emit_cast(gen, builder, Cast(Var("a"), "bool"), scope)
+    value = emit_cast(gen, builder, Cast(Var("a"), "bool"), scope)
+    assert value.opname == "trunc"
+    assert value.type == ir.IntType(1)
 
 
-def test_cast_from_non_numeric_value_is_an_error(env):
+def test_char_casts_from_its_integer_representation(env):
     """
-    Casting a non-numeric value (a char) is rejected.
+    Char explicitly widens from its unsigned byte representation.
     """
     gen, builder = env
     scope = var(builder, "c", "char", ir.IntType(8))
-    with pytest.raises(TypeError, match="cannot cast a non-numeric value"):
-        emit_cast(gen, builder, Cast(Var("c"), "i32"), scope)
+    value = emit_cast(gen, builder, Cast(Var("c"), "i32"), scope)
+    assert value.opname == "zext"
+    assert value.type == ir.IntType(32)

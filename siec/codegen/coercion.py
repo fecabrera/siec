@@ -116,7 +116,7 @@ def emit_any_wrap(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast,
 
 def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict):
     """
-    Emit an explicit numeric cast, choosing the LLVM conversion the prefixes and widths call for.
+    Emit an explicit representation cast.
 
     The 'const' contract survives casts: an aliasing const value (a pointer
     or array) never becomes mutable, not even explicitly.
@@ -150,11 +150,16 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
             and is_aliasing(strip_const(operand_name))):
         raise TypeError(f"cannot cast away 'const': {operand_name!r} to {expr.type!r}")
 
-    # a cast to an enum type converts to its backing type
+    # enums convert through their backing representation. Other LLVM integer
+    # representations (char and bool) cast the same way without pretending
+    # they are arithmetic types elsewhere in the language.
+    target_type = resolve_type(expr.type, gen.structs)
     target = numeric_class(enum_backing(gen, expr.type))
+    if target is None and isinstance(target_type, ir.IntType):
+        target = "u", target_type.width
+
     if target is None:
         # an array casts to its element pointer: 'arr as X*' extracts the data field
-        target_type = resolve_type(expr.type, gen.structs)
         value = emit_expression(gen, builder, expr.operand, None, scope)
 
         # casting a value to its own represented type is a no-op
@@ -228,18 +233,27 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
     value = emit_expression(gen, builder, expr.operand, None, scope)
     source = value_class(gen, value, expr.operand, scope)
     if source is None:
-        # a bare integer literal has no declared type and reads as a signed
-        # integer; a named non-numeric value (a char or bool) cannot be cast
+        # a bare integer literal has no declared type and reads as signed;
+        # named LLVM integer representations such as char and bool are
+        # unsigned bit patterns for explicit casts
         declared = expr_sie_type(gen, expr.operand, scope)
         if declared is None and isinstance(value.type, ir.IntType) and value.type.width > 1:
             source = "i", value.type.width
+        elif isinstance(value.type, ir.IntType):
+            source = "u", value.type.width
+        elif isinstance(value.type, (ir.LiteralStructType,
+                                     ir.IdentifiedStructType,
+                                     ir.ArrayType)):
+            return builder.load(
+                emit_reinterpret_address(
+                    gen, builder, expr, scope, allow_const_copy=True),
+                name="reinterpret.value",
+            )
         else:
-            raise TypeError(f"cannot cast a non-numeric value to {expr.type}")
+            raise TypeError(f"cannot cast {operand_name or value.type} to {expr.type}")
 
     source_prefix, source_width = source
     target_prefix, target_width = target
-    target_type = resolve_type(expr.type, gen.structs)
-
     # float to float: extend or truncate the mantissa
     if source_prefix == "f" and target_prefix == "f":
         if target_width > source_width:

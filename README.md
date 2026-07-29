@@ -1715,7 +1715,11 @@ A concrete spelling supplies the arguments wherever a type is written: `cmp<i32>
 
 #### Type casting
 
-Numeric values can be explicitly converted to another numeric type through the `as` keyword, followed by the target type. This is the escape hatch for conversions that don't happen implicitly: narrowing, and crossing between signed, unsigned, and float.
+Any represented value can be explicitly viewed as another type through the
+`as` keyword. Reading that view produces a value copy. Scalar representations
+convert at their LLVM width even when the Sie type is not arithmetic, so
+`char` and `bool` cast like their underlying integers. Addressable aggregate
+values reinterpret the same storage through the target representation.
 
 ```
 x as Y

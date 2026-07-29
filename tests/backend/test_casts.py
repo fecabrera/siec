@@ -101,16 +101,23 @@ def test_cast_binds_tighter_than_addition(run):
     assert run(source).returncode == 45
 
 
-@pytest.mark.parametrize("decl", [
-    "let a: i32 = 0; let b: bool = a as bool;",   # to a non-numeric type
-    "let a: bool = true; let b: i32 = a as i32;", # from a non-numeric value
-])
-def test_non_numeric_casts_are_errors(compile_source, decl):
+def test_char_and_bool_cast_through_their_representations(run):
     """
-    Casting to or from a non-numeric type is rejected.
+    Explicit casts use represented values, regardless of whether the source
+    and target participate in arithmetic.
     """
-    with pytest.raises(TypeError, match="cannot cast"):
-        compile_source(f"fn main() -> i32 {{ {decl} return 0; }}")
+    source = """
+    fn widen(c: const &char) -> u64 {
+        return c as u64;
+    }
+
+    fn main() -> i32 {
+        let chars: const char[] = "*";
+        let bit: bool = 3 as bool;
+        return widen(chars[0]) as i32 + bit as i32 - 1;
+    }
+    """
+    assert run(source).returncode == 42
 
 
 def test_pointer_casts_between_pointer_types(run):
