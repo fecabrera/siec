@@ -1,29 +1,35 @@
+@private @const FNV1A_OFFSET = 14695981039346656037;
+@private @const FNV1A_PRIME = 1099511628211;
+
+struct FNV1a {
+    hash: u64;
+}
+
 /**
- * FNV-1a content hash of a slice: folds exactly `length` elements into the
- * hash. The length-bounded sibling of the zero-terminated overload above —
- * elements may be anything, zero included, so this is the right member for
- * binary data; an empty slice hashes to the FNV offset basis.
- *
- * @param value: slice whose elements to hash
- *
- * @return hash of the slice's contents
+ * Initializes the FNV-1a hash to the FNV offset basis.
  */
-fn fnv1a<T>(keys: const &Iterable<T>) -> u64 {
-    let hash: u64 = 14695981039346656037;
-    foreach (key : keys) {
-        fnv1a_k(hash, key as u64);
-    }
-    return hash;
+fn FNV1a::init(&self) {
+    self.hash = FNV1A_OFFSET; 
 }
 
 /**
  * Folds one element into a running FNV-1a hash: XORs the element in, then
- * multiplies by the FNV prime. Internal; called by fnv1a once per element.
+ * multiplies by the FNV prime.
  *
- * @param hash: running hash, updated in the caller's storage
  * @param k:    element to fold in
  */
-fn fnv1a_k(hash: &u64, k: u64) {
-    hash ^= k;
-    hash *= 1099511628211;
+fn FNV1a::ingest(&self, k: u64) {
+    self.hash ^= k;
+    self.hash *= FNV1A_PRIME; 
+}
+
+/**
+ * Folds multiple elements into a running FNV-1a hash.
+ *
+ * @param data: iterable of elements to fold in
+ */
+fn FNV1a::ingest(&self, data: const &Iterable<u64>) {
+    foreach (k : data) {
+        self.ingest(k);
+    }
 }

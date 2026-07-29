@@ -1,10 +1,15 @@
 @include("_hashing/_crc32")
 @include("_hashing/_fnv1a")
 @include("_hashing/_splitmix64")
+@include("_hashing/_hashable");
 
 @inline
 fn hash<T>(value: const &Iterable<T>) -> u64 {
-    return fnv1a(value);
+    let h = FNV1a();
+    foreach (k : value) {
+        h.ingest(k as u64);
+    }
+    return h.hash;
 }
 
 @inline

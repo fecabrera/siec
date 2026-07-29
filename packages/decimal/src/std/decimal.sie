@@ -1,4 +1,5 @@
 import mpdecimal;
+import { FNV1a } from std.hashing;
 import { Formattable } from std.format;
 import { String } from std.collections;
 
@@ -51,6 +52,11 @@ struct Decimal
 fn Decimal::init(&self) {
     self.ctx = __get_default_context();
     self.mpd = mpdecimal.mpd_new(self.ctx);
+}
+
+fn Decimal::init(&self, dec: const &Decimal) {
+    self.init();
+    mpdecimal.mpd_copy(self.mpd, dec.mpd, self.ctx);
 }
 
 /**
@@ -580,6 +586,44 @@ fn Decimal::ceil(&self) -> Decimal {
     let result = Decimal();
     mpdecimal.mpd_ceil(result.mpd, self.mpd, self.ctx);
     return result;
+}
+
+@inline
+fn Decimal::is_positive(const &self) -> bool {
+    return mpdecimal.mpd_sign(self.mpd) == 0;
+}
+
+@inline
+fn Decimal::is_negative(const &self) -> bool {
+    return mpdecimal.mpd_sign(self.mpd) == 1;
+}
+
+@inline
+fn Decimal::is_zero(const &self) -> bool {
+    return mpdecimal.mpd_iszero(self.mpd) == 1;
+}
+
+fn Decimal::hash(const &self) -> u64 {
+    let tmp = Decimal(self);
+    defer tmp.destroy();
+
+    let sign = mpdecimal.mpd_sign(tmp.mpd);
+    let tz = mpdecimal.mpd_trail_zeros(tmp.mpd);
+    let eff_digits = tmp.mpd->digits - tz;
+    let eff_exp = tmp.mpd->exp + tz;
+
+    if (tmp.is_zero()) {
+        sign = 0;
+        eff_exp = 0;
+    }
+
+    let h = FNV1a();
+    h.ingest(sign);
+    h.ingest(eff_digits as u64);
+    h.ingest(eff_exp as u64);
+    h.ingest({tmp.mpd->data, tmp.mpd->length as u64});
+    
+    return h.hash;
 }
 
 @inline

@@ -500,7 +500,7 @@ struct mpd_spec {
 /*                       Get attributes of a decimal                          */
 /******************************************************************************/
 
-@extern fn mpd_adjexp(dec: mpd*) -> i64;
+@extern fn mpd_adjexp(dec: const mpd*) -> i64;
 @extern fn mpd_etiny(ctx: mpd_context*) -> i64;
 @extern fn mpd_etop(ctx: mpd_context*) -> i64;
 @extern fn mpd_msword(dec: mpd*) -> u64;
@@ -509,35 +509,35 @@ struct mpd_spec {
 @extern fn mpd_lsd(word: u64) -> u64;
 @extern fn mpd_digits_to_size(digits: i64) -> i64;
 @extern fn mpd_exp_digits(exp: i64) -> i32;
-@extern fn mpd_iscanonical(dec: mpd*) -> i32;
-@extern fn mpd_isfinite(dec: mpd*) -> i32;
-@extern fn mpd_isinfinite(dec: mpd*) -> i32;
-@extern fn mpd_isinteger(dec: mpd*) -> i32;
-@extern fn mpd_isnan(dec: mpd*) -> i32;
-@extern fn mpd_isnegative(dec: mpd*) -> i32;
-@extern fn mpd_ispositive(dec: mpd*) -> i32;
-@extern fn mpd_isqnan(dec: mpd*) -> i32;
-@extern fn mpd_issigned(dec: mpd*) -> i32;
-@extern fn mpd_issnan(dec: mpd*) -> i32;
-@extern fn mpd_isspecial(dec: mpd*) -> i32;
-@extern fn mpd_iszero(dec: mpd*) -> i32;
-@extern fn mpd_iszerocoeff(dec: mpd*) -> i32;
-@extern fn mpd_isnormal(dec: mpd*, ctx: mpd_context*) -> i32;
-@extern fn mpd_issubnormal(dec: mpd*, ctx: mpd_context*) -> i32;
+@extern fn mpd_iscanonical(dec: const mpd*) -> i32;
+@extern fn mpd_isfinite(dec: const mpd*) -> i32;
+@extern fn mpd_isinfinite(dec: const mpd*) -> i32;
+@extern fn mpd_isinteger(dec: const mpd*) -> i32;
+@extern fn mpd_isnan(dec: const mpd*) -> i32;
+@extern fn mpd_isnegative(dec: const mpd*) -> i32;
+@extern fn mpd_ispositive(dec: const mpd*) -> i32;
+@extern fn mpd_isqnan(dec: const mpd*) -> i32;
+@extern fn mpd_issigned(dec: const mpd*) -> i32;
+@extern fn mpd_issnan(dec: const mpd*) -> i32;
+@extern fn mpd_isspecial(dec: const mpd*) -> i32;
+@extern fn mpd_iszero(dec: const mpd*) -> i32;
+@extern fn mpd_iszerocoeff(dec: const mpd*) -> i32;
+@extern fn mpd_isnormal(dec: const mpd*, ctx: const mpd_context*) -> i32;
+@extern fn mpd_issubnormal(dec: const mpd*, ctx: const mpd_context*) -> i32;
 @extern fn mpd_isoddword(word: u64) -> i32;
-@extern fn mpd_isoddcoeff(dec: mpd*) -> i32;
-@extern fn mpd_isodd(dec: mpd*) -> i32;
-@extern fn mpd_iseven(dec: mpd*) -> i32;
-@extern fn mpd_sign(dec: mpd*) -> u8;
-@extern fn mpd_arith_sign(dec: mpd*) -> i32;
+@extern fn mpd_isoddcoeff(dec: const mpd*) -> i32;
+@extern fn mpd_isodd(dec: const mpd*) -> i32;
+@extern fn mpd_iseven(dec: const mpd*) -> i32;
+@extern fn mpd_sign(dec: const mpd*) -> u8;
+@extern fn mpd_arith_sign(dec: const mpd*) -> i32;
 @extern fn mpd_radix() -> i32;
-@extern fn mpd_isdynamic(dec: mpd*) -> i32;
-@extern fn mpd_isstatic(dec: mpd*) -> i32;
-@extern fn mpd_isdynamic_data(dec: mpd*) -> i32;
-@extern fn mpd_isstatic_data(dec: mpd*) -> i32;
-@extern fn mpd_isshared_data(dec: mpd*) -> i32;
-@extern fn mpd_isconst_data(dec: mpd*) -> i32;
-@extern fn mpd_trail_zeros(dec: mpd*) -> i64;
+@extern fn mpd_isdynamic(dec: const mpd*) -> i32;
+@extern fn mpd_isstatic(dec: const mpd*) -> i32;
+@extern fn mpd_isdynamic_data(dec: const mpd*) -> i32;
+@extern fn mpd_isstatic_data(dec: const mpd*) -> i32;
+@extern fn mpd_isshared_data(dec: const mpd*) -> i32;
+@extern fn mpd_isconst_data(dec: const mpd*) -> i32;
+@extern fn mpd_trail_zeros(dec: const mpd*) -> i64;
 
 
 /******************************************************************************/
