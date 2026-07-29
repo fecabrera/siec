@@ -6,7 +6,7 @@ from siec.ast import Function
 from siec.codegen.abi import DIRECT, classify
 from siec.codegen.aliases import expand_alias
 from siec.codegen.asm import emit_asm_function
-from siec.codegen.errors import source_location
+from siec.codegen.errors import error_call_trace, source_location
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
 from siec.codegen.overloads import (
     declare_overload,
@@ -262,13 +262,15 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
     A nested statement tags its own line first, so the function line only fills
     in for errors raised outside any statement (a missing return, say).
     """
-    with source_location(line=fn.line, file=fn.file):
+    with source_location(line=fn.line, file=fn.file), error_call_trace(gen):
         # the emitting file decides which statics its body's names resolve to
         gen.current_file = fn.file
 
         # a declaration that already has blocks was defined elsewhere; an
         # overloaded name's body belongs to its own signature's sibling
         symbol = overload_symbol(gen, gen.resolve_symbol(fn.name), fn.params)
+        gen.current_function = symbol
+        gen.current_line = fn.line
         func = gen.module.globals[symbol]
         if func.blocks:
             raise TypeError(f"function '{shown_signature(fn)}' "
@@ -276,8 +278,6 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
 
         # the names this body uses are recorded against it: the call graph
         # the deprecation walk reads
-        gen.current_function = symbol
-        gen.current_line = fn.line
         gen.call_graph.setdefault(symbol, set())
 
         ret_type = func.function_type.return_type

@@ -43,6 +43,22 @@ def error_parts(error: Exception) -> tuple[str | None, int | None, str]:
         if match:
             line, message = int(match.group(1)), match.group(2)
 
+    trace = getattr(error, "sie_trace", ())
+    if trace:
+        calls = []
+        for frame in trace:
+            if len(frame) == 3:
+                kind, (file, call_line, function) = "called", frame
+            else:
+                kind, file, call_line, function = frame
+
+            location = display_path(file) if file else "<unknown>"
+            if call_line:
+                location += f" at line {call_line}"
+            calls.append(f"  {kind} from {location} in {function}")
+
+        message += "\ncall trace:\n" + "\n".join(calls)
+
     return getattr(error, "sie_file", None), line, message
 
 

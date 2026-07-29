@@ -229,6 +229,18 @@ class CodeGenerator:
         # warn, once the whole program is in
         self.deprecated: dict[str, str] = {}
         self.call_graph: dict = {}
+        # each direct edge's first source location: compile errors in lazily
+        # emitted generic bodies use these to reconstruct a Sie call trace
+        self.call_sites: dict[tuple[str, str], tuple[str, int]] = {}
+        # generic structs may stamp interface methods without a direct call.
+        # Retain the type-use and resulting method edges so their errors can
+        # still explain what caused those bodies to be emitted.
+        self.type_instantiation_sites: dict[
+            str, tuple[str, str, int]
+        ] = {}
+        self.instantiation_sites: dict[
+            str, tuple[str, str, int]
+        ] = {}
         self.deprecated_uses: list = []
 
         # '@remove' functions by symbol, mapped to their advice: a

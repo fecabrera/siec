@@ -190,6 +190,12 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
     if canonical in gen.structs:
         return canonical
 
+    if gen.current_function is not None:
+        gen.type_instantiation_sites.setdefault(
+            canonical,
+            (gen.current_function, gen.current_file, gen.current_line),
+        )
+
     if template.fields is None:
         raise TypeError(f"generic struct {base!r} is declared without a body")
 
@@ -722,6 +728,11 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
 
     if symbol not in gen.instantiated_functions:
         gen.instantiated_functions.add(symbol)
+        if gen.current_function is not None:
+            gen.instantiation_sites.setdefault(
+                symbol,
+                (gen.current_function, gen.current_file, gen.current_line),
+            )
 
         instance = copy.deepcopy(template)
         instance.name = symbol

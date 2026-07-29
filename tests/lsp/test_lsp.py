@@ -35,6 +35,33 @@ def test_analyze_reports_the_error_with_its_line(tmp_path):
                             "cannot implicitly convert {i8*, i64} to i32")
 
 
+def test_analyze_preserves_generic_call_trace(tmp_path):
+    """
+    LSP diagnostics retain the same source-level generic call chain as CLI
+    diagnostics.
+    """
+    src = write(tmp_path / "main.sie", """\
+fn fail<T>(value: const &T) -> i32 {
+    return value.missing;
+}
+
+fn middle<T>(value: const &T) -> i32 {
+    return fail(value);
+}
+
+fn main() -> i32 {
+    let value: i32 = 0;
+    return middle(value);
+}
+""")
+
+    report = analyze(src, [])
+    assert report.line == 2
+    assert "call trace:" in report.message
+    assert "middle<i32>" in report.message
+    assert "main" in report.message
+
+
 def test_analyze_reports_parse_errors(tmp_path):
     """
     Lexer and parser errors locate the same way as codegen's.

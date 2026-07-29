@@ -23,6 +23,9 @@ def note_use(gen: CodeGenerator, symbol: str) -> None:
 
     caller = gen.current_function
     gen.call_graph.setdefault(caller, set()).add(symbol)
+    if caller is not None:
+        gen.call_sites.setdefault(
+            (caller, symbol), (gen.current_file, gen.current_line))
 
     if symbol in gen.deprecated:
         gen.deprecated_uses.append((caller, symbol, gen.current_line,

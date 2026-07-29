@@ -136,6 +136,11 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
     struct_base, args = parts
     gen.instantiated_functions.add(symbol)
+    site = gen.type_instantiation_sites.get(base)
+    if site is None and gen.current_function is not None:
+        site = (gen.current_function, gen.current_file, gen.current_line)
+    if site is not None:
+        gen.instantiation_sites.setdefault(symbol, site)
 
     # the method's overloads stamp together, joining one set under
     # the instantiated symbol for calls to pick among
@@ -161,6 +166,9 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
                 func = declare_function(gen, instance)
             finally:
                 gen.ungated_types -= 1
+
+            if site is not None:
+                gen.instantiation_sites.setdefault(func.name, site)
 
             # a lone signature's body queues at once; overloads wait for
             # a call to pick them, so a candidate fitting only some

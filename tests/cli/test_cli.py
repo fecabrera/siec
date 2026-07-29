@@ -653,6 +653,87 @@ def test_format_error_prefers_the_errors_own_file():
     assert format_error("app.sie", error) == "lib/dep.sie at line 4: undefined variable 'x'"
 
 
+def test_format_error_includes_the_sie_call_trace():
+    """
+    A codegen error's source-level callers render below its primary location.
+    """
+    error = TypeError("bad cast")
+    error.sie_line = 14
+    error.sie_file = "lib/fnv.sie"
+    error.sie_trace = [
+        ("lib/hash.sie", 7, "hash<char>"),
+        ("app.sie", 5, "main"),
+    ]
+
+    assert format_error("app.sie", error) == (
+        "lib/fnv.sie at line 14: bad cast\n"
+        "call trace:\n"
+        "  called from lib/hash.sie at line 7 in hash<char>\n"
+        "  called from app.sie at line 5 in main"
+    )
+
+
+def test_generic_codegen_error_reports_call_trace(tmp_path, monkeypatch, capsys):
+    """
+    Lazily emitted generic bodies retain their Sie callers even though those
+    calls are absent from the Python exception stack.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+fn fail<T>(value: const &T) -> i32 {
+    return value.missing;
+}
+
+fn middle<T>(value: const &T) -> i32 {
+    return fail(value);
+}
+
+fn main() -> i32 {
+    let value: i32 = 0;
+    return middle(value);
+}
+""")
+
+    assert run_cli(monkeypatch, src, "-o", tmp_path / "p") == 1
+    error = capsys.readouterr().err
+    assert "call trace:" in error
+    assert "called from" in error and "middle<i32>" in error
+    assert "called from" in error and "main" in error
+
+
+def test_conformance_emitted_method_reports_instantiation_trace(
+        tmp_path, monkeypatch, capsys):
+    """
+    A generic method emitted for interface conformance, without a direct call,
+    points back to the concrete type use that caused its instantiation.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+interface Read<T>;
+fn Read<T>::read(const &self) -> T;
+
+struct Box<T>: Read<T> {
+    value: T;
+}
+
+fn Box<T>::read(const &self) -> T {
+    return self.value;
+}
+
+fn main() -> i32 {
+    let box: Box<char[]> = { "value" };
+    return 0;
+}
+""")
+
+    assert run_cli(monkeypatch, src, "-o", tmp_path / "p") == 1
+    error = capsys.readouterr().err
+    assert "cannot use a 'const char[]' value" in error
+    assert "call trace:" in error
+    assert "instantiated from" in error
+    assert "main" in error
+
+
 def test_codegen_error_is_reported_with_a_line(tmp_path, monkeypatch, capsys):
     """
     A codegen error exits non-zero and prints the source and line, not a traceback.
