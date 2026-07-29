@@ -732,6 +732,34 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 3)]
 
 
+def test_inspect_preserves_bounds_in_declarations(tmp_path):
+    """
+    Hover renders declared bounds on structs and generic methods instead
+    of exposing the compiler's internal constraint representation.
+    """
+    analysis, src = unit(tmp_path, """\
+interface Hashable;
+struct Key: Hashable { value: i32; }
+struct Box<T: Hashable> { value: T; }
+
+fn Box<T>::take<U: Hashable>(&self, value: U) -> T {
+    return self.value;
+}
+
+fn main() -> i32 {
+    let box: Box<Key>;
+    let key: Key;
+    return box.take(key).value;
+}
+""")
+
+    struct = probe(analysis, src, 2, 8)
+    method = probe(analysis, src, 11, 16)
+
+    assert struct.text == "struct Box<T: Hashable> {\n    value: T;\n}"
+    assert method.text == "fn Box<T>::take<U: Hashable>(&Box<T>, value: U) -> T"
+
+
 def test_inspect_types_a_field_through_the_chain(tmp_path):
     """
     Hovering a field types it through the receiver chain and sites its

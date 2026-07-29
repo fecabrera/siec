@@ -171,6 +171,12 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
             raise TypeError(f"cannot instantiate {base!r} with {arg!r}: "
                             "the argument carries a modifier")
 
+    constraint_owner = alias if alias is not None else template
+    if constraint_owner.constraints:
+        from siec.codegen.interfaces import check_constraints
+
+        check_constraints(gen, constraint_owner, dict(zip(params, args)))
+
     # a generic alias expands its target with the arguments substituted,
     # like any alias one step further; 'seen' catches self-reference; the
     # substituted target mixes files' names, so no view gates it
@@ -272,7 +278,7 @@ def register_generic_function(gen: CodeGenerator, fn) -> None:
             overloads = gen.generic_overloads.setdefault(fn.name, [])
             for other in (primary, *overloads):
                 if (len(other.type_params) == len(fn.type_params)
-                        and template_key(other) == template_key(fn)):
+                        and template_identity(other) == template_identity(fn)):
                     from siec.codegen.overloads import shown_signature
                     raise TypeError(f"function '{shown_signature(fn)}' "
                                     "is declared more than once")
@@ -292,6 +298,19 @@ def template_key(template) -> tuple:
     mapping = {p: f"#{i}" for i, p in enumerate(template.type_params)}
     return tuple(substitute(strip_const(p.type), mapping)
                  for p in template.params)
+
+
+def template_identity(template) -> tuple:
+    """
+    A generic template's normalized parameter shape and bounds. Bounds
+    distinguish otherwise identical overloads: 'f<T>' and 'f<T: I>'.
+    """
+    mapping = {p: f"#{i}" for i, p in enumerate(template.type_params)}
+    constraints = tuple(
+        (mapping[param], substitute(bound, mapping))
+        for param, bound in (template.constraints or {}).items()
+    )
+    return template_key(template), constraints
 
 
 def rewrite_types(node, apply) -> None:
@@ -318,7 +337,8 @@ def rewrite_types(node, apply) -> None:
                 setattr(node, field.name, apply(value))
         elif field.name == "type_args" and value is not None:
             setattr(node, field.name, [apply(v) for v in value])
-        elif field.name == "constraints" and value is not None:
+        elif (field.name in ("constraints", "receiver_constraints")
+              and value is not None):
             setattr(node, field.name,
                     {k: apply(v) for k, v in value.items()})
         else:
@@ -714,7 +734,10 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
     if any(other is not None and other is not template
            and len(other.type_params) == len(template.type_params)
            for other in siblings):
-        symbol = f"{symbol}({','.join(template_key(template))})"
+        params, constraints = template_identity(template)
+        shape = [*params, *(f"{param}:{bound}"
+                            for param, bound in constraints)]
+        symbol = f"{symbol}({','.join(shape)})"
 
     # a '@static' template's instances stay file-local like the template:
     # the symbol mangles per file, so another file's same-named static

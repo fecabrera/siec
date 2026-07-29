@@ -430,6 +430,29 @@ def test_generic_method_conformance_checks_the_substituted_signature(
     """)
 
 
+def test_bounded_generic_method_satisfies_an_interface_action(compile_source):
+    """
+    A generic method may satisfy a concrete action when the action's type
+    both unifies with and satisfies the method parameter's bound.
+    """
+    compile_source("""
+    interface Hashable;
+    struct Key: Hashable { value: i32; }
+
+    interface Consumer {
+        fn consume(&self, key: Key) -> i32;
+    }
+
+    struct Sink: Consumer {}
+
+    fn Sink::consume<T: Hashable>(&self, key: T) -> i32 {
+        return key.value;
+    }
+
+    fn main() -> i32 { return 0; }
+    """)
+
+
 def test_constrained_void_method_satisfies_an_interface_action(compile_source):
     """
     An interface-valued parameter adapts its method into a constrained

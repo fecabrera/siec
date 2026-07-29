@@ -19,7 +19,7 @@ from siec.parser.includes import parse_include
 from siec.parser.statements import parse_block
 from siec.parser.stream import TokenStream
 from siec.parser.structs import parse_struct
-from siec.parser.types import parse_type
+from siec.parser.types import parse_type, parse_type_params
 
 
 def parse_program(ts: TokenStream) -> Program:
@@ -272,20 +272,14 @@ def parse_alias(ts: TokenStream) -> TypeAlias:
 
     # '<T, U>' names the type parameters of a generic alias, instantiated
     # by use: 'cmp<i32>' expands the target with each argument list
-    params = None
-    if ts.peek().syntax == "<":
-        ts.next()
-        params = [ts.expect("ident").value]
-        while ts.peek().syntax == ",":
-            ts.next()
-            params.append(ts.expect("ident").value)
-        ts.expect("sym", ">")
+    params, constraints = parse_type_params(ts)
 
     ts.expect("sym", "=")
     target = parse_type(ts)
     ts.expect("sym", ";")
 
-    return TypeAlias(name, target, params=params, line=line)
+    return TypeAlias(name, target, params=params, constraints=constraints,
+                     line=line)
 
 
 def declares_global(ts: TokenStream) -> bool:
@@ -383,20 +377,11 @@ DECORATORS = {"extern", "inline", "static", "asm", "noreturn", "private"}
 
 
 
-def placeholders(ts: TokenStream) -> list[str] | None:
+def placeholders(ts: TokenStream) -> tuple[list[str] | None, dict | None]:
     """
-    Parse an optional '<T, U>' placeholder list of plain identifiers.
+    Parse an optional '<T, U: Bound>' generic parameter list.
     """
-    if ts.peek().syntax != "<":
-        return None
-
-    ts.next()
-    names = [ts.expect("ident").value]
-    while ts.peek().syntax == ",":
-        ts.next()
-        names.append(ts.expect("ident").value)
-    ts.expect("sym", ">")
-    return names
+    return parse_type_params(ts)
 
 
 def parse_function(ts: TokenStream, receiver: str | None = None,
@@ -474,14 +459,17 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
 
     # '<T, U>' after the first name is either a generic function's type
     # parameters or, before a '::', a generic struct's placeholders
-    params_list = placeholders(ts)
+    params_list, params_constraints = placeholders(ts)
 
     # 'S::m' declares a method: the name canonicalizes to 'S::m', the
     # receiver rides along, and its own '<X, Y>' may follow the method name
     type_params = None
+    constraints = None
+    receiver_constraints = None
     if receiver is not None:
         name = f"{receiver}::{name}"
         type_params = params_list
+        constraints = params_constraints
     elif (params_list is None and ts.peek().syntax == "["
             and ts.peek(1).syntax == "]" and ts.peek(2).syntax == "::"):
         # 'T[]::m' declares a method of the arrays, the element name a
@@ -491,14 +479,16 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         ts.next()
         receiver, receiver_params = f"{name}[]", [name]
         name = f"{receiver}::{ts.expect('ident').value}"
-        type_params = placeholders(ts)
+        type_params, constraints = placeholders(ts)
     elif ts.peek().syntax == "::":
         ts.next()
         receiver, receiver_params = name, params_list
+        receiver_constraints = params_constraints
         name = f"{receiver}::{ts.expect('ident').value}"
-        type_params = placeholders(ts)
+        type_params, constraints = placeholders(ts)
     else:
         type_params = params_list
+        constraints = params_constraints
 
     if is_extern and (type_params is not None or receiver is not None):
         raise SyntaxError(f"line {line}: an '@extern' function cannot be "
@@ -606,6 +596,8 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         "type_params": type_params,
         "receiver": receiver,
         "receiver_params": receiver_params,
+        "receiver_constraints": receiver_constraints,
+        "constraints": constraints,
         "variadic": variadic,
         "deprecated": deprecated,
         "removed": removed,

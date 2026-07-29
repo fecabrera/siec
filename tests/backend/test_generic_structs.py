@@ -26,6 +26,55 @@ def test_generic_struct_instantiates_per_argument_list(run):
     assert run(source).returncode == 42
 
 
+def test_bounded_struct_and_alias_instantiations(run):
+    """
+    Struct and alias templates enforce interface bounds at their concrete
+    type spellings, supporting the Map<K: Hashable, V> shape.
+    """
+    source = """
+    interface Hashable;
+    struct Key: Hashable { value: i32; }
+
+    struct Map<K: Hashable, V> {
+        key: K;
+        value: V;
+    }
+
+    @type Entry<K: Hashable> = Map<K, i32>;
+
+    fn main() -> i32 {
+        let entry: Entry<Key> = { { 40 }, 2 };
+        return entry.key.value + entry.value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_bounded_struct_and_alias_reject_nonimplementers(compile_source):
+    """
+    A bad argument is rejected whether it reaches the bound through a
+    struct template directly or through a generic alias.
+    """
+    source = """
+    interface Hashable;
+    struct Key {{ value: i32; }}
+    struct Map<K: Hashable, V> {{ key: K; value: V; }}
+    {alias}
+    fn main() -> i32 {{ let value: {type}; return 0; }}
+    """
+
+    with pytest.raises(TypeError, match="type 'Key' does not implement "
+                                        "interface 'Hashable'"):
+        compile_source(source.format(alias="", type="Map<Key,i32>"))
+
+    with pytest.raises(TypeError, match="type 'Key' does not implement "
+                                        "interface 'Hashable'"):
+        compile_source(source.format(
+            alias="@type Entry<K: Hashable> = Map<K, i32>;",
+            type="Entry<Key>",
+        ))
+
+
 def test_nested_and_recursive_generics(run):
     """
     Arguments nest ('Box<Box<i32>>', splitting the lexer's '>>'), and a

@@ -135,6 +135,37 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         return None
 
     struct_base, args = parts
+
+    # A method may repeat bounds on its generic receiver declaration.
+    # Check them before stamping any overload for this instantiation.
+    if any(template.receiver_constraints for template in templates):
+        from siec.codegen.interfaces import check_constraints
+
+        eligible = []
+        failure = None
+        for template in templates:
+            if not template.receiver_constraints:
+                eligible.append(template)
+                continue
+
+            receiver_template = copy.copy(template)
+            receiver_template.constraints = template.receiver_constraints
+            try:
+                check_constraints(
+                    gen,
+                    receiver_template,
+                    dict(zip(template.receiver_params, args)),
+                )
+            except TypeError as error:
+                failure = failure or error
+            else:
+                eligible.append(template)
+
+        if not eligible:
+            raise failure
+
+        templates = eligible
+
     gen.instantiated_functions.add(symbol)
     site = gen.type_instantiation_sites.get(base)
     if site is None and gen.current_function is not None:

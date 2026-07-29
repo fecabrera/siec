@@ -91,6 +91,34 @@ def parse_type(ts: TokenStream) -> str:
             return name
 
 
+def parse_type_params(ts: TokenStream) -> tuple[list[str] | None, dict | None]:
+    """
+    Parse an optional generic parameter list, each parameter carrying an
+    optional type bound: '<T, U: Iface>'. Bounds use the full type grammar.
+    """
+    if ts.peek().syntax != "<":
+        return None, None
+
+    ts.next()
+    params = []
+    constraints = {}
+    while True:
+        param = ts.expect("ident").value
+        params.append(param)
+
+        if ts.peek().syntax == ":":
+            ts.next()
+            constraints[param] = parse_type(ts)
+
+        if ts.peek().syntax != ",":
+            break
+
+        ts.next()
+
+    close_angle(ts)
+    return params, constraints or None
+
+
 def close_angle(ts: TokenStream) -> None:
     """
     Consume one closing '>', splitting it off a glued token when the lexer

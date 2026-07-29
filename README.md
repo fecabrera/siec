@@ -1054,6 +1054,16 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
                        // that can be replaced by any concrete types at compile time
 ```
 
+A parameter may carry a bound after `:`. An interface bound accepts any type that implements it; any other type-like bound—an intrinsic, alias, or struct—accepts that canonical type exactly. Bounds may refer to the other parameters, and apply whether the call infers its arguments or spells them:
+
+```
+fn hash<K: Hashable>(key: K) -> u64;
+fn size<T, U: Iterable<T>>(values: U) -> u64;
+fn word<T: u64>(value: T) -> T;
+```
+
+An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the last declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
+
 A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments (`identity(n)` on an `i32` compiles `identity<i32>`) by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
 
 In a typed context (a declared return type, an annotated `let`, an argument's parameter) the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:
@@ -1713,6 +1723,12 @@ Type aliases are generic when their name is followed by an arbitrary number of p
 
 A concrete spelling supplies the arguments wherever a type is written: `cmp<i32>` is `fn(i32, i32) -> bool`. The target may be any type over the parameters, including a [generic struct](#generic-structs) or another generic alias (`@type boxes<T> = List<Box<T>>;`); the same modifier rule applies to arguments, and cycles are reported like any alias cycle.
 
+Alias parameters take the same [bounds as generic functions](#generic-functions), checked before the target expands:
+
+```
+@type Entry<K: Hashable, V> = Pair<K, V>;
+```
+
 #### Type casting
 
 Any represented value can be explicitly viewed as another type through the
@@ -2020,6 +2036,16 @@ let lst: List<i32>; // lst is a variable that holds a value of type List<i32>
 
 Each argument list stamps out one concrete struct at compile time, shared by every use spelling the same arguments; arguments may be any concrete type, including other instantiations (`Box<Box<i32>>`), and a field may name its own instantiation through a pointer (`next: Node<T>*`). A modifier-carrying argument (`const T`, `&T`) is rejected: substituted into a derived position like `T*`, the modifier would silently move where it applies.
 
+Struct parameters take the same [bounds as generic functions](#generic-functions). This is the usual way to make a capability part of a container's type:
+
+```
+struct Map<K: Hashable, V> {
+    // every Map key implements Hashable
+}
+```
+
+The bound is checked whenever a concrete `Map<K, V>` is formed, before its fields or methods instantiate. Unions and generic interfaces use the same parameter syntax.
+
 #### Tuples
 
 `Tuple<A, B, ...>` is builtin and variadic: each arity is a struct of its element types, built by a parenthesized literal or declared like any type:
@@ -2235,6 +2261,14 @@ fn S::method<A, B, ...>(self: &S, a: A, b: B, ...) {
 }
 ```
 
+Their parameters take bounds in the same place:
+
+```
+fn S::method<T: Iface>(&self, value: T) {
+    // ...
+}
+```
+
 #### Methods of a generic struct
 
 Given a generic struct `S` with generic type params `A`, `B`, etc.
@@ -2346,6 +2380,8 @@ interface Iterable<T> {
     fn iterator(&self) -> Iterator<T>;
 }
 ```
+
+Their parameters may be bounded too (`interface Index<K: Hashable>;`); every concrete claim must satisfy those bounds.
 
 An interface with no requirements of its own may end in `;` without a body; outside-the-body actions then spell the receiver's parameters themselves:
 

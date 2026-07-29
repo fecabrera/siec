@@ -249,7 +249,7 @@ module.exports = grammar({
         optional(seq("=", field("value", $._expression))),
       ),
 
-    type_parameters: ($) => seq("<", commaSep1($.identifier), ">"),
+    type_parameters: ($) => seq("<", commaSep1($.type_parameter), ">"),
 
     /* ------------------------------------------------------------------ *
      * functions
@@ -761,6 +761,12 @@ module.exports = grammar({
 
     line_comment: ($) => token(seq("//", /[^\n]*/)),
     block_comment: ($) => token(seq("/*", /[^*]*\*+([^/*][^*]*\*+)*/, "/")),
+
+    type_parameter: ($) =>
+      seq(
+        field("name", $.identifier),
+        optional(seq(":", field("bound", $.type))),
+      ),
   },
 });
 

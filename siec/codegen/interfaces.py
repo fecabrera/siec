@@ -243,6 +243,7 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                                 f"got {len(args)}")
 
             mapping = dict(zip(iface.params or (), args))
+            check_constraints(gen, iface, mapping)
 
             # every interface field, at its declared type
             for required in iface.fields or ():
@@ -351,9 +352,14 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
     for template in [t for t in (gen.generic_functions.get(symbol),
                                  *gen.generic_overloads.get(symbol, ()))
                      if t is not None]:
-        bindings = dict(template.constraints or {})
+        synthetic = {
+            param: constraint
+            for param, constraint in (template.constraints or {}).items()
+            if param.startswith("__")
+        }
+        bindings = dict(synthetic)
         type_params = [p for p in template.type_params or ()
-                       if p not in bindings]
+                       if p not in synthetic]
         initial = [expand_lax(gen, substitute(p.type, bindings))
                    for p in template.params]
         if not receiver_matches(initial):
@@ -376,6 +382,17 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
 
         if any(param not in bindings for param in type_params):
             continue
+
+        declared = {
+            param: constraint
+            for param, constraint in (template.constraints or {}).items()
+            if not param.startswith("__")
+        }
+        if declared:
+            try:
+                check_constraints(gen, template, bindings, declared)
+            except TypeError:
+                continue
 
         have = [expand_lax(gen, substitute(pattern, bindings))
                 for pattern in patterns]
@@ -443,6 +460,51 @@ def expand_lax(gen: CodeGenerator, name: str | None) -> str | None:
         return canonical_interface(gen, name)
 
     return expand_alias(gen, name, checked=False)
+
+
+def expand_bound(gen: CodeGenerator, spelling: str,
+                 seen: tuple = ()) -> tuple[str, bool]:
+    """
+    Resolve a bound in its declaration's view. The bool says whether its
+    canonical target is an interface, which ordinary alias expansion
+    deliberately rejects as an abstract value type.
+    """
+    from siec.codegen.aliases import expand_alias
+
+    head, angle, rest = spelling.partition("<")
+    if "." in head:
+        resolved = gen.resolve_qualified(head.split("."))
+        if resolved is None:
+            raise TypeError(f"unknown type {spelling!r}")
+        spelling = resolved + angle + rest
+    elif ((bound := gen.member_bindings.get((gen.current_file, head)))
+          is not None):
+        spelling = bound + angle + rest
+
+    parts = split_generic(spelling)
+    base = parts[0] if parts is not None else spelling
+    if base in gen.interfaces:
+        return canonical_interface(gen, spelling), True
+
+    # An alias may deliberately name an interface for use as a bound even
+    # though that abstract target cannot be used as a stored value type.
+    if parts is None and spelling in gen.aliases:
+        if spelling in seen:
+            cycle = " -> ".join([*seen, spelling])
+            raise TypeError(f"type alias cycle: {cycle}")
+        return expand_bound(gen, gen.aliases[spelling], (*seen, spelling))
+
+    if parts is not None and base in gen.generic_aliases:
+        alias = gen.generic_aliases[base]
+        if len(parts[1]) != len(alias.params):
+            take = len(alias.params)
+            raise TypeError(f"generic type alias {base!r} takes {take} type "
+                            f"argument{'s' if take != 1 else ''}, "
+                            f"got {len(parts[1])}")
+        target = substitute(alias.type, dict(zip(alias.params, parts[1])))
+        return expand_bound(gen, target, (*seen, base))
+
+    return expand_alias(gen, spelling), False
 
 
 def interface_expansions(gen: CodeGenerator, spelling: str) -> list[str]:
@@ -708,17 +770,31 @@ def register_array_extend(gen: CodeGenerator, ext) -> None:
         gen.array_claims.append((elem, spelling))
 
 
-def check_constraints(gen: CodeGenerator, template, mapping: dict) -> None:
+def check_constraints(gen: CodeGenerator, template, mapping: dict,
+                      constraints: dict | None = None) -> None:
     """
-    Check a template's interface constraints against one instantiation:
-    each bound type must implement the constraining interface.
+    Check a template's bounds against one instantiation. An interface
+    bound accepts any implementing type; every concrete type-like bound
+    accepts its canonical type exactly, aliases included.
     """
-    for placeholder, spelling in (template.constraints or {}).items():
-        concrete = mapping.get(placeholder)
-        if concrete is None:
-            continue
+    from siec.codegen.aliases import expand_alias
 
-        required = canonical_interface(gen, substitute(spelling, mapping))
-        if not type_implements(gen, concrete, required):
-            raise TypeError(f"type {concrete!r} does not implement "
-                            f"interface {required!r}")
+    with declaration_view(gen, template.file):
+        constraints = template.constraints if constraints is None else constraints
+        for placeholder, spelling in (constraints or {}).items():
+            concrete = mapping.get(placeholder)
+            if concrete is None:
+                continue
+
+            required, is_interface_bound = expand_bound(
+                gen, substitute(spelling, mapping))
+            if is_interface_bound:
+                if not type_implements(gen, concrete, required):
+                    raise TypeError(f"type {concrete!r} does not implement "
+                                    f"interface {required!r}")
+                continue
+
+            concrete = expand_alias(gen, concrete, checked=False)
+            if strip_const(concrete) != strip_const(required):
+                raise TypeError(f"type {concrete!r} does not satisfy bound "
+                                f"{required!r}")

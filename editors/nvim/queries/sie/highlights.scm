@@ -112,7 +112,7 @@
 ; every written type reaches the tree through 'qualified_type', a plain
 ; name being the one-element case of a dotted one
 (qualified_type (identifier) @type)
-(type_parameters (identifier) @type.definition)
+(type_parameter name: (identifier) @type.definition)
 (struct_declaration name: (identifier) @type)
 (enum_declaration name: (identifier) @type)
 (alias_declaration name: (identifier) @type)

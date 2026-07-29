@@ -132,6 +132,22 @@ def test_function_with_return_type(ts):
     assert fn.body == [Return(IntLiteral(0))]
 
 
+def test_generic_function_and_method_bounds(ts):
+    """
+    Each generic parameter may carry a full type bound, including a
+    generic interface spelling on a method's own parameter.
+    """
+    fn = parse_function(ts("fn f<T: u64, U>(t: T) -> U;"))
+    method = parse_function(
+        ts("fn S<T>::f<U: Iface<T>>(&self, value: U) -> T;"))
+
+    assert fn.type_params == ["T", "U"]
+    assert fn.constraints == {"T": "u64"}
+    assert method.receiver_params == ["T"]
+    assert method.type_params == ["U"]
+    assert method.constraints == {"U": "Iface<T>"}
+
+
 def test_forward_declaration_has_no_body(ts):
     """
     A signature ending in ';' parses as a declaration with body None.

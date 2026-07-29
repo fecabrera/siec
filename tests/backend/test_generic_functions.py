@@ -52,6 +52,110 @@ def test_explicit_type_arguments_and_generic_returns(run):
     assert run(source).returncode == 42
 
 
+def test_type_like_bounds_accept_their_canonical_types(run):
+    """
+    Intrinsics, aliases, and structs are concrete bounds: aliases
+    canonicalize, and each accepts exactly that resulting type.
+    """
+    source = """
+    struct Key { value: i32; }
+    @type Word = u64;
+    @type KeyAlias = Key;
+
+    fn word<T: Word>(value: T) -> T { return value; }
+    fn key<T: KeyAlias>(value: T) -> T { return value; }
+
+    fn main() -> i32 {
+        let k: Key = { 2 };
+        return word<u64>(40) as i32 + key(k).value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_interface_bound_accepts_an_implementer(run):
+    """
+    An interface bound accepts a concrete type carrying its nominal claim.
+    """
+    source = """
+    interface Hashable;
+
+    struct Key: Hashable { value: i32; }
+
+    fn hash<K: Hashable>(key: K) -> i32 {
+        return key.value;
+    }
+
+    fn main() -> i32 {
+        let key: Key = { 42 };
+        return hash(key);
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_interface_bound_infers_its_free_type_arguments(run):
+    """
+    A concrete claim supplies generic arguments named only inside another
+    parameter's bound.
+    """
+    source = """
+    interface Holds<T>;
+    struct Key: Holds<i32> { value: i32; }
+
+    fn size<T, U: Holds<T>>(value: U) -> u64 {
+        return @sizeof(T);
+    }
+
+    fn main() -> i32 {
+        let key: Key;
+        return size(key) as i32 + 38;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_bounds_reject_nonmatching_function_arguments(compile_source):
+    """
+    Inferred type arguments are checked against concrete and interface
+    bounds before a function instance is declared.
+    """
+    with pytest.raises(TypeError, match="type 'i32' does not satisfy bound 'u64'"):
+        compile_source("""
+        fn only_words<T: u64>(value: T) {}
+        fn main() -> i32 { only_words(1); return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="type 'Key' does not implement "
+                                        "interface 'Hashable'"):
+        compile_source("""
+        interface Hashable;
+        struct Key { value: i32; }
+        fn hash<K: Hashable>(key: K) {}
+        fn main() -> i32 { let key: Key; hash(key); return 0; }
+        """)
+
+
+def test_a_bounded_overload_beats_an_unbounded_one(run):
+    """
+    Otherwise identical templates may differ by bounds, and the bounded
+    candidate is more specific when both accept a call.
+    """
+    source = """
+    interface Hashable;
+    struct Key: Hashable { value: i32; }
+
+    fn pick<T>(value: T) -> i32 { return 1; }
+    fn pick<T: Hashable>(value: T) -> i32 { return 42; }
+
+    fn main() -> i32 {
+        let key: Key = { 0 };
+        return pick(key);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_generic_functions_recurse_and_call_each_other(run):
     """
     An instance may call itself, and one generic may instantiate another.

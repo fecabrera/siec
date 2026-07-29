@@ -8530,6 +8530,32 @@
     }
   },
   {
+    "type": "type_parameter",
+    "named": true,
+    "fields": {
+      "bound": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "type_parameters",
     "named": true,
     "fields": {},
@@ -8538,7 +8564,7 @@
       "required": true,
       "types": [
         {
-          "type": "identifier",
+          "type": "type_parameter",
           "named": true
         }
       ]

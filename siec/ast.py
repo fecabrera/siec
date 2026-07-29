@@ -596,7 +596,8 @@ class Function:
     type_params: list[str] | None = None  # 'fn f<T, U>': generic type parameters
     receiver: str | None = None  # 'fn S::m': the struct the method acts on
     receiver_params: list[str] | None = None  # 'fn S<A>::m': its placeholders
-    constraints: dict | None = None  # interface bound per synthetic type param
+    receiver_constraints: dict | None = None  # bounds repeated on 'S<A>::m'
+    constraints: dict | None = None  # bound per generic type parameter
     variadic: bool = False  # 'args...': the last param is an 'Any[]' sugar
     deprecated: str | None = None  # '@deprecated("...")': the advice its uses warn with
     removed: str | None = None  # '@remove("...")': the advice its uses fail with
@@ -632,6 +633,7 @@ class Struct:
     volatile: bool = False
     is_union: bool = False  # 'union': the fields share one storage
     params: list[str] | None = None  # 'struct S<T, U>': generic type parameters
+    constraints: dict | None = None  # bound per generic type parameter
     is_interface: bool = False  # 'interface I': an abstract type, no storage
     interfaces: list[str] | None = None  # 'struct S: I, J': what it implements
     actions: list = field(default_factory=list)  # an interface body's 'fn' signatures
@@ -711,6 +713,7 @@ class TypeAlias:
     name: str
     type: str
     params: list[str] | None = None  # '@type a<T, U> = ...': generic parameters
+    constraints: dict | None = None  # bound per generic type parameter
     line: int = _line()
     file: str = _file()
 

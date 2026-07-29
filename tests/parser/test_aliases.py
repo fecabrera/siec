@@ -25,6 +25,17 @@ def test_alias_targets_keep_their_canonical_names(ts):
     assert parse_alias(ts("@type view = const u8[];")).type == "const u8[]"
 
 
+def test_generic_alias_bounds(ts):
+    """
+    A generic alias keeps each parameter's optional type-like bound.
+    """
+    alias = parse_alias(ts("@type A<T: Iface, U> = Pair<T, U>;"))
+
+    assert alias.params == ["T", "U"]
+    assert alias.constraints == {"T": "Iface"}
+    assert alias.type == "Pair<T,U>"
+
+
 def test_alias_requires_equals_and_semicolon(ts):
     """
     The '=' and the closing ';' are both mandatory.

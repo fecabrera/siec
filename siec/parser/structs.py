@@ -3,7 +3,7 @@
 from siec.ast import Field, Struct
 from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
-from siec.parser.types import parse_type
+from siec.parser.types import parse_type, parse_type_params
 
 
 def parse_struct(ts: TokenStream) -> Struct:
@@ -66,14 +66,7 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     # '<T, U>' names the type parameters of a generic struct, instantiated
     # by use: 'S<i32>' stamps out a concrete struct per argument list
-    params = None
-    if ts.peek().syntax == "<":
-        ts.next()
-        params = [ts.expect("ident").value]
-        while ts.peek().syntax == ",":
-            ts.next()
-            params.append(ts.expect("ident").value)
-        ts.expect("sym", ">")
+    params, constraints = parse_type_params(ts)
 
     # ': I, J<T>' after a struct's name declares the interfaces it
     # implements; there is no inheritance, so ':' always means interfaces
@@ -92,6 +85,7 @@ def parse_struct(ts: TokenStream) -> Struct:
         ts.next()
         return Struct(name, [] if is_interface else None, packed, align,
                       volatile, is_union, params=params,
+                      constraints=constraints,
                       is_interface=is_interface, interfaces=interfaces,
                       is_private=is_private,
                       line=line)
@@ -146,6 +140,7 @@ def parse_struct(ts: TokenStream) -> Struct:
         ts.next()
 
     return Struct(name, fields, packed, align, volatile, is_union,
-                  params=params, is_interface=is_interface,
+                  params=params, constraints=constraints,
+                  is_interface=is_interface,
                   interfaces=interfaces, actions=actions,
                   is_private=is_private, line=line)

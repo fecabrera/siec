@@ -674,11 +674,21 @@ def signature(fn: Function) -> str:
     name = fn.name
     if (fn.receiver_params and fn.receiver
             and not fn.receiver.endswith("[]")):
-        name = (f"{fn.receiver}<{', '.join(fn.receiver_params)}>"
+        receiver_params = ", ".join(
+            p + (f": {fn.receiver_constraints[p]}"
+                 if p in (fn.receiver_constraints or {}) else "")
+            for p in fn.receiver_params
+        )
+        name = (f"{fn.receiver}<{receiver_params}>"
                 f"::{fn.name.partition('::')[2]}")
 
     if type_params:
-        name += f"<{', '.join(type_params)}>"
+        shown = ", ".join(
+            p + (f": {fn.constraints[p]}"
+                 if p in (fn.constraints or {}) else "")
+            for p in type_params
+        )
+        name += f"<{shown}>"
 
     params = ", ".join(
         p.type if p.name == "self" and is_reference(strip_const(p.type))
@@ -696,7 +706,12 @@ def struct_text(node) -> str:
         "union" if getattr(node, "is_union", False) else "struct"
     name = node.name
     if node.params:
-        name += f"<{', '.join(node.params)}>"
+        params = ", ".join(
+            p + (f": {node.constraints[p]}"
+                 if p in (node.constraints or {}) else "")
+            for p in node.params
+        )
+        name += f"<{params}>"
 
     if node.is_interface or not node.fields:
         return f"{kind} {name};"

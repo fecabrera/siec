@@ -29,6 +29,20 @@ def test_struct_fields_keep_pointer_and_struct_types(ts):
         "S", [Field("p", "i32*"), Field("inner", "T")])
 
 
+def test_generic_struct_bounds(ts):
+    """
+    Structs and interfaces retain optional type-like bounds by parameter.
+    """
+    struct = parse_struct(
+        ts("struct Map<K: Hashable, V: Pair<u64, i32>>;"))
+
+    assert struct.params == ["K", "V"]
+    assert struct.constraints == {
+        "K": "Hashable",
+        "V": "Pair<u64,i32>",
+    }
+
+
 def test_forward_declaration_has_no_fields(ts):
     """
     'struct Name;' parses to a Struct with None fields, marking a forward declaration.

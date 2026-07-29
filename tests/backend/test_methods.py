@@ -126,6 +126,36 @@ def test_generic_methods_infer_and_spell_their_arguments(run):
     assert run(source).returncode == 42
 
 
+def test_generic_method_bounds(run, compile_source):
+    """
+    A generic method's own parameter accepts interface implementers and
+    rejects other inferred or explicitly spelled arguments.
+    """
+    source = """
+    interface Hashable;
+    struct Key: Hashable { value: i32; }
+    struct Box<T> { value: T; }
+
+    fn Box<T>::add<U: Hashable>(&self, key: U) -> T {
+        return self.value + key.value as T;
+    }
+
+    fn main() -> i32 {
+        let box: Box<i32> = { 40 };
+        let key: Key = { 2 };
+        return box.add(key);
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="type 'i32' does not implement "
+                                        "interface 'Hashable'"):
+        compile_source(source.replace(
+            "let key: Key = { 2 };\n        return box.add(key);",
+            "return box.add(2);",
+        ))
+
+
 def test_missing_method_names_itself(compile_source):
     """
     Calling a method the receiver's type does not declare is an error.

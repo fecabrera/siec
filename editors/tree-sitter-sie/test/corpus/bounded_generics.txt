@@ -1,0 +1,82 @@
+==================
+Bounded generics
+==================
+
+struct Map<K: Hashable, V> {
+  key: K;
+  value: V;
+}
+
+fn Map<K>::find<U: Iterable<K>>(&self, value: U) -> V;
+
+@type Entry<T: Hashable> = Pair<T, u64>;
+
+---
+
+(source_file
+  (struct_declaration
+    name: (identifier)
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier)
+        bound: (type
+          (qualified_type
+            (identifier))))
+      (type_parameter
+        name: (identifier)))
+    body: (struct_body
+      (field_declaration
+        name: (identifier)
+        type: (type
+          (qualified_type
+            (identifier))))
+      (field_declaration
+        name: (identifier)
+        type: (type
+          (qualified_type
+            (identifier))))))
+  (function_declaration
+    name: (function_name
+      name: (identifier)
+      type_parameters: (type_parameters
+        (type_parameter
+          name: (identifier)))
+      method: (identifier)
+      method_type_parameters: (type_parameters
+        (type_parameter
+          name: (identifier)
+          bound: (type
+            (qualified_type
+              (identifier)
+              (type_arguments
+                (type
+                  (qualified_type
+                    (identifier)))))))))
+    parameters: (parameters
+      (self_parameter)
+      (parameter
+        name: (identifier)
+        type: (type
+          (qualified_type
+            (identifier)))))
+    return_type: (type
+      (qualified_type
+        (identifier))))
+  (alias_declaration
+    name: (identifier)
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier)
+        bound: (type
+          (qualified_type
+            (identifier)))))
+    type: (type
+      (qualified_type
+        (identifier)
+        (type_arguments
+          (type
+            (qualified_type
+              (identifier)))
+          (type
+            (qualified_type
+              (identifier))))))))
