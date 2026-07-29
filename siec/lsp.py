@@ -673,6 +673,7 @@ def signature(fn: Function) -> str:
 
     name = fn.name
     if (fn.receiver_params and fn.receiver
+            and fn.receiver not in fn.receiver_params
             and not fn.receiver.endswith("[]")):
         receiver_params = ", ".join(
             p + (f": {fn.receiver_constraints[p]}"
@@ -1034,6 +1035,19 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
         nodes.extend(gen.generic_methods.get((parts[0], name), ()))
     elif base.endswith("[]"):
         nodes.extend(gen.generic_methods.get(("[]", name), ()))
+
+    if not nodes:
+        from siec.codegen.generics import unify
+        from siec.codegen.interfaces import constraints_hold
+
+        for template in gen.generic_receiver_methods.get(name, ()):
+            mapping = {}
+            unify(template.receiver, base, template.receiver_params, mapping)
+            if (all(param in mapping for param in template.receiver_params)
+                    and constraints_hold(
+                        gen, template.receiver_constraints,
+                        mapping, template.file)):
+                nodes.append(template)
 
     if not nodes and symbol is None:
         return None

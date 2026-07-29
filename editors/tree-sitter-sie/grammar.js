@@ -171,7 +171,14 @@ module.exports = grammar({
       ),
 
     extend_declaration: ($) =>
-      seq("@extend", field("type", $.type), ":", commaSep1($.type), ";"),
+      seq(
+        "@extend",
+        optional(field("type_parameters", $.type_parameters)),
+        field("type", $.type),
+        ":",
+        field("interfaces", commaSep1($.type)),
+        choice(";", field("body", $.extend_body)),
+      ),
 
     global_declaration: ($) =>
       seq(
@@ -210,6 +217,22 @@ module.exports = grammar({
         field("parameters", $.parameters),
         optional(seq("->", field("return_type", $.type))),
         ";",
+      ),
+
+    // An extension block supplies the receiver for each method. This rule
+    // is deliberately receiver-neutral so struct bodies can reuse it when
+    // inline struct methods are added.
+    extend_body: ($) => seq("{", repeat($.method_declaration), "}"),
+
+    method_declaration: ($) =>
+      seq(
+        repeat($.attribute),
+        "fn",
+        field("name", $.identifier),
+        optional(field("type_parameters", $.type_parameters)),
+        field("parameters", $.parameters),
+        optional(seq("->", field("return_type", $.type))),
+        choice(field("body", $.block), $.asm_body, ";"),
       ),
 
     field_declaration: ($) =>

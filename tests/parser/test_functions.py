@@ -148,6 +148,30 @@ def test_generic_function_and_method_bounds(ts):
     assert method.constraints == {"U": "Iface<T>"}
 
 
+def test_bounded_extension_block_supplies_method_receivers(ts):
+    """
+    An extension block binds its receiver parameter and bounds for every
+    method it contains.
+    """
+    program = parse_program(ts("""
+    @extend<T: Scalar> T[]: Hashable {
+        fn hash(const &self) -> u64 { return 0; }
+    }
+    """))
+
+    ext = program.extends[0]
+    method = program.functions[0]
+    assert ext.name == "T[]"
+    assert ext.interfaces == ["Hashable"]
+    assert ext.params == ["T"]
+    assert ext.constraints == {"T": "Scalar"}
+    assert ext.actions == [method]
+    assert method.name == "T[]::hash"
+    assert method.receiver == "T[]"
+    assert method.receiver_params == ["T"]
+    assert method.receiver_constraints == {"T": "Scalar"}
+
+
 def test_forward_declaration_has_no_body(ts):
     """
     A signature ending in ';' parses as a declaration with body None.

@@ -760,6 +760,53 @@ fn main() -> i32 {
     assert method.text == "fn Box<T>::take<U: Hashable>(&Box<T>, value: U) -> T"
 
 
+def test_inspect_resolves_a_bounded_extension_method(tmp_path):
+    """
+    A method declared inside a bounded extension block is visible through
+    a matching concrete receiver and sites back to the block method.
+    """
+    analysis, src = unit(tmp_path, """\
+interface Hashable {
+    fn hash(const &self) -> u64;
+}
+
+@extend<T: Scalar> T[]: Hashable {
+    fn hash(const &self) -> u64 { return self.length; }
+}
+
+fn main() -> i32 {
+    let values: i32[] = [1, 2];
+    return values.hash() as i32;
+}
+""")
+
+    finding = probe(analysis, src, 10, 19)
+    assert finding.text == "fn T[]::hash(const &T[]) -> u64"
+    assert finding.targets == [(str(src.resolve()), 6)]
+
+
+def test_inspect_formats_a_bare_bounded_receiver(tmp_path):
+    """A bare receiver family renders as T, never as a generic T<T>."""
+    analysis, src = unit(tmp_path, """\
+interface Hashable {
+    fn hash(const &self) -> u64;
+}
+
+@extend<T: Scalar> T: Hashable {
+    fn hash(const &self) -> u64 { return self as u64; }
+}
+
+fn main() -> i32 {
+    let value: u8 = 42;
+    return value.hash() as i32;
+}
+""")
+
+    finding = probe(analysis, src, 10, 18)
+    assert finding.text == "fn T::hash(const &T) -> u64"
+    assert finding.targets == [(str(src.resolve()), 6)]
+
+
 def test_inspect_types_a_field_through_the_chain(tmp_path):
     """
     Hovering a field types it through the receiver chain and sites its

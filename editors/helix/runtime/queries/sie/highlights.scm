@@ -131,7 +131,7 @@
 ; the prelude's own declarations
 ((identifier) @type.builtin
  (#any-of? @type.builtin
-  "Any" "Result" "Tuple" "Iterator" "ConstIterator" "Iterable"
+  "Any" "Result" "Tuple" "Scalar" "Iterator" "ConstIterator" "Iterable"
   "ArrayIterator" "ConstArrayIterator" "Enumerated" "EnumerateIterator"
   "Add" "Sub" "Mul" "Div" "Rem"
   "AddAssign" "SubAssign" "MulAssign" "DivAssign" "RemAssign"
@@ -153,6 +153,7 @@
   name: (identifier) @type
   method: (identifier) @function.method)
 (action_declaration name: (identifier) @function.method)
+(method_declaration name: (identifier) @function.method)
 
 (call_expression function: (identifier) @function.call)
 (call_expression function: (field_expression field: (identifier) @function.method))

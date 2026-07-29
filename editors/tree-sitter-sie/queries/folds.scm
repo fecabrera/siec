@@ -3,6 +3,7 @@
   (block)
   (declaration_block)
   (struct_body)
+  (extend_body)
   (enum_declaration)
   (case_statement)
   (aggregate_literal)

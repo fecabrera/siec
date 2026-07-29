@@ -2,6 +2,8 @@
 ; usual parameter, call, loop, conditional, comment, and block objects.
 (function_declaration) @function.outer
 (function_declaration body: (block) @function.inner)
+(method_declaration) @function.outer
+(method_declaration body: (block) @function.inner)
 (macro_declaration) @function.outer
 (macro_declaration body: (block) @function.inner)
 

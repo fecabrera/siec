@@ -730,12 +730,16 @@ class Include:
 @dataclass
 class Extend:
     """
-    An '@extend Type: Iface, ...;' declaration: interface claims added to
-    an existing type outside its declaration - a struct's, an alias's, or
-    the arrays' ('T[]', generic over the element).
+    An '@extend[<T: Bound>] Type: Iface, ...;' declaration: interface
+    claims added to an existing type outside its declaration - a struct's,
+    an alias's, or an array family. An optional body owns the methods
+    implementing those claims under the same generic receiver parameters.
     """
     name: str
     interfaces: list[str]
+    params: list[str] | None = None
+    constraints: dict | None = None
+    actions: list = field(default_factory=list)
     line: int = _line()
     file: str = _file()
 

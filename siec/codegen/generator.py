@@ -146,11 +146,16 @@ class CodeGenerator:
         self.interfaces: dict = {}
         self.interface_actions: dict = {}
         self.implements: dict[str, set] = {}
+        self.interface_queries: set[tuple[str, str]] = set()
         self.pending_conformance: deque[tuple] = deque()
         self.conformance_ready = False
         # the arrays' '@extend T[]' claims: (element placeholder,
-        # interface spelling) pairs, substituted per element on query
-        self.array_claims: list[tuple[str, str]] = []
+        # interface spelling, bounds, declaring file), substituted and
+        # filtered by their bounds per element on query
+        self.array_claims: list[tuple[str, str, dict | None, str]] = []
+        # blanket claims over a bare receiver placeholder:
+        # (placeholder, interface spellings, bounds, declaring file)
+        self.generic_claims: list[tuple[str, list[str], dict | None, str]] = []
         # per-symbol parameter defaults with the declaring file, whose
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
@@ -184,6 +189,9 @@ class CodeGenerator:
         # a generic struct's method templates by (struct, method) name,
         # stamped alongside each 'S<args>' instantiation on first call
         self.generic_methods: dict = {}
+        # methods over a bare receiver placeholder, such as a bounded
+        # '@extend<T: Scalar> T' block, grouped by method name
+        self.generic_receiver_methods: dict[str, list] = {}
         # '@private' methods by canonical 'Type::method' name. Method
         # lookup starts from a carried receiver type rather than an import
         # spelling, so it needs an explicit textual-module visibility gate.
@@ -458,6 +466,10 @@ class CodeGenerator:
 # and 'Add<S, T>' and its siblings the ones the binary operators do;
 # 'GetItem<K, V>' and 'SetItem<K, V>' describe indexed access
 PRELUDE = """
+// a sealed marker implemented by the compiler's primitive value types;
+// unlike an ordinary interface, user declarations cannot claim it
+interface Scalar;
+
 interface Iterator<T>;
 
 fn Iterator<T>::has_next(&self) -> bool;
@@ -748,7 +760,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.structs = [*prelude.structs, *program.structs]
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
-    gen.builtin_names.update(("Result", "Ok", "Error", "Iterator", "Iterable",
+    gen.builtin_names.update(("Result", "Ok", "Error", "Scalar",
+                              "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",
                               "ArrayIterator", "ConstArrayIterator",
                               "Enumerated", "EnumerateIterator", "__enumerate",

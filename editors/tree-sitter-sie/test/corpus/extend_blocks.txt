@@ -1,0 +1,39 @@
+========================
+Bounded extension blocks
+========================
+
+@extend<T: Scalar> T[]: Hashable {
+  fn hash(const &self) -> u64 {
+    return 0;
+  }
+}
+
+---
+
+(source_file
+  (extend_declaration
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier)
+        bound: (type
+          (qualified_type
+            (identifier)))))
+    type: (type
+      (array_type
+        (type
+          (qualified_type
+            (identifier)))))
+    interfaces: (type
+      (qualified_type
+        (identifier)))
+    body: (extend_body
+      (method_declaration
+        name: (identifier)
+        parameters: (parameters
+          (self_parameter))
+        return_type: (type
+          (qualified_type
+            (identifier)))
+        body: (block
+          (return_statement
+            (integer_literal)))))))

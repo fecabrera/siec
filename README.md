@@ -1064,6 +1064,8 @@ fn word<T: u64>(value: T) -> T;
 
 An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the last declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
 
+`Scalar` is a sealed builtin interface for the primitive value types: the signed and unsigned integers, `f32`, `f64`, `bool`, and `char`. It is useful when an implementation needs the builtin scalar representation while accepting every width. Structs, enums, pointers, and arrays do not satisfy it, and user declarations cannot claim it.
+
 A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments (`identity(n)` on an `i32` compiles `identity<i32>`) by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
 
 In a typed context (a declared return type, an annotated `let`, an argument's parameter) the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:
@@ -2395,19 +2397,23 @@ A claim's type argument may itself be an interface: `struct List<T>: Add<List<T>
 
 #### Extending types
 
-`@extend Type: Iface, ...;` adds interface claims to an existing type, outside its declaration. Methods already declare anywhere, so this is the claiming half: together they extend a type's surface from another file, the claims checked like the declaration's own.
+`@extend Type: Iface, ...;` adds interface claims to an existing type, outside its declaration. Its methods may stay separate, or live with the claims in an extension block. Inside a block each `fn` gets the extended type as its receiver:
 
 ```
-@extend String:
-    Add<String, char*>,
-    Add<String, char>,
-    Eq<char*>;
-
-fn String::add(&self, arr: const char*) -> String { ... }
-fn String::eq(&self, arr: const char*) -> bool { ... }
+@extend Number: Formattable {
+    fn format(const &self) -> String { ... }
+}
 ```
 
-The extended name may be a struct's, an enum's, a primitive's, or an alias's for any of them: whatever a method takes as its receiver extends. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
+The separate spelling remains equivalent, and is useful when claims and methods belong in different places:
+
+```
+@extend Number: Formattable;
+
+fn Number::format(const &self) -> String { ... }
+```
+
+Either form checks the claims like the type declaration's own. The extended name may be a struct's, an enum's, a primitive's, or an alias's for any of them: whatever a method takes as its receiver extends. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
 
 ```
 interface Formattable;
@@ -2425,7 +2431,26 @@ show(count);   // an i64 passes where the interface is required
 
 A primitive's operators stay the machine's: claiming `Eq<i64>` over `i64` declares a callable `eq` without `==` ever routing through it. The shorthands only reach structs and arrays, whose operators have nowhere else to come from.
 
-Arrays extend two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. Either way an array then passes wherever the (substituted) interface is required, and the operator shorthands apply:
+An extension may bind and bound its receiver parameters. A bare receiver blankets the matching types themselves; a constructed receiver such as `T[]` blankets that family. The bound gates the claims and every method in the block together:
+
+```
+@extend<T: Scalar> T: Hashable {
+    fn hash(const &self) -> u64 { ... }
+}
+
+@extend<T: Scalar> T[]: Hashable {
+    fn hash(const &self) -> u64 {
+        let value: u64 = 0;
+        foreach (element : self)
+            value += element as u64;
+        return value;
+    }
+}
+```
+
+The first block gives `hash` and `Hashable` to each scalar type. The second gives them to arrays whose element is scalar; `i32[]` matches, while a struct's array gets neither the claim nor the method.
+
+Arrays still extend without a bound in two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. The block and separate spellings are interchangeable:
 
 ```
 @extend T[]: Eq<T[]>;

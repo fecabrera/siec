@@ -74,7 +74,9 @@ def takes_self(fn) -> bool:
 
     # an array receiver already spells its element in the reference
     spelling = fn.receiver
-    if fn.receiver_params is not None and not fn.receiver.endswith("[]"):
+    if (fn.receiver_params is not None
+            and fn.receiver not in fn.receiver_params
+            and not fn.receiver.endswith("[]")):
         spelling += f"<{','.join(fn.receiver_params)}>"
 
     return strip_const(fn.params[0].type) == f"&{spelling}"
@@ -235,6 +237,10 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                         or base in gen.generic_structs else "not")
                 raise TypeError(f"{base!r} is {kind} an interface: "
                                 f"{name!r} cannot implement it")
+
+            if base == "Scalar":
+                raise TypeError("'Scalar' is a sealed builtin interface: "
+                                "only primitive scalar types implement it")
 
             declared = len(iface.params or ())
             if declared != len(args):
@@ -542,10 +548,15 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
     found = [name for name in gen.implements
              if type_implements(gen, name, required)]
 
-    for param, claim in gen.array_claims:
+    if required == "Scalar":
+        found.extend(name for name in SCALAR_TYPES if name not in found)
+
+    for param, claim, constraints, file in gen.array_claims:
         bindings: dict = {}
         unify(claim, required, [param], bindings)
-        if param in bindings and f"{bindings[param]}[]" not in found:
+        if (param in bindings
+                and constraints_hold(gen, constraints, bindings, file)
+                and f"{bindings[param]}[]" not in found):
             found.append(f"{bindings[param]}[]")
 
     return found
@@ -559,12 +570,25 @@ def claimed_interfaces(gen: CodeGenerator, concrete: str) -> set[str]:
     concrete = strip_const(concrete)
     claims = set(gen.implements.get(concrete, set()))
 
+    if concrete in SCALAR_TYPES:
+        claims.add("Scalar")
+
     if concrete.endswith("[]"):
         element = concrete[:-2]
         claims.update(
             canonical_interface(gen, substitute(claim, {param: element}))
-            for param, claim in gen.array_claims
+            for param, claim, constraints, file in gen.array_claims
+            if constraints_hold(
+                gen, constraints, {param: element}, file)
         )
+
+    for param, spellings, constraints, file in gen.generic_claims:
+        mapping = {param: concrete}
+        if constraints_hold(gen, constraints, mapping, file):
+            claims.update(
+                canonical_interface(gen, substitute(claim, mapping))
+                for claim in spellings
+            )
 
     return claims
 
@@ -576,7 +600,23 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     element substituted in. A free placeholder in the requirement -
     'Iterable<T>' with no T bound - matches any claim that spells it.
     """
-    claims = claimed_interfaces(gen, concrete)
+    # Scalar is sealed and structural: answering it directly also keeps a
+    # blanket claim guarded by Scalar from consulting itself recursively.
+    if required == "Scalar":
+        return strip_const(concrete) in SCALAR_TYPES
+
+    # Blanket claims may depend on other blanket claims. A cycle supplies
+    # no evidence of conformance, so fail that path closed while allowing
+    # the remaining concrete and blanket claims to be considered.
+    query = (strip_const(concrete), required)
+    if query in gen.interface_queries:
+        return False
+
+    gen.interface_queries.add(query)
+    try:
+        claims = claimed_interfaces(gen, concrete)
+    finally:
+        gen.interface_queries.remove(query)
 
     if required in claims:
         return True
@@ -651,6 +691,10 @@ def register_extends(gen: CodeGenerator, program) -> None:
     for ext in program.extends:
         gen.current_file = ext.file
         with source_location(line=ext.line, file=ext.file):
+            if ext.params is not None and ext.name in ext.params:
+                register_type_family_extend(gen, ext)
+                continue
+
             if ext.name.endswith("[]") and ext.name[:-2].isidentifier():
                 # a real element type claims for that one array; a
                 # placeholder claims for the family
@@ -686,6 +730,60 @@ def register_extends(gen: CodeGenerator, program) -> None:
 
             declare_implements(gen, canonical, ext.name, ext.interfaces,
                                ext.line, ext.file)
+
+
+def register_type_family_extend(gen: CodeGenerator, ext) -> None:
+    """
+    Register a blanket claim over one bare receiver placeholder:
+    '@extend<T: Scalar> T: Iface'. Claims and receiver methods both filter
+    through the same bound set at each concrete use.
+    """
+    if ext.params != [ext.name]:
+        raise TypeError(f"type-family extension receiver {ext.name!r} must "
+                        "be its one declared type parameter")
+
+    for spelling in ext.interfaces:
+        base, args = split_generic(spelling) or (spelling, [])
+        iface = gen.interfaces.get(base)
+        if iface is None:
+            kind = ("a struct, not" if base in gen.structs
+                    or base in gen.generic_structs else "not")
+            raise TypeError(f"{base!r} is {kind} an interface: "
+                            f"{ext.name!r} cannot implement it")
+
+        if base == "Scalar":
+            raise TypeError("'Scalar' is a sealed builtin interface: "
+                            "only primitive scalar types implement it")
+
+        declared = len(iface.params or ())
+        if declared != len(args):
+            raise TypeError(f"interface {base!r} takes {declared} type "
+                            f"argument{'s' if declared != 1 else ''}, "
+                            f"got {len(args)}")
+
+        if iface.fields:
+            raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
+                            "a blanket receiver carries no interface fields")
+
+        for (action_iface, method), actions in gen.interface_actions.items():
+            if (action_iface == base
+                    and method not in gen.generic_receiver_methods):
+                action = actions[0]
+                mapping = dict(zip(iface.params or (), args))
+                params = ", ".join(
+                    expand_lax(gen, substitute(p.type, mapping))
+                    for p in action.params[1:])
+                wanted = f"{method}({params})"
+                if action.return_type is not None:
+                    wanted += (" -> " + expand_lax(
+                        gen, substitute(action.return_type, mapping)))
+
+                raise TypeError(f"{ext.name!r} does not implement "
+                                f"{spelling!r}: it is missing the method "
+                                f"'{wanted}'")
+
+    gen.generic_claims.append(
+        (ext.name, ext.interfaces, ext.constraints, ext.file))
 
 
 def is_type_name(gen: CodeGenerator, name: str) -> bool:
@@ -732,6 +830,11 @@ def register_array_extend(gen: CodeGenerator, ext) -> None:
     signatures check themselves per element at each use.
     """
     elem = ext.name[:-2]
+    if ext.params is not None:
+        if ext.params != [elem]:
+            raise TypeError(f"array extension receiver {ext.name!r} must "
+                            "use its one declared type parameter")
+
     for spelling in ext.interfaces:
         base, args = split_generic(spelling) or (spelling, [])
         iface = gen.interfaces.get(base)
@@ -740,6 +843,10 @@ def register_array_extend(gen: CodeGenerator, ext) -> None:
                     or base in gen.generic_structs else "not")
             raise TypeError(f"{base!r} is {kind} an interface: "
                             f"{ext.name!r} cannot implement it")
+
+        if base == "Scalar":
+            raise TypeError("'Scalar' is a sealed builtin interface: "
+                            "only primitive scalar types implement it")
 
         declared = len(iface.params or ())
         if declared != len(args):
@@ -767,7 +874,8 @@ def register_array_extend(gen: CodeGenerator, ext) -> None:
                                 f"{spelling!r}: it is missing the method "
                                 f"'{wanted}' ('fn {elem}[]::{method}')")
 
-        gen.array_claims.append((elem, spelling))
+        gen.array_claims.append(
+            (elem, spelling, ext.constraints, ext.file))
 
 
 def check_constraints(gen: CodeGenerator, template, mapping: dict,
@@ -777,10 +885,19 @@ def check_constraints(gen: CodeGenerator, template, mapping: dict,
     bound accepts any implementing type; every concrete type-like bound
     accepts its canonical type exactly, aliases included.
     """
+    constraints = template.constraints if constraints is None else constraints
+    check_constraint_set(gen, constraints, mapping, template.file)
+
+
+def check_constraint_set(gen: CodeGenerator, constraints: dict | None,
+                         mapping: dict, file: str) -> None:
+    """
+    Check a standalone generic environment, such as a bounded extension
+    family, against one concrete substitution.
+    """
     from siec.codegen.aliases import expand_alias
 
-    with declaration_view(gen, template.file):
-        constraints = template.constraints if constraints is None else constraints
+    with declaration_view(gen, file):
         for placeholder, spelling in (constraints or {}).items():
             concrete = mapping.get(placeholder)
             if concrete is None:
@@ -798,3 +915,14 @@ def check_constraints(gen: CodeGenerator, template, mapping: dict,
             if strip_const(concrete) != strip_const(required):
                 raise TypeError(f"type {concrete!r} does not satisfy bound "
                                 f"{required!r}")
+
+
+def constraints_hold(gen: CodeGenerator, constraints: dict | None,
+                     mapping: dict, file: str) -> bool:
+    """Whether one substitution satisfies a standalone bound set."""
+    try:
+        check_constraint_set(gen, constraints, mapping, file)
+    except TypeError:
+        return False
+
+    return True

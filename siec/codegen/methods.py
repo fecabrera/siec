@@ -52,9 +52,13 @@ def register_method(gen: CodeGenerator, fn) -> None:
             # template registers whole, with no set to pick among; an
             # array's ('T[]::m') registers under the one array family,
             # whatever its element placeholder is called
-            base = "[]" if fn.receiver.endswith("[]") else fn.receiver
-            key = (base, fn.name.partition("::")[2])
-            templates = gen.generic_methods.setdefault(key, [])
+            method = fn.name.partition("::")[2]
+            if fn.receiver in fn.receiver_params:
+                templates = gen.generic_receiver_methods.setdefault(
+                    method, [])
+            else:
+                base = "[]" if fn.receiver.endswith("[]") else fn.receiver
+                templates = gen.generic_methods.setdefault((base, method), [])
 
             if (fn.type_params is not None
                     and any(t.type_params is not None for t in templates)):
@@ -114,6 +118,32 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         parts = ("[]", [base[:-2]])
 
     templates = gen.generic_methods.get((parts[0], method)) if parts else None
+    template_entries = []
+    if templates:
+        template_entries = [
+            (template, dict(zip(template.receiver_params, parts[1])))
+            for template in templates
+        ]
+    else:
+        # An inherent method on this exact type is more specific than a
+        # blanket receiver family and keeps its ordinary declaration.
+        if (symbol in gen.generic_functions or symbol in gen.overloads
+                or isinstance(gen.module.globals.get(symbol), ir.Function)):
+            if not gen.sees_method(symbol):
+                return None
+            return symbol
+
+        # A blanket receiver template unifies its receiver placeholder
+        # directly from the carried concrete type.
+        from siec.codegen.generics import unify
+
+        for template in gen.generic_receiver_methods.get(method, ()):
+            mapping = {}
+            unify(template.receiver, base, template.receiver_params, mapping)
+            if all(param in mapping for param in template.receiver_params):
+                template_entries.append((template, mapping))
+
+        templates = [template for template, _ in template_entries]
 
     # A method bypasses module-qualified lookup because its receiver carries
     # the type. Keep private methods within the same textual include module.
@@ -134,8 +164,6 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
         return None
 
-    struct_base, args = parts
-
     # A method may repeat bounds on its generic receiver declaration.
     # Check them before stamping any overload for this instantiation.
     if any(template.receiver_constraints for template in templates):
@@ -143,9 +171,9 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
         eligible = []
         failure = None
-        for template in templates:
+        for template, mapping in template_entries:
             if not template.receiver_constraints:
-                eligible.append(template)
+                eligible.append((template, mapping))
                 continue
 
             receiver_template = copy.copy(template)
@@ -154,17 +182,18 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
                 check_constraints(
                     gen,
                     receiver_template,
-                    dict(zip(template.receiver_params, args)),
+                    mapping,
                 )
             except TypeError as error:
                 failure = failure or error
             else:
-                eligible.append(template)
+                eligible.append((template, mapping))
 
         if not eligible:
             raise failure
 
-        templates = eligible
+        template_entries = eligible
+        templates = [template for template, _ in eligible]
 
     gen.instantiated_functions.add(symbol)
     site = gen.type_instantiation_sites.get(base)
@@ -175,14 +204,14 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
     # the method's overloads stamp together, joining one set under
     # the instantiated symbol for calls to pick among
-    for template in templates:
+    for template, mapping in template_entries:
         if template.is_private:
             gen.private_methods.setdefault(symbol, set()).add(template.file)
 
         instance = copy.deepcopy(template)
         instance.name = symbol
         instance.receiver = instance.receiver_params = None
-        substitute_types(instance, dict(zip(template.receiver_params, args)))
+        substitute_types(instance, mapping)
 
         # a still-generic method waits for its own arguments; a concrete
         # one declares like any instantiation - either way its

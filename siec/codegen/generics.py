@@ -465,10 +465,14 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
             continue
 
         required = substitute(constraints[placeholder], bindings)
-        for family_param, claim in gen.array_claims:
+        from siec.codegen.interfaces import constraints_hold
+
+        for family_param, claim, family_constraints, file in gen.array_claims:
             family: dict = {}
             unify(claim, required, [family_param], family)
-            if family_param in family:
+            if (family_param in family
+                    and constraints_hold(
+                        gen, family_constraints, family, file)):
                 bindings[placeholder] = f"{family[family_param]}[]"
                 break
 

@@ -25,7 +25,7 @@ syn keyword sieSelf self
 
 " the builtin types, and the builtin declarations the prelude ships
 syn keyword sieType i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 bool char opaque raw
-syn keyword sieBuiltinType Any Result Tuple Iterator ConstIterator Iterable
+syn keyword sieBuiltinType Any Result Tuple Scalar Iterator ConstIterator Iterable
 syn keyword sieBuiltinType ArrayIterator ConstArrayIterator Enumerated
 syn keyword sieBuiltinType EnumerateIterator
 syn keyword sieBuiltinType Add Sub Mul Div Rem

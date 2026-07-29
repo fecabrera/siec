@@ -43,6 +43,197 @@ def test_array_methods_stamp_per_element(run):
     assert run(source).returncode == 42
 
 
+BOUNDED_HASH = """
+interface Hashable {
+    fn hash(const &self) -> u64;
+}
+
+@extend<T: Scalar> T[]: Hashable {
+    fn hash(const &self) -> u64 {
+        let total: u64 = 0;
+        for (let i: u64 = 0; i < self.length; i += 1) {
+            total += self[i] as u64;
+        }
+        return total;
+    }
+}
+"""
+
+
+def test_bounded_extension_block_claims_and_implements_together(run):
+    """
+    One bounded extension block gives scalar arrays both the interface
+    claim and the receiver-family method that implements it.
+    """
+    source = BOUNDED_HASH + """
+    fn read<T: Hashable>(value: T) -> u64 {
+        return value.hash();
+    }
+
+    fn main() -> i32 {
+        let values: i32[] = [20, 22];
+        return read(values) as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_bounded_extension_block_supports_bare_receiver_families(run):
+    """
+    The same block form blankets matching value types themselves, not
+    only constructed receiver patterns such as T[].
+    """
+    source = """
+    interface Hashable {
+        fn hash(const &self) -> u64;
+    }
+
+    @extend<T: Scalar> T: Hashable {
+        fn hash(const &self) -> u64 {
+            return self as u64;
+        }
+    }
+
+    fn read<T: Hashable>(value: T) -> u64 {
+        return value.hash();
+    }
+
+    fn main() -> i32 {
+        return read(40 as u8) as i32 + read(2 as i64) as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_bounded_bare_extension_excludes_nonmatching_receivers(
+        compile_source):
+    """A bare blanket method is absent when its receiver misses the bound."""
+    with pytest.raises(TypeError, match="type 'Item' does not implement "
+                                        "interface 'Scalar'"):
+        compile_source("""
+        interface Hashable {
+            fn hash(const &self) -> u64;
+        }
+
+        @extend<T: Scalar> T: Hashable {
+            fn hash(const &self) -> u64 { return 0; }
+        }
+
+        struct Item {}
+
+        fn main() -> i32 {
+            let item: Item = {};
+            return item.hash() as i32;
+        }
+        """)
+
+
+def test_cyclic_blanket_bounds_do_not_supply_their_own_evidence(
+        compile_source):
+    """Mutually guarded blanket claims fail closed instead of recursing."""
+    with pytest.raises(TypeError, match="type 'Item' does not implement "
+                                        "interface 'Left'"):
+        compile_source("""
+        interface Left;
+        interface Right;
+
+        @extend<T: Left> T: Right {}
+        @extend<T: Right> T: Left {}
+
+        struct Item {}
+
+        fn need<T: Left>(value: T) {}
+
+        fn main() -> i32 {
+            let item: Item = {};
+            need(item);
+            return 0;
+        }
+        """)
+
+
+def test_bounded_extension_excludes_nonmatching_receivers(compile_source):
+    """
+    A struct array gets neither a scalar-array claim nor its bounded
+    receiver method.
+    """
+    with pytest.raises(TypeError, match="type 'Item\\[\\]' does not implement "
+                                        "interface 'Hashable'"):
+        compile_source(BOUNDED_HASH + """
+        struct Item { value: i32; }
+
+        fn read<T: Hashable>(value: T) -> u64 {
+            return value.hash();
+        }
+
+        fn main() -> i32 {
+            let values: Item[];
+            return read(values) as i32;
+        }
+        """)
+
+    with pytest.raises(TypeError, match="type 'Item' does not implement "
+                                        "interface 'Scalar'"):
+        compile_source(BOUNDED_HASH + """
+        struct Item { value: i32; }
+
+        fn main() -> i32 {
+            let values: Item[];
+            return values.hash() as i32;
+        }
+        """)
+
+
+def test_concrete_extension_block_owns_its_methods(run):
+    """
+    A non-generic extension block is the compact form of a separate
+    concrete claim and receiver method.
+    """
+    source = """
+    interface Value {
+        fn value(const &self) -> i32;
+    }
+
+    struct Number { inner: i32; }
+
+    @extend Number: Value {
+        fn value(const &self) -> i32 {
+            return self.inner;
+        }
+    }
+
+    fn read<T: Value>(value: T) -> i32 { return value.value(); }
+
+    fn main() -> i32 {
+        let number: Number = { 42 };
+        return read(number);
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_scalar_is_a_sealed_builtin_bound(run, compile_source):
+    """
+    Primitive scalar types satisfy Scalar automatically; structs cannot
+    claim the compiler-owned category.
+    """
+    source = """
+    fn widen<T: Scalar>(value: T) -> u64 { return value as u64; }
+
+    fn main() -> i32 {
+        return widen(40 as u8) as i32 + widen('b') as i32 - 96;
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="'Scalar' is a sealed builtin "
+                                        "interface"):
+        compile_source("""
+        struct Pretender: Scalar {}
+        fn main() -> i32 { return 0; }
+        """)
+
+
 def test_array_operators_desugar_through_methods(run):
     """
     '==' and '!=' on array operands reach the 'T[]::eq' method.

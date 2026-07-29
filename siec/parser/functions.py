@@ -92,7 +92,9 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
         elif ts.peek().value == "@" and ts.peek(1).value == "type":
             program.aliases.append(parse_alias(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "extend":
-            program.extends.append(parse_extend(ts))
+            ext = parse_extend(ts)
+            program.extends.append(ext)
+            program.functions.extend(ext.actions)
         elif ts.peek().value == "@" and ts.peek(1).value == "error":
             program.errors.append(parse_error(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "static_assert":
@@ -142,14 +144,15 @@ def parse_error(ts: TokenStream) -> CompileError:
 
 def parse_extend(ts: TokenStream) -> Extend:
     """
-    Parse an '@extend Type: Iface, ...;' declaration: interface claims
-    added to an existing type. The type is a struct's name, an alias, or
-    an array pattern like 'T[]', its element name a placeholder.
+    Parse an '@extend[<T: Bound>] Type: Iface, ...;' declaration:
+    interface claims added to an existing type. A block in place of the
+    semicolon holds methods on that receiver under the same type parameters.
     """
     line = ts.peek().line
     ts.expect("sym", "@")
     ts.expect("ident", "extend")
 
+    params, constraints = parse_type_params(ts)
     name = parse_type(ts)
     ts.expect("sym", ":")
 
@@ -158,8 +161,34 @@ def parse_extend(ts: TokenStream) -> Extend:
         ts.next()
         interfaces.append(parse_type(ts))
 
-    ts.expect("sym", ";")
-    return Extend(name, interfaces, line=line)
+    if ts.peek().syntax == ";":
+        ts.next()
+        return Extend(name, interfaces, params=params,
+                      constraints=constraints, line=line)
+
+    actions = parse_method_body(ts, name, params, constraints)
+    return Extend(name, interfaces, params=params,
+                  constraints=constraints, actions=actions, line=line)
+
+
+def parse_method_body(ts: TokenStream, receiver: str,
+                      receiver_params: list[str] | None = None,
+                      receiver_constraints: dict | None = None) -> list:
+    """
+    Parse methods whose enclosing declaration supplies their receiver.
+
+    Extension blocks use this now; a struct body can reuse the same shape
+    when inline struct methods become part of the language.
+    """
+    ts.expect("sym", "{")
+    methods = []
+    while ts.peek().syntax != "}":
+        method = parse_function(ts, receiver, receiver_params)
+        method.receiver_constraints = receiver_constraints
+        methods.append(method)
+
+    ts.next()
+    return methods
 
 
 def parse_import(ts: TokenStream) -> Import:
@@ -529,7 +558,9 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
 
             # an array receiver already spells its element: '&T[]'
             expected = receiver
-            if receiver_params is not None and not receiver.endswith("[]"):
+            if (receiver_params is not None
+                    and receiver not in receiver_params
+                    and not receiver.endswith("[]")):
                 expected += f"<{','.join(receiver_params)}>"
 
             params.append(Param("self", f"{prefix}&{expected}"))
