@@ -539,7 +539,7 @@ fn Ord<T>::cmp(const &self, value: const T) -> i32;
 // and tuples keep their built-in indexing
 interface GetItem<K, V>;
 
-fn GetItem<K, V>::get_item(const &self, key: const K) -> V;
+fn GetItem<K, V>::get_item(const &self, key: const K) -> const V;
 
 interface SetItem<K, V>;
 

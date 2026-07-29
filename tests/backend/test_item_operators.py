@@ -170,7 +170,7 @@ def test_item_interface_claims_check_the_operator_methods(compile_source):
     """
     GetItem and SetItem claims require their corresponding method shapes.
     """
-    with pytest.raises(TypeError, match=r"missing the method 'get_item\(const u64\) -> i32'"):
+    with pytest.raises(TypeError, match=r"missing the method 'get_item\(const u64\) -> const i32'"):
         compile_source("""
         struct Broken: GetItem<u64, i32> {}
         fn main() -> i32 { return 0; }
