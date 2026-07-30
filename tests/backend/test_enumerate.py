@@ -3,10 +3,10 @@
 import pytest
 
 
-def test_enumerate_pairs_indices_with_values(run):
+def test_enumerate_pairs_indices_with_values(run, compile_source):
     """
-    'enumerate(x)' wraps an Iterable or an iterator, its 'next()'
-    referencing '{index: u64, value: T}' pairs.
+    'enumerate(x)' wraps mutable and const Iterables or iterators, its
+    'next()' referencing a pair with the element's contract preserved.
     """
     source = """
     struct List<T>: Iterable<T> {
@@ -20,6 +20,26 @@ def test_enumerate_pairs_indices_with_values(run):
     fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
         let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
         return it;
+    }
+
+    fn const_pair_score(
+        pairs: ConstIterator<ConstEnumerated<char[]>>
+    ) -> u64 {
+        let score: u64 = 0;
+        foreach (e : pairs) {
+            score += e.value.length;
+        }
+        return score;
+    }
+
+    fn const_score(values: const &char[][]) -> u64 {
+        let score: u64 = 0;
+        foreach (e : enumerate(values)) {
+            score += e.index + e.value.length;
+        }
+        let it = values.const_iterator();
+        score += const_pair_score(enumerate(it));
+        return score;
     }
 
     fn main() -> i32 {
@@ -53,10 +73,23 @@ def test_enumerate_pairs_indices_with_values(run):
         foreach (e : enumerate(ro)) {
             count += 1;
         }
-        return (count as i32) - 3;
+        if (count != 3) { return 5; }
+
+        let words: char[][] = ["a", "bc"];
+        return (const_score(words) as i32) - 7;
     }
     """
     assert run(source).returncode == 0
+
+    with pytest.raises(TypeError, match="cannot assign to const field 'value'"):
+        compile_source("""
+        fn tamper(values: const &i32[]) {
+            foreach (e : enumerate(values)) {
+                e.value = 0;
+            }
+        }
+        fn main() -> i32 { return 0; }
+        """)
 
 
 def test_enumerate_carried_foreign_types(tmp_path, monkeypatch):

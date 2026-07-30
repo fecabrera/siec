@@ -612,7 +612,12 @@ struct Enumerated<T> {
     value: T;
 }
 
-struct EnumerateIterator<I, T> {
+struct ConstEnumerated<T> {
+    index: u64;
+    value: const T;
+}
+
+struct EnumerateIterator<I, T>: Iterator<Enumerated<T>> {
     inner: I;
     count: u64;
     current: Enumerated<T>;
@@ -628,8 +633,31 @@ fn EnumerateIterator<I, T>::next(&self) -> &Enumerated<T> {
     return self.current;
 }
 
+struct ConstEnumerateIterator<I, T>: ConstIterator<ConstEnumerated<T>> {
+    inner: I;
+    count: u64;
+    current: ConstEnumerated<T>;
+}
+
+fn ConstEnumerateIterator<I, T>::has_next(&self) -> bool {
+    return self.inner.has_next();
+}
+
+fn ConstEnumerateIterator<I, T>::next(&self) -> const &ConstEnumerated<T> {
+    self.current = { self.count, self.inner.next() };
+    self.count += 1;
+    return self.current;
+}
+
 fn __enumerate<I, T>(it: I) -> EnumerateIterator<I, T> {
     let e: EnumerateIterator<I, T>;
+    e.inner = it;
+    e.count = 0;
+    return e;
+}
+
+fn __const_enumerate<I, T>(it: I) -> ConstEnumerateIterator<I, T> {
+    let e: ConstEnumerateIterator<I, T>;
     e.inner = it;
     e.count = 0;
     return e;
@@ -783,7 +811,9 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                               "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",
                               "ArrayIterator", "ConstArrayIterator",
-                              "Enumerated", "EnumerateIterator", "__enumerate",
+                              "Enumerated", "ConstEnumerated",
+                              "EnumerateIterator", "ConstEnumerateIterator",
+                              "__enumerate", "__const_enumerate",
                               "Tuple", "Any"))
 
     # first pass: register the named declarations - aliases first so every

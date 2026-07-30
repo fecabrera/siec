@@ -27,7 +27,8 @@ syn keyword sieSelf self
 syn keyword sieType i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 bool char opaque raw
 syn keyword sieBuiltinType Any Result Tuple Scalar Iterator ConstIterator Iterable
 syn keyword sieBuiltinType ArrayIterator ConstArrayIterator Enumerated
-syn keyword sieBuiltinType EnumerateIterator
+syn keyword sieBuiltinType ConstEnumerated EnumerateIterator
+syn keyword sieBuiltinType ConstEnumerateIterator
 syn keyword sieBuiltinType Add Sub Mul Div Rem
 syn keyword sieBuiltinType AddAssign SubAssign MulAssign DivAssign RemAssign
 syn keyword sieBuiltinType Eq Ord GetItem SetItem

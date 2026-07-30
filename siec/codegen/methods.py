@@ -316,14 +316,15 @@ def iteration_getter(gen: CodeGenerator, source: str) -> str | None:
 
 def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | None:
     """
-    Rewrite the builtin 'enumerate(x)' into its '__enumerate<I, T>' call:
+    Rewrite the builtin 'enumerate(x)' into its mutable or const helper:
     the argument's iterator type and element type spell the arguments,
-    an Iterable handing out its iterator first. A user declaration named
+    an Iterable handing out its iterator first. A const iterator keeps its
+    element contract through ConstEnumerated<T>. A user declaration named
     'enumerate' takes precedence; None leaves the call untouched.
     """
     from siec.ast import MethodCall
     from siec.codegen.inference import expr_sie_type
-    from siec.codegen.types import is_reference
+    from siec.codegen.types import is_const, is_reference
 
     if call.name != "enumerate" or "enumerate" in scope:
         return None
@@ -362,14 +363,16 @@ def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | Non
         raise TypeError(f"cannot enumerate: type {it_type!r} has no "
                         "'next' returning a reference")
 
-    element = strip_const(strip_reference(next_ret))
+    value_type = strip_reference(next_ret)
+    element = strip_const(value_type)
+    helper = "__const_enumerate" if is_const(value_type) else "__enumerate"
 
     # the arguments are carried canonical names; no view gates them
     from siec.codegen.generics import instantiate_function
 
     gen.ungated_types += 1
     try:
-        symbol = instantiate_function(gen, gen.generic_functions["__enumerate"],
+        symbol = instantiate_function(gen, gen.generic_functions[helper],
                                       [it_type, element])
     finally:
         gen.ungated_types -= 1

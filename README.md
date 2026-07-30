@@ -691,7 +691,7 @@ foreach (e : enumerate(nums)) {
 }
 ```
 
-`value` is a copy of the element, not a reference into the collection; a declared function named `enumerate` takes precedence over the builtin.
+`value` is a copy of the element, not a reference into the collection. A mutable iterator produces `Enumerated<T>` pairs through `EnumerateIterator<I, T>`; a const iterator produces `ConstEnumerated<T>` pairs through `ConstEnumerateIterator<I, T>`, whose `value` remains `const T`. A declared function named `enumerate` takes precedence over the builtin.
 
 #### Break and continue
 
