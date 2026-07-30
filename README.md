@@ -2431,24 +2431,36 @@ show(count);   // an i64 passes where the interface is required
 
 A primitive's operators stay the machine's: claiming `Eq<i64>` over `i64` declares a callable `eq` without `==` ever routing through it. The shorthands only reach structs and arrays, whose operators have nowhere else to come from.
 
-An extension may bind and bound its receiver parameters. A bare receiver blankets the matching types themselves; a constructed receiver such as `T[]` blankets that family. The bound gates the claims and every method in the block together:
+`@template<T: Bound>` supplies one generic environment to extensions and methods. Braces apply it to a group, so a claim and any sibling methods share exactly the same receiver parameters and bounds:
 
 ```
-@extend<T: Scalar> T: Hashable {
+@template<T: Scalar> {
+    @extend T[]: Hashable {
+        fn hash(const &self) -> u64 {
+            let value: u64 = 0;
+            foreach (element : self)
+                value += element as u64;
+            return value;
+        }
+    }
+
+    fn T[]::first(const &self) -> T { return self[0]; }
+}
+```
+
+Without braces it decorates the one extension or method following it. Repeat the decorator when separately placed declarations need the same environment:
+
+```
+@template<T: Scalar>
+@extend T[]: Hashable {
     fn hash(const &self) -> u64 { ... }
 }
 
-@extend<T: Scalar> T[]: Hashable {
-    fn hash(const &self) -> u64 {
-        let value: u64 = 0;
-        foreach (element : self)
-            value += element as u64;
-        return value;
-    }
-}
+@template<T: Scalar>
+fn T[]::first(const &self) -> T { return self[0]; }
 ```
 
-The first block gives `hash` and `Hashable` to each scalar type. The second gives them to arrays whose element is scalar; `i32[]` matches, while a struct's array gets neither the claim nor the method.
+Every template parameter must occur in the receiver type; ordinary generic functions and a method's own generic parameters keep declaring their parameters on `fn`. A bare receiver blankets the matching types themselves (`@extend T: Hashable`); a constructed receiver such as `T[]` blankets that family. The bound gates both the claims and methods. In the examples `i32[]` gets `Hashable`, `hash`, and `first`, while a struct's array gets none of them. The older compact header, `@extend<T: Scalar> T[]: Hashable`, remains accepted as the declaration-wise equivalent.
 
 Arrays still extend without a bound in two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. The block and separate spellings are interchangeable:
 

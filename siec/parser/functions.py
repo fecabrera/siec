@@ -1,5 +1,7 @@
 """Parsing of function declarations, definitions, and whole programs."""
 
+import re
+
 from siec.ast import (
     CompileError,
     CondBlock,
@@ -91,6 +93,8 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.enums.append(parse_enum(ts, is_private=True))
         elif ts.peek().value == "@" and ts.peek(1).value == "type":
             program.aliases.append(parse_alias(ts))
+        elif ts.peek().value == "@" and ts.peek(1).value == "template":
+            merge_declarations(program, parse_template(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "extend":
             ext = parse_extend(ts)
             program.extends.append(ext)
@@ -103,6 +107,113 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.functions.append(parse_function(ts))
 
     return program
+
+
+def merge_declarations(program: Program, declarations: Program) -> None:
+    """Append one parsed declaration group to its surrounding program."""
+    for name in (
+        "includes",
+        "functions",
+        "structs",
+        "consts",
+        "enums",
+        "globals",
+        "aliases",
+        "conds",
+        "imports",
+        "extends",
+        "errors",
+        "asserts",
+    ):
+        getattr(program, name).extend(getattr(declarations, name))
+
+
+def parse_template(ts: TokenStream) -> Program:
+    """
+    Parse a generic declaration environment.
+
+    A braced '@template<T: Bound> { ... }' applies to every extension and
+    method inside it; without braces it decorates the one extension or
+    method following it.
+    """
+    line = ts.peek().line
+    ts.expect("sym", "@")
+    ts.expect("ident", "template")
+    params, constraints = parse_type_params(ts)
+    if params is None:
+        raise SyntaxError(f"line {line}: '@template' needs type parameters")
+
+    if ts.peek().syntax == "{":
+        ts.next()
+        declarations = parse_declarations(ts)
+        ts.expect("sym", "}")
+    else:
+        declarations = Program([], [])
+        if ts.peek().value == "@" and ts.peek(1).value == "extend":
+            ext = parse_extend(ts)
+            declarations.extends.append(ext)
+            declarations.functions.extend(ext.actions)
+        else:
+            declarations.functions.append(parse_function(ts))
+
+    apply_template_environment(declarations, params, constraints, line)
+    return declarations
+
+
+def apply_template_environment(program: Program, params: list[str],
+                               constraints: dict | None, line: int) -> None:
+    """Attach one '@template' environment to its extensions and methods."""
+    unsupported = (
+        program.includes or program.structs or program.consts
+        or program.enums or program.globals or program.aliases
+        or program.conds or program.imports or program.errors
+        or program.asserts
+    )
+    if unsupported:
+        raise SyntaxError(f"line {line}: an '@template' block may contain "
+                          "only extensions and methods")
+
+    actions = {id(action) for ext in program.extends for action in ext.actions}
+    for ext in program.extends:
+        if ext.params is not None:
+            raise SyntaxError(f"line {ext.line}: an extension inside "
+                              "'@template' cannot declare type parameters")
+
+        require_template_receiver(ext.name, params, ext.line)
+        ext.params = list(params)
+        ext.constraints = dict(constraints or {})
+        for action in ext.actions:
+            action.receiver_params = list(params)
+            action.receiver_constraints = dict(constraints or {})
+
+    for fn in program.functions:
+        if id(fn) in actions:
+            continue
+        if fn.receiver is None:
+            raise SyntaxError(f"line {fn.line}: an '@template' declaration "
+                              "must be an extension or a method")
+
+        require_template_receiver(fn.receiver, params, fn.line)
+        receiver_params = set(fn.receiver_params or ())
+        if receiver_params and receiver_params != set(params):
+            raise SyntaxError(f"line {fn.line}: method receiver parameters "
+                              "must match its '@template' parameters")
+
+        fn.receiver_params = list(params)
+        fn.receiver_constraints = dict(constraints or {})
+
+
+def require_template_receiver(receiver: str, params: list[str],
+                              line: int) -> None:
+    """Require every environment parameter to occur in its receiver type."""
+    missing = [
+        param for param in params
+        if re.search(rf"(?<!\w){re.escape(param)}(?!\w)", receiver) is None
+    ]
+    if missing:
+        shown = ", ".join(repr(param) for param in missing)
+        raise SyntaxError(f"line {line}: template parameter {shown} does "
+                          f"not occur in receiver {receiver!r}")
 
 
 def parse_static_assert(ts: TokenStream) -> StaticAssert:

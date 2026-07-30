@@ -38,3 +38,4 @@
 ] @comment.outer
 
 (block) @block.outer
+(template_body) @block.outer

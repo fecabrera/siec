@@ -2641,6 +2641,10 @@
         {
           "type": "struct_declaration",
           "named": true
+        },
+        {
+          "type": "template_declaration",
+          "named": true
         }
       ]
     }
@@ -7504,6 +7508,10 @@
         {
           "type": "struct_declaration",
           "named": true
+        },
+        {
+          "type": "template_declaration",
+          "named": true
         }
       ]
     }
@@ -7748,6 +7756,65 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "template_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "extend_declaration",
+          "named": true
+        },
+        {
+          "type": "function_declaration",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "template_declaration",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "template_body",
+            "named": true
+          }
+        ]
+      },
+      "declaration": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "extend_declaration",
+            "named": true
+          },
+          {
+            "type": "function_declaration",
+            "named": true
+          }
+        ]
+      },
+      "type_parameters": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type_parameters",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -9442,6 +9509,10 @@
   },
   {
     "type": "@static_assert",
+    "named": false
+  },
+  {
+    "type": "@template",
     "named": false
   },
   {

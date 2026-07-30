@@ -37,3 +37,131 @@ Bounded extension blocks
         body: (block
           (return_statement
             (integer_literal)))))))
+
+========================
+Template declaration block
+========================
+
+@template<T: Scalar> {
+  @extend T[]: Hashable {
+    fn hash(const &self) -> u64 {
+      return 0;
+    }
+  }
+
+  fn T[]::other(const &self) -> u64 {
+    return 1;
+  }
+}
+
+---
+
+(source_file
+  (template_declaration
+    (type_parameters
+      (type_parameter
+        (identifier)
+        (type
+          (qualified_type
+            (identifier)))))
+    (template_body
+      (extend_declaration
+        (type
+          (array_type
+            (type
+              (qualified_type
+                (identifier)))))
+        (type
+          (qualified_type
+            (identifier)))
+        (extend_body
+          (method_declaration
+            (identifier)
+            (parameters
+              (self_parameter))
+            (type
+              (qualified_type
+                (identifier)))
+            (block
+              (return_statement
+                (integer_literal))))))
+      (function_declaration
+        (function_name
+          (array_receiver
+            (identifier))
+          (identifier))
+        (parameters
+          (self_parameter))
+        (type
+          (qualified_type
+            (identifier)))
+        (block
+          (return_statement
+            (integer_literal)))))))
+
+========================
+Template declaration decorators
+========================
+
+@template<T: Scalar>
+@extend T[]: Hashable {
+  fn hash(const &self) -> u64 {
+    return 0;
+  }
+}
+
+@template<T: Scalar>
+fn T[]::other(const &self) -> u64 {
+  return 1;
+}
+
+---
+
+(source_file
+  (template_declaration
+    (type_parameters
+      (type_parameter
+        (identifier)
+        (type
+          (qualified_type
+            (identifier)))))
+    (extend_declaration
+      (type
+        (array_type
+          (type
+            (qualified_type
+              (identifier)))))
+      (type
+        (qualified_type
+          (identifier)))
+      (extend_body
+        (method_declaration
+          (identifier)
+          (parameters
+            (self_parameter))
+          (type
+            (qualified_type
+              (identifier)))
+          (block
+            (return_statement
+              (integer_literal)))))))
+  (template_declaration
+    (type_parameters
+      (type_parameter
+        (identifier)
+        (type
+          (qualified_type
+            (identifier)))))
+    (function_declaration
+      (function_name
+        (array_receiver
+          (identifier))
+        (identifier))
+      (parameters
+        (self_parameter))
+      (type
+        (qualified_type
+          (identifier)))
+      (block
+        (return_statement
+          (integer_literal))))))

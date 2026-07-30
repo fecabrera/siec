@@ -3,6 +3,7 @@
 [
   (block)
   (declaration_block)
+  (template_body)
   (struct_body)
   (extend_body)
   (enum_declaration)

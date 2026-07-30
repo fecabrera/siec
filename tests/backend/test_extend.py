@@ -78,6 +78,94 @@ def test_bounded_extension_block_claims_and_implements_together(run):
     assert run(source).returncode == 42
 
 
+def test_template_block_bounds_an_extension_and_sibling_method(run):
+    """One template environment covers a claim block and another method."""
+    source = """
+    interface Hashable {
+        fn hash(const &self) -> u64;
+    }
+
+    @template<T: Scalar> {
+        @extend T[]: Hashable {
+            fn hash(const &self) -> u64 {
+                let total: u64 = 0;
+                foreach (element : self)
+                    total += element as u64;
+                return total;
+            }
+        }
+
+        fn T[]::first(const &self) -> T {
+            return self[0];
+        }
+    }
+
+    fn read<T: Hashable>(value: T) -> u64 {
+        return value.hash();
+    }
+
+    fn main() -> i32 {
+        let values: i32[] = [20, 22];
+        return read(values) as i32 + values.first() - 20;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_template_decorator_bounds_extensions_and_methods(run):
+    """The decorator form supplies the same environment declaration-wise."""
+    source = """
+    interface Hashable {
+        fn hash(const &self) -> u64;
+    }
+
+    @template<T: Scalar>
+    @extend T[]: Hashable {
+        fn hash(const &self) -> u64 { return self[0] as u64; }
+    }
+
+    @template<T: Scalar>
+    fn T[]::last(const &self) -> T {
+        return self[self.length - 1];
+    }
+
+    fn main() -> i32 {
+        let values: i32[] = [40, 2];
+        return values.hash() as i32 + values.last();
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_template_extension_accepts_an_interface_bound(run):
+    """The environment's bound may be an ordinary user interface."""
+    source = """
+    interface Element;
+
+    interface Counted {
+        fn count(const &self) -> u64;
+    }
+
+    struct Item: Element {}
+
+    @template<T: Element> {
+        @extend T[]: Counted {
+            fn count(const &self) -> u64 { return self.length; }
+        }
+    }
+
+    fn count<C: Counted>(value: C) -> u64 {
+        return value.count();
+    }
+
+    fn main() -> i32 {
+        let items: Item[] = [{}, {}];
+        return count(items) as i32 + 40;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_bounded_extension_block_supports_bare_receiver_families(run):
     """
     The same block form blankets matching value types themselves, not
@@ -88,7 +176,8 @@ def test_bounded_extension_block_supports_bare_receiver_families(run):
         fn hash(const &self) -> u64;
     }
 
-    @extend<T: Scalar> T: Hashable {
+    @template<T: Scalar>
+    @extend T: Hashable {
         fn hash(const &self) -> u64 {
             return self as u64;
         }

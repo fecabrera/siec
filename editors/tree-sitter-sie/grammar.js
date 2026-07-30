@@ -63,6 +63,7 @@ module.exports = grammar({
         $.const_declaration,
         $.macro_declaration,
         $.alias_declaration,
+        $.template_declaration,
         $.extend_declaration,
         $.error_directive,
         $.static_assert_directive,
@@ -168,6 +169,26 @@ module.exports = grammar({
         "=",
         field("type", $.type),
         ";",
+      ),
+
+    template_declaration: ($) =>
+      seq(
+        "@template",
+        field("type_parameters", $.type_parameters),
+        choice(
+          field("body", $.template_body),
+          field(
+            "declaration",
+            choice($.extend_declaration, $.function_declaration),
+          ),
+        ),
+      ),
+
+    template_body: ($) =>
+      seq(
+        "{",
+        repeat(choice($.extend_declaration, $.function_declaration)),
+        "}",
       ),
 
     extend_declaration: ($) =>

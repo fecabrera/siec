@@ -807,6 +807,30 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 6)]
 
 
+def test_inspect_resolves_a_template_block_method(tmp_path):
+    """A template environment preserves its method's source definition."""
+    analysis, src = unit(tmp_path, """\
+interface Hashable {
+    fn hash(const &self) -> u64;
+}
+
+@template<T: Scalar> {
+    @extend T[]: Hashable {
+        fn hash(const &self) -> u64 { return self.length; }
+    }
+}
+
+fn main() -> i32 {
+    let values: i32[] = [1, 2];
+    return values.hash() as i32;
+}
+""")
+
+    finding = probe(analysis, src, 12, 19)
+    assert finding.text == "fn T[]::hash(const &T[]) -> u64"
+    assert finding.targets == [(str(src.resolve()), 7)]
+
+
 def test_inspect_types_a_field_through_the_chain(tmp_path):
     """
     Hovering a field types it through the receiver chain and sites its

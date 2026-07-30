@@ -172,6 +172,50 @@ def test_bounded_extension_block_supplies_method_receivers(ts):
     assert method.receiver_constraints == {"T": "Scalar"}
 
 
+def test_template_block_supplies_bounds_to_extensions_and_methods(ts):
+    """A template block binds both implicit and separate method receivers."""
+    program = parse_program(ts("""
+    @template<T: Scalar> {
+        @extend T[]: Hashable {
+            fn hash(const &self) -> u64 { return 0; }
+        }
+
+        fn T[]::other(const &self) -> u64 { return 1; }
+    }
+    """))
+
+    ext = program.extends[0]
+    hash_method, other = program.functions
+    assert ext.params == ["T"]
+    assert ext.constraints == {"T": "Scalar"}
+    assert hash_method.receiver == "T[]"
+    assert hash_method.receiver_params == ["T"]
+    assert hash_method.receiver_constraints == {"T": "Scalar"}
+    assert other.receiver == "T[]"
+    assert other.receiver_params == ["T"]
+    assert other.receiver_constraints == {"T": "Scalar"}
+
+
+def test_template_decorator_supplies_one_declaration(ts):
+    """The unbraced form decorates one extension or method at a time."""
+    program = parse_program(ts("""
+    @template<T: Scalar>
+    @extend T[]: Hashable {
+        fn hash(const &self) -> u64 { return 0; }
+    }
+
+    @template<T: Scalar>
+    fn T[]::other(const &self) -> u64 { return 1; }
+    """))
+
+    ext = program.extends[0]
+    assert ext.params == ["T"]
+    assert ext.constraints == {"T": "Scalar"}
+    assert all(fn.receiver_params == ["T"] for fn in program.functions)
+    assert all(fn.receiver_constraints == {"T": "Scalar"}
+               for fn in program.functions)
+
+
 def test_forward_declaration_has_no_body(ts):
     """
     A signature ending in ';' parses as a declaration with body None.

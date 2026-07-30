@@ -73,6 +73,7 @@
   "@const"
   "@macro"
   "@type"
+  "@template"
   "@extend"
   "@error"
   "@static_assert"
