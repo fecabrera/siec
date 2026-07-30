@@ -513,7 +513,10 @@ def parse_global(ts: TokenStream) -> Global:
     return Global(name, var_type, kind == "static", value, symbol, line=line)
 
 
-DECORATORS = {"extern", "inline", "static", "asm", "noreturn", "private"}
+DECORATORS = {
+    "extern", "inline", "static", "asm", "noreturn", "private",
+    "override",
+}
 
 
 
@@ -582,6 +585,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     is_private = "private" in decorators
     is_asm = "asm" in decorators
     noreturn = "noreturn" in decorators
+    is_override = "override" in decorators
 
     if is_extern and decorators - {"extern", "noreturn"}:
         raise SyntaxError(f"line {line}: '@extern' only combines with '@noreturn'")
@@ -636,6 +640,9 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
 
     if is_static and receiver is not None:
         raise SyntaxError(f"line {line}: a method cannot be '@static'")
+
+    if is_override and removed is not None:
+        raise SyntaxError(f"line {line}: '@override' cannot combine with '@remove'")
 
     ts.expect("sym", "(")
 
@@ -744,6 +751,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         "deprecated": deprecated,
         "removed": removed,
         "is_private": is_private,
+        "is_override": is_override,
         "line": line,
     }
 

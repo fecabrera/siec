@@ -185,6 +185,12 @@ class CodeGenerator:
         self.generic_functions: dict = {}
         self.instantiated_functions: set = set()
         self.pending_functions: deque[Function] = deque()
+        # concrete definitions displaced by an '@override' declaration;
+        # registration keeps their signatures, emission skips their bodies
+        self.overridden_functions: set[int] = set()
+        # exact method specializations suppress only the matching receiver
+        # family overload, leaving its siblings available
+        self.overridden_method_signatures: dict[str, set[tuple]] = {}
 
         # a generic struct's method templates by (struct, method) name,
         # stamped alongside each 'S<args>' instantiation on first call
@@ -849,7 +855,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     )
 
     prepare_extension_methods(gen, program)
-    for fn in program.functions:
+    # Ordinary declarations enter first regardless of source order, giving
+    # every '@override' the complete target inventory it is checked against.
+    for fn in sorted(program.functions, key=lambda declaration:
+                     declaration.is_override):
         if fn.receiver is not None and fn.receiver in gen.interfaces:
             register_action(gen, fn)
             continue
@@ -862,6 +871,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
             register_generic_function(gen, fn)
         else:
             declare_function(gen, fn)
+
+    from siec.codegen.overrides import validate_concrete_overrides
+
+    validate_concrete_overrides(gen, program)
 
     # Checking is last: every resolved field and callable signature is
     # available before assertions, receiver-family requirements, and nominal
@@ -883,6 +896,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     for fn in program.functions:
         if (fn.type_params is None and fn.receiver_params is None
                 and (fn.body is not None or fn.asm is not None)
+                and id(fn) not in gen.overridden_functions
                 and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
             emit_function(gen, fn)
 

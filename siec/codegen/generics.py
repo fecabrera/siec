@@ -279,12 +279,40 @@ def register_generic_function(gen: CodeGenerator, fn) -> None:
             for other in (primary, *overloads):
                 if (len(other.type_params) == len(fn.type_params)
                         and template_identity(other) == template_identity(fn)):
+                    if fn.is_override and not other.is_override:
+                        if template_return(other) != template_return(fn):
+                            from siec.codegen.overloads import shown_signature
+                            raise TypeError(
+                                f"function '{shown_signature(fn)}' has no "
+                                "matching declaration to override")
+                        overloads.append(fn)
+                        return
+                    from siec.codegen.overloads import shown_signature
+                    what = ("is overridden more than once"
+                            if fn.is_override else "is declared more than once")
+                    raise TypeError(f"function '{shown_signature(fn)}' "
+                                    f"{what}")
+
+            if fn.is_override:
+                targets = [
+                    other for other in (primary, *overloads)
+                    if (not other.is_override
+                        and len(other.type_params) == len(fn.type_params)
+                        and template_key(other) == template_key(fn)
+                        and template_return(other) == template_return(fn))
+                ]
+                if not targets:
                     from siec.codegen.overloads import shown_signature
                     raise TypeError(f"function '{shown_signature(fn)}' "
-                                    "is declared more than once")
+                                    "has no matching declaration to override")
 
             overloads.append(fn)
             return
+
+        if fn.is_override:
+            from siec.codegen.overloads import shown_signature
+            raise TypeError(f"function '{shown_signature(fn)}' "
+                            "has no matching declaration to override")
 
         gen.generic_functions[fn.name] = fn
 
@@ -311,6 +339,15 @@ def template_identity(template) -> tuple:
         for param, bound in (template.constraints or {}).items()
     )
     return template_key(template), constraints
+
+
+def template_return(template) -> str | None:
+    """A generic template's normalized return type."""
+    if template.return_type is None:
+        return None
+
+    mapping = {p: f"#{i}" for i, p in enumerate(template.type_params)}
+    return substitute(strip_const(template.return_type), mapping)
 
 
 def rewrite_types(node, apply) -> None:
@@ -619,12 +656,22 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
 
         strength = {"exact": 0, "implicit": 1, "adopt": 2}
         ranked = [
-            (strength[fit], -len(entry[0].constraints or {}), entry)
+            (strength[fit], -len(entry[0].constraints or {}),
+             -int(entry[0].is_override), entry)
             for entry in resolved
             if (fit := generic_fit(gen, *entry, call, scope)) is not None
         ]
         if ranked:
-            return min(ranked, key=lambda candidate: candidate[:2])[2]
+            best = min(candidate[:3] for candidate in ranked)
+            winners = [
+                candidate for candidate in ranked
+                if candidate[:3] == best
+            ]
+            if sum(candidate[3][0].is_override
+                   for candidate in winners) > 1:
+                raise TypeError(
+                    f"overrides of function {symbol!r} are ambiguous")
+            return winners[0][3]
 
         return resolved[0]
 

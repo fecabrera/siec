@@ -53,6 +53,15 @@ def test_decorators_stack(ts):
     assert fn.is_inline
 
 
+def test_override_decorator_marks_functions_and_methods(ts):
+    """'@override' marks the declaration whose implementation takes precedence."""
+    fn = parse_function(ts("@override fn f() {}"))
+    method = parse_function(ts("@override fn char[]::f(&self) {}"))
+
+    assert fn.is_override
+    assert method.is_override
+
+
 def test_extern_combines_only_with_noreturn(ts):
     """
     '@extern' functions have no body for other decorators to act on;

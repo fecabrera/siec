@@ -732,6 +732,24 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 3)]
 
 
+def test_inspect_sites_a_selected_function_override(tmp_path):
+    """Hover and navigation omit the concrete implementation it replaces."""
+    analysis, src = unit(tmp_path, """\
+fn answer() -> i32 { return 1; }
+
+@override
+fn answer() -> i32 { return 42; }
+
+fn main() -> i32 {
+    return answer();
+}
+""")
+
+    finding = probe(analysis, src, 6, 12)
+    assert finding.text == "fn answer() -> i32"
+    assert finding.targets == [(str(src.resolve()), 3)]
+
+
 def test_inspect_preserves_bounds_in_declarations(tmp_path):
     """
     Hover renders declared bounds on structs and generic methods instead
@@ -783,6 +801,34 @@ fn main() -> i32 {
     finding = probe(analysis, src, 10, 19)
     assert finding.text == "fn T[]::hash(const &T[]) -> u64"
     assert finding.targets == [(str(src.resolve()), 6)]
+
+
+def test_inspect_sites_the_selected_method_override(tmp_path):
+    """Hover follows a bounded override where it applies and the base elsewhere."""
+    analysis, src = unit(tmp_path, """\
+interface Special;
+@extend char: Special;
+
+fn T[]::answer(const &self) -> i32 { return 1; }
+
+@template<T: Special>
+@override
+fn T[]::answer(const &self) -> i32 { return 42; }
+
+fn main() -> i32 {
+    let chars: char[] = "x";
+    let ints: i32[] = [1];
+    return chars.answer() + ints.answer();
+}
+""")
+
+    overridden = probe(analysis, src, 12, 18)
+    fallback = probe(analysis, src, 12, 34)
+
+    assert overridden.text == "fn T[]::answer(const &T[]) -> i32"
+    assert overridden.targets == [(str(src.resolve()), 7)]
+    assert fallback.text == "fn T[]::answer(const &T[]) -> i32"
+    assert fallback.targets == [(str(src.resolve()), 4)]
 
 
 def test_inspect_formats_a_bare_bounded_receiver(tmp_path):

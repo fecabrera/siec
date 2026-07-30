@@ -986,11 +986,37 @@ def resolve_name(analysis: Analysis, sites: dict, name: str,
 
     kind = found[0][0]
     if kind == "function":
+        from siec.codegen.generics import template_identity, template_return
+        from siec.codegen.overloads import overload_key
+
+        groups = {}
+        for entry in found:
+            decl = entry[1]
+            if decl.type_params is not None:
+                key = (template_identity(decl), template_return(decl))
+            else:
+                key = (overload_key(decl.params), decl.return_type)
+            groups.setdefault(key, []).append(entry)
+
+        found = [
+            entry
+            for declarations in groups.values()
+            for entry in (
+                [candidate for candidate in declarations
+                 if candidate[1].is_override]
+                or declarations
+            )
+        ]
         texts = []
         for _, decl in found:
             if (sig := signature(decl)) not in texts:
                 texts.append(sig)
 
+        targets = [
+            (decl.file, decl.line)
+            for _, decl in found
+            if navigable_file(decl.file)
+        ]
         return Finding("\n".join(texts), targets)
 
     decl = found[0][1]
@@ -1197,34 +1223,69 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
     A method on a base type: every overload's signature, from the
     concrete declarations and the generic struct's templates alike.
     """
-    from siec.codegen.generics import split_generic
-    from siec.codegen.methods import resolve_method
+    from siec.codegen.generics import split_generic, unify
+    from siec.codegen.interfaces import constraints_hold, free_name
+    from siec.codegen.methods import resolve_method, select_method_overrides
 
     gen = analysis.gen
+
+    def unresolved(spelling: str) -> bool:
+        """Whether an editor-side type still contains a free placeholder."""
+        spelling = strip_const(strip_reference(spelling))
+        if spelling.endswith("[]"):
+            return unresolved(spelling[:-2])
+        if (generic := split_generic(spelling)) is not None:
+            return any(unresolved(arg) for arg in generic[1])
+        return free_name(gen, spelling)
+
+    def eligible(template, mapping: dict) -> bool:
+        # During inspection, a receiver may still contain its enclosing
+        # function's placeholder. Its bounds cannot be decided until that
+        # function is instantiated, so keep the conditional declaration
+        # visible just as resolution will then do.
+        return (constraints_hold(
+                    gen, template.receiver_constraints,
+                    mapping, template.file)
+                or any(unresolved(actual) for actual in mapping.values()))
+
     try:
         symbol = resolve_method(gen, base, name)
     except (TypeError, NameError):
         symbol = None
 
-    nodes = [decl for kind, decl in sites.get(f"{base}::{name}", ())
-             if kind == "function"]
-    if (parts := split_generic(base)) is not None:
-        nodes.extend(gen.generic_methods.get((parts[0], name), ()))
-    elif base.endswith("[]"):
-        nodes.extend(gen.generic_methods.get(("[]", name), ()))
+    exact = [decl for kind, decl in sites.get(f"{base}::{name}", ())
+             if kind == "function" and decl.receiver_params is None]
+    if exact:
+        overrides = [node for node in exact if node.is_override]
+        nodes = overrides or exact
+    else:
+        parts = split_generic(base)
+        if parts is None and base.endswith("[]"):
+            parts = ("[]", [base[:-2]])
 
-    if not nodes:
-        from siec.codegen.generics import unify
-        from siec.codegen.interfaces import constraints_hold
+        entries = []
+        if parts is not None:
+            for template in gen.generic_methods.get((parts[0], name), ()):
+                mapping = dict(zip(template.receiver_params or (), parts[1]))
+                if eligible(template, mapping):
+                    entries.append((template, mapping))
 
         for template in gen.generic_receiver_methods.get(name, ()):
             mapping = {}
-            unify(template.receiver, base, template.receiver_params, mapping)
+            try:
+                unify(template.receiver, base,
+                      template.receiver_params, mapping)
+            except TypeError:
+                continue
             if (all(param in mapping for param in template.receiver_params)
-                    and constraints_hold(
-                        gen, template.receiver_constraints,
-                        mapping, template.file)):
-                nodes.append(template)
+                    and eligible(template, mapping)):
+                entries.append((template, mapping))
+
+        try:
+            entries = select_method_overrides(gen, base, name, entries)
+        except TypeError:
+            entries = []
+        nodes = [template for template, _ in entries]
 
     unique = []
     seen = set()

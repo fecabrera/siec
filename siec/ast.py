@@ -602,6 +602,8 @@ class Function:
     deprecated: str | None = None  # '@deprecated("...")': the advice its uses warn with
     removed: str | None = None  # '@remove("...")': the advice its uses fail with
     is_private: bool = False  # '@private': visible textually, never through import
+    # '@override': deliberately replaces a matching declaration
+    is_override: bool = False
     line: int = _line()
     file: str = _file()
 

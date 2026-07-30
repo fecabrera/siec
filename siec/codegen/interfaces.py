@@ -137,6 +137,9 @@ def register_action(gen: CodeGenerator, fn) -> None:
     interface receiver, required of every implementing struct.
     """
     with source_location(line=fn.line, file=fn.file):
+        if fn.is_override:
+            raise TypeError("'@override' cannot decorate an interface action")
+
         if fn.body is not None or fn.asm is not None:
             raise TypeError(f"an interface action cannot have a body: "
                             f"{fn.name!r} declares a required signature")

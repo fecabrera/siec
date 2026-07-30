@@ -980,6 +980,38 @@ The return type is not part of the signature, so two overloads differing only th
 
 A function's module symbol carries its parameter types: `pick(i64)`, `List<char>::init(&List<char>,u64)`. Separately compiled units therefore name every signature alike, whatever their declaration order; only `@extern`, `@symbol`, and `main` keep their unmangled C symbols.
 
+#### Overrides
+
+`@override` deliberately replaces one matching function or method implementation. The target must already exist in the compilation unit with the same parameter and return types; without the decorator, defining that same function twice remains an error. Collection happens before override selection, so the declarations may appear in either order:
+
+```
+fn answer() -> i32 { return 1; }
+
+@override
+fn answer() -> i32 { return 42; }
+```
+
+A concrete receiver, such as `char[]` or `Box<i32>`, overrides a receiver family only for that concrete type and signature. Other instantiations and overloads keep the family implementation:
+
+```
+fn T[]::f(const &self) -> i32 { return 1; }
+
+@override
+fn char[]::f(const &self) -> i32 { return 42; }
+```
+
+A bounded template is a conditional override. It wins where its bound holds and falls back to the less-specific family everywhere else:
+
+```
+fn T[]::f(const &self) -> i32 { return 1; }
+
+@template<T: Formattable>
+@override
+fn T[]::f(const &self) -> i32 { return 42; }
+```
+
+The same rule applies to bounded generic functions. Exact concrete overrides are more specific than bounded ones, and bounded overrides are more specific than an unbounded declaration. Two equally specific overrides that both apply are ambiguous and rejected; an override with no matching target is also an error.
+
 #### Operator overloading
 
 Binary operators on a struct operand are shorthand for method calls: `a + b` is `a.add(b)`, picking among `add`'s overloads by `b`'s type. The operators map to `add`, `sub`, `mul`, `div`, and `rem`.

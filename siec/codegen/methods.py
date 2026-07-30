@@ -15,8 +15,89 @@ from llvmlite import ir
 from siec.ast import Call, Member, Var
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.generics import split_generic, substitute_types
+from siec.codegen.generics import split_generic, substitute, substitute_types
 from siec.codegen.types import strip_const, strip_reference
+
+
+def method_signature(fn, mapping: dict | None = None) -> tuple:
+    """A method's parameter and return types after an optional substitution."""
+    mapping = mapping or {}
+    params = tuple(
+        strip_const(substitute(param.type, mapping))
+        for param in fn.params
+    )
+    ret = (strip_const(substitute(fn.return_type, mapping))
+           if fn.return_type is not None else None)
+    return params, ret
+
+
+def normalized_method_signature(fn) -> tuple:
+    """A receiver template's signature independent of placeholder names."""
+    mapping = {
+        param: f"#R{index}"
+        for index, param in enumerate(fn.receiver_params or ())
+    }
+    mapping.update({
+        param: f"#T{index}"
+        for index, param in enumerate(fn.type_params or ())
+    })
+    return method_signature(fn, mapping)
+
+
+def concrete_type_like(gen: CodeGenerator, spelling: str) -> bool:
+    """Whether a receiver argument contains no free type placeholders."""
+    from siec.codegen.interfaces import is_type_name
+
+    spelling = strip_const(strip_reference(spelling))
+    while spelling.endswith("*") or spelling.endswith("[]"):
+        spelling = spelling[:-1] if spelling.endswith("*") else spelling[:-2]
+
+    if (parts := split_generic(spelling)) is not None:
+        return (is_type_name(gen, parts[0])
+                and all(concrete_type_like(gen, arg) for arg in parts[1]))
+
+    return is_type_name(gen, spelling) or spelling in gen.interfaces
+
+
+def select_method_overrides(gen: CodeGenerator, base: str, method: str,
+                            entries: list[tuple]) -> list[tuple]:
+    """
+    Pick one eligible implementation per instantiated method signature.
+
+    An override replaces the ordinary family only where its bounds hold.
+    Two equally specific overrides applying to the same receiver are
+    ambiguous rather than depending on declaration order.
+    """
+    groups: dict[tuple, list] = {}
+    for template, mapping in entries:
+        groups.setdefault(method_signature(template, mapping), []).append(
+            (template, mapping))
+
+    selected = []
+    for signature, candidates in groups.items():
+        overrides = [
+            entry for entry in candidates if entry[0].is_override
+        ]
+        if not overrides:
+            selected.extend(candidates)
+            continue
+
+        rank = max(
+            len(template.receiver_constraints or {})
+            for template, _ in overrides
+        )
+        winners = [
+            entry for entry in overrides
+            if len(entry[0].receiver_constraints or {}) == rank
+        ]
+        if len(winners) != 1:
+            raise TypeError(f"overrides of method {base + '::' + method!r} "
+                            "are ambiguous for receiver "
+                            f"{base!r}")
+
+        selected.append(winners[0])
+
+    return selected
 
 
 def register_method(gen: CodeGenerator, fn) -> None:
@@ -27,9 +108,30 @@ def register_method(gen: CodeGenerator, fn) -> None:
     """
     from siec.codegen.functions import declare_function
     from siec.codegen.generics import register_generic_function
-    from siec.codegen.overloads import overload_key, shown_signature
+    from siec.codegen.overloads import shown_signature
 
     with source_location(line=fn.line, file=fn.file):
+        # The parser cannot know whether the element in 'X[]::m' is a
+        # placeholder or a declared type. Settle it now that collection is
+        # complete: 'char[]::m' is concrete, while 'T[]::m' stays a family.
+        if (fn.receiver_params is not None and fn.receiver.endswith("[]")
+                and fn.receiver_params == [fn.receiver[:-2]]):
+            element = fn.receiver[:-2]
+            if concrete_type_like(gen, element):
+                fn.receiver_params = None
+
+        # The same ambiguity exists in 'Box<X>::m': X is a template
+        # placeholder when free and a concrete specialization argument when
+        # it names a collected type.
+        if (fn.receiver_params is not None
+                and fn.receiver in gen.generic_structs
+                and all(concrete_type_like(gen, param)
+                        for param in fn.receiver_params)):
+            receiver = f"{fn.receiver}<{','.join(fn.receiver_params)}>"
+            fn.receiver = receiver
+            fn.name = f"{receiver}::{fn.name.partition('::')[2]}"
+            fn.receiver_params = None
+
         if fn.is_private:
             gen.private_methods.setdefault(fn.name, set()).add(fn.file)
 
@@ -65,10 +167,37 @@ def register_method(gen: CodeGenerator, fn) -> None:
                 raise TypeError(f"cannot overload method {fn.name!r} with "
                                 "more than one generic signature")
 
-            if any(overload_key(t.params) == overload_key(fn.params)
-                   for t in templates):
+            same = [
+                template for template in templates
+                if normalized_method_signature(template)[0]
+                == normalized_method_signature(fn)[0]
+            ]
+            if fn.is_override and not same:
                 raise TypeError(f"method '{shown_signature(fn)}' "
-                                "is declared more than once")
+                                "has no matching declaration to override")
+
+            if same:
+                if not fn.is_override:
+                    raise TypeError(f"method '{shown_signature(fn)}' "
+                                    "is declared more than once")
+
+                targets = [
+                    template for template in same
+                    if (not template.is_override
+                        and normalized_method_signature(template)
+                        == normalized_method_signature(fn))
+                ]
+                if not targets:
+                    raise TypeError(f"method '{shown_signature(fn)}' "
+                                    "has no matching declaration to override")
+
+                if any(
+                        template.is_override
+                        and template.receiver_constraints
+                        == fn.receiver_constraints
+                        for template in same):
+                    raise TypeError(f"method '{shown_signature(fn)}' "
+                                    "is overridden more than once")
 
             templates.append(fn)
         elif fn.type_params is not None:
@@ -113,10 +242,12 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         or isinstance(gen.module.globals.get(symbol), ir.Function)
     )
 
-    # A concrete array specialization owns its method name. Do not let a
-    # 'T[]::m' family displace it, especially when that family's bounds do
-    # not accept the concrete element type.
-    if base.endswith("[]") and exact:
+    overrides = gen.overridden_method_signatures.get(symbol, set())
+
+    # An ordinary concrete array specialization owns its method name, as it
+    # did before explicit overrides. An '@override' instead suppresses only
+    # its matching family signature below, preserving sibling overloads.
+    if base.endswith("[]") and exact and not overrides:
         if not gen.sees_method(symbol):
             return None
         return symbol
@@ -137,6 +268,13 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
             (template, dict(zip(template.receiver_params, parts[1])))
             for template in templates
         ]
+        if overrides:
+            template_entries = [
+                (template, mapping)
+                for template, mapping in template_entries
+                if method_signature(template, mapping) not in overrides
+            ]
+            templates = [template for template, _ in template_entries]
     else:
         # An inherent method on this exact type is more specific than a
         # blanket receiver family and keeps its ordinary declaration.
@@ -205,6 +343,10 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
         template_entries = eligible
         templates = [template for template, _ in eligible]
+
+    template_entries = select_method_overrides(
+        gen, base, method, template_entries)
+    templates = [template for template, _ in template_entries]
 
     gen.instantiated_functions.add(symbol)
     site = gen.type_instantiation_sites.get(base)
