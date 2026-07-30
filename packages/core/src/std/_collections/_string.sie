@@ -1,118 +1,107 @@
-import _list;
+import { List } from _list;
 import { Formattable } from std.format;
 
-@type String = _list.List<char>;
+@type String = List<char>;
 
-@extend String:
-    Add<String, char*>,
-    AddAssign<char*>,
-    Eq<char*>,
-    Formattable;
-
-/**
- * Initialize the String with the given array.
- *
- * @param arr The array to initialize the String with.
- */
-fn String::init(&self, arr: const char*) {
-    self.init();
-    self.append(arr);
-}
-
-/**
- * Add the given null-terminated array to the String.
- *
- * @param arr The array to add to the String.
- * @return The resulting String.
- */
-fn String::add(&self, arr: const char*) -> String {
-    let result = String(self);
-    result.append(arr);
-    return result;
-}
-
-/**
- * Add in place the given null-terminated array to the String.
- *
- * @param arr The array to add to the String.
- * @return The resulting String.
- */
-fn String::add_assign(&self, arr: const char*) {
-    self.append(arr);
-}
-
-/**
- * Check if the String is equal to the given null-terminated pointer.
- *
- * @param arr The char pointer to check if the String is equal to.
- * @return True if the String is equal to the given array, false otherwise.
- */
-fn String::eq(const &self, arr: const char*) -> bool {
-    for (let i: u64 = 0; i < self.length; i += 1) {
-        if (arr[i] == 0 or self.data[i] != arr[i])
-            return false;
+@extend String
+    : Add<String, char*>,
+      AddAssign<char*>,
+      Eq<char*>,
+      Formattable {
+    /**
+    * Initialize the String with the given array.
+    *
+    * @param arr The array to initialize the String with.
+    */
+    fn init(&self, arr: const char*) {
+        self.init();
+        self.append(arr);
     }
 
-    return arr[self.length] == 0;
-}
-
-/**
- * Append the given array to the String.
- *
- * @param arr The array to append to the String.
- */
-fn String::append(&self, arr: const char*) {
-    for (let i: u64 = 0; arr[i]; i += 1) {
-        self.push(arr[i]);
+    /**
+    * Add the given null-terminated array to the String.
+    *
+    * @param arr The array to add to the String.
+    * @return The resulting String.
+    */
+    fn add(&self, arr: const char*) -> String {
+        let result = String(self);
+        result.append(arr);
+        return result;
     }
-}
 
-/**
- * Set the String to the given array.
- *
- * @param arr The array to set the String to.
- */
-fn String::assign(&self, arr: const char*) {
-    self.reset();
-    self.append(arr);
-}
+    /**
+    * Add in place the given null-terminated array to the String.
+    *
+    * @param arr The array to add to the String.
+    * @return The resulting String.
+    */
+    fn add_assign(&self, arr: const char*) {
+        self.append(arr);
+    }
 
-/**
- * Null terminate the String.
- */
-@inline
-fn String::null_terminate(&self) {
-    self.push('\0');
-    self.pop();
-}
+    /**
+    * Check if the String is equal to the given null-terminated pointer.
+    *
+    * @param arr The char pointer to check if the String is equal to.
+    * @return True if the String is equal to the given array, false otherwise.
+    */
+    fn eq(const &self, arr: const char*) -> bool {
+        for (let i: u64 = 0; i < self.length; i += 1) {
+            if (arr[i] == 0 or self.data[i] != arr[i])
+                return false;
+        }
 
-/**
- * Convert the String to a byte array.
- *
- * @return The byte array.
- */
-@inline
-fn String::as_bytes(&self) -> u8[] {
-    return {self.data as u8*, self.length};
-}
+        return arr[self.length] == 0;
+    }
 
-/**
- * Convert the String to a byte array.
- *
- * @return The byte array.
- */
-@inline
-fn String::as_const_bytes(const &self) -> const u8[] {
-    return {self.data as const u8*, self.length};
-}
+    /**
+    * Append the given array to the String.
+    *
+    * @param arr The array to append to the String.
+    */
+    fn append(&self, arr: const char*) {
+        for (let i: u64 = 0; arr[i]; i += 1) {
+            self.push(arr[i]);
+        }
+    }
 
-/**
- * Format the String with the given modifiers.
- *
- * @param modifiers The modifiers to format the String with.
- * @return The formatted String.
- */
-@inline
-fn String::format(const &self, modifiers: const &char[]) -> String {
-    return self.as_const_array().format(modifiers);
+    /**
+    * Set the String to the given array.
+    *
+    * @param arr The array to set the String to.
+    */
+    fn assign(&self, arr: const char*) {
+        self.reset();
+        self.append(arr);
+    }
+
+    /**
+    * Null terminate the String.
+    */
+    @inline
+    fn null_terminate(&self) {
+        self.push('\0');
+        self.pop();
+    }
+
+    /**
+    * Convert the String to a byte array.
+    *
+    * @return The byte array.
+    */
+    @inline
+    fn as_bytes(&self) -> u8[] {
+        return {self.data as u8*, self.length};
+    }
+
+    /**
+    * Convert the String to a byte array.
+    *
+    * @return The byte array.
+    */
+    @inline
+    fn as_const_bytes(const &self) -> const u8[] {
+        return {self.data as const u8*, self.length};
+    }
 }

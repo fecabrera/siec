@@ -1,6 +1,6 @@
 import { panic } from std;
 import { format } from std.format;
-import { hash } from std.hashing;
+import { Hashable } from std.hashing;
 import { String } from std.collections;
 import { malloc, realloc, free } from stdlib;
 
@@ -29,7 +29,7 @@ struct MapEntry<K, V> {
     state: MapEntryState;
 }
 
-struct Map<K, V>:
+struct Map<K: Hashable, V>:
     Iterable<KeyValuePair<K, V>>,
     Formattable {
     entries: MapEntry<K, V>*;
@@ -75,7 +75,7 @@ fn Map<K, V>::destroy(&self) {
 
 fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     let str = String();
-    str += "{ ";
+    str += "{";
     foreach (entry : enumerate(self)) {
         if (entry.index) str += ", ";
         let tmp = format("{}: {}", entry.value.key, entry.value.value);
@@ -94,8 +94,8 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
  * @return The entry for the given key.
  */
 @private
-fn Map<K, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V>*, MapIndexError> {
-    let slot = hash(key) % self.capacity;
+fn Map<K: Hashable, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V>*, MapIndexError> {
+    let slot = key.hash() % self.capacity;
 
     while (self.entries[slot].state != MapEntryState::Empty) {
         if (self.entries[slot].state == MapEntryState::Used) {
@@ -116,11 +116,11 @@ fn Map<K, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V
  * @return The entry for the given key.
  */
 @private
-fn Map<K, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
+fn Map<K: Hashable, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
     if (self.size * 10 >= self.capacity * 7)
         self.grow();
     
-    let slot = hash(key) % self.capacity;
+    let slot = key.hash() % self.capacity;
 
     while (self.entries[slot].state != MapEntryState::Empty) {
         if (self.entries[slot].state == MapEntryState::Used) {

@@ -7,82 +7,89 @@ interface Formattable {
     fn format(const &self, modifiers: const &char[]) -> String;
 }
 
-@extend i64: Formattable;
-
-fn i64::format(const &self, modifiers: const &char[]) -> String {
-    let neg = false;
-    let num = self as u64;
-    if (self < 0) {
-        neg = true;
-        num = (~num) + 1;
+@extend i64: Formattable {
+    fn format(const &self, modifiers: const &char[]) -> String {
+        let neg = false;
+        let num = self as u64;
+        if (self < 0) {
+            neg = true;
+            num = (~num) + 1;
+        }
+        return format_int(num, modifiers, neg);
     }
-    return format_int(num, modifiers, neg);
 }
 
-@extend i32: Formattable;
-
-@inline
-fn i32::format(const &self, modifiers: const &char[]) -> String {
-    return (self as i64).format(modifiers);
+@extend i32: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return (self as i64).format(modifiers);
+    }
 }
 
-@extend i16: Formattable;
-
-@inline
-fn i16::format(const &self, modifiers: const &char[]) -> String {
-    return (self as i64).format(modifiers);
+@extend i16: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return (self as i64).format(modifiers);
+    }
 }
 
-@extend i8: Formattable;
-
-@inline
-fn i8::format(const &self, modifiers: const &char[]) -> String {
-    return (self as i64).format(modifiers);
+@extend i8: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return (self as i64).format(modifiers);
+    }
 }
 
-@extend u64: Formattable;
-
-@inline
-fn u64::format(const &self, modifiers: const &char[]) -> String {
-    return format_int(self, modifiers, false);
+@extend u64: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return format_int(self, modifiers, false);
+    }
 }
 
-@extend u32: Formattable;
-
-@inline
-fn u32::format(const &self, modifiers: const &char[]) -> String {
-    return format_int(self, modifiers, false);
+@extend u32: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return format_int(self, modifiers, false);
+    }
 }
 
-@extend u16: Formattable;
-
-@inline
-fn u16::format(const &self, modifiers: const &char[]) -> String {
-    return format_int(self, modifiers, false);
+@extend u16: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return format_int(self, modifiers, false);
+    }
 }
 
-@extend u8: Formattable;
-
-@inline
-fn u8::format(const &self, modifiers: const &char[]) -> String {
-    return format_int(self, modifiers, false);
+@extend u8: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return format_int(self, modifiers, false);
+    }
 }
 
-@extend bool: Formattable;
-
-@inline
-fn bool::format(const &self, modifiers: const &char[]) -> String {
-    if (modifiers == "y")
-        return String(self ? "y": "n");
-    else if (modifiers == "yes")
-        return String(self ? "yes": "no");
-    else
-        return String(self ? "true": "false");
+@extend bool: Formattable { 
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        if (modifiers == "y")
+            return String(self ? "y": "n");
+        else if (modifiers == "yes")
+            return String(self ? "yes": "no");
+        else
+            return String(self ? "true": "false");
+    }
 }
 
-@extend char[]: Formattable;
+@extend char[]: Formattable {
+    @inline fn format(const &self, modifiers: const &char[]) -> String {
+        return format_str(self, modifiers);
+    }
+}
 
-@inline
-fn char[]::format(const &self, modifiers: const &char[]) -> String {
-    return format_str(self, modifiers);
+@template<T: Formattable>
+@extend T[]: Formattable {
+    fn format(const &self, modifiers: const &char[]) -> String {
+        let result = String();
+        result += '[';
+        foreach (el : enumerate(self)) {
+            if (el.index) result += ", ";
+            let tmp = el.value.format(modifiers);
+            defer tmp.destroy();
+            result += tmp;
+        }
+        result += ']';
+        return result;
+    }
 }

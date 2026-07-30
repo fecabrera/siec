@@ -53,16 +53,6 @@ fn format(str: const &Iterable<char>, args...) -> String {
                     let tmp = arg.format(modifier.as_array());
                     defer tmp.destroy();
                     result.append(tmp);
-                when Iterable<Formattable>:
-                    let arg = args[i] as Iterable<Formattable>;
-                    result.push('[');
-                    foreach (el : enumerate(arg)) {
-                        if (el.index) result.append(", ");
-                        let tmp = el.value.format(modifier.as_array());
-                        defer tmp.destroy();
-                        result.append(tmp);
-                    }
-                    result.push(']');
                 else:
                     result.append(@typename(args[i]));
                 }

@@ -3,16 +3,21 @@
 @include("_hashing/_splitmix64")
 @include("_hashing/_hashable");
 
-@inline
-fn hash<T>(value: const &Iterable<T>) -> u64 {
-    let h = FNV1a();
-    foreach (k : value) {
-        h.ingest(k as u64);
+@template<T: Scalar> {
+    @extend T: Hashable {
+        @inline
+        fn hash(const &self) -> u64 {
+            return splitmix64(self);
+        }
     }
-    return h.hash;
-}
 
-@inline
-fn hash<T>(value: const &T) -> u64 {
-    return splitmix64(value);
+    @extend T[]: Hashable {
+        fn hash(const &self) -> u64 {
+            let h = FNV1a();
+            foreach (k : self) {
+                h.ingest(k as u64);
+            }
+            return h.hash;
+        }
+    }
 }

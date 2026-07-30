@@ -1,17 +1,19 @@
 import { malloc, realloc, free } from stdlib;
+import { Formattable } from std.format;
 
 @private @const DEFAULT_LIST_CAPACITY = 2;
 
-struct List<T>:
-    Iterable<T>,
-    GetItem<u64, T>,
-    SetItem<u64, T>,
-    Add<List<T>, Iterable<T>>,
-    Add<List<T>, T>,
-    AddAssign<Iterable<T>>,
-    AddAssign<T>,
-    Eq<List<T>>,
-    Eq<T[]> {
+struct List<T>
+    : Iterable<T>,
+      GetItem<u64, T>,
+      SetItem<u64, T>,
+      Add<List<T>, Iterable<T>>,
+      Add<List<T>, T>,
+      AddAssign<Iterable<T>>,
+      AddAssign<T>,
+      Eq<List<T>>,
+      Eq<T[]>,
+      Formattable {
     data: T* = null;
     length: u64;
     capacity: u64;
@@ -26,6 +28,16 @@ fn List<T>::init(&self, capacity: u64 = DEFAULT_LIST_CAPACITY) {
     self.data = malloc(capacity * @sizeof(T)) as T*;
     self.length = 0;
     self.capacity = capacity;
+}
+
+/**
+ * Initialize the List with the given iterable.
+ *
+ * @param arr The iterable to initialize the List with.
+ */
+fn List<T>::init(&self, v: const T) {
+    self.init();
+    self.push(v);
 }
 
 /**
@@ -262,6 +274,11 @@ fn List<T>::eq(const &self, arr: const &T[]) -> bool {
     return true;
 }
 
+@inline
+fn List<T>::format(const &self, modifiers: const &char[]) -> String {
+    return self.as_const_array().format(modifiers);
+}
+
 /**
  * Grow the List.
  */
@@ -272,48 +289,48 @@ fn List<T>::grow(&self) {
     self.capacity = capacity;
 }
 
-@extend T[]:
-    Add<List<T>, T[]>,
-    Add<List<T>, List<T>>,
-    Eq<T[]>,
-    Eq<List<T>>;
-
-/**
- * Concatenate the given iterable to the array.
- *
- * @param it The iterable to concatenate to the array.
- * @return A new array with the given array concatenated.
- */
-fn T[]::add(&self, it: const &Iterable<T>) -> List<T> {
-    let result = List<T>(self);
-    result.append(it);
-    return result;
-}
-
-/**
- * Check if the array is equal to the given array.
- *
- * @param arr The array to check if the array is equal to.
- * @return True if the array is equal to the given array, false otherwise.
- */
-fn T[]::eq(const &self, arr: const &T[]) -> bool {
-    if (self.length != arr.length)
-        return false;
-
-    for (let i: u64 = 0; i < arr.length; i += 1) {
-        if (self[i] != arr[i])
-            return false;
+@extend T[]
+    : Add<List<T>, T[]>,
+      Add<List<T>, List<T>>,
+      Eq<T[]>,
+      Eq<List<T>> {
+    /**
+    * Concatenate the given iterable to the array.
+    *
+    * @param it The iterable to concatenate to the array.
+    * @return A new array with the given array concatenated.
+    */
+    fn add(&self, it: const &Iterable<T>) -> List<T> {
+        let result = List<T>(self);
+        result.append(it);
+        return result;
     }
 
-    return true;
-}
+    /**
+    * Check if the array is equal to the given array.
+    *
+    * @param arr The array to check if the array is equal to.
+    * @return True if the array is equal to the given array, false otherwise.
+    */
+    fn eq(const &self, arr: const &T[]) -> bool {
+        if (self.length != arr.length)
+            return false;
 
-/**
- * Check if the array is equal to the given List.
- *
- * @param lst The List to check if the array is equal to.
- * @return True if the array is equal to the given List, false otherwise.
- */
-fn T[]::eq(const &self, lst: const &List<T>) -> bool {
-    return self == lst.as_array();
+        for (let i: u64 = 0; i < arr.length; i += 1) {
+            if (self[i] != arr[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    /**
+    * Check if the array is equal to the given List.
+    *
+    * @param lst The List to check if the array is equal to.
+    * @return True if the array is equal to the given List, false otherwise.
+    */
+    fn eq(const &self, lst: const &List<T>) -> bool {
+        return self == lst.as_array();
+    }
 }
