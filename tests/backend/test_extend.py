@@ -166,6 +166,33 @@ def test_template_extension_accepts_an_interface_bound(run):
     assert run(source).returncode == 42
 
 
+def test_exact_array_method_precedes_an_ineligible_bounded_family(run):
+    """
+    A concrete array specialization wins without satisfying a separate
+    receiver family's element bound.
+    """
+    source = """
+    interface Formattable {
+        fn format(const &self) -> i32;
+    }
+
+    @extend char[]: Formattable {
+        fn format(const &self) -> i32 { return 42; }
+    }
+
+    @template<T: Formattable>
+    @extend T[]: Formattable {
+        fn format(const &self) -> i32 { return self.length as i32; }
+    }
+
+    fn main() -> i32 {
+        let text: char[] = "hello";
+        return text.format();
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_bounded_extension_block_supports_bare_receiver_families(run):
     """
     The same block form blankets matching value types themselves, not

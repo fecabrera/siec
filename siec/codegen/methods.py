@@ -107,6 +107,19 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         return None
 
     symbol = f"{base}::{method}"
+    exact = (
+        symbol in gen.generic_functions
+        or symbol in gen.overloads
+        or isinstance(gen.module.globals.get(symbol), ir.Function)
+    )
+
+    # A concrete array specialization owns its method name. Do not let a
+    # 'T[]::m' family displace it, especially when that family's bounds do
+    # not accept the concrete element type.
+    if base.endswith("[]") and exact:
+        if not gen.sees_method(symbol):
+            return None
+        return symbol
 
     # a generic struct's method instantiates with the struct's arguments;
     # stamping comes first, so the templates join any overloads declared
@@ -127,8 +140,7 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     else:
         # An inherent method on this exact type is more specific than a
         # blanket receiver family and keeps its ordinary declaration.
-        if (symbol in gen.generic_functions or symbol in gen.overloads
-                or isinstance(gen.module.globals.get(symbol), ir.Function)):
+        if exact:
             if not gen.sees_method(symbol):
                 return None
             return symbol
@@ -156,8 +168,7 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         return None
 
     if not templates or symbol in gen.instantiated_functions:
-        if (symbol in gen.generic_functions or symbol in gen.overloads
-                or isinstance(gen.module.globals.get(symbol), ir.Function)):
+        if exact:
             if not gen.sees_method(symbol):
                 return None
             return symbol
