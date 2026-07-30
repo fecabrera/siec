@@ -40,6 +40,47 @@ def test_member_values_may_reference_members(run):
     assert run(source).returncode == 14
 
 
+def test_member_values_may_reference_later_enums(run):
+    """
+    Every enum identity is collected before values resolve, so a member may
+    build on an enum declared later in the compilation unit.
+    """
+    source = """
+    enum Result {
+        BASE = Values::FORTY_ONE,
+        ANSWER,
+    }
+
+    enum Values {
+        FORTY_ONE = 41,
+    }
+
+    fn main() -> i32 {
+        return Result::ANSWER as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_member_values_may_reference_later_members(run):
+    """
+    Members of one enum resolve as a dependency graph too; automatic values
+    still count from the resolved value immediately before them.
+    """
+    source = """
+    enum Values {
+        FORTY = Values::ANSWER - 2,
+        FORTY_ONE,
+        ANSWER = 42,
+    }
+
+    fn main() -> i32 {
+        return (Values::FORTY_ONE + 1) as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_enum_as_a_type(run):
     """
     An enum types variables and parameters, compared by value.
@@ -147,6 +188,21 @@ def test_duplicate_member_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="declares member 'A' more than once"):
         compile_source("enum E { A, A }")
+
+
+def test_member_reference_cycle_is_an_error(compile_source):
+    """
+    A cycle through members is rejected with the dependency chain rather than
+    recursing indefinitely.
+    """
+    with pytest.raises(
+        TypeError,
+        match=r"enum member cycle: A::VALUE -> B::VALUE -> A::VALUE",
+    ):
+        compile_source("""
+        enum A { VALUE = B::VALUE }
+        enum B { VALUE = A::VALUE }
+        """)
 
 
 def test_non_integer_backing_is_an_error(compile_source):

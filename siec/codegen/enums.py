@@ -34,41 +34,99 @@ BINARY_OPS = {
 
 def register_enums(gen: CodeGenerator, program: Program) -> None:
     """
-    Register every enum, evaluating its members to integer constants.
+    Register every enum and member, then evaluate the members.
 
     Automatic values start at 1; an explicit '= <value>' resets the counter,
-    and the following members keep counting from there. A member's value may
-    reference members already declared, in this or an earlier enum.
+    and the following members keep counting from there. Member values resolve
+    through the complete inventory, so they may reference any enum regardless
+    of declaration order.
     """
+    declarations = {}
+
+    # Collect every enum and member identity before resolving a backing type
+    # or value. Evaluation can then follow references in either direction.
     for enum in program.enums:
         with source_location(line=enum.line, file=enum.file):
             if enum.name in gen.enums or enum.name in gen.structs:
                 raise TypeError(f"type {enum.name!r} is declared more than once")
 
+            info = EnumInfo(enum.type, {})
+            gen.enums[enum.name] = info
+
+            for index, member in enumerate(enum.members):
+                key = (enum.name, member.name)
+                if key in declarations:
+                    raise TypeError(f"enum {enum.name!r} declares member "
+                                    f"{member.name!r} more than once")
+
+                declarations[key] = (enum, member, index)
+
+    # Resolve every backing type only after all enum names are available.
+    for enum in program.enums:
+        with source_location(line=enum.line, file=enum.file):
             gen.current_file = enum.file
             enum.type = expand_alias(gen, enum.type)
             if enum.type not in INTEGER_TYPES:
                 raise TypeError(f"enum {enum.name!r} needs an integer backing "
                                 f"type, not {enum.type!r}")
 
-            # register before evaluating so members can reference earlier
-            # ones of the same enum; the enum name also resolves as a type,
-            # represented by its backing type
-            info = EnumInfo(enum.type, {})
-            gen.enums[enum.name] = info
+            info = gen.enums[enum.name]
+            info.backing = enum.type
             gen.structs[enum.name] = StructInfo(resolve_type(enum.type), [])
 
-            counter = 1
-            for member in enum.members:
-                if member.name in info.members:
-                    raise TypeError(f"enum {enum.name!r} declares member "
-                                    f"{member.name!r} more than once")
+    active = []
 
+    def resolve_member(expr: EnumMember) -> int:
+        name = resolve_enum(gen, expr.enum)
+        info = gen.enums.get(name)
+        if info is None:
+            raise NameError(f"undefined enum {expr.enum!r}")
+
+        key = (name, expr.member)
+        if key not in declarations:
+            raise TypeError(f"enum {expr.enum!r} has no member "
+                            f"{expr.member!r}")
+
+        return resolve_key(key)
+
+    def resolve_key(key: tuple[str, str]) -> int:
+        enum_name, member_name = key
+        info = gen.enums[enum_name]
+        if member_name in info.members:
+            return info.members[member_name]
+
+        if key in active:
+            start = active.index(key)
+            cycle = " -> ".join(
+                f"{name}::{member}" for name, member in [*active[start:], key]
+            )
+            raise TypeError(f"enum member cycle: {cycle}")
+
+        enum, member, index = declarations[key]
+        active.append(key)
+        previous_file = gen.current_file
+        gen.current_file = enum.file
+        try:
+            with source_location(line=member.line, file=enum.file):
                 if member.value is not None:
-                    counter = evaluate(gen, member.value)
+                    value = evaluate(gen, member.value, resolve_member)
+                elif index == 0:
+                    value = 1
+                else:
+                    previous = enum.members[index - 1]
+                    value = resolve_key((enum.name, previous.name)) + 1
+        finally:
+            gen.current_file = previous_file
+            active.pop()
 
-                info.members[member.name] = counter
-                counter += 1
+        info.members[member_name] = value
+        return value
+
+    # Resolve every member even when no expression uses it, reporting invalid
+    # references and cycles at its declaration.
+    for enum in program.enums:
+        for member in enum.members:
+            resolve_key((enum.name, member.name))
 
 
 def resolve_enum(gen: CodeGenerator, name: str) -> str:
@@ -125,7 +183,7 @@ def evaluate_size(gen: CodeGenerator, text: str) -> int:
     return size
 
 
-def evaluate(gen: CodeGenerator, expr) -> int:
+def evaluate(gen: CodeGenerator, expr, enum_resolver=None) -> int:
     """
     Evaluate a constant integer expression at compile time: literals,
     integer operators, enum members, and '@const' references.
@@ -141,6 +199,9 @@ def evaluate(gen: CodeGenerator, expr) -> int:
         return expr.value.encode()[0]
 
     if isinstance(expr, EnumMember):
+        if enum_resolver is not None:
+            return enum_resolver(expr)
+
         return member_value(gen, expr)
 
     # a '@sizeof' is a compile-time byte count; only type names resolve here,
@@ -163,16 +224,18 @@ def evaluate(gen: CodeGenerator, expr) -> int:
             raise TypeError(f"{expr.name!r} is not a compile-time constant")
 
         with constant_view(gen, const):
-            return evaluate(gen, const.value)
+            return evaluate(gen, const.value, enum_resolver)
 
     if isinstance(expr, UnaryOp) and expr.op in ("-", "~", "not"):
-        value = evaluate(gen, expr.operand)
+        value = evaluate(gen, expr.operand, enum_resolver)
         if expr.op == "not":
             return int(not value)
 
         return -value if expr.op == "-" else ~value
 
     if isinstance(expr, BinaryOp) and expr.op in BINARY_OPS:
-        return BINARY_OPS[expr.op](evaluate(gen, expr.left), evaluate(gen, expr.right))
+        left = evaluate(gen, expr.left, enum_resolver)
+        right = evaluate(gen, expr.right, enum_resolver)
+        return BINARY_OPS[expr.op](left, right)
 
     raise TypeError("value must be a constant integer expression")

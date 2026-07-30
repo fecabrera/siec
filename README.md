@@ -1945,7 +1945,7 @@ Members are accessed through the enum's name and `::`:
 let color: name = name::ABC;
 ```
 
-Optionally, you can define a specific value for any of their members through `= <value>` after their name. The value is a constant integer expression, and may combine literals, `@const` constants, and members already declared:
+Optionally, you can define a specific value for any of their members through `= <value>` after their name. The value is a constant integer expression, and may combine literals, `@const` constants, and members of any enum:
 
 ```
 enum name {
@@ -1954,6 +1954,8 @@ enum name {
     GHI = name::DEF | 0x10,
 }
 ```
+
+Every enum and member name is collected before those values resolve, so an expression may also reference a member or enum declared later. A cycle between member values is rejected with the chain that forms it.
 
 Members are assigned values automatically, starting at 1 and increasing by 1 for each subsequent member. Setting a specific value for a member changes the counter for the following ones, which then keep increasing from there.
 
