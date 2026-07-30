@@ -790,9 +790,14 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # a method registers under its receiver's rules, an interface receiver
     # marks a required action, and an interface-typed parameter turns the
     # function into a constrained template
-    from siec.codegen.interfaces import (adapt_interface_params,
-                                         register_action, run_conformance)
+    from siec.codegen.interfaces import (
+        adapt_interface_params,
+        prepare_extension_methods,
+        register_action,
+        run_conformance,
+    )
 
+    prepare_extension_methods(gen, program)
     for fn in program.functions:
         if fn.receiver is not None and fn.receiver in gen.interfaces:
             register_action(gen, fn)

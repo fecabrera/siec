@@ -43,6 +43,30 @@ def test_array_methods_stamp_per_element(run):
     assert run(source).returncode == 42
 
 
+def test_unbounded_array_extension_block_infers_its_placeholder(run):
+    """
+    An implicit method in '@extend T[]' binds T exactly like the separate
+    'fn T[]::method' spelling.
+    """
+    source = """
+    interface First<T> {
+        fn first(const &self) -> T;
+    }
+
+    @extend T[]: First<T> {
+        fn first(const &self) -> T {
+            return self[0];
+        }
+    }
+
+    fn main() -> i32 {
+        let values: i32[] = [42];
+        return values.first();
+    }
+    """
+    assert run(source).returncode == 42
+
+
 BOUNDED_HASH = """
 interface Hashable {
     fn hash(const &self) -> u64;

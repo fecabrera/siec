@@ -675,6 +675,30 @@ def free_name(gen: CodeGenerator, spelling: str) -> bool:
             and spelling not in gen.interfaces)
 
 
+def prepare_extension_methods(gen: CodeGenerator, program) -> None:
+    """
+    Give an unbounded array extension's owned methods the placeholder its
+    receiver introduces. This makes
+
+        '@extend T[]: I { fn m(...) { ... } }'
+
+    equivalent to the separate 'fn T[]::m(...)' spelling. Concrete element
+    names, such as 'char[]', keep concrete methods.
+    """
+    for ext in program.extends:
+        if ext.params is not None or not ext.actions:
+            continue
+        if not ext.name.endswith("[]"):
+            continue
+
+        elem = ext.name[:-2]
+        if not elem.isidentifier() or is_type_name(gen, elem):
+            continue
+
+        for action in ext.actions:
+            action.receiver_params = [elem]
+
+
 def register_extends(gen: CodeGenerator, program) -> None:
     """
     Register every '@extend Type: Iface, ...;' claim before conformance
