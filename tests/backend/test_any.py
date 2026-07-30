@@ -159,9 +159,18 @@ def test_when_interface_covers_a_bounded_array_claim(run):
         fn format(const &self) -> i32 { return self; }
     }
 
+    @extend char: Formattable {
+        fn format(const &self) -> i32 { return self as i32; }
+    }
+
     @template<T: Formattable>
     @extend T[]: Formattable {
         fn format(const &self) -> i32 { return self.length as i32; }
+    }
+
+    @override
+    fn char[]::format(const &self) -> i32 {
+        return self.length as i32;
     }
 
     fn format_one(args...) -> i32 {
@@ -174,7 +183,8 @@ def test_when_interface_covers_a_bounded_array_claim(run):
     }
 
     fn main() -> i32 {
-        return format_one([1, 2, 3] as i32[]) - 3;
+        return (format_one([1, 2, 3] as i32[])
+                + format_one(["a", "b"] as char[][])) - 5;
     }
     """
     assert run(source).returncode == 0

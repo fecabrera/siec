@@ -5,6 +5,7 @@ from siec.codegen.generics import split_generic, unify
 from siec.codegen.interfaces import constraints_hold
 from siec.codegen.methods import method_signature
 from siec.codegen.overloads import overload_symbol, shown_signature
+from siec.codegen.types import strip_const
 
 
 def function_symbol(gen, fn) -> str:
@@ -20,15 +21,40 @@ def function_symbol(gen, fn) -> str:
         gen.current_file = previous
 
 
-def family_method_target(gen, fn) -> bool:
+def canonical_method_signature(gen, fn, mapping: dict | None = None) -> tuple:
+    """A method signature with aliases expanded in its declaration's view."""
+    from siec.codegen.aliases import expand_alias
+
+    params, ret = method_signature(fn, mapping)
+    previous, gen.current_file = gen.current_file, fn.file
+    try:
+        # Receiver-family signatures still contain source spellings and
+        # resolve through their declaring file. Concrete methods have already
+        # been registered and canonicalized; their carried names may refer to
+        # an alias target that was not itself imported into that file.
+        checked = fn.receiver_params is not None
+        params = tuple(
+            strip_const(expand_alias(gen, param, checked=checked))
+            for param in params
+        )
+        ret = (strip_const(expand_alias(gen, ret, checked=checked))
+               if ret is not None else None)
+        return params, ret
+    finally:
+        gen.current_file = previous
+
+
+def family_method_targets(gen, fn) -> set[tuple]:
     """
-    Whether a concrete method override matches an ordinary receiver family.
+    The written signatures of ordinary receiver families a method overrides.
 
     ``char[]::f`` can therefore override ``T[]::f`` without first declaring
-    a redundant concrete forwarding signature.
+    a redundant concrete forwarding signature. Matching uses canonical types,
+    while the written signatures are retained so method stamping can suppress
+    precisely those family entries later.
     """
     if fn.receiver is None:
-        return False
+        return set()
 
     base = fn.receiver
     method = fn.name.partition("::")[2]
@@ -51,14 +77,15 @@ def family_method_target(gen, fn) -> bool:
         if all(param in mapping for param in template.receiver_params):
             entries.append((template, mapping))
 
-    wanted = method_signature(fn)
-    return any(
-        not template.is_override
-        and constraints_hold(
-            gen, template.receiver_constraints, mapping, template.file)
-        and method_signature(template, mapping) == wanted
+    wanted = canonical_method_signature(gen, fn)
+    return {
+        method_signature(template, mapping)
         for template, mapping in entries
-    )
+        if (not template.is_override
+            and constraints_hold(
+                gen, template.receiver_constraints, mapping, template.file)
+            and canonical_method_signature(gen, template, mapping) == wanted)
+    }
 
 
 def validate_concrete_overrides(gen, program) -> None:
@@ -83,13 +110,15 @@ def validate_concrete_overrides(gen, program) -> None:
 
         for fn in overrides:
             with source_location(line=fn.line, file=fn.file):
-                if not ordinary and not family_method_target(gen, fn):
+                family_targets = family_method_targets(gen, fn)
+                if not ordinary and not family_targets:
                     raise TypeError(
                         f"function '{shown_signature(fn)}' has no matching "
                         "declaration to override")
                 if fn.receiver is not None:
                     gen.overridden_method_signatures.setdefault(
-                        fn.name, set()).add(method_signature(fn))
+                        fn.name, set()).update(
+                            family_targets or {method_signature(fn)})
 
         definitions = [
             fn for fn in overrides

@@ -33,6 +33,30 @@ def test_concrete_array_method_overrides_a_receiver_family(run):
     assert run(source).returncode == 42
 
 
+def test_concrete_override_matches_a_bounded_family_through_aliases(run):
+    """Target matching canonicalizes aliases on both method signatures."""
+    source = """
+    @type Answer = i32;
+
+    interface Special;
+    @extend char: Special;
+
+    @template<T: Special>
+    @extend T[]: Special {
+        fn answer(const &self) -> Answer { return 1; }
+    }
+
+    @override
+    fn char[]::answer(const &self) -> Answer { return 42; }
+
+    fn main() -> i32 {
+        let chars: char[] = "x";
+        return chars.answer();
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_concrete_method_override_keeps_family_overloads(run):
     """An exact replacement does not hide differently shaped siblings."""
     source = """

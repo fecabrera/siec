@@ -574,11 +574,34 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
         if not unify_spelling(gen, required, claim):
             continue
 
+        # A wrapped nested array contributes each of its element layers.
+        # Those are the concrete substitutions needed to derive exactly the
+        # runtime array types this interface case may encounter, without
+        # attempting the family's infinite theoretical closure.
+        runtime_elements = []
+        for name in gen.any_names.values():
+            element = strip_const(name)
+            while element.endswith("[]"):
+                element = element[:-2]
+                runtime_elements.append(element)
+
+        # An exact override makes its concrete receiver part of the known
+        # type universe as well. In particular, overriding 'char[]::format'
+        # supplies the T = char[] layer from which the same family derives
+        # 'char[][]: Formattable'.
+        method_receivers = [
+            name.partition("::")[0]
+            for name in gen.overridden_method_signatures
+            if "::" in name
+        ]
+
         candidates = dict.fromkeys((
             *gen.implements,
             *SCALAR_TYPES,
             *gen.structs,
             *gen.enums,
+            *runtime_elements,
+            *method_receivers,
         ))
         for concrete in candidates:
             mapping = {param: concrete}
