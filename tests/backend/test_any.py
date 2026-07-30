@@ -145,6 +145,41 @@ def test_when_interface_covers_the_array_family(run):
     assert run(source).returncode == 0
 
 
+def test_when_interface_covers_a_bounded_array_claim(run):
+    """
+    A family whose element appears only in its bound still contributes
+    each known matching array to an interface arm.
+    """
+    source = """
+    interface Formattable {
+        fn format(const &self) -> i32;
+    }
+
+    @extend i32: Formattable {
+        fn format(const &self) -> i32 { return self; }
+    }
+
+    @template<T: Formattable>
+    @extend T[]: Formattable {
+        fn format(const &self) -> i32 { return self.length as i32; }
+    }
+
+    fn format_one(args...) -> i32 {
+        case (@typeof(args[0])) {
+        when Formattable:
+            let value = args[0] as Formattable;
+            return value.format();
+        }
+        return 100;
+    }
+
+    fn main() -> i32 {
+        return format_one([1, 2, 3] as i32[]) - 3;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_when_interface_expands_nested_combinations(run):
     """
     A nested interface argument expands per combination:

@@ -544,7 +544,8 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
     """
     Every type known to implement an interface: the declared claims,
     plus the array the family's claim spells once its element unifies
-    out of the requirement - 'Iterable<char>' names 'char[]'.
+    out of the requirement - 'Iterable<char>' names 'char[]' - or once
+    its bounds select the known elements for a non-generic claim.
     """
     from siec.codegen.generics import unify
 
@@ -557,10 +558,34 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
     for param, claim, constraints, file in gen.array_claims:
         bindings: dict = {}
         unify(claim, required, [param], bindings)
-        if (param in bindings
-                and constraints_hold(gen, constraints, bindings, file)
-                and f"{bindings[param]}[]" not in found):
-            found.append(f"{bindings[param]}[]")
+        if param in bindings:
+            if (constraints_hold(gen, constraints, bindings, file)
+                    and f"{bindings[param]}[]" not in found):
+                found.append(f"{bindings[param]}[]")
+            continue
+
+        # In 'T[]: Formattable', T does not occur in the claimed interface,
+        # so unification cannot discover it from 'Formattable'. Expand the
+        # family over the concrete types already known to this compilation
+        # and let its bound select the eligible elements. This set is
+        # deliberately finite: recursive claims such as
+        # 'T: Formattable => T[]: Formattable' otherwise describe infinitely
+        # many nested array types.
+        if not unify_spelling(gen, required, claim):
+            continue
+
+        candidates = dict.fromkeys((
+            *gen.implements,
+            *SCALAR_TYPES,
+            *gen.structs,
+            *gen.enums,
+        ))
+        for concrete in candidates:
+            mapping = {param: concrete}
+            array = f"{concrete}[]"
+            if (array not in found
+                    and constraints_hold(gen, constraints, mapping, file)):
+                found.append(array)
 
     return found
 
