@@ -774,7 +774,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.generics import register_generic_function
     from siec.codegen.methods import register_method
     from siec.codegen.globals import register_globals
-    from siec.codegen.structs import register_structs
+    from siec.codegen.structs import declare_structs, define_structs
 
     from siec.codegen.constants import BUILTIN_CONSTANTS
 
@@ -816,29 +816,31 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                               "__enumerate", "__const_enumerate",
                               "Tuple", "Any"))
 
-    # first pass: register the named declarations - aliases first so every
-    # later type annotation expands through them, constants next so enum
-    # values can reference them, then the '@if' conditions, which those
-    # constants decide, splicing in the chosen declarations; enums next so
-    # struct fields can be enum-typed, then structs for signatures and
-    # bodies to name, and globals last so their types can name any of the above
+    # Parsing is complete before codegen receives the Program. Collection
+    # comes next: choose conditional declarations, then inventory every
+    # type/interface identity and extension claim without resolving struct
+    # fields. Nothing in the following resolution phase may depend on source
+    # or module traversal order.
     register_builtin_constants(gen)
     register_aliases(gen, program)
     register_constants(gen, program)
     resolve_conditionals(gen, program)
     register_enums(gen, program)
-    register_structs(gen, program)
+    declare_structs(gen, program)
+
+    # Extension claims are declaration facts. Record them before resolving
+    # fields, since a field may instantiate a bounded generic whose argument
+    # implements its bound through an extension declared anywhere.
+    from siec.codegen.interfaces import predeclare_extends
+
+    predeclare_extends(gen, program)
+
+    # Resolution starts only after the declaration and claim inventory is
+    # complete. Struct fields may now instantiate bounded generics; globals
+    # and callable signatures follow with the same complete type environment.
+    define_structs(gen, program)
     register_globals(gen, program)
 
-    # every declaration is registered: an '@static_assert' can now weigh
-    # what they turned out to be
-    check_asserts(gen, program)
-
-    # second pass: declare every function so calls can target ones defined
-    # later; a generic function is a template, declared per instantiation,
-    # a method registers under its receiver's rules, an interface receiver
-    # marks a required action, and an interface-typed parameter turns the
-    # function into a constrained template
     from siec.codegen.interfaces import (
         adapt_interface_params,
         prepare_extension_methods,
@@ -861,9 +863,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         else:
             declare_function(gen, fn)
 
-    # '@extend' claims join before conformance runs: a struct's queue
-    # like its declaration's own, a template's carry to its instances,
-    # and the arrays' check their 'T[]::m' templates
+    # Checking is last: every resolved field and callable signature is
+    # available before assertions, receiver-family requirements, and nominal
+    # interface conformance decide whether the collected declarations agree.
+    check_asserts(gen, program)
+
     from siec.codegen.interfaces import register_extends
 
     register_extends(gen, program)
@@ -871,8 +875,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # every declaration is in: check each struct's interface claims
     run_conformance(gen)
 
-    # third pass: emit the bodies of the defined functions, an '@asm'
-    # function's assembly standing in for one; an imported file's emit
+    # With declarations checked, emit the bodies of the defined functions,
+    # an '@asm' function's assembly standing in for one; an imported file's emit
     # only when this unit defines it - except its '@static's, which stay
     # internal per unit like C's, and its '@inline's, which every unit
     # defines so their bodies are there to inline, C99-style

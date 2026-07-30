@@ -44,6 +44,17 @@ siec main.sie libfoo.a -o main
 siec main.sie --run arg1 arg2
 ```
 
+### Compilation phases
+
+Compilation is declaration-order independent. A source file, an include, or an imported module cannot change meaning merely by moving a type or extension before or after the code that uses it. The compiler keeps that guarantee through four ordered phases:
+
+1. **Parse.** Parse every source in the compilation unit into syntax trees before asking what any type means.
+2. **Collect.** Collect definitions, type and interface identities, generic templates, and interface claims—including bounded `@extend` families—across the whole unit.
+3. **Resolve.** Resolve aliases, fields, callable signatures, generic arguments, and bounds against that complete inventory.
+4. **Check.** Check assertions, required extension methods, interface conformance, and function bodies only after resolution has made every relevant declaration available.
+
+This ordering is a compiler invariant, not a source-order rule. For example, `@template<T: Scalar> @extend T[]: Hashable` makes `char[]` available to a `Map<K: Hashable, V>` field even when the extension is declared later or arrives through another module. Compiler changes should preserve the phase boundary: no dependent field or signature may resolve, and no bound may be rejected, while the claim inventory is incomplete.
+
 ### Editor support
 
 `sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, hover, and go-to-definition. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.

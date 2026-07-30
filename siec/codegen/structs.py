@@ -14,6 +14,18 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
     """
     Register every struct as an identified LLVM type, then fill in its body.
     """
+    declare_structs(gen, program)
+    define_structs(gen, program)
+
+
+def declare_structs(gen: CodeGenerator, program: Program) -> None:
+    """
+    Register every struct and interface name without resolving field types.
+
+    Codegen uses the gap before ``define_structs`` to record extension
+    claims, so a bounded generic named by a field can consult claims declared
+    anywhere in the program.
+    """
     # first create empty identified types so a field may name any struct,
     # including one declared later or the struct itself through a pointer;
     # a bodiless forward declaration registers the type alone, taking its
@@ -90,6 +102,9 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
             if struct.is_union:
                 info.is_union = True
 
+
+def define_structs(gen: CodeGenerator, program: Program) -> None:
+    """Resolve and install every previously declared concrete struct body."""
     # then set each body from the now-resolvable field types; a struct
     # never given a body stays opaque, usable only through a pointer;
     # an interface's fields are requirements, not storage

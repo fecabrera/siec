@@ -136,6 +136,41 @@ def test_template_block_bounds_an_extension_and_sibling_method(run):
     assert run(source).returncode == 42
 
 
+def test_bounded_extension_claim_is_available_to_struct_fields(run):
+    """
+    A field may instantiate a bounded generic through a blanket claim before
+    extension methods reach their later declaration pass.
+    """
+    source = """
+    interface Hashable {
+        fn hash(const &self) -> u64;
+    }
+
+    struct Box<K: Hashable> {
+        value: K;
+    }
+
+    struct Holder {
+        box: Box<char[]>;
+    }
+
+    @template<T: Scalar> {
+        @extend T[]: Hashable {
+            fn hash(const &self) -> u64 {
+                return self.length;
+            }
+        }
+    }
+
+    fn main() -> i32 {
+        let chars: char[] = "ok";
+        let holder: Holder = { { chars } };
+        return holder.box.value.hash() as i32 - 2;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_template_decorator_bounds_extensions_and_methods(run):
     """The decorator form supplies the same environment declaration-wise."""
     source = """
