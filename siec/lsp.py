@@ -517,15 +517,17 @@ def outline(text: str) -> list[Symbol] | None:
     return symbols
 
 
-def token_chain(tokens: list[Token], line: int, col: int):
+def token_chain(tokens: list[Token], line: int, col: int,
+                text: str | None = None):
     """
     The name chain ending at the cursor: the identifier at the 0-based
     position, walked back through its '.' and '::' links. Returns the
     parts, the separators between them, the cursor's token, and the
     syntax following the chain; None off any identifier.
 
-    A chain hanging off a wider expression ('get(i).x') stops at the
-    link: the receiver's type is the emitted expression's business.
+    A chain hanging off a wider expression ('get(i).x') carries that
+    receiver's source spelling as its first part, so the compiler's
+    expression inference can type it.
     """
     at = next((i for i, t in enumerate(tokens)
                if t.kind == "ident" and t.line == line + 1
@@ -538,14 +540,83 @@ def token_chain(tokens: list[Token], line: int, col: int):
            and tokens[start - 2].kind == "ident"):
         start -= 2
 
-    # a link into a non-name receiver: the chain is not a pure name
+    # A link into a non-name receiver keeps the expression to its left:
+    # 'self.as_array().format' carries 'self.as_array()' as the receiver.
     if start >= 1 and tokens[start - 1].syntax in (".", "::"):
+        if tokens[start - 1].syntax == "." and text is not None:
+            receiver = expression_receiver(
+                tokens, start - 2, tokens[start - 1], text)
+            if receiver is not None:
+                following = (
+                    tokens[at + 1].syntax if at + 1 < len(tokens) else None)
+                return ([receiver, tokens[at].value], ["."],
+                        tokens[at], following)
         return None
 
     parts = [tokens[i].value for i in range(start, at + 1, 2)]
     seps = [tokens[i].syntax for i in range(start + 1, at, 2)]
     following = tokens[at + 1].syntax if at + 1 < len(tokens) else None
     return parts, seps, tokens[at], following
+
+
+def expression_receiver(tokens: list[Token], end: int, dot: Token,
+                        text: str) -> str | None:
+    """
+    The source spelling of an expression ending immediately before a
+    member-access dot. Balanced call, index, and grouped delimiters stay
+    inside it; a surrounding statement, operator, or argument starts the
+    boundary.
+    """
+    if end < 0:
+        return None
+
+    opens = {"(": ")", "[": "]", "{": "}"}
+    closes = {value: key for key, value in opens.items()}
+    boundaries = {
+        ";", ",", "=", "?", ":",
+        "+", "-", "*", "/", "%", "**",
+        "==", "!=", "<", ">", "<=", ">=",
+        "&", "|", "^", "&&", "||",
+        "and", "or",
+        "return", "emit", "let", "if", "while", "for", "foreach",
+        "case", "when", "defer",
+    }
+
+    depth: list[str] = []
+    start = end
+    for index in range(end, -1, -1):
+        syntax = tokens[index].syntax
+        if syntax in closes:
+            depth.append(closes[syntax])
+        elif syntax in opens:
+            if not depth:
+                start = index + 1
+                break
+            if depth[-1] != syntax:
+                return None
+            depth.pop()
+        elif not depth and syntax in boundaries:
+            start = index + 1
+            break
+
+        start = index
+
+    if depth or start > end:
+        return None
+
+    line_offsets = [0]
+    for index, char in enumerate(text):
+        if char == "\n":
+            line_offsets.append(index + 1)
+
+    first = tokens[start]
+    if first.line > len(line_offsets) or dot.line > len(line_offsets):
+        return None
+
+    begin = line_offsets[first.line - 1] + first.col
+    finish = line_offsets[dot.line - 1] + dot.col
+    receiver = text[begin:finish].strip()
+    return receiver or None
 
 
 def span_contains(body: list, line: int, col: int) -> bool:
@@ -789,7 +860,7 @@ def inspect(analysis: Analysis, text: str, line: int, col: int) -> Finding | Non
     except SyntaxError:
         return None
 
-    chain = token_chain(tokens, line, col)
+    chain = token_chain(tokens, line, col, text)
     if chain is None:
         return None
 
@@ -963,13 +1034,12 @@ def resolve_member(analysis: Analysis, sites: dict, scope: dict,
     The final link of a member chain: the receiver's inferred type hands
     out the field or method the name selects.
     """
-    from siec.codegen.inference import expr_sie_type
     from siec.parser.expressions import parse_expression
     from siec.parser.stream import TokenStream
 
     gen = analysis.gen
     expr = parse_expression(TokenStream(lex(receiver)))
-    recv_type = expr_sie_type(gen, expr, scope)
+    recv_type = hover_expr_type(gen, expr, scope)
     if recv_type is None:
         return None
 
@@ -983,6 +1053,99 @@ def resolve_member(analysis: Analysis, sites: dict, scope: dict,
 
     return (method_finding(analysis, sites, base, name)
             or field_finding(analysis, sites, base, name))
+
+
+def hover_expr_type(gen: CodeGenerator, expr, scope: dict) -> str | None:
+    """
+    Type a hover receiver through the compiler, with one tooling fallback:
+    a call inside an unstamped generic method may return a type over that
+    method's still-free receiver parameters.
+    """
+    from siec.ast import Call
+    from siec.codegen.inference import expr_sie_type
+
+    receiver_type = None
+    method = None
+    if isinstance(expr, Call) and "." in expr.name:
+        from siec.parser.expressions import parse_expression
+        from siec.parser.stream import TokenStream
+
+        receiver, _, method = expr.name.rpartition(".")
+        receiver_expr = parse_expression(TokenStream(lex(receiver)))
+        receiver_type = hover_expr_type(gen, receiver_expr, scope)
+
+        # Resolving a method normally would try to stamp 'List<T>::m'
+        # while T is still free. Read its template instead, before that
+        # failed instantiation can mutate the generator's method tables.
+        if (receiver_type is not None
+                and contains_free_type(gen, receiver_type)):
+            if (found := template_method_return(
+                    gen, receiver_type, method)) is not None:
+                return found
+
+    try:
+        if (found := expr_sie_type(gen, expr, scope)) is not None:
+            return found
+    except (TypeError, NameError):
+        pass
+
+    if receiver_type is None or method is None:
+        return None
+
+    return template_method_return(gen, receiver_type, method)
+
+
+def contains_free_type(gen: CodeGenerator, spelling: str) -> bool:
+    """Whether a type spelling contains an unresolved template name."""
+    from siec.codegen.generics import split_generic
+    from siec.codegen.interfaces import free_name
+
+    spelling = strip_const(strip_reference(spelling))
+    while spelling.endswith("*"):
+        spelling = spelling[:-1]
+    if spelling.endswith("[]"):
+        return contains_free_type(gen, spelling[:-2])
+
+    parts = split_generic(spelling)
+    if parts is not None:
+        return any(contains_free_type(gen, arg) for arg in parts[1])
+
+    return free_name(gen, spelling)
+
+
+def template_method_return(gen: CodeGenerator, receiver_type: str,
+                           method: str) -> str | None:
+    """
+    A generic receiver template's return before its receiver is concrete.
+    Return it only when every matching overload agrees on the spelling.
+    """
+    from siec.codegen.generics import split_generic, substitute, unify
+
+    base = strip_const(strip_reference(receiver_type))
+    parts = split_generic(base)
+    if parts is None and base.endswith("[]"):
+        parts = ("[]", [base[:-2]])
+
+    entries = []
+    if parts is not None:
+        entries.extend(
+            (template, dict(zip(template.receiver_params, parts[1])))
+            for template in gen.generic_methods.get((parts[0], method), ())
+        )
+
+    if not entries:
+        for template in gen.generic_receiver_methods.get(method, ()):
+            mapping = {}
+            unify(template.receiver, base, template.receiver_params, mapping)
+            if all(param in mapping for param in template.receiver_params):
+                entries.append((template, mapping))
+
+    returns = {
+        strip_reference(substitute(template.return_type, mapping))
+        for template, mapping in entries
+        if template.return_type is not None
+    }
+    return returns.pop() if len(returns) == 1 else None
 
 
 def field_finding(analysis: Analysis, sites: dict, base: str,
@@ -1048,6 +1211,14 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
                         gen, template.receiver_constraints,
                         mapping, template.file)):
                 nodes.append(template)
+
+    unique = []
+    seen = set()
+    for node in nodes:
+        if id(node) not in seen:
+            unique.append(node)
+            seen.add(id(node))
+    nodes = unique
 
     if not nodes and symbol is None:
         return None

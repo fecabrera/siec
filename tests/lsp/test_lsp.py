@@ -831,6 +831,44 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 7)]
 
 
+def test_inspect_resolves_a_bounded_array_method_through_generic_chain(
+        tmp_path):
+    """
+    A generic method's unresolved T still finds a bounded T[] method
+    through another method's array return.
+    """
+    analysis, src = unit(tmp_path, """\
+interface Formattable {
+    fn format(const &self, modifiers: const &char[]) -> i32;
+}
+
+@template<T: Formattable>
+@extend T[]: Formattable {
+    fn format(const &self, modifiers: const &char[]) -> i32 {
+        return self.length as i32;
+    }
+}
+
+struct List<T> {
+    data: T*;
+    length: u64;
+}
+
+fn List<T>::as_const_array(const &self) -> const T[] {
+    return {self.data, self.length};
+}
+
+fn List<T>::format(const &self, modifiers: const &char[]) -> i32 {
+    return self.as_const_array().format(modifiers);
+}
+""")
+
+    finding = probe(analysis, src, 21, 34)
+    assert finding.text == (
+        "fn T[]::format(const &T[], modifiers: const &char[]) -> i32")
+    assert finding.targets == [(str(src.resolve()), 7)]
+
+
 def test_inspect_types_a_field_through_the_chain(tmp_path):
     """
     Hovering a field types it through the receiver chain and sites its
