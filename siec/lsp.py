@@ -818,10 +818,20 @@ def source_line(analysis: Analysis, file: str, line: int) -> str | None:
     return None
 
 
+def navigable_file(file: str) -> bool:
+    """
+    Whether a declaration's source names a real editor document.
+
+    Angle-bracket names identify compiler-owned virtual sources such as the
+    builtin prelude: useful in diagnostics, but not valid definition targets.
+    """
+    return bool(file) and not (file.startswith("<") and file.endswith(">"))
+
+
 def declaration_sites(program: Program):
     """
     Every top-level declaration by name: (kind, node) pairs, the prelude's
-    included (their empty file marks them unnavigable).
+    included (its virtual file remains unnavigable).
     """
     index: dict[str, list] = {}
 
@@ -968,7 +978,11 @@ def resolve_name(analysis: Analysis, sites: dict, name: str,
     if not found:
         return None
 
-    targets = [(decl.file, decl.line) for _, decl in found if decl.file]
+    targets = [
+        (decl.file, decl.line)
+        for _, decl in found
+        if navigable_file(decl.file)
+    ]
 
     kind = found[0][0]
     if kind == "function":
@@ -1019,7 +1033,7 @@ def resolve_scoped(analysis: Analysis, sites: dict, scope: dict, base: str,
 
         value = info.members.get(name)
         text = f"{base}::{name}" + (f" = {value}" if value is not None else "")
-        if node is not None and node.file:
+        if node is not None and navigable_file(node.file):
             at = variant.line if variant is not None and variant.line else node.line
             return Finding(text, [(node.file, at)])
 
@@ -1171,7 +1185,7 @@ def field_finding(analysis: Analysis, sites: dict, base: str,
         node = gen.generic_structs.get(parts[0])
 
     targets = []
-    if node is not None and node.file:
+    if node is not None and navigable_file(node.file):
         targets = [(node.file, found.line or node.line)]
 
     return Finding(f"{name}: {found.type}", targets)
@@ -1239,7 +1253,11 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
             texts.append(f"fn {base}::{name}({params})"
                          + (f" -> {ret}" if ret else ""))
 
-    targets = [(node.file, node.line) for node in nodes if node.file]
+    targets = [
+        (node.file, node.line)
+        for node in nodes
+        if navigable_file(node.file)
+    ]
     return Finding("\n".join(texts), targets) if texts else None
 
 

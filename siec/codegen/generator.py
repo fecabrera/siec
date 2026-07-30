@@ -676,16 +676,35 @@ fn Error<E>(e: E) -> Result<E> {
 }
 """
 
+PRELUDE_FILE = "<prelude>"
+
 
 @lru_cache(maxsize=1)
 def _prelude_template() -> Program:
     """
-    Parse the builtin prelude once into an immutable template.
+    Parse and source-tag the builtin prelude once into an immutable template.
+
+    Its declarations carry ordinary line numbers. Giving those lines their
+    own virtual file keeps a codegen error in a generic prelude body from
+    being reported against the command-line source instead.
     """
     from siec.lexer import lex
     from siec.parser import parse
 
-    return parse(lex(PRELUDE))
+    program = parse(lex(PRELUDE))
+    for declaration in (
+            *program.structs,
+            *program.functions,
+            *program.consts,
+            *program.enums,
+            *program.globals,
+            *program.aliases,
+            *program.extends,
+            *program.errors,
+            *program.asserts):
+        declaration.file = PRELUDE_FILE
+
+    return program
 
 
 def parse_prelude() -> Program:

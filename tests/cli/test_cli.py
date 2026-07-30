@@ -734,6 +734,27 @@ fn main() -> i32 {
     assert "main" in error
 
 
+def test_generic_prelude_error_names_the_prelude(
+        tmp_path, monkeypatch, capsys):
+    """
+    A line in an instantiated builtin body is not paired with the user's file.
+    """
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+fn main() -> i32 {
+    let values: char[][] = ["value"];
+    foreach (item : enumerate(values as const char[][])) {}
+    return 0;
+}
+""")
+
+    assert run_cli(monkeypatch, src, "-o", tmp_path / "p") == 1
+    error = capsys.readouterr().err
+    assert error.startswith("<prelude> at line ")
+    assert f"{src} at line 159" not in error
+    assert "cannot use a 'const char[]' value where a mutable 'char[]' is expected" in error
+
+
 def test_codegen_error_is_reported_with_a_line(tmp_path, monkeypatch, capsys):
     """
     A codegen error exits non-zero and prints the source and line, not a traceback.
