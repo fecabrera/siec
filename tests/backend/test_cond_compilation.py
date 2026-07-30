@@ -122,6 +122,113 @@ def test_conditions_follow_the_target():
     assert "ret i32 1" in str(module)
 
 
+def test_sizeof_condition_sees_a_later_struct(run):
+    """
+    A type-dependent condition waits until the active struct inventory and
+    layouts are resolved, regardless of declaration order.
+    """
+    result = run("""
+        @if (@sizeof(Header) == 4) {
+            @const ANSWER = 42;
+        } @else {
+            @const ANSWER = 1;
+        }
+
+        struct Header {
+            value: i32;
+        }
+
+        fn main() -> i32 { return ANSWER; }
+    """)
+    assert result.returncode == 42
+
+
+def test_enum_condition_sees_a_later_enum(run):
+    """
+    Enum members and type IDs in conditions resolve from the complete active
+    inventory, not from the declarations visited so far.
+    """
+    result = run("""
+        @if (Mode::Enabled == 42 and @typeid(Mode) != 0) {
+            @const ANSWER = 42;
+        } @else {
+            @const ANSWER = 1;
+        }
+
+        enum Mode {
+            Enabled = 42,
+        }
+
+        fn main() -> i32 { return ANSWER; }
+    """)
+    assert result.returncode == 42
+
+
+def test_constant_condition_waits_for_its_type_dependencies(run):
+    """
+    Deferral follows '@const' references, so hiding '@sizeof' behind a
+    constant does not restore declaration-order dependence.
+    """
+    result = run("""
+        @const HEADER_FITS = @sizeof(Header) == 4;
+
+        @if (HEADER_FITS) {
+            @const ANSWER = 42;
+        } @else {
+            @const ANSWER = 1;
+        }
+
+        struct Header {
+            value: i32;
+        }
+
+        fn main() -> i32 { return ANSWER; }
+    """)
+    assert result.returncode == 42
+
+
+def test_nested_condition_sees_types_selected_by_its_parent(run):
+    """
+    A selected semantic branch registers its declarations before resolving a
+    nested condition, so the nested condition may inspect the selected type.
+    """
+    result = run("""
+        struct Trigger {
+            value: i32;
+        }
+
+        @if (@sizeof(Trigger) == 4) {
+            struct Selected {
+                value: i64;
+            }
+
+            @if (@sizeof(Selected) == 8) {
+                @const ANSWER = 42;
+            } @else {
+                @const ANSWER = 1;
+            }
+        }
+
+        fn main() -> i32 { return ANSWER; }
+    """)
+    assert result.returncode == 42
+
+
+def test_condition_cannot_depend_on_the_type_it_selects(compile_source):
+    """
+    A declaration cannot supply the type information that decides whether the
+    declaration exists; the unavailable type is diagnosed at the condition.
+    """
+    with pytest.raises(TypeError, match="unknown type 'Selected'"):
+        compile_source("""
+        @if (@sizeof(Selected) == 4) {
+            struct Selected {
+                value: i32;
+            }
+        }
+        """)
+
+
 def test_non_constant_condition_is_an_error(compile_source):
     """
     The condition must evaluate at compile time.

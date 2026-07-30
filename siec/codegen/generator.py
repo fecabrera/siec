@@ -822,15 +822,18 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                               "__enumerate", "__const_enumerate",
                               "Tuple", "Any"))
 
-    # Parsing is complete before codegen receives the Program. Collection
-    # comes next: choose conditional declarations, then inventory every
-    # type/interface identity and extension claim without resolving struct
-    # fields. Nothing in the following resolution phase may depend on source
-    # or module traversal order.
+    # Parsing is complete before codegen receives the Program. Choose every
+    # condition that needs no type meaning first; enum members, '@sizeof',
+    # and '@typeid' wait for the active type inventory below.
     register_builtin_constants(gen)
     register_aliases(gen, program)
     register_constants(gen, program)
-    resolve_conditionals(gen, program)
+    resolve_conditionals(gen, program, defer_types=True)
+
+    # Collection inventories every active type/interface identity and
+    # extension claim without resolving struct fields. Nothing in the
+    # following resolution phase may depend on source or module traversal
+    # order.
     register_enums(gen, program)
     declare_structs(gen, program)
 
@@ -841,10 +844,25 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     predeclare_extends(gen, program)
 
-    # Resolution starts only after the declaration and claim inventory is
-    # complete. Struct fields may now instantiate bounded generics; globals
-    # and callable signatures follow with the same complete type environment.
+    # Resolve the active layouts, then choose the conditions that asked for
+    # them. A selected branch registers its own identities and claims before
+    # nested conditions run, so those conditions can weigh the new types too.
     define_structs(gen, program)
+
+    def register_conditional_branch(branch) -> None:
+        register_enums(gen, branch)
+        declare_structs(gen, branch)
+        predeclare_extends(gen, branch)
+        define_structs(gen, branch)
+
+    resolve_conditionals(
+        gen,
+        program,
+        register_branch=register_conditional_branch,
+    )
+
+    # Every selected declaration and claim is now resolved. Globals and
+    # callable signatures follow with the same complete type environment.
     register_globals(gen, program)
 
     from siec.codegen.interfaces import (

@@ -418,6 +418,8 @@ The condition is a constant expression: literals, `@const` names, enum members, 
 
 A branch may hold any top-level declaration (functions, structs, enums, globals, constants, type aliases) including further `@if` blocks, and a constant declared in a chosen branch is visible to the conditions after it.
 
+Conditions that need no type meaning are selected before declarations are collected. A condition using an enum member, `@sizeof`, or `@typeid` waits until the active type inventory is resolved, so it may inspect a declaration written later. Once such a branch is chosen, its declarations are registered before its nested conditions run. A condition cannot depend on a declaration whose own existence it decides; that dependency has no inventory in which to resolve.
+
 An `@include` may also sit in a branch: only the chosen arm's files load, and an unchosen arm's include is never resolved, so its file need not exist on this platform, C-header-style:
 
 ```
