@@ -752,7 +752,6 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
     call spelling the same arguments shares the one instance.
     """
     from siec.codegen.aliases import expand_alias
-    from siec.codegen.functions import declare_function
 
     # the arguments arrive expanded (an explicit spelling, resolved at the
     # call) or as carried canonical names (inferred from the values), so
@@ -802,6 +801,7 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
 
     if symbol not in gen.instantiated_functions:
         gen.instantiated_functions.add(symbol)
+        gen.function_instance_states[symbol] = "requested"
         if gen.current_function is not None:
             gen.instantiation_sites.setdefault(
                 symbol,
@@ -817,14 +817,9 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
         # it stays the module symbol, unmangled, like an '@symbol' pick
         instance.symbol = symbol
 
-        # the instance's signature mixes files' names; no view gates it
-        gen.ungated_types += 1
-        try:
-            declare_function(gen, instance)
-        finally:
-            gen.ungated_types -= 1
+        from siec.codegen.worklist import resolve_function_instance
 
-        gen.pending_functions.append(instance)
+        resolve_function_instance(gen, instance)
 
     return symbol
 

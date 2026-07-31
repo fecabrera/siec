@@ -192,27 +192,70 @@ def canonical_interface(gen: CodeGenerator, spelling: str) -> str:
 def declare_implements(gen: CodeGenerator, name: str, template_base: str,
                        spellings: list[str], line: int, file: str) -> None:
     """
-    Record what a struct claims to implement and queue the conformance
-    check, run once every method is declared; checks queued after that
-    point run immediately.
+    Record what a struct claims to implement and queue it for resolution.
+
+    Generic struct instances may add claims while function bodies are being
+    checked. They join the same worklist as source declarations instead of
+    initiating a conformance check from type resolution.
     """
     canonical = [canonical_interface(gen, s) for s in spellings]
     gen.implements.setdefault(name, set()).update(canonical)
 
     entry = (name, template_base, canonical, line, file)
-    if gen.conformance_ready:
-        check_conformance(gen, *entry)
-    else:
-        gen.pending_conformance.append(entry)
+    gen.pending_conformance.append(entry)
+
+
+def resolve_conformance(gen: CodeGenerator) -> None:
+    """
+    Resolve every queued claim's method dependencies without checking it.
+
+    Receiver-family lookup may stamp concrete method headers. Doing that here
+    keeps specialization in resolution; the later conformance check only
+    compares already-resolved declarations.
+    """
+    from siec.codegen.methods import resolve_method
+
+    while gen.pending_conformance:
+        entry = gen.pending_conformance.popleft()
+        name, _, spellings, line, file = entry
+
+        with source_location(line=line, file=file), declaration_view(gen, file):
+            for spelling in spellings:
+                base = (split_generic(spelling) or (spelling, []))[0]
+                if base not in gen.interfaces:
+                    continue
+
+                for action_iface, method in gen.interface_actions:
+                    if action_iface == base:
+                        resolve_method(gen, name, method)
+
+        gen.resolved_conformance.append(entry)
 
 
 def run_conformance(gen: CodeGenerator) -> None:
-    """
-    Drain the queued conformance checks; later claims check on the spot.
-    """
-    gen.conformance_ready = True
-    while gen.pending_conformance:
-        check_conformance(gen, *gen.pending_conformance.popleft())
+    """Check resolved claims without initiating method specialization."""
+    if gen.pending_conformance:
+        raise RuntimeError("cannot check unresolved interface claims")
+
+    while gen.resolved_conformance:
+        before = (
+            frozenset(gen.structs),
+            frozenset(gen.instantiated_functions),
+            frozenset(gen.return_types),
+            len(gen.pending_functions),
+            len(gen.pending_conformance),
+        )
+        check_conformance(gen, *gen.resolved_conformance.popleft())
+        after = (
+            frozenset(gen.structs),
+            frozenset(gen.instantiated_functions),
+            frozenset(gen.return_types),
+            len(gen.pending_functions),
+            len(gen.pending_conformance),
+        )
+        if after != before:
+            raise RuntimeError(
+                "conformance checking attempted semantic resolution")
 
 
 def noun(gen: CodeGenerator, name: str) -> str:
@@ -310,7 +353,7 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
     required_ret = action.return_type and expand_lax(
         gen, substitute(action.return_type, mapping))
 
-    symbol = resolve_method(gen, name, method)
+    symbol = resolve_method(gen, name, method, specialize=False)
     if symbol is None:
         wanted = f"{method}({', '.join(required)})"
         if required_ret is not None:

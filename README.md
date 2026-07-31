@@ -55,6 +55,8 @@ Compilation is declaration-order independent. A source file, an include, or an i
 
 This ordering is a compiler invariant, not a source-order rule. For example, `@template<T: Scalar> @extend T[]: Hashable` makes `char[]` available to a `Map<K: Hashable, V>` field even when the extension is declared later or arrives through another module. Compiler changes should preserve the phase boundary: no dependent field or signature may resolve, and no bound may be rejected, while the claim inventory is incomplete.
 
+Reachable generic instances follow the same ordering through a fixed-point worklist. A call first requests an instance; the compiler substitutes and resolves its header and bounds, then queues its body for checking. That body may request more instances or instantiate types carrying new interface claims, so the compiler repeats resolution and checking until no work remains. Conformance checks only inspect methods specialized during resolution—they never specialize a receiver family themselves.
+
 ### Editor support
 
 `sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, hover, and go-to-definition. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.

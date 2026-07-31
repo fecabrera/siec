@@ -148,7 +148,7 @@ class CodeGenerator:
         self.implements: dict[str, set] = {}
         self.interface_queries: set[tuple[str, str]] = set()
         self.pending_conformance: deque[tuple] = deque()
-        self.conformance_ready = False
+        self.resolved_conformance: deque[tuple] = deque()
         # the arrays' '@extend T[]' claims: (element placeholder,
         # interface spelling, bounds, declaring file), substituted and
         # filtered by their bounds per element on query
@@ -185,6 +185,11 @@ class CodeGenerator:
         self.generic_functions: dict = {}
         self.instantiated_functions: set = set()
         self.pending_functions: deque[Function] = deque()
+        # Each concrete generic function or receiver-family method follows
+        # the same semantic lifecycle. Calls request instances, signature
+        # resolution queues them, and the fixed-point checker marks their
+        # bodies checked before final backend work consumes the complete set.
+        self.function_instance_states: dict[str, str] = {}
         # concrete definitions displaced by an '@override' declaration;
         # registration keeps their signatures, emission skips their bodies
         self.overridden_functions: set[int] = set()
@@ -775,8 +780,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.constants import (register_builtin_constants,
                                         register_constants)
     from siec.codegen.enums import register_enums
-    from siec.codegen.functions import (declare_function, emit_function,
-                                        link_once)
+    from siec.codegen.functions import declare_function, emit_function
     from siec.codegen.generics import register_generic_function
     from siec.codegen.methods import register_method
     from siec.codegen.globals import register_globals
@@ -869,6 +873,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         adapt_interface_params,
         prepare_extension_methods,
         register_action,
+        resolve_conformance,
         run_conformance,
     )
 
@@ -904,6 +909,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     register_extends(gen, program)
 
     # every declaration is in: check each struct's interface claims
+    resolve_conformance(gen)
     run_conformance(gen)
 
     # With declarations checked, emit the bodies of the defined functions,
@@ -918,21 +924,12 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                 and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
             emit_function(gen, fn)
 
-    # calls met while emitting queue their instantiations' bodies, each of
-    # which may queue more: generic functions calling generic functions;
-    # their substituted types mix files' names, so no view gates them
-    while gen.pending_functions:
-        instance = gen.pending_functions.popleft()
-        gen.ungated_types += 1
-        try:
-            emit_function(gen, instance)
-        finally:
-            gen.ungated_types -= 1
+    # Calls met while checking bodies request concrete generic instances.
+    # Resolve their headers, claims, and bounds, then check their bodies to
+    # a fixed point before final tables consume the complete reachable graph.
+    from siec.codegen.worklist import run_semantic_worklist
 
-        # under separate compilation each unit stamps the instances it
-        # uses, so their duplicate definitions merge at link
-        if gen.unit_files is not None:
-            link_once(gen, instance)
+    run_semantic_worklist(gen)
 
     # every wrap has been seen: the runtime '@typename' table can build
     from siec.codegen.expressions import finish_typename_table

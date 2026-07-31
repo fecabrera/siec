@@ -149,8 +149,9 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
                 raise
 
     # a stamped overload's body waits for its first picked call
-    if (instance := gen.deferred_overloads.pop(symbol, None)) is not None:
-        gen.pending_functions.append(instance)
+    from siec.codegen.worklist import activate_function_instance
+
+    activate_function_instance(gen, symbol)
 
     # a generic callee instantiates for this call's type arguments,
     # explicit, inferred, or driven by the expected result type; the

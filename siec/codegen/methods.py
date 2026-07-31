@@ -229,10 +229,13 @@ def register_method(gen: CodeGenerator, fn) -> None:
 
 
 def resolve_method(gen: CodeGenerator, receiver_type: str | None,
-                   method: str) -> str | None:
+                   method: str, *, specialize: bool = True) -> str | None:
     """
     The symbol of a method on a receiver's type, stamping a generic
     struct's template on first use; None when the type has none.
+
+    Conformance checking passes ``specialize=False`` because its resolution
+    pass has already stamped every candidate it may inspect.
     """
     base = strip_const(strip_reference(receiver_type)) if receiver_type else None
     if not base:
@@ -316,6 +319,9 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
 
         return None
 
+    if not specialize:
+        return None
+
     # A method may repeat bounds on its generic receiver declaration.
     # Check them before stamping any overload for this instantiation.
     if any(template.receiver_constraints for template in templates):
@@ -375,24 +381,15 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         if instance.type_params is not None:
             gen.generic_functions[symbol] = instance
         else:
-            from siec.codegen.functions import declare_function
+            from siec.codegen.worklist import resolve_function_instance
 
-            gen.ungated_types += 1
-            try:
-                func = declare_function(gen, instance)
-            finally:
-                gen.ungated_types -= 1
-
+            func = resolve_function_instance(
+                gen,
+                instance,
+                deferred=len(templates) != 1,
+            )
             if site is not None:
                 gen.instantiation_sites.setdefault(func.name, site)
-
-            # a lone signature's body queues at once; overloads wait for
-            # a call to pick them, so a candidate fitting only some
-            # element types never emits unpicked
-            if len(templates) == 1:
-                gen.pending_functions.append(instance)
-            else:
-                gen.deferred_overloads[func.name] = instance
 
     return symbol
 
@@ -716,8 +713,9 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
                 raise
 
     # a stamped overload's body waits for its first picked call
-    if (instance := gen.deferred_overloads.pop(symbol, None)) is not None:
-        gen.pending_functions.append(instance)
+    from siec.codegen.worklist import activate_function_instance
+
+    activate_function_instance(gen, symbol)
 
     # a generic 'init' (one taking an interface parameter, say)
     # instantiates like any generic call, the fresh instance joining
