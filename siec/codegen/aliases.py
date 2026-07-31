@@ -65,6 +65,9 @@ def type_identity(gen: CodeGenerator, name: str) -> str | None:
     so the more specific registries take precedence. Keeping this arbitration
     in one place makes every collector enforce the same type namespace.
     """
+    if name in SCALAR_TYPES or name in ("opaque", "Tuple"):
+        return "builtin"
+
     if (name in gen.aliases or name in gen.alias_targets
             or name in gen.generic_aliases):
         return "alias"
@@ -105,7 +108,7 @@ def collect_aliases(gen: CodeGenerator, program: Program) -> None:
         with source_location(line=alias.line, file=alias.file):
             gen.current_file = alias.file
 
-            if alias.name in SCALAR_TYPES or alias.name == "opaque":
+            if alias.name in SCALAR_TYPES or alias.name in ("opaque", "Tuple"):
                 raise TypeError(f"type alias {alias.name!r} shadows a builtin type")
 
             if alias.name in types:

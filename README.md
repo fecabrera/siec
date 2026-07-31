@@ -66,6 +66,8 @@ Reachable generic instances follow the same ordering through a fixed-point workl
 
 LLVM emission begins only after phase 0, all four semantic phases, and that fixed point succeed. Until then, structs, globals, callable signatures, and checked bodies live in backend-neutral compiler records; the output module has no LLVM types or values in it. `@sizeof` consults the selected target's layout through those semantic type records without lowering them. The backend then consumes the closed, checked program in one direction—types, globals, callable declarations, and finally bodies—and cannot discover a new generic instance while doing so.
 
+The compiler test suite treats declaration order as part of this contract. Its permutation matrices cover every declaration family, type-namespace collisions, direct and selected conditional declarations, source-file order, includes, and imports. New declaration forms should join those matrices so order independence remains an enforced property rather than an incidental one.
+
 ### Editor support
 
 `sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, hover, and go-to-definition. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.

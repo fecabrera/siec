@@ -146,3 +146,64 @@ def test_conformance_resolution_carries_no_active_function(monkeypatch):
 
     assert observed
     assert set(observed) == {None}
+
+
+def test_recursive_generic_instance_reuses_checked_work():
+    """Recursive generic calls reuse one instance instead of growing work."""
+    gen = compile_with_state("""
+    fn descend<T>(value: T, count: i32) -> T {
+        if (count) return descend(value, count - 1);
+        return value;
+    }
+
+    fn main() -> i32 { return descend(42, 3); }
+    """)
+
+    assert gen.function_instance_states["descend<i32>"] == "checked"
+    assert not gen.pending_functions
+
+
+def test_bounded_receiver_family_uses_the_worklist():
+    """A bounded receiver specialization follows resolve then check."""
+    gen = compile_with_state("""
+    @template<T: Scalar>
+    fn T::answer(const &self) -> i32 { return 42; }
+
+    fn main() -> i32 {
+        let value: u8 = 1;
+        return value.answer();
+    }
+    """)
+
+    states = {
+        symbol: state
+        for symbol, state in gen.function_instance_states.items()
+        if "answer" in symbol
+    }
+    assert states
+    assert set(states.values()) == {"checked"}
+
+
+def test_invalid_late_requested_instance_is_deterministic():
+    """A nested instance that misses a bound fails identically every time."""
+    source = """
+    interface Marker {}
+    struct Item {}
+
+    fn constrained<T: Marker>(value: T) -> T { return value; }
+    fn root<T>(value: T) -> T { return constrained(value); }
+
+    fn main() -> i32 {
+        let item: Item = {};
+        root(item);
+        return 0;
+    }
+    """
+    messages = []
+    for _ in range(2):
+        with pytest.raises(TypeError) as info:
+            compile_with_state(source)
+        messages.append(str(info.value))
+
+    assert messages[0] == messages[1]
+    assert "does not implement interface 'Marker'" in messages[0]

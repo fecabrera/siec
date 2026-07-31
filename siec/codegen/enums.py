@@ -43,12 +43,16 @@ def collect_enums(gen: CodeGenerator, program: Program) -> None:
             "enum collection continued after its inventory was frozen")
 
     for enum in program.enums:
-        identity = id(enum)
-        if identity in gen.collected_enums:
+        declaration_id = id(enum)
+        if declaration_id in gen.collected_enums:
             continue
 
         with source_location(line=enum.line, file=enum.file):
-            if type_identity(gen, enum.name) is not None:
+            owner = type_identity(gen, enum.name)
+            if owner == "builtin":
+                raise TypeError(f"{enum.name!r} is a builtin type: "
+                                "declarations cannot take its name")
+            if owner is not None:
                 raise TypeError(f"type {enum.name!r} is declared more than once")
 
             info = EnumInfo(enum.type, {})
@@ -62,7 +66,7 @@ def collect_enums(gen: CodeGenerator, program: Program) -> None:
 
                 gen.enum_member_declarations[key] = (enum, member, index)
 
-            gen.collected_enums.add(identity)
+            gen.collected_enums.add(declaration_id)
             gen.enum_declarations.append(enum)
 
 

@@ -828,6 +828,10 @@ def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:
         symbol = gen.statics[key]
 
     if symbol not in gen.instantiated_functions:
+        if gen.semantic_complete:
+            raise RuntimeError(
+                "LLVM emission attempted to instantiate a generic function")
+
         gen.instantiated_functions.add(symbol)
         gen.function_instance_states[symbol] = "requested"
         if gen.current_function is not None:
