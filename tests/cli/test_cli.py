@@ -97,6 +97,91 @@ def test_module_qualified_global_function_reference_is_callable(
     assert "release" in capsys.readouterr().out
 
 
+def test_override_through_alias_of_imported_generic(tmp_path, monkeypatch):
+    """
+    An '@override' on an alias of an imported generic instantiation matches
+    the receiver-family template even though the template's file cannot see
+    the substituted struct: compiler-carried names expand unchecked.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "boxes.sie").write_text("""\
+    struct Box<T> {
+        value: T;
+    }
+
+    fn Box<T>::describe(const &self) -> i32 {
+        return 1;
+    }
+    """)
+    (tmp_path / "lib" / "mid.sie").write_text("""\
+    import { Box } from boxes;
+
+    struct Pair {
+        a: i32;
+    }
+
+    @type Table = Box<Pair>;
+
+    @override
+    fn Table::describe(const &self) -> i32 {
+        return 42;
+    }
+    """)
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    import { Table } from mid;
+
+    fn main() -> i32 {
+        let t: Table;
+        t.value = {7};
+        return t.describe();
+    }
+    """)
+
+    exe = tmp_path / "p"
+    assert run_cli(monkeypatch, src, "-o", exe) == 0
+    assert subprocess.run([str(exe)]).returncode == 42
+
+
+def test_unpicked_inline_overload_declares_without_linkonce(
+        tmp_path, monkeypatch):
+    """
+    Under separate compilation a stamped '@inline' overload no call picked
+    keeps no body; its declaration must not carry 'linkonce_odr', which
+    only a definition may hold.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "boxes.sie").write_text("""\
+    struct Box<T> {
+        value: T;
+    }
+
+    @inline
+    fn Box<T>::set(&self, v: const T) {
+        self.value = v;
+    }
+
+    @inline
+    fn Box<T>::set(&self, other: const &Box<T>) {
+        self.value = other.value;
+    }
+    """)
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    import { Box } from boxes;
+
+    fn main() -> i32 {
+        let b: Box<i32>;
+        b.set(42);
+        return b.value;
+    }
+    """)
+
+    assert run_cli(monkeypatch, src, "-c", "-o", tmp_path / "p.o") == 0
+
+
 def test_another_files_static_is_undefined(tmp_path, monkeypatch, capsys):
     """
     A static never resolves from outside its own file.

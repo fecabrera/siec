@@ -31,8 +31,11 @@ def canonical_method_signature(gen, fn, mapping: dict | None = None) -> tuple:
         # Receiver-family signatures still contain source spellings and
         # resolve through their declaring file. Concrete methods have already
         # been registered and canonicalized; their carried names may refer to
-        # an alias target that was not itself imported into that file.
-        checked = fn.receiver_params is not None
+        # an alias target that was not itself imported into that file. A
+        # substituted signature likewise carries the overriding site's
+        # concrete arguments, which the template's file need not see:
+        # compiler-carried names expand unchecked.
+        checked = fn.receiver_params is not None and not mapping
         params = tuple(
             strip_const(expand_alias(gen, param, checked=checked))
             for param in params

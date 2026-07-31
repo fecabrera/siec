@@ -994,6 +994,12 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         if gen.unit_files is not None:
             link_once(gen, instance)
 
+    # a stamped '@inline' overload no call activated keeps no body; only a
+    # definition may carry 'linkonce_odr', so it declares externally
+    for func in gen.module.functions:
+        if func.linkage == "linkonce_odr" and not func.blocks:
+            func.linkage = "external"
+
     gen.emitting = False
 
     # every wrap has been seen: the runtime '@typename' table can build
