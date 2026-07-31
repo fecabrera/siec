@@ -427,6 +427,7 @@ def resolve_callable_header(gen: CodeGenerator, fn, *,
             receiver = fn.receiver
             if (fn.receiver_params is not None
                     and receiver not in fn.receiver_params
+                    and "<" not in receiver
                     and not receiver.endswith("[]")):
                 receiver += f"<{','.join(fn.receiver_params)}>"
             resolve_header_type(gen, receiver, parameters)

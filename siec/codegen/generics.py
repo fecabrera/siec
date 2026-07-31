@@ -250,21 +250,36 @@ def _instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
         # the template's interface claims carry to each instance, its
         # arguments substituted in: 'List<T>: Iterable<T>' makes
         # 'List<i32>' implement 'Iterable<i32>'
-        if template.interfaces:
-            from siec.codegen.interfaces import declare_implements
+        from siec.codegen.interfaces import constraints_hold, declare_implements
 
+        if template.interfaces:
             declare_implements(gen, canonical, base,
                                [substitute(s, mapping) for s in template.interfaces],
                                template.line, template.file)
+
+        # An '@extend Base<T>' claim has its own template environment. Unlike
+        # claims written on the struct, it applies only when this instance's
+        # arguments satisfy the extension bounds.
+        for claims, constraints, file, line in gen.generic_struct_claims.get(
+                base, ()):
+            if constraints_hold(gen, constraints, mapping, file):
+                declare_implements(
+                    gen,
+                    canonical,
+                    base,
+                    [substitute(spelling, mapping) for spelling in claims],
+                    line,
+                    file,
+                )
     finally:
         gen.ungated_types -= 1
 
     return canonical
 
 
-def register_generic_function(gen: CodeGenerator, fn) -> None:
+def resolve_generic_function(gen: CodeGenerator, fn) -> None:
     """
-    Register a generic function template, instantiated by its calls; a
+    Resolve a generic function template, instantiated by its calls; a
     same-named template with a different type-parameter count joins as
     an arity overload, picked per call.
     """

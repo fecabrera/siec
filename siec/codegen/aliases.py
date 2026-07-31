@@ -52,6 +52,7 @@ def names_type(gen: CodeGenerator, name: str) -> bool:
     Whether a name is a declared type identity, wherever it was declared.
     """
     return (name in gen.structs or name in gen.enums or name in gen.aliases
+            or name in gen.alias_targets
             or name in gen.generic_structs or name in gen.generic_aliases
             or name in gen.interfaces)
 
@@ -64,7 +65,8 @@ def type_identity(gen: CodeGenerator, name: str) -> str | None:
     so the more specific registries take precedence. Keeping this arbitration
     in one place makes every collector enforce the same type namespace.
     """
-    if name in gen.aliases or name in gen.generic_aliases:
+    if (name in gen.aliases or name in gen.alias_targets
+            or name in gen.generic_aliases):
         return "alias"
 
     if name in gen.enums:
@@ -82,14 +84,24 @@ def type_identity(gen: CodeGenerator, name: str) -> str | None:
     return None
 
 
-def register_aliases(gen: CodeGenerator, program: Program) -> None:
+def collect_aliases(gen: CodeGenerator, program: Program) -> None:
     """
-    Register every 'type' alias, then expand each target to its canonical
-    name so cycles and bad derivations surface at the declaration.
+    Add raw alias declarations to the type-identity inventory.
+
+    Collection records names and syntax only. Target expansion, generic
+    template cycles, and invalid derivations wait for ``resolve_aliases``.
     """
+    if gen.declaration_inventory_complete:
+        raise RuntimeError(
+            "alias collection continued after its inventory was frozen")
+
     types = {s.name for s in program.structs} | {e.name for e in program.enums}
 
     for alias in program.aliases:
+        declaration_id = id(alias)
+        if declaration_id in gen.collected_aliases:
+            continue
+
         with source_location(line=alias.line, file=alias.file):
             gen.current_file = alias.file
 
@@ -99,11 +111,11 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
             if alias.name in types:
                 raise TypeError(f"type {alias.name!r} is declared more than once")
 
-            identity = type_identity(gen, alias.name)
-            if identity == "alias":
+            owner = type_identity(gen, alias.name)
+            if owner == "alias":
                 raise TypeError(f"type alias {alias.name!r} is declared more than once")
 
-            if identity is not None:
+            if owner is not None:
                 raise TypeError(f"type {alias.name!r} is declared more than once")
 
             # a generic alias is a template, expanded when a concrete
@@ -111,12 +123,19 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
             if alias.params is not None:
                 gen.generic_aliases[alias.name] = alias
             else:
-                gen.aliases[alias.name] = alias.type
+                gen.alias_targets[alias.name] = alias.type
 
-    # expand after registration so aliases may reference one another
-    # regardless of declaration order; a generic template cannot expand
-    # without arguments, but a cycle among templates is checkable now
-    for alias in program.aliases:
+            gen.collected_aliases.add(declaration_id)
+            gen.alias_declarations.append(alias)
+
+
+def resolve_aliases(gen: CodeGenerator) -> None:
+    """Resolve every collected alias target and generic template cycle."""
+    for alias in gen.alias_declarations:
+        identity = id(alias)
+        if identity in gen.resolved_aliases:
+            continue
+
         with source_location(line=alias.line, file=alias.file):
             gen.current_file = alias.file
 
@@ -126,6 +145,8 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
                 from siec.codegen.generics import check_template_cycle
 
                 check_template_cycle(gen, alias.name)
+
+            gen.resolved_aliases.add(identity)
 
 
 def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
@@ -145,7 +166,8 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
     if name is None:
         return None
 
-    if (not gen.aliases and not gen.visible and not gen.interfaces
+    if (not gen.aliases and not gen.alias_targets
+            and not gen.visible and not gen.interfaces
             and not any(m in name for m in ("<", "struct{", "union{", "."))):
         return name
 
@@ -270,7 +292,7 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
 
             return generic + suffix
 
-    if base not in gen.aliases:
+    if base not in gen.aliases and base not in gen.alias_targets:
         # an interface is abstract: only a parameter's type can take one,
         # standing for any implementing struct
         if base.partition("<")[0] in gen.interfaces:
@@ -296,7 +318,7 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
 
     target = expand_alias(
         gen,
-        gen.aliases[base],
+        gen.aliases.get(base, gen.alias_targets.get(base)),
         (*seen, base),
         checked=False,
         parameters=parameters,

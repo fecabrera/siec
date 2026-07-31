@@ -31,20 +31,22 @@ BINARY_OPS = {
 }
 
 
-def register_enums(gen: CodeGenerator, program: Program) -> None:
+def collect_enums(gen: CodeGenerator, program: Program) -> None:
     """
-    Register every enum and member, then evaluate the members.
+    Add enum and member identities to the declaration inventory.
 
-    Automatic values start at 1; an explicit '= <value>' resets the counter,
-    and the following members keep counting from there. Member values resolve
-    through the complete inventory, so they may reference any enum regardless
-    of declaration order.
+    Collection deliberately leaves backing types and member expressions
+    untouched. ``resolve_enums`` consumes the complete collected inventory.
     """
-    declarations = {}
+    if gen.declaration_inventory_complete:
+        raise RuntimeError(
+            "enum collection continued after its inventory was frozen")
 
-    # Collect every enum and member identity before resolving a backing type
-    # or value. Evaluation can then follow references in either direction.
     for enum in program.enums:
+        identity = id(enum)
+        if identity in gen.collected_enums:
+            continue
+
         with source_location(line=enum.line, file=enum.file):
             if type_identity(gen, enum.name) is not None:
                 raise TypeError(f"type {enum.name!r} is declared more than once")
@@ -54,14 +56,31 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
 
             for index, member in enumerate(enum.members):
                 key = (enum.name, member.name)
-                if key in declarations:
+                if key in gen.enum_member_declarations:
                     raise TypeError(f"enum {enum.name!r} declares member "
                                     f"{member.name!r} more than once")
 
-                declarations[key] = (enum, member, index)
+                gen.enum_member_declarations[key] = (enum, member, index)
+
+            gen.collected_enums.add(identity)
+            gen.enum_declarations.append(enum)
+
+
+def resolve_enums(gen: CodeGenerator) -> None:
+    """
+    Resolve every collected enum backing type and member dependency.
+
+    Automatic values start at 1; an explicit value resets the counter, and
+    following members keep counting from there. All backing types resolve
+    before any member expression so dependencies are declaration-order
+    independent.
+    """
 
     # Resolve every backing type only after all enum names are available.
-    for enum in program.enums:
+    for enum in gen.enum_declarations:
+        if id(enum) in gen.resolved_enums:
+            continue
+
         with source_location(line=enum.line, file=enum.file):
             gen.current_file = enum.file
             enum.type = expand_alias(gen, enum.type)
@@ -86,7 +105,7 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
             raise NameError(f"undefined enum {expr.enum!r}")
 
         key = (name, expr.member)
-        if key not in declarations:
+        if key not in gen.enum_member_declarations:
             raise TypeError(f"enum {expr.enum!r} has no member "
                             f"{expr.member!r}")
 
@@ -105,7 +124,7 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
             )
             raise TypeError(f"enum member cycle: {cycle}")
 
-        enum, member, index = declarations[key]
+        enum, member, index = gen.enum_member_declarations[key]
         active.append(key)
         previous_file = gen.current_file
         gen.current_file = enum.file
@@ -127,9 +146,14 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
 
     # Resolve every member even when no expression uses it, reporting invalid
     # references and cycles at its declaration.
-    for enum in program.enums:
+    for enum in gen.enum_declarations:
+        if id(enum) in gen.resolved_enums:
+            continue
+
         for member in enum.members:
             resolve_key((enum.name, member.name))
+
+        gen.resolved_enums.add(id(enum))
 
 
 def resolve_enum(gen: CodeGenerator, name: str) -> str:

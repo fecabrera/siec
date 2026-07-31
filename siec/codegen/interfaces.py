@@ -79,6 +79,7 @@ def takes_self(fn) -> bool:
     spelling = fn.receiver
     if (fn.receiver_params is not None
             and fn.receiver not in fn.receiver_params
+            and "<" not in fn.receiver
             and not fn.receiver.endswith("[]")):
         spelling += f"<{','.join(fn.receiver_params)}>"
 
@@ -139,9 +140,9 @@ def adapt_interface_params(gen: CodeGenerator, fn) -> None:
         gen.current_file = previous
 
 
-def register_action(gen: CodeGenerator, fn) -> None:
+def resolve_action_declaration(gen: CodeGenerator, fn) -> None:
     """
-    Register an interface action: a bodiless method signature on an
+    Resolve an interface action: a bodiless method signature on an
     interface receiver, required of every implementing struct.
     """
     with source_location(line=fn.line, file=fn.file):
@@ -777,7 +778,7 @@ def free_name(gen: CodeGenerator, spelling: str) -> bool:
             and spelling not in gen.interfaces)
 
 
-def prepare_extension_methods(gen: CodeGenerator, program) -> None:
+def resolve_extension_methods(gen: CodeGenerator) -> None:
     """
     Give an unbounded array extension's owned methods the placeholder its
     receiver introduces. This makes
@@ -787,7 +788,7 @@ def prepare_extension_methods(gen: CodeGenerator, program) -> None:
     equivalent to the separate 'fn T[]::m(...)' spelling. Concrete element
     names, such as 'char[]', keep concrete methods.
     """
-    for ext in program.extends:
+    for ext in gen.extension_declarations:
         if ext.params is not None or not ext.actions:
             continue
         if not ext.name.endswith("[]"):
@@ -801,87 +802,123 @@ def prepare_extension_methods(gen: CodeGenerator, program) -> None:
             action.receiver_params = [elem]
 
 
-def predeclare_extends(gen: CodeGenerator, program) -> None:
+def collect_extensions(gen: CodeGenerator, program) -> None:
     """
-    Record extension claims before struct field types instantiate generics.
+    Add raw extension declarations to the declaration inventory.
 
-    Interface actions are not registered yet, so receiver-family method
-    validation waits for ``register_extends``. The claims themselves are
-    already valid evidence for bounds during struct definition.
+    Collection records syntax only. It does not canonicalize receivers,
+    inspect interfaces, publish bound evidence, or validate required methods.
     """
-    _register_extends(gen, program, validate_actions=False)
-
-
-def register_extends(gen: CodeGenerator, program) -> None:
-    """
-    Validate receiver-family extension methods once every method is declared.
-
-    ``predeclare_extends`` has already recorded the claims and queued concrete
-    conformance checks; this pass checks that blanket receiver families have
-    templates for every required interface action.
-    """
-    _register_extends(gen, program, validate_actions=True)
-
-
-def _register_extends(gen: CodeGenerator, program,
-                      validate_actions: bool) -> None:
-    """Run the claim or action-validation phase for every extension."""
-    from siec.codegen.aliases import expand_alias
+    if gen.declaration_inventory_complete:
+        raise RuntimeError(
+            "extension collection continued after its inventory was frozen")
 
     for ext in program.extends:
+        identity = id(ext)
+        if identity in gen.collected_extensions:
+            continue
+
+        gen.collected_extensions.add(identity)
+        gen.extension_declarations.append(ext)
+
+
+def resolve_extensions(gen: CodeGenerator) -> None:
+    """
+    Resolve every collected extension into canonical interface-claim facts.
+
+    This runs before struct fields instantiate bounded generics, making the
+    complete resolved claim inventory available to bound checks.
+    """
+    for ext in gen.extension_declarations:
+        identity = id(ext)
+        if identity in gen.resolved_extensions:
+            continue
+
         gen.current_file = ext.file
         with source_location(line=ext.line, file=ext.file):
-            if ext.params is not None and ext.name in ext.params:
-                register_type_family_extend(gen, ext, validate_actions)
-                continue
+            resolve_extension(gen, ext)
 
-            if ext.name.endswith("[]") and ext.name[:-2].isidentifier():
-                # a real element type claims for that one array; a
-                # placeholder claims for the family
-                elem = ext.name[:-2]
-                if is_type_name(gen, elem):
-                    if validate_actions:
-                        continue
-                    canonical = strip_const(expand_alias(gen, elem))
-                    declare_implements(gen, f"{canonical}[]", ext.name,
-                                       ext.interfaces, ext.line, ext.file)
-                else:
-                    register_array_extend(gen, ext, validate_actions)
-                continue
-
-            # 'Base<E>' over bare placeholder names extends the template;
-            # spelled over real types, one concrete instantiation
-            parts = split_generic(ext.name)
-            if (parts is not None and parts[0] in gen.generic_structs
-                    and not any(is_type_name(gen, arg) for arg in parts[1])):
-                if not validate_actions:
-                    register_template_extend(gen, ext, *parts)
-                continue
-
-            # a struct, an enum, or a primitive extends: whatever a
-            # method can name as its receiver
-            if validate_actions:
-                continue
-
-            canonical = strip_const(expand_alias(gen, ext.name))
-            info = gen.structs.get(canonical)
-            if info is not None and info.fields is None:
-                raise TypeError(f"cannot extend {ext.name!r}: the struct has "
-                                "no body to extend")
-
-            if (info is None and canonical not in SCALAR_TYPES
-                    and canonical not in gen.enums):
-                raise TypeError(f"cannot extend {ext.name!r}: it does not "
-                                "name a struct, an enum, or a primitive")
-
-            declare_implements(gen, canonical, ext.name, ext.interfaces,
-                               ext.line, ext.file)
+        gen.resolved_extensions.add(identity)
 
 
-def register_type_family_extend(gen: CodeGenerator, ext,
-                                validate_actions: bool = True) -> None:
+def check_extensions(gen: CodeGenerator) -> None:
+    """Check required receiver-family methods on resolved extensions."""
+    unresolved = (gen.collected_extensions - gen.resolved_extensions)
+    if unresolved:
+        raise RuntimeError("cannot check unresolved extension claims")
+
+    for ext in gen.extension_declarations:
+        identity = id(ext)
+        if identity in gen.checked_extensions:
+            continue
+
+        gen.current_file = ext.file
+        with source_location(line=ext.line, file=ext.file):
+            check_extension(gen, ext)
+
+        gen.checked_extensions.add(identity)
+
+
+def resolve_extension(gen: CodeGenerator, ext) -> None:
+    """Resolve one raw extension declaration into claim facts."""
+    from siec.codegen.aliases import expand_alias
+
+    if ext.params is not None and ext.name in ext.params:
+        resolve_type_family_extend(gen, ext)
+        return
+
+    if ext.name.endswith("[]") and ext.name[:-2].isidentifier():
+        # a real element type claims for that one array; a placeholder claims
+        # for the family
+        elem = ext.name[:-2]
+        if is_type_name(gen, elem):
+            canonical = strip_const(expand_alias(gen, elem))
+            declare_implements(gen, f"{canonical}[]", ext.name,
+                               ext.interfaces, ext.line, ext.file)
+        else:
+            resolve_array_extend(gen, ext)
+        return
+
+    # 'Base<E>' over bare placeholder names extends the template; spelled
+    # over real types, one concrete instantiation.
+    parts = split_generic(ext.name)
+    if (parts is not None and parts[0] in gen.generic_structs
+            and not any(is_type_name(gen, arg) for arg in parts[1])):
+        resolve_template_extend(gen, ext, *parts)
+        return
+
+    # A struct, enum, or primitive extends: whatever a method can name as its
+    # receiver.
+    canonical = strip_const(expand_alias(gen, ext.name))
+    info = gen.structs.get(canonical)
+    if info is not None and info.fields is None:
+        raise TypeError(f"cannot extend {ext.name!r}: the struct has "
+                        "no body to extend")
+
+    if (info is None and canonical not in SCALAR_TYPES
+            and canonical not in gen.enums):
+        raise TypeError(f"cannot extend {ext.name!r}: it does not "
+                        "name a struct, an enum, or a primitive")
+
+    declare_implements(gen, canonical, ext.name, ext.interfaces,
+                       ext.line, ext.file)
+
+
+def check_extension(gen: CodeGenerator, ext) -> None:
+    """Check one resolved family extension against registered actions."""
+    if ext.params is not None and ext.name in ext.params:
+        check_type_family_extend(gen, ext)
+        return
+
+    if ext.name.endswith("[]") and ext.name[:-2].isidentifier():
+        elem = ext.name[:-2]
+        if not is_type_name(gen, elem):
+            check_array_extend(gen, ext)
+
+
+def resolve_type_family_extend(gen: CodeGenerator, ext) -> None:
     """
-    Register a blanket claim over one bare receiver placeholder:
+    Resolve a blanket claim over one bare receiver placeholder:
     '@extend<T: Scalar> T: Iface'. Claims and receiver methods both filter
     through the same bound set at each concrete use.
     """
@@ -912,27 +949,31 @@ def register_type_family_extend(gen: CodeGenerator, ext,
             raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
                             "a blanket receiver carries no interface fields")
 
-        if validate_actions:
-            for (action_iface, method), actions in gen.interface_actions.items():
-                if (action_iface == base
-                        and method not in gen.generic_receiver_methods):
-                    action = actions[0]
-                    mapping = dict(zip(iface.params or (), args))
-                    params = ", ".join(
-                        expand_lax(gen, substitute(p.type, mapping))
-                        for p in action.params[1:])
-                    wanted = f"{method}({params})"
-                    if action.return_type is not None:
-                        wanted += (" -> " + expand_lax(
-                            gen, substitute(action.return_type, mapping)))
+    gen.generic_claims.append(
+        (ext.name, ext.interfaces, ext.constraints, ext.file))
 
-                    raise TypeError(f"{ext.name!r} does not implement "
-                                    f"{spelling!r}: it is missing the method "
-                                    f"'{wanted}'")
 
-    if not validate_actions:
-        gen.generic_claims.append(
-            (ext.name, ext.interfaces, ext.constraints, ext.file))
+def check_type_family_extend(gen: CodeGenerator, ext) -> None:
+    """Check a resolved type-family claim has every required method."""
+    for spelling in ext.interfaces:
+        base, args = split_generic(spelling) or (spelling, [])
+        iface = gen.interfaces[base]
+        for (action_iface, method), actions in gen.interface_actions.items():
+            if (action_iface == base
+                    and method not in gen.generic_receiver_methods):
+                action = actions[0]
+                mapping = dict(zip(iface.params or (), args))
+                params = ", ".join(
+                    expand_lax(gen, substitute(p.type, mapping))
+                    for p in action.params[1:])
+                wanted = f"{method}({params})"
+                if action.return_type is not None:
+                    wanted += (" -> " + expand_lax(
+                        gen, substitute(action.return_type, mapping)))
+
+                raise TypeError(f"{ext.name!r} does not implement "
+                                f"{spelling!r}: it is missing the method "
+                                f"'{wanted}'")
 
 
 def is_type_name(gen: CodeGenerator, name: str) -> bool:
@@ -943,15 +984,18 @@ def is_type_name(gen: CodeGenerator, name: str) -> bool:
 
     return (not name.isidentifier() or name in SCALAR_TYPES
             or name in gen.structs or name in gen.enums
-            or name in gen.aliases or name in gen.generic_structs)
+            or name in gen.aliases or name in gen.alias_targets
+            or name in gen.generic_structs)
 
 
-def register_template_extend(gen: CodeGenerator, ext, base: str,
-                             args: list) -> None:
+def resolve_template_extend(gen: CodeGenerator, ext, base: str,
+                            args: list) -> None:
     """
-    Add claims to a generic struct template, the written placeholders
-    renamed to the template's own; instances stamped before this
-    declaration catch up on the spot.
+    Record a generic struct family's conditional interface claims.
+
+    The extension's placeholders and bounds are renamed to the struct
+    template's environment. Each existing and future instance publishes the
+    claims only when its arguments satisfy those bounds.
     """
     template = gen.generic_structs[base]
     if len(args) != len(template.params):
@@ -961,23 +1005,26 @@ def register_template_extend(gen: CodeGenerator, ext, base: str,
 
     renaming = dict(zip(args, template.params))
     claims = [substitute(s, renaming) for s in ext.interfaces]
-    template.interfaces = [*(template.interfaces or ()), *claims]
+    constraints = {
+        renaming.get(param, param): substitute(bound, renaming)
+        for param, bound in (ext.constraints or {}).items()
+    }
+    entry = (claims, constraints, ext.file, ext.line)
+    gen.generic_struct_claims.setdefault(base, []).append(entry)
 
     for name in list(gen.structs):
         parts = split_generic(name)
         if parts is not None and parts[0] == base:
             mapping = dict(zip(template.params, parts[1]))
-            declare_implements(gen, name, base,
-                               [substitute(c, mapping) for c in claims],
-                               ext.line, ext.file)
+            if constraints_hold(gen, constraints, mapping, ext.file):
+                declare_implements(gen, name, base,
+                                   [substitute(c, mapping) for c in claims],
+                                   ext.line, ext.file)
 
 
-def register_array_extend(gen: CodeGenerator, ext,
-                          validate_actions: bool = True) -> None:
+def resolve_array_extend(gen: CodeGenerator, ext) -> None:
     """
-    Record the arrays' claims, the element name a placeholder: each
-    action must have its 'T[]::m' template declared, and the stamped
-    signatures check themselves per element at each use.
+    Resolve an array-family claim and publish it as bound evidence.
     """
     elem = ext.name[:-2]
     if ext.params is not None:
@@ -1008,26 +1055,32 @@ def register_array_extend(gen: CodeGenerator, ext,
             raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
                             "an array carries no interface fields")
 
-        if validate_actions:
-            mapping = dict(zip(iface.params or (), args))
-            for (action_iface, method), actions in gen.interface_actions.items():
-                if (action_iface == base
-                        and ("[]", method) not in gen.generic_methods):
-                    action = actions[0]
-                    params = ", ".join(
-                        expand_lax(gen, substitute(p.type, mapping))
-                        for p in action.params[1:])
-                    wanted = f"{method}({params})"
-                    if action.return_type is not None:
-                        wanted += (" -> " + expand_lax(
-                            gen, substitute(action.return_type, mapping)))
+        gen.array_claims.append(
+            (elem, spelling, ext.constraints, ext.file))
 
-                    raise TypeError(f"{ext.name!r} does not implement "
-                                    f"{spelling!r}: it is missing the method "
-                                    f"'{wanted}' ('fn {elem}[]::{method}')")
-        else:
-            gen.array_claims.append(
-                (elem, spelling, ext.constraints, ext.file))
+
+def check_array_extend(gen: CodeGenerator, ext) -> None:
+    """Check a resolved array-family claim has every required method."""
+    elem = ext.name[:-2]
+    for spelling in ext.interfaces:
+        base, args = split_generic(spelling) or (spelling, [])
+        iface = gen.interfaces[base]
+        mapping = dict(zip(iface.params or (), args))
+        for (action_iface, method), actions in gen.interface_actions.items():
+            if (action_iface == base
+                    and ("[]", method) not in gen.generic_methods):
+                action = actions[0]
+                params = ", ".join(
+                    expand_lax(gen, substitute(p.type, mapping))
+                    for p in action.params[1:])
+                wanted = f"{method}({params})"
+                if action.return_type is not None:
+                    wanted += (" -> " + expand_lax(
+                        gen, substitute(action.return_type, mapping)))
+
+                raise TypeError(f"{ext.name!r} does not implement "
+                                f"{spelling!r}: it is missing the method "
+                                f"'{wanted}' ('fn {elem}[]::{method}')")
 
 
 def check_constraints(gen: CodeGenerator, template, mapping: dict,

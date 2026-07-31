@@ -37,7 +37,7 @@ def test_callables_are_collected_before_layouts_and_globals(monkeypatch):
     no callable header has resolved yet.
     """
     original_define = structs.define_structs
-    original_globals = global_declarations.register_globals
+    original_globals = global_declarations.resolve_globals
     events = []
 
     def inspect_layout_boundary(gen, tree):
@@ -58,7 +58,7 @@ def test_callables_are_collected_before_layouts_and_globals(monkeypatch):
     monkeypatch.setattr(structs, "define_structs", inspect_layout_boundary)
     monkeypatch.setattr(
         global_declarations,
-        "register_globals",
+        "resolve_globals",
         inspect_global_boundary,
     )
 

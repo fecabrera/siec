@@ -61,29 +61,29 @@ def resolve_callables(gen: CodeGenerator) -> None:
         raise RuntimeError("callable declarations were resolved more than once")
 
     from siec.codegen.functions import resolve_function
-    from siec.codegen.generics import register_generic_function
+    from siec.codegen.generics import resolve_generic_function
     from siec.codegen.headers import resolve_callable_header
     from siec.codegen.interfaces import (
         adapt_interface_params,
-        register_action,
+        resolve_action_declaration,
     )
-    from siec.codegen.methods import register_method
+    from siec.codegen.methods import resolve_method_declaration
 
     for fn in sorted(
             gen.callable_declarations,
             key=lambda declaration: declaration.is_override):
         if fn.receiver is not None and fn.receiver in gen.interfaces:
             resolve_callable_header(gen, fn, interface_action=True)
-            register_action(gen, fn)
+            resolve_action_declaration(gen, fn)
             continue
 
         adapt_interface_params(gen, fn)
         resolve_callable_header(gen, fn)
 
         if fn.receiver is not None:
-            register_method(gen, fn)
+            resolve_method_declaration(gen, fn)
         elif fn.type_params is not None:
-            register_generic_function(gen, fn)
+            resolve_generic_function(gen, fn)
         else:
             resolve_function(gen, fn)
 

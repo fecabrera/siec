@@ -1,7 +1,7 @@
 """Resolution of '@if' conditional compilation blocks."""
 
 from siec.ast import BinaryOp, EnumMember, Program, SizeOf, TypeId, UnaryOp, Var
-from siec.codegen.aliases import register_aliases
+from siec.codegen.aliases import collect_aliases
 from siec.codegen.constants import (constant_view, find_constant,
                                     register_constants)
 from siec.codegen.enums import evaluate
@@ -70,11 +70,11 @@ def resolve_conditionals(gen: CodeGenerator, program: Program, *,
     into the program, so the registration passes see exactly the code the
     conditions selected.
 
-    A branch's aliases and constants register on the spot: later conditions,
-    including nested ones, may build on them. With 'defer_types', conditions
-    needing resolved type information stay in 'program.conds' for a later
-    pass. 'register_branch' lets that pass register a selected branch's type
-    declarations before resolving nested conditions.
+    A branch's aliases and constants join collection on the spot. With
+    'defer_types', conditions needing resolved type information stay in
+    'program.conds' for a later pass. 'register_branch' lets that pass collect
+    and resolve a selected branch's type declarations before nested conditions
+    inspect them.
     """
     # an '@error' the compilation reaches stops it with its own message;
     # one in a branch is reached only when that branch is chosen, since
@@ -102,7 +102,7 @@ def resolve_conditionals(gen: CodeGenerator, program: Program, *,
         if branch is None:
             continue
 
-        register_aliases(gen, branch)
+        collect_aliases(gen, branch)
         register_constants(gen, branch)
         if register_branch is not None:
             register_branch(branch)

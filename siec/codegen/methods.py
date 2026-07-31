@@ -100,17 +100,26 @@ def select_method_overrides(gen: CodeGenerator, base: str, method: str,
     return selected
 
 
-def register_method(gen: CodeGenerator, fn) -> None:
+def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
     """
-    Register a method: a plain one declares like any function under its
+    Resolve a method: a plain one declares like any function under its
     'S::m' name, a generic one like a generic function, and a generic
     struct's becomes a template stamped per struct instantiation.
     """
     from siec.codegen.functions import resolve_function
-    from siec.codegen.generics import register_generic_function
+    from siec.codegen.generics import resolve_generic_function
     from siec.codegen.overloads import shown_signature
 
     with source_location(line=fn.line, file=fn.file):
+        # A template environment may decorate an already-spelled generic
+        # receiver, as in '@template<T> fn List<T>::f'. Normalize it to the
+        # same family identity as the standalone 'fn List<T>::f' syntax.
+        parts = split_generic(fn.receiver)
+        if (fn.receiver_params is not None and parts is not None
+                and parts[1] == fn.receiver_params):
+            fn.receiver = parts[0]
+            fn.name = f"{fn.receiver}::{fn.name.partition('::')[2]}"
+
         # The parser cannot know whether the element in 'X[]::m' is a
         # placeholder or a declared type. Settle it now that collection is
         # complete: 'char[]::m' is concrete, while 'T[]::m' stays a family.
@@ -223,7 +232,7 @@ def register_method(gen: CodeGenerator, fn) -> None:
             finally:
                 gen.current_file = previous
 
-            register_generic_function(gen, fn)
+            resolve_generic_function(gen, fn)
         else:
             resolve_function(gen, fn)
 

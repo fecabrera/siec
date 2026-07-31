@@ -118,6 +118,7 @@ class CodeGenerator:
         self.types_lowered = False
         self.functions_lowered = False
         self.semantic_complete = False
+        self.declaration_inventory_complete = False
         self.generic_type_depth = 0
         self.str_count = 0
         self.temporary_count = 0
@@ -170,6 +171,13 @@ class CodeGenerator:
         self.interface_queries: set[tuple[str, str]] = set()
         self.pending_conformance: deque[tuple] = deque()
         self.resolved_conformance: deque[tuple] = deque()
+        # Raw extension declarations have an explicit collect/resolve/check
+        # lifecycle. Type-dependent conditional branches may add declarations
+        # until callable collection freezes; each declaration advances once.
+        self.extension_declarations: list = []
+        self.collected_extensions: set[int] = set()
+        self.resolved_extensions: set[int] = set()
+        self.checked_extensions: set[int] = set()
         # the arrays' '@extend T[]' claims: (element placeholder,
         # interface spelling, bounds, declaring file), substituted and
         # filtered by their bounds per element on query
@@ -177,6 +185,10 @@ class CodeGenerator:
         # blanket claims over a bare receiver placeholder:
         # (placeholder, interface spellings, bounds, declaring file)
         self.generic_claims: list[tuple[str, list[str], dict | None, str]] = []
+        # Claims added to a generic struct by '@extend Base<T>' retain their
+        # own bounds. Each concrete instance publishes only the claims whose
+        # extension environment accepts its arguments.
+        self.generic_struct_claims: dict[str, list[tuple]] = {}
         # per-symbol parameter defaults with the declaring file, whose
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
@@ -201,6 +213,14 @@ class CodeGenerator:
         # generic alias templates by name: each 'a<args>' spelling expands
         # the target with its arguments substituted
         self.generic_aliases: dict = {}
+
+        # Alias syntax is collected separately from canonical targets. This
+        # keeps collection from asking what a target means while still making
+        # every alias identity visible to collision checks.
+        self.alias_declarations: list = []
+        self.collected_aliases: set[int] = set()
+        self.alias_targets: dict[str, str] = {}
+        self.resolved_aliases: set[int] = set()
 
         # generic function templates by name; calls declare each 'f<args>'
         # instance once and queue its body for emission
@@ -264,8 +284,7 @@ class CodeGenerator:
         # the floor, never the ones it flushes inside of
         self.flush_loop_floors: list[int] = []
 
-        # the registered 'type' aliases by name, mapped to their canonical
-        # expanded targets; every type name is expanded through them
+        # Resolved non-generic aliases by name, mapped to canonical targets.
         self.aliases: dict[str, str] = {}
 
         # the registered '@const' declarations by name, substituted at their uses
@@ -304,8 +323,13 @@ class CodeGenerator:
         self.current_function: str | None = None
         self.current_line: int = 0
 
-        # the registered enums by name, their members evaluated to integers
+        # Enum syntax and identities are collected before backing types and
+        # member values resolve. The member map is the dependency inventory.
         self.enums: dict[str, EnumInfo] = {}
+        self.enum_declarations: list = []
+        self.collected_enums: set[int] = set()
+        self.enum_member_declarations: dict[tuple[str, str], tuple] = {}
+        self.resolved_enums: set[int] = set()
 
         # the '@extern let' globals by name, mapped to their Sie types;
         # their storage lives in the module's globals
@@ -809,21 +833,21 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     retains the private working copy of the AST; codegen never mutates the
     Program instance supplied by its caller.
     """
-    from siec.codegen.aliases import register_aliases
+    from siec.codegen.aliases import collect_aliases, resolve_aliases
     from siec.codegen.conditionals import check_asserts, resolve_conditionals
     from siec.codegen.constants import (
         register_builtin_constants,
         register_constants,
         resolve_constants,
     )
-    from siec.codegen.enums import register_enums
+    from siec.codegen.enums import collect_enums, resolve_enums
     from siec.codegen.callables import (
         collect_callables,
         complete_callable_inventory,
         resolve_callables,
     )
     from siec.codegen.functions import emit_function, lower_functions
-    from siec.codegen.globals import lower_globals, register_globals
+    from siec.codegen.globals import lower_globals, resolve_globals
     from siec.codegen.structs import declare_structs, define_structs
 
     from siec.codegen.constants import BUILTIN_CONSTANTS
@@ -868,7 +892,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # condition that needs no type meaning first; enum members, '@sizeof',
     # and '@typeid' wait for the active type inventory below.
     register_builtin_constants(gen)
-    register_aliases(gen, program)
+    collect_aliases(gen, program)
     register_constants(gen, program)
     resolve_conditionals(gen, program, defer_types=True)
 
@@ -877,26 +901,29 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # callable headers. Nothing in the following resolution phase may depend
     # on source or module traversal order.
     collect_callables(gen, program)
-    register_enums(gen, program)
+    collect_enums(gen, program)
     declare_structs(gen, program)
 
-    # Extension claims are declaration facts. Record them before resolving
-    # fields, since a field may instantiate a bounded generic whose argument
-    # implements its bound through an extension declared anywhere.
-    from siec.codegen.interfaces import predeclare_extends
+    from siec.codegen.interfaces import collect_extensions, resolve_extensions
 
-    predeclare_extends(gen, program)
+    collect_extensions(gen, program)
 
-    # Resolve the active layouts, then choose the conditions that asked for
-    # them. A selected branch registers its own identities and claims before
-    # nested conditions run, so those conditions can weigh the new types too.
+    # Resolve declaration headers only after the active inventory is present.
+    # Claims resolve before fields so bounded fields can use an extension
+    # declared anywhere in the compilation unit.
+    resolve_extensions(gen)
+    resolve_enums(gen)
+    resolve_aliases(gen)
     define_structs(gen, program)
 
     def register_conditional_branch(branch) -> None:
         collect_callables(gen, branch)
-        register_enums(gen, branch)
+        collect_enums(gen, branch)
         declare_structs(gen, branch)
-        predeclare_extends(gen, branch)
+        collect_extensions(gen, branch)
+        resolve_extensions(gen)
+        resolve_enums(gen)
+        resolve_aliases(gen)
         define_structs(gen, branch)
 
     resolve_conditionals(
@@ -905,8 +932,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         register_branch=register_conditional_branch,
     )
 
-    # Every selected branch has now contributed its raw callables. Freeze
-    # that inventory before resolving globals or any callable header.
+    # Every selected branch has now contributed its raw declarations. Verify
+    # and freeze the inventories before resolving globals or callable headers.
+    from siec.codegen.declarations import complete_declaration_inventory
+
+    complete_declaration_inventory(gen, program)
     complete_callable_inventory(gen, program)
 
     # Resolve every generic/interface type header against the complete active
@@ -918,16 +948,17 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # Globals join the resolved value inventory before constants, since a
     # constant '@sizeof' or '@typeid' may name one. Then resolve every constant
     # target regardless of whether a later expression uses its value.
-    register_globals(gen, program)
+    resolve_globals(gen, program)
     resolve_constants(gen)
 
     from siec.codegen.interfaces import (
-        prepare_extension_methods,
+        check_extensions,
+        resolve_extension_methods,
         resolve_conformance,
         run_conformance,
     )
 
-    prepare_extension_methods(gen, program)
+    resolve_extension_methods(gen)
     resolve_callables(gen)
 
     from siec.codegen.overrides import validate_concrete_overrides
@@ -939,9 +970,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # interface conformance decide whether the collected declarations agree.
     check_asserts(gen, program)
 
-    from siec.codegen.interfaces import register_extends
-
-    register_extends(gen, program)
+    check_extensions(gen)
 
     # every declaration is in: check each struct's interface claims
     resolve_conformance(gen)
@@ -1039,9 +1068,23 @@ def complete_semantics(gen: CodeGenerator) -> None:
     if not gen.callable_inventory_complete or not gen.callables_resolved:
         raise RuntimeError(
             "callable declarations did not cross collection and resolution")
+    if not gen.declaration_inventory_complete:
+        raise RuntimeError("declaration inventory was not frozen")
     if not gen.constants_resolved:
         raise RuntimeError(
             "constant declarations did not cross semantic resolution")
+    if gen.collected_aliases != gen.resolved_aliases:
+        raise RuntimeError(
+            "alias declarations did not cross semantic resolution")
+    if gen.collected_enums != gen.resolved_enums:
+        raise RuntimeError(
+            "enum declarations did not cross semantic resolution")
+    if gen.collected_extensions != gen.resolved_extensions:
+        raise RuntimeError(
+            "extension declarations did not cross semantic resolution")
+    if gen.resolved_extensions != gen.checked_extensions:
+        raise RuntimeError(
+            "extension declarations did not cross semantic checking")
 
     pending = (
         gen.pending_conformance

@@ -84,6 +84,62 @@ interface Hashable {
 """
 
 
+def test_template_decorator_accepts_spelled_generic_receiver(run):
+    """A decorator does not append its parameters to `List<T>` twice."""
+    source = """
+    interface Hashable {
+        fn hash(const &self) -> u64;
+    }
+
+    struct List<T> {
+        value: T;
+    }
+
+    @template<T: Scalar>
+    @extend List<T>: Hashable {
+        fn hash(const &self) -> u64 {
+            return self.value as u64;
+        }
+    }
+
+    fn main() -> i32 {
+        let value: List<i32> = { 42 };
+        let text: List<char[]> = { "not scalar" };
+        return value.hash() as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_alias_resolution_sees_collected_array_family_claims(run):
+    """A generic alias may use a bounded claim declared anywhere."""
+    source = """
+    interface Hashable {
+        fn hash(const &self) -> u64;
+    }
+
+    struct Map<K: Hashable, V> {
+        key: K;
+        value: V;
+    }
+
+    @type Table = Map<char[], i32>;
+
+    @template<T: Scalar>
+    @extend T[]: Hashable {
+        fn hash(const &self) -> u64 {
+            return self.length;
+        }
+    }
+
+    fn main() -> i32 {
+        let table: Table = { "key", 42 };
+        return table.value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_bounded_extension_block_claims_and_implements_together(run):
     """
     One bounded extension block gives scalar arrays both the interface

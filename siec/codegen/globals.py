@@ -1,4 +1,4 @@
-"""Registration of '@extern let' and '@static let' global variables."""
+"""Resolution and lowering of module-level variables."""
 
 from llvmlite import ir
 
@@ -26,7 +26,7 @@ from siec.codegen.types import (
 )
 
 
-def register_globals(gen: CodeGenerator, program: Program) -> None:
+def resolve_globals(gen: CodeGenerator, program: Program) -> None:
     """
     Resolve every module-level variable without constructing LLVM storage.
     """

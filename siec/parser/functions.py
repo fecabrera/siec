@@ -678,6 +678,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
             expected = receiver
             if (receiver_params is not None
                     and receiver not in receiver_params
+                    and "<" not in receiver
                     and not receiver.endswith("[]")):
                 expected += f"<{','.join(receiver_params)}>"
 
