@@ -78,20 +78,38 @@ interface Formattable {
     } 
 }
 
-@template<T: Formattable>
-@extend T[]: Formattable {
-    fn format(const &self, modifiers: const &char[]) -> String {
-        let result = String();
-        result += '[';
-        foreach (el : enumerate(self)) {
-            if (el.index) result += ", ";
-            let tmp = el.value.format(modifiers);
-            defer tmp.destroy();
-            result += tmp;
+@template<T: Formattable> {
+    @extend T[]: Formattable {
+        fn format(const &self, modifiers: const &char[]) -> String {
+            let result = String();
+            result += '[';
+            foreach (el : enumerate(self)) {
+                if (el.index) result += ", ";
+                let tmp = el.value.format(modifiers);
+                defer tmp.destroy();
+                result += tmp;
+            }
+            result += ']';
+            return result;
         }
-        result += ']';
-        return result;
     }
+}
+
+@template<T: Iterable<char>>
+@override
+fn T[]::format(const &self, modifiers: const &char[]) -> String {
+    let result = String();
+    result += '[';
+    foreach (el : enumerate(self)) {
+        if (el.index) result += ", ";
+        let tmp = el.value.format(modifiers);
+        defer tmp.destroy();
+        result += '"';
+        result += tmp;
+        result += '"';
+    }
+    result += ']';
+    return result;
 }
 
 @override

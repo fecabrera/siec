@@ -54,9 +54,9 @@ fn Decimal::init(&self) {
     self.mpd = mpdecimal.mpd_new(self.ctx);
 }
 
-fn Decimal::init(&self, dec: const &Decimal) {
+fn Decimal::init(&self, value: const &Decimal) {
     self.init();
-    mpdecimal.mpd_copy(self.mpd, dec.mpd, self.ctx);
+    self.assign(value);
 }
 
 /**
@@ -116,6 +116,10 @@ fn Decimal::to_string(const &self) -> String {
     ptr.length = mpdecimal.mpd_to_sci_size(&ptr.data, self.mpd, 0) as u64;
     defer mpdecimal.mpd_free(ptr.data);
     return String(ptr);
+}
+
+fn Decimal::assign(&self, value: const &Decimal) {
+    mpdecimal.mpd_copy(self.mpd, value.mpd, self.ctx);
 }
 
 /**

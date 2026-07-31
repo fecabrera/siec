@@ -47,6 +47,38 @@ fn TOMLObject::init(&self, type: TOMLObjectType) {
     }
 }
 
+fn TOMLObject::string(value: const &Iterable<char>) -> TOMLObject {
+    let obj = TOMLObject(TOMLObjectType::String);
+    obj.str.assign(value);
+    return obj;
+}
+
+fn TOMLObject::array() -> TOMLObject {
+    return TOMLObject(TOMLObjectType::Array);
+}
+
+fn TOMLObject::table() -> TOMLObject {
+    return TOMLObject(TOMLObjectType::Table);
+}
+
+fn TOMLObject::integer(value: TOMLInteger) -> TOMLObject {
+    let obj = TOMLObject(TOMLObjectType::Integer);
+    obj.int = value;
+    return obj;
+}
+
+fn TOMLObject::float(value: const &Decimal) -> TOMLObject {
+    let obj = TOMLObject(TOMLObjectType::Float);
+    obj.flt.assign(value);
+    return obj;
+}
+
+fn TOMLObject::float(value: const &Iterable<char>) -> TOMLObject {
+    let obj = TOMLObject(TOMLObjectType::Float);
+    obj.flt.assign(value);
+    return obj;
+}
+
 fn TOMLObject::destroy(&self) {
     case (self.type) {
     when TOMLObjectType::String:
@@ -65,11 +97,7 @@ fn TOMLObject::destroy(&self) {
 fn TOMLObject::format(const &self, modifiers: const &char[]) -> String {
     case (self.type) {
     when TOMLObjectType::String:
-        let str = String();
-        str += '"';
-        str += self.str;
-        str += '"';
-        return str;
+        return self.str.format(modifiers);
     when TOMLObjectType::Array:
         return self.arr.format(modifiers);
     when TOMLObjectType::Table:

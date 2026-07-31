@@ -1,18 +1,18 @@
 import { println } from std.io;
+import { Decimal } from std.decimal;
 import { String } from std.collections;
 import { TOMLObject, TOMLObjectType } from toml;
 
 fn main() -> i32 {
-    let obj = TOMLObject(TOMLObjectType::Table);
+    let obj = TOMLObject::table();
     defer obj.destroy();
 
-    let v1 = TOMLObject(TOMLObjectType::Integer);
-    v1.int = 5;
-
-    obj.tab.set("hello", v1);
+    obj.tab.set("hello", TOMLObject::integer(5));
     
-    let v2 = TOMLObject(TOMLObjectType::Array);
-    obj.tab.set("world", v2);
+    let v = TOMLObject(TOMLObjectType::Array);
+    v.arr.push(TOMLObject::string("abc"));
+    v.arr.push(TOMLObject::float("3.14159"));
+    obj.tab.set("world", v);
 
     println("{}", obj);
 

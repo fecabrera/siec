@@ -4,8 +4,6 @@ import { Hashable } from std.hashing;
 import { String } from std.collections;
 import { malloc, realloc, free } from stdlib;
 
-@private @const DEFAULT_MAP_CAPACITY = 2;
-
 @private
 enum MapEntryState {
     Empty,
@@ -52,7 +50,7 @@ struct ConstMapIterator<K, V>: ConstIterator<KeyValuePair<K, V>> {
  *
  * @param capacity The initial capacity of the map.
  */
-fn Map<K, V>::init(&self, capacity: u64 = DEFAULT_MAP_CAPACITY) {
+fn Map<K, V>::init(&self, capacity: u64 = 0) {
     self.entries = malloc(capacity * @sizeof(MapEntry<K, V>)) as MapEntry<K, V>*;
     self.size = 0;
     self.capacity = capacity;
@@ -66,7 +64,8 @@ fn Map<K, V>::init(&self, capacity: u64 = DEFAULT_MAP_CAPACITY) {
  * Destroys the map and frees the memory.
  */
 fn Map<K, V>::destroy(&self) {
-    free(self.entries);
+    if (self.entries)
+        free(self.entries);
 
     self.entries = null;
     self.size = 0;
@@ -79,6 +78,22 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     foreach (entry : enumerate(self)) {
         if (entry.index) str += ", ";
         let tmp = format("{}: {}", entry.value.key, entry.value.value);
+        defer tmp.destroy();
+        str += tmp;
+    }
+    str += "}";
+
+    return str;
+}
+
+@template<K: Iterable<char>>
+@override
+fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
+    let str = String();
+    str += "{";
+    foreach (entry : enumerate(self)) {
+        if (entry.index) str += ", ";
+        let tmp = format("\"{}\": {}", entry.value.key, entry.value.value);
         defer tmp.destroy();
         str += tmp;
     }
@@ -183,7 +198,7 @@ fn Map<K, V>::remove(&self, key: const &K) -> Result<MapIndexError> {
  */
 @private
 fn Map<K, V>::grow(&self) {
-    let tmp = Map<K, V>(2 * self.capacity);
+    let tmp = Map<K, V>(self.capacity ? 2 * self.capacity : 5);
 
     foreach (entry : self) {
         tmp.set(entry.key, entry.value);

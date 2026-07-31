@@ -2,8 +2,6 @@ import { malloc, realloc, free } from stdlib;
 import { FNV1a } from std.hashing;
 import { Formattable } from std.format;
 
-@private @const DEFAULT_LIST_CAPACITY = 2;
-
 struct List<T>
     : Iterable<T>,
       GetItem<u64, T>,
@@ -25,7 +23,7 @@ struct List<T>
  *
  * @param capacity The capacity of the List.
  */
-fn List<T>::init(&self, capacity: u64 = DEFAULT_LIST_CAPACITY) {
+fn List<T>::init(&self, capacity: u64 = 0) {
     self.data = malloc(capacity * @sizeof(T)) as T*;
     self.length = 0;
     self.capacity = capacity;
@@ -55,7 +53,8 @@ fn List<T>::init(&self, arr: const &Iterable<T>) {
  * Destroy the List.
  */
 fn List<T>::destroy(&self) {
-    free(self.data);
+    if (self.data)
+        free(self.data);
 
     self.data = null;
     self.length = 0;
@@ -285,7 +284,7 @@ fn List<T>::format(const &self, modifiers: const &char[]) -> String {
  */
 @private
 fn List<T>::grow(&self) {
-    let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
+    let capacity = self.capacity ? self.capacity * 2 : 1;
     self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
     self.capacity = capacity;
 }
