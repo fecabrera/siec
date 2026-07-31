@@ -3,7 +3,7 @@
 from llvmlite import ir
 
 from siec.ast import Program
-from siec.codegen.aliases import expand_alias
+from siec.codegen.aliases import expand_alias, type_identity
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.sizes import target_data
@@ -39,15 +39,25 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
                 raise TypeError("'Tuple' is a builtin type: declarations "
                                 "cannot take its name")
 
+            identity = type_identity(gen, struct.name)
+
             # an interface is all requirement: it registers its shape
             # and stamps no storage
             if struct.is_interface:
-                if struct.name in gen.interfaces:
+                if identity == "interface":
                     raise TypeError(f"interface {struct.name!r} is declared "
+                                    "more than once")
+
+                if identity is not None:
+                    raise TypeError(f"type {struct.name!r} is declared "
                                     "more than once")
 
                 gen.interfaces[struct.name] = struct
                 continue
+
+            expected = "generic struct" if struct.params is not None else "struct"
+            if identity is not None and identity != expected:
+                raise TypeError(f"type {struct.name!r} is declared more than once")
 
             # a concrete struct's interface claims queue for checking
             # once every method is declared; a template's wait for its

@@ -2,7 +2,7 @@
 
 from siec.ast import (BinaryOp, BoolLiteral, CharLiteral, EnumMember, IntLiteral,
                       Program, SizeOf, TypeId, UnaryOp, Var)
-from siec.codegen.aliases import expand_alias
+from siec.codegen.aliases import expand_alias, type_identity
 from siec.codegen.errors import source_location
 from siec.codegen.sizes import size_of
 from siec.codegen.generator import CodeGenerator, EnumInfo, StructInfo
@@ -47,7 +47,7 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
     # or value. Evaluation can then follow references in either direction.
     for enum in program.enums:
         with source_location(line=enum.line, file=enum.file):
-            if enum.name in gen.enums or enum.name in gen.structs:
+            if type_identity(gen, enum.name) is not None:
                 raise TypeError(f"type {enum.name!r} is declared more than once")
 
             info = EnumInfo(enum.type, {})

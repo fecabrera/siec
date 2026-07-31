@@ -42,11 +42,37 @@ def register_anonymous(gen: CodeGenerator, name: str, is_union: bool,
 
 def names_type(gen: CodeGenerator, name: str) -> bool:
     """
-    Whether a name is a declared type's: a struct, enum, alias, or
-    generic template, wherever it was declared.
+    Whether a name is a declared type identity, wherever it was declared.
     """
     return (name in gen.structs or name in gen.enums or name in gen.aliases
-            or name in gen.generic_structs or name in gen.generic_aliases)
+            or name in gen.generic_structs or name in gen.generic_aliases
+            or name in gen.interfaces)
+
+
+def type_identity(gen: CodeGenerator, name: str) -> str | None:
+    """
+    The declaration category currently owning a type name.
+
+    Enums also carry an entry in 'structs' for their backing representation,
+    so the more specific registries take precedence. Keeping this arbitration
+    in one place makes every collector enforce the same type namespace.
+    """
+    if name in gen.aliases or name in gen.generic_aliases:
+        return "alias"
+
+    if name in gen.enums:
+        return "enum"
+
+    if name in gen.interfaces:
+        return "interface"
+
+    if name in gen.generic_structs:
+        return "generic struct"
+
+    if name in gen.structs:
+        return "struct"
+
+    return None
 
 
 def register_aliases(gen: CodeGenerator, program: Program) -> None:
@@ -66,8 +92,12 @@ def register_aliases(gen: CodeGenerator, program: Program) -> None:
             if alias.name in types:
                 raise TypeError(f"type {alias.name!r} is declared more than once")
 
-            if alias.name in gen.aliases or alias.name in gen.generic_aliases:
+            identity = type_identity(gen, alias.name)
+            if identity == "alias":
                 raise TypeError(f"type alias {alias.name!r} is declared more than once")
+
+            if identity is not None:
+                raise TypeError(f"type {alias.name!r} is declared more than once")
 
             # a generic alias is a template, expanded when a concrete
             # 'a<args>' spelling supplies its arguments

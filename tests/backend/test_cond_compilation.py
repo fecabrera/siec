@@ -105,6 +105,81 @@ def test_the_unchosen_branch_never_compiles(run):
     assert result.returncode == 42
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        """
+        struct S { value: i32; }
+        @if (true) { @type S = i32; }
+        """,
+        """
+        @type S = i32;
+        @if (true) { struct S { value: i32; } }
+        """,
+        """
+        @if (true) { @type S = i32; }
+        @if (true) { struct S { value: i32; } }
+        """,
+        """
+        struct Trigger { value: i32; }
+        struct S { value: i32; }
+        @if (@sizeof(Trigger) == 4) { @type S = i32; }
+        """,
+        """
+        struct Trigger { value: i32; }
+        @type S = i32;
+        @if (@sizeof(Trigger) == 4) {
+            struct S { value: i32; }
+        }
+        """,
+    ],
+)
+def test_chosen_branch_types_share_the_type_namespace(compile_source, source):
+    """
+    Direct and selected declarations use one type namespace, whichever
+    collector sees the alias or struct first.
+    """
+    with pytest.raises(TypeError, match="type 'S' is declared more than once"):
+        compile_source(source)
+
+
+def test_chosen_branch_constants_share_the_constant_namespace(compile_source):
+    """
+    Constants use the same duplicate check inside and outside a selected
+    branch, matching the type-identity rule.
+    """
+    with pytest.raises(TypeError, match="constant 'VALUE' is declared more "
+                                        "than once"):
+        compile_source("""
+        @const VALUE = 1;
+        @if (true) {
+            @const VALUE = 2;
+        }
+        """)
+
+
+def test_unchosen_type_collision_is_inactive(run):
+    """
+    An inactive declaration owns no identity and therefore cannot collide
+    with the selected program's type namespace.
+    """
+    result = run("""
+        struct S {
+            value: i32;
+        }
+
+        @if (false) {
+            @type S = i32;
+        }
+
+        fn main() -> i32 {
+            let value: S = {42};
+            return value.value;
+        }
+    """)
+    assert result.returncode == 42
+
+
 def test_conditions_follow_the_target():
     """
     Target constants inside '@if' see the compilation target's values.

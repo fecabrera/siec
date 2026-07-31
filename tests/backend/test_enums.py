@@ -46,7 +46,7 @@ def test_member_values_may_reference_later_enums(run):
     build on an enum declared later in the compilation unit.
     """
     source = """
-    enum Result {
+    enum Outcome {
         BASE = Values::FORTY_ONE,
         ANSWER,
     }
@@ -56,7 +56,7 @@ def test_member_values_may_reference_later_enums(run):
     }
 
     fn main() -> i32 {
-        return Result::ANSWER as i32;
+        return Outcome::ANSWER as i32;
     }
     """
     assert run(source).returncode == 42

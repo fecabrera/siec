@@ -1758,6 +1758,8 @@ Type aliases give an existing type expression a new name. They're declared throu
 @type fnc3 = fn(char[]);
 ```
 
+Aliases, enums, structs, generic structs, and interfaces share one type-name namespace: a name owned by one cannot be redeclared as another. A declaration in a chosen `@if` branch follows the same rule as a direct declaration, while an inactive branch owns no name.
+
 #### Generic type aliases
 
 Type aliases are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.
