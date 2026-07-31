@@ -72,10 +72,10 @@ interface Formattable {
     }
 }
 
-@extend char[]: Formattable {
+@extend char: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
-        return format_str(self, modifiers);
-    }
+        return String(self);
+    } 
 }
 
 @template<T: Formattable>
@@ -92,4 +92,9 @@ interface Formattable {
         result += ']';
         return result;
     }
+}
+
+@override
+@inline fn char[]::format(const &self, modifiers: const &char[]) -> String {
+    return format_str(self, modifiers);
 }
