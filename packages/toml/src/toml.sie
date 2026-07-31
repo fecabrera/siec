@@ -79,6 +79,12 @@ fn TOMLObject::float(value: const &Iterable<char>) -> TOMLObject {
     return obj;
 }
 
+fn TOMLObject::bool(value: bool) -> TOMLObject {
+    let obj = TOMLObject(TOMLObjectType::Bool);
+    obj.bol = value;
+    return obj;
+}
+
 fn TOMLObject::destroy(&self) {
     case (self.type) {
     when TOMLObjectType::String:

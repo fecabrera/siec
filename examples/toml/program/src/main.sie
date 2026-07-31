@@ -9,10 +9,12 @@ fn main() -> i32 {
 
     obj.tab.set("hello", TOMLObject::integer(5));
     
-    let v = TOMLObject(TOMLObjectType::Array);
+    let v = TOMLObject::array();
     v.arr.push(TOMLObject::string("abc"));
     v.arr.push(TOMLObject::float("3.14159"));
+    
     obj.tab.set("world", v);
+    obj.tab.set("def", TOMLObject::bool(true));
 
     println("{}", obj);
 
