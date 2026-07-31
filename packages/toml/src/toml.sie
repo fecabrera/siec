@@ -97,7 +97,11 @@ fn TOMLObject::destroy(&self) {
 fn TOMLObject::format(const &self, modifiers: const &char[]) -> String {
     case (self.type) {
     when TOMLObjectType::String:
-        return self.str.format(modifiers);
+        let str = String();
+        str += '"';
+        str += self.str;
+        str += '"';
+        return str;
     when TOMLObjectType::Array:
         return self.arr.format(modifiers);
     when TOMLObjectType::Table:
