@@ -270,6 +270,8 @@ class CodeGenerator:
 
         # the registered '@const' declarations by name, substituted at their uses
         self.constants: dict = {}
+        self.resolved_constants: set[int] = set()
+        self.constants_resolved = False
 
         # the registered '@const' macros by name, expanded at their calls
         self.macros: dict = {}
@@ -809,8 +811,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     """
     from siec.codegen.aliases import register_aliases
     from siec.codegen.conditionals import check_asserts, resolve_conditionals
-    from siec.codegen.constants import (register_builtin_constants,
-                                        register_constants)
+    from siec.codegen.constants import (
+        register_builtin_constants,
+        register_constants,
+        resolve_constants,
+    )
     from siec.codegen.enums import register_enums
     from siec.codegen.callables import (
         collect_callables,
@@ -849,6 +854,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.structs = [*prelude.structs, *program.structs]
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
+    gen.builtin_names.update(struct.name for struct in prelude.structs)
     gen.builtin_names.update(("Result", "Ok", "Error", "Scalar",
                               "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",
@@ -903,9 +909,17 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # that inventory before resolving globals or any callable header.
     complete_callable_inventory(gen, program)
 
-    # Every selected declaration and claim is now available. Globals and
-    # callable signatures resolve against the same complete type environment.
+    # Resolve every generic/interface type header against the complete active
+    # inventory, even when no body or expression uses it.
+    from siec.codegen.headers import resolve_type_declaration_headers
+
+    resolve_type_declaration_headers(gen, program)
+
+    # Globals join the resolved value inventory before constants, since a
+    # constant '@sizeof' or '@typeid' may name one. Then resolve every constant
+    # target regardless of whether a later expression uses its value.
     register_globals(gen, program)
+    resolve_constants(gen)
 
     from siec.codegen.interfaces import (
         prepare_extension_methods,
@@ -1025,6 +1039,9 @@ def complete_semantics(gen: CodeGenerator) -> None:
     if not gen.callable_inventory_complete or not gen.callables_resolved:
         raise RuntimeError(
             "callable declarations did not cross collection and resolution")
+    if not gen.constants_resolved:
+        raise RuntimeError(
+            "constant declarations did not cross semantic resolution")
 
     pending = (
         gen.pending_conformance

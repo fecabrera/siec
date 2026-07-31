@@ -269,3 +269,101 @@ def check_constant(gen: CodeGenerator, expr: Expr, chain: list[str],
         return
 
     raise TypeError(f"constant {chain[0]!r} must be a constant expression")
+
+
+def resolve_constants(gen: CodeGenerator) -> None:
+    """
+    Resolve every registered constant declaration, whether it is used or not.
+
+    Registration has already established that each value has constant
+    expression syntax. This phase follows the dependency graph and validates
+    enum members, type operators, cast targets, and annotations against the
+    complete active type inventory.
+    """
+    if gen.constants_resolved:
+        raise RuntimeError("constant declarations were resolved more than once")
+
+    active: list[Const] = []
+
+    def resolve_declaration(const: Const) -> None:
+        identity = id(const)
+        if identity in gen.resolved_constants:
+            return
+
+        active_ids = [id(item) for item in active]
+        if identity in active_ids:
+            start = active_ids.index(identity)
+            cycle = " -> ".join(
+                item.name for item in [*active[start:], const])
+            raise TypeError(f"constant cycle: {cycle}")
+
+        active.append(const)
+        try:
+            with source_location(line=const.line, file=const.file):
+                with constant_view(gen, const):
+                    if const.type is not None:
+                        from siec.codegen.headers import resolve_header_type
+
+                        const.type = resolve_header_type(gen, const.type)
+                    resolve_expression(const.value)
+        finally:
+            active.pop()
+
+        gen.resolved_constants.add(identity)
+
+    def resolve_expression(expr: Expr) -> None:
+        if isinstance(expr, LITERALS):
+            return
+
+        if isinstance(expr, EnumMember):
+            from siec.codegen.enums import member_value
+
+            member_value(gen, expr)
+            return
+
+        if isinstance(expr, SizeOf):
+            from siec.codegen.sizes import size_of
+
+            size_of(gen, expr.name)
+            return
+
+        if isinstance(expr, TypeId):
+            from siec.codegen.expressions import typename_of
+
+            typename_of(gen, expr.name, {})
+            return
+
+        if isinstance(expr, Var):
+            other = find_constant(
+                gen,
+                expr.name,
+                getattr(expr, "module_file", None),
+            )
+            if other is None:
+                raise TypeError(f"{expr.name!r} is not a compile-time constant")
+            resolve_declaration(other)
+            return
+
+        if isinstance(expr, UnaryOp):
+            resolve_expression(expr.operand)
+            return
+
+        if isinstance(expr, BinaryOp):
+            resolve_expression(expr.left)
+            resolve_expression(expr.right)
+            return
+
+        if isinstance(expr, Cast):
+            resolve_expression(expr.operand)
+            from siec.codegen.headers import resolve_header_type
+
+            expr.type = resolve_header_type(gen, expr.type)
+            return
+
+        raise TypeError("value must be a constant expression")
+
+    for declarations in gen.constants.values():
+        for const in declarations:
+            resolve_declaration(const)
+
+    gen.constants_resolved = True

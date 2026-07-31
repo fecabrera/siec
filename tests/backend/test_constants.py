@@ -113,3 +113,74 @@ def test_duplicate_constant_is_an_error(compile_source):
     """
     with pytest.raises(TypeError, match="declared more than once"):
         compile_source(source)
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "@const VALUE = Missing::member;",
+        "@const VALUE = @sizeof(Missing);",
+        "@const VALUE = @typeid(Missing);",
+        "@const VALUE: Missing = 0;",
+        "@const VALUE = 0 as Missing;",
+    ],
+)
+def test_unused_constants_resolve_all_type_targets(
+        compile_source, declaration):
+    """An invalid constant declaration fails even when nothing uses it."""
+    with pytest.raises((NameError, TypeError), match="Missing"):
+        compile_source(declaration + " fn main() -> i32 { return 0; }")
+
+
+def test_unused_constants_resolve_forward_enum_and_type_targets(run):
+    """Constant targets may appear later because resolution follows collection."""
+    source = """
+    @const VALUE = @sizeof(Later) + Kind::one;
+    @const ID = @typeid(Later);
+
+    enum Kind {
+        one = 1
+    }
+
+    struct Later {
+        value: i32;
+    }
+
+    fn main() -> i32 {
+        return VALUE;
+    }
+    """
+    assert run(source).returncode == 5
+
+
+def test_constant_dependencies_propagate_resolution_errors(compile_source):
+    """Every dependency is resolved even when only its parent is inventoried."""
+    with pytest.raises(TypeError, match="unknown type 'Missing'"):
+        compile_source("""
+        @const FIRST = SECOND;
+        @const SECOND = @sizeof(Missing);
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_constant_type_operators_can_name_globals(run):
+    """Globals join the value inventory before constant targets resolve."""
+    source = """
+    @static let stored: i64;
+    @const SIZE = @sizeof(stored);
+
+    fn main() -> i32 {
+        return SIZE as i32;
+    }
+    """
+    assert run(source).returncode == 8
+
+
+def test_inactive_invalid_constants_do_not_exist(compile_source):
+    """Only constants from selected conditional branches are resolved."""
+    compile_source("""
+    @if (false) {
+        @const INVALID = @sizeof(Missing);
+    }
+    fn main() -> i32 { return 0; }
+    """)

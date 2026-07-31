@@ -62,6 +62,7 @@ def resolve_callables(gen: CodeGenerator) -> None:
 
     from siec.codegen.functions import resolve_function
     from siec.codegen.generics import register_generic_function
+    from siec.codegen.headers import resolve_callable_header
     from siec.codegen.interfaces import (
         adapt_interface_params,
         register_action,
@@ -72,10 +73,12 @@ def resolve_callables(gen: CodeGenerator) -> None:
             gen.callable_declarations,
             key=lambda declaration: declaration.is_override):
         if fn.receiver is not None and fn.receiver in gen.interfaces:
+            resolve_callable_header(gen, fn, interface_action=True)
             register_action(gen, fn)
             continue
 
         adapt_interface_params(gen, fn)
+        resolve_callable_header(gen, fn)
 
         if fn.receiver is not None:
             register_method(gen, fn)
