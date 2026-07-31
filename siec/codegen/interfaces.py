@@ -33,17 +33,20 @@ def declaration_view(gen: CodeGenerator, file: str):
         gen.current_file = previous
 
 
-def find_interface_spelling(gen: CodeGenerator, text: str | None):
+def find_interface_spelling(gen: CodeGenerator, text: str | None,
+                            shadowed=frozenset()):
     """
     The first complete interface spelling inside a type name: the bare
     name or, with its '<...>', the whole generic form. Returns the
-    spelling with its start and end, or None.
+    spelling with its start and end, or None. Lexical type parameters
+    shadow same-named interfaces.
     """
     if not text:
         return None
 
     for match in IDENT.finditer(text):
-        if match.group() not in gen.interfaces:
+        if (match.group() in shadowed
+                or match.group() not in gen.interfaces):
             continue
 
         end = match.end()
@@ -94,12 +97,16 @@ def adapt_interface_params(gen: CodeGenerator, fn) -> None:
     previous, gen.current_file = gen.current_file, fn.file
     try:
         constraints = {}
+        shadowed = frozenset(
+            [*(fn.receiver_params or ()), *(fn.type_params or ())]
+        )
 
         # a method's '&self' receiver stands for its own type, never an
         # interface; a static method's first parameter adapts like any
         start = 1 if takes_self(fn) else 0
         for param in fn.params[start:]:
-            while (found := find_interface_spelling(gen, param.type)) is not None:
+            while (found := find_interface_spelling(
+                    gen, param.type, shadowed)) is not None:
                 spelling, begin, end = found
 
                 # 'Iterable<T>[]' constrains the whole array argument:
@@ -113,7 +120,8 @@ def adapt_interface_params(gen: CodeGenerator, fn) -> None:
                 constraints[placeholder] = spelling
 
         with source_location(line=fn.line, file=fn.file):
-            if find_interface_spelling(gen, fn.return_type) is not None:
+            if find_interface_spelling(
+                    gen, fn.return_type, shadowed) is not None:
                 raise TypeError(f"function {fn.name!r} cannot return an "
                                 "interface value: return the concrete "
                                 "struct type")

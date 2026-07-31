@@ -212,6 +212,29 @@ def test_alias_cannot_collide_with_a_struct(compile_source):
         """)
 
 
+@pytest.mark.parametrize(
+    "declarations",
+    [
+        "@type Shared = i32; enum Shared { value }",
+        "enum Shared { value } struct Shared<T> { value: T; }",
+        "interface Shared; struct Shared { value: i32; }",
+        "struct Shared { value: i32; } interface Shared;",
+        "struct Shared<T> { value: T; } struct Shared { value: i32; }",
+        "struct Shared { value: i32; } struct Shared<T> { value: T; }",
+        "@type Shared<T> = T; struct Shared<U> { value: U; }",
+    ],
+)
+def test_type_declaration_categories_share_a_namespace(
+        compile_source, declarations):
+    """
+    Every type declaration category consults the same collision rule,
+    independent of the collectors' fixed order or the source order.
+    """
+    with pytest.raises(TypeError, match="type 'Shared' is declared more "
+                                        "than once"):
+        compile_source(declarations)
+
+
 def test_deriving_from_a_modified_target_is_an_error(compile_source):
     """
     '*' or '[]' on an alias whose target carries 'const' or '&' would

@@ -1099,6 +1099,8 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
                        // that can be replaced by any concrete types at compile time
 ```
 
+A type parameter is lexical: inside its function, method, receiver family, struct, interface, or alias, it wins over a same-named type or interface declared outside the template. The rule follows the placeholder through derived and nested forms such as `T[]`, `Box<T>`, and `fn(T) -> T`; outside the template, the global declaration keeps its ordinary meaning.
+
 A parameter may carry a bound after `:`. An interface bound accepts any type that implements it; any other type-like bound—an intrinsic, alias, or struct—accepts that canonical type exactly. Bounds may refer to the other parameters, and apply whether the call infers its arguments or spells them:
 
 ```

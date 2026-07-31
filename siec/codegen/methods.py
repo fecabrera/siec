@@ -56,7 +56,7 @@ def concrete_type_like(gen: CodeGenerator, spelling: str) -> bool:
         return (is_type_name(gen, parts[0])
                 and all(concrete_type_like(gen, arg) for arg in parts[1]))
 
-    return is_type_name(gen, spelling) or spelling in gen.interfaces
+    return is_type_name(gen, spelling)
 
 
 def select_method_overrides(gen: CodeGenerator, base: str, method: str,
@@ -214,9 +214,12 @@ def register_method(gen: CodeGenerator, fn) -> None:
                 if fn.is_private:
                     gen.private_methods.setdefault(
                         fn.name, set()).add(fn.file)
-                fn.return_type = expand_alias(gen, fn.return_type)
+                parameters = frozenset(fn.type_params)
+                fn.return_type = expand_alias(
+                    gen, fn.return_type, parameters=parameters)
                 for param in fn.params:
-                    param.type = expand_alias(gen, param.type)
+                    param.type = expand_alias(
+                        gen, param.type, parameters=parameters)
             finally:
                 gen.current_file = previous
 

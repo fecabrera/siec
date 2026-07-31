@@ -49,6 +49,79 @@ def test_interface_parameters_take_any_implementer(run):
     assert run(source).returncode == 0
 
 
+def test_type_parameters_shadow_same_named_interfaces(run):
+    """
+    Lexical function, method, and receiver parameters win over global
+    interfaces with the same names; a genuine interface parameter beside
+    them still adapts normally.
+    """
+    source = """
+    interface I;
+    interface T;
+
+    struct Marker: I {}
+
+    struct Box<T> {
+        value: T;
+    }
+
+    fn Box<T>::get(const &self) -> T {
+        return self.value;
+    }
+
+    struct P {}
+
+    fn P::identity<T>(const &self, value: T) -> T {
+        return value;
+    }
+
+    fn identity<T>(value: T) -> T {
+        return value;
+    }
+
+    fn mixed<T>(value: T, marker: I) -> T {
+        return value;
+    }
+
+    fn main() -> i32 {
+        let marker: Marker;
+        let box: Box<i32> = {11};
+        let p: P;
+
+        return identity(10) + box.get() + p.identity(12)
+               + mixed(9, marker);
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_generic_method_type_shapes_keep_lexical_parameters(run):
+    """
+    Placeholder precedence reaches through derived and function-reference
+    types while a generic method's signature is registered.
+    """
+    source = """
+    interface T;
+
+    struct P {}
+
+    fn P::apply<T>(const &self, values: T[], transform: fn(T) -> T) -> T {
+        return transform(values[0]);
+    }
+
+    fn bump(value: i32) -> i32 {
+        return value + 1;
+    }
+
+    fn main() -> i32 {
+        let p: P;
+        let values: i32[] = [41];
+        return p.apply(values, bump);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_generic_interfaces(run):
     """
     'interface Iterator<T>;' with a generic action, implemented by a
