@@ -141,6 +141,14 @@ class CodeGenerator:
         # lowers this inventory only after semantic checking has completed.
         self.resolved_functions: dict[str, Function] = {}
         self.function_signatures: dict[str, tuple] = {}
+        # Raw callable declarations are collected before their type-bearing
+        # headers resolve. The written-name index is the declaration-phase
+        # view; later registries hold canonical resolved symbols.
+        self.raw_callables: dict[str, list[Function]] = {}
+        self.callable_declarations: list[Function] = []
+        self.collected_callables: set[int] = set()
+        self.callable_inventory_complete = False
+        self.callables_resolved = False
         # the symbols declared '@noreturn', whose bodies must not return
         self.noreturns: set[str] = set()
         # each overloaded name's candidates: (signature key, symbol) pairs,
@@ -804,13 +812,12 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.constants import (register_builtin_constants,
                                         register_constants)
     from siec.codegen.enums import register_enums
-    from siec.codegen.functions import (
-        emit_function,
-        lower_functions,
-        resolve_function,
+    from siec.codegen.callables import (
+        collect_callables,
+        complete_callable_inventory,
+        resolve_callables,
     )
-    from siec.codegen.generics import register_generic_function
-    from siec.codegen.methods import register_method
+    from siec.codegen.functions import emit_function, lower_functions
     from siec.codegen.globals import lower_globals, register_globals
     from siec.codegen.structs import declare_structs, define_structs
 
@@ -859,10 +866,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     register_constants(gen, program)
     resolve_conditionals(gen, program, defer_types=True)
 
-    # Collection inventories every active type/interface identity and
-    # extension claim without resolving struct fields. Nothing in the
-    # following resolution phase may depend on source or module traversal
-    # order.
+    # Collection inventories every active type/interface and callable
+    # identity, plus extension claims, without resolving struct fields or
+    # callable headers. Nothing in the following resolution phase may depend
+    # on source or module traversal order.
+    collect_callables(gen, program)
     register_enums(gen, program)
     declare_structs(gen, program)
 
@@ -879,6 +887,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     define_structs(gen, program)
 
     def register_conditional_branch(branch) -> None:
+        collect_callables(gen, branch)
         register_enums(gen, branch)
         declare_structs(gen, branch)
         predeclare_extends(gen, branch)
@@ -890,35 +899,22 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         register_branch=register_conditional_branch,
     )
 
-    # Every selected declaration and claim is now resolved. Globals and
-    # callable signatures follow with the same complete type environment.
+    # Every selected branch has now contributed its raw callables. Freeze
+    # that inventory before resolving globals or any callable header.
+    complete_callable_inventory(gen, program)
+
+    # Every selected declaration and claim is now available. Globals and
+    # callable signatures resolve against the same complete type environment.
     register_globals(gen, program)
 
     from siec.codegen.interfaces import (
-        adapt_interface_params,
         prepare_extension_methods,
-        register_action,
         resolve_conformance,
         run_conformance,
     )
 
     prepare_extension_methods(gen, program)
-    # Ordinary declarations enter first regardless of source order, giving
-    # every '@override' the complete target inventory it is checked against.
-    for fn in sorted(program.functions, key=lambda declaration:
-                     declaration.is_override):
-        if fn.receiver is not None and fn.receiver in gen.interfaces:
-            register_action(gen, fn)
-            continue
-
-        adapt_interface_params(gen, fn)
-
-        if fn.receiver is not None:
-            register_method(gen, fn)
-        elif fn.type_params is not None:
-            register_generic_function(gen, fn)
-        else:
-            resolve_function(gen, fn)
+    resolve_callables(gen)
 
     from siec.codegen.overrides import validate_concrete_overrides
 
@@ -1025,6 +1021,10 @@ def complete_semantics(gen: CodeGenerator) -> None:
     identified type already present here is a phase-boundary violation.
     """
     from siec.codegen.sizes import type_layout
+
+    if not gen.callable_inventory_complete or not gen.callables_resolved:
+        raise RuntimeError(
+            "callable declarations did not cross collection and resolution")
 
     pending = (
         gen.pending_conformance

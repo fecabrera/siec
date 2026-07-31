@@ -49,11 +49,13 @@ siec main.sie --run arg1 arg2
 Compilation is declaration-order independent. A source file, an include, or an imported module cannot change meaning merely by moving a type or extension before or after the code that uses it. The compiler keeps that guarantee through four ordered phases:
 
 1. **Parse.** Parse every source in the compilation unit into syntax trees before asking what any type means.
-2. **Collect.** Collect definitions, type and interface identities, generic templates, and interface claims—including bounded `@extend` families—across the whole unit.
+2. **Collect.** Collect definitions, type and interface identities, raw callable declarations, generic templates, and interface claims—including bounded `@extend` families—across the whole unit.
 3. **Resolve.** Resolve aliases, fields, callable signatures, generic arguments, and bounds against that complete inventory.
 4. **Check.** Check assertions, required extension methods, interface conformance, and function bodies only after resolution has made every relevant declaration available.
 
 This ordering is a compiler invariant, not a source-order rule. For example, `@template<T: Scalar> @extend T[]: Hashable` makes `char[]` available to a `Map<K: Hashable, V>` field even when the extension is declared later or arrives through another module. Compiler changes should preserve the phase boundary: no dependent field or signature may resolve, and no bound may be rejected, while the claim inventory is incomplete.
+
+Callable collection records written declarations only. Receiver canonicalization, interface-parameter adaptation, overload and override identities, signatures, and bounds wait until the active callable inventory is complete; a callable selected by a type-dependent conditional joins that inventory before it is frozen and resolved.
 
 Reachable generic instances follow the same ordering through a fixed-point worklist. A call first requests an instance; the compiler substitutes and resolves its header and bounds, then queues its body for checking. That body may request more instances or instantiate types carrying new interface claims, so the compiler repeats resolution and checking until no work remains. Conformance checks only inspect methods specialized during resolution—they never specialize a receiver family themselves.
 
