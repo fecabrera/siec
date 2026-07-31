@@ -225,6 +225,39 @@ def test_template_decorator_supplies_one_declaration(ts):
                for fn in program.functions)
 
 
+def test_template_decorator_bounds_subset_of_generic_receiver(ts):
+    """A decorator keeps unconstrained receiver parameters in the family."""
+    program = parse_program(ts("""
+    @template<K: Hashable>
+    @override
+    fn Map<K, V>::hash(const &self) -> u64 { return 42; }
+    """))
+
+    method = program.functions[0]
+    assert method.receiver == "Map"
+    assert method.receiver_params == ["K", "V"]
+    assert method.receiver_constraints == {"K": "Hashable"}
+    assert method.params[0] == Param("self", "const &Map<K,V>")
+
+
+def test_template_decorator_parameter_must_belong_to_receiver(ts):
+    """A decorator cannot introduce an unrelated receiver parameter."""
+    with pytest.raises(SyntaxError, match="parameter 'T'.*not occur"):
+        parse_program(ts("""
+        @template<T: Hashable>
+        fn Map<K, V>::hash(const &self) -> u64 { return 42; }
+        """))
+
+
+def test_template_decorator_rejects_conflicting_receiver_bound(ts):
+    """One receiver parameter cannot acquire two different bounds."""
+    with pytest.raises(SyntaxError, match="conflicting bounds"):
+        parse_program(ts("""
+        @template<K: Hashable>
+        fn Map<K: Scalar, V>::hash(const &self) -> u64 { return 42; }
+        """))
+
+
 def test_forward_declaration_has_no_body(ts):
     """
     A signature ending in ';' parses as a declaration with body None.

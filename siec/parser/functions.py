@@ -193,22 +193,38 @@ def apply_template_environment(program: Program, params: list[str],
             raise SyntaxError(f"line {fn.line}: an '@template' declaration "
                               "must be an extension or a method")
 
-        require_template_receiver(fn.receiver, params, fn.line)
-        receiver_params = set(fn.receiver_params or ())
-        if receiver_params and receiver_params != set(params):
-            raise SyntaxError(f"line {fn.line}: method receiver parameters "
-                              "must match its '@template' parameters")
+        receiver_params = list(fn.receiver_params or ())
+        require_template_receiver(
+            fn.receiver, params, fn.line, receiver_params)
 
-        fn.receiver_params = list(params)
-        fn.receiver_constraints = dict(constraints or {})
+        # A spelled generic receiver introduces all of its placeholders.
+        # The environment may constrain only some of them, as in
+        # '@template<K: I> fn Map<K, V>::f'. Keep V in the receiver family
+        # while adding K's bound.
+        if not receiver_params:
+            fn.receiver_params = list(params)
+
+        receiver_constraints = dict(fn.receiver_constraints or {})
+        for param, bound in (constraints or {}).items():
+            previous = receiver_constraints.get(param)
+            if previous is not None and previous != bound:
+                raise SyntaxError(f"line {fn.line}: receiver parameter "
+                                  f"{param!r} has conflicting bounds "
+                                  f"{previous!r} and {bound!r}")
+            receiver_constraints[param] = bound
+        fn.receiver_constraints = receiver_constraints
 
 
 def require_template_receiver(receiver: str, params: list[str],
-                              line: int) -> None:
+                              line: int,
+                              receiver_params: list[str] | None = None) -> None:
     """Require every environment parameter to occur in its receiver type."""
+    declared = set(receiver_params or ())
     missing = [
         param for param in params
-        if re.search(rf"(?<!\w){re.escape(param)}(?!\w)", receiver) is None
+        if (param not in declared
+            and re.search(
+                rf"(?<!\w){re.escape(param)}(?!\w)", receiver) is None)
     ]
     if missing:
         shown = ", ".join(repr(param) for param in missing)

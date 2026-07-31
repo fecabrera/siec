@@ -114,6 +114,33 @@ def test_bounded_array_override_falls_back_outside_its_bound(run):
     assert run(source).returncode == 42
 
 
+def test_bounded_override_constrains_subset_of_receiver_parameters(run):
+    """An override may bound K while preserving Map's unconstrained V."""
+    source = """
+    interface Special;
+    struct Item {}
+    @extend Item: Special;
+
+    struct Map<K, V> {
+        key: K;
+        value: V;
+    }
+
+    fn Map<K, V>::answer(const &self) -> i32 { return 1; }
+
+    @template<K: Special>
+    @override
+    fn Map<K, V>::answer(const &self) -> i32 { return 42; }
+
+    fn main() -> i32 {
+        let special: Map<Item, i32> = {{}, 0};
+        let ordinary: Map<i32, char> = {0, 'x'};
+        return special.answer() + ordinary.answer() - 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_bounded_generic_function_override_is_more_specific(run):
     """The same override rule applies to constrained generic functions."""
     source = """

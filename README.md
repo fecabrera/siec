@@ -2526,6 +2526,8 @@ fn T[]::first(const &self) -> T { return self[0]; }
 
 Every template parameter must occur in the receiver type; ordinary generic functions and a method's own generic parameters keep declaring their parameters on `fn`. A bare receiver blankets the matching types themselves (`@extend T: Hashable`); a constructed receiver such as `T[]` blankets that family. The bound gates both the claims and methods. In the examples `i32[]` gets `Hashable`, `hash`, and `first`, while a struct's array gets none of them. The older compact header, `@extend<T: Scalar> T[]: Hashable`, remains accepted as the declaration-wise equivalent.
 
+A decorator may constrain only part of an already-generic receiver. `@template<K: Hashable> @override fn Map<K, V>::hash(...)` applies the bound to `K` while `V` remains an unconstrained parameter of the `Map<K, V>` receiver family. Parameters written on the receiver are preserved; the decorator adds bounds rather than replacing the receiver's parameter list.
+
 Arrays still extend without a bound in two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. The block and separate spellings are interchangeable:
 
 ```
