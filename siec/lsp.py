@@ -23,7 +23,7 @@ from siec.codegen import CodeGenerator, codegen
 from siec.codegen.generator import Variable
 from siec.codegen.types import is_reference, strip_const, strip_reference
 from siec.lexer import Token, lex
-from siec.loader import ParsedProgramCache, load_program
+from siec.loader import ParsedProgramCache, discover_program
 from siec.parser import parse
 
 if TYPE_CHECKING:
@@ -428,7 +428,7 @@ def compile_unit(path: Path, include_paths: list[Path],
     report = None
     dependencies: set[str] = set()
     try:
-        program = load_program(
+        program = discover_program(
             [path],
             paths,
             overlays=overlays,

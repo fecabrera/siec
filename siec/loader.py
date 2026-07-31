@@ -1,4 +1,4 @@
-"""Loading of source files and resolution of includes."""
+"""Phase 0: source discovery, selection, parsing, and unit assembly."""
 
 import copy
 from collections.abc import Iterable
@@ -179,13 +179,18 @@ def resolve_module(path: str, importer_dir: Path, include_paths: list[Path],
     raise FileNotFoundError(f"cannot resolve import {path!r}")
 
 
-def load_program(sources: list[Path], include_paths: list[Path],
-                 target: str | None = None,
-                 overlays: dict[str, str] | None = None,
-                 cache: ParsedProgramCache | None = None,
-                 dependencies: set[str] | None = None) -> Program:
+def discover_program(sources: list[Path], include_paths: list[Path],
+                     target: str | None = None,
+                     overlays: dict[str, str] | None = None,
+                     cache: ParsedProgramCache | None = None,
+                     dependencies: set[str] | None = None) -> Program:
     """
-    Parse source files and their includes (recursively) into a single merged Program.
+    Discover and parse the selected source graph into one compilation unit.
+
+    This is compilation phase 0. Imports and includes recursively discover the
+    unit; conditions guarding includes select files with the loader-safe
+    constant environment. Every selected file is parsed before this function
+    returns, and no semantic type lookup occurs here.
 
     The target triple decides conditional includes; the host's when none
     is given, matching codegen.
@@ -529,3 +534,19 @@ def load_program(sources: list[Path], include_paths: list[Path],
     merged.entry_files = [str(source.resolve()) for source in sources]
     merged.unit_files = unit_files
     return merged
+
+
+def load_program(sources: list[Path], include_paths: list[Path],
+                 target: str | None = None,
+                 overlays: dict[str, str] | None = None,
+                 cache: ParsedProgramCache | None = None,
+                 dependencies: set[str] | None = None) -> Program:
+    """Compatibility wrapper for :func:`discover_program`."""
+    return discover_program(
+        sources,
+        include_paths,
+        target,
+        overlays,
+        cache,
+        dependencies,
+    )

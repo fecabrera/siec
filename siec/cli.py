@@ -16,7 +16,7 @@ from siec.backend import (
 )
 from siec.codegen import codegen
 from siec.codegen.errors import display_path
-from siec.loader import load_program
+from siec.loader import discover_program
 
 
 def host_triple() -> str:
@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     # includes define here, while an imported module only declares, its
     # definitions coming from its own unit at link
     try:
-        program = load_program(sources, include_paths, opts.target)
+        program = discover_program(sources, include_paths, opts.target)
         module = codegen(program, str(sources[0]), opts.target, opts.debug,
                          define_imports=not opts.compile_only)
     except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:

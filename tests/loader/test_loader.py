@@ -2,7 +2,7 @@
 
 import pytest
 
-from siec.loader import load_program, resolve_include
+from siec.loader import discover_program, load_program, resolve_include
 
 
 def write(path, text):
@@ -257,10 +257,10 @@ def test_conditional_include_loads_the_chosen_arm(tmp_path):
         fn main() {}
     """)
 
-    program = load_program([main], [], "arm64-apple-darwin")
+    program = discover_program([main], [], "arm64-apple-darwin")
     assert [fn.name for fn in program.functions] == ["on_darwin", "main"]
 
-    program = load_program([main], [], "x86_64-unknown-linux-gnu")
+    program = discover_program([main], [], "x86_64-unknown-linux-gnu")
     assert [fn.name for fn in program.functions] == ["on_linux", "main"]
 
 

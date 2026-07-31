@@ -46,9 +46,10 @@ siec main.sie --run arg1 arg2
 
 ### Compilation phases
 
-Compilation is declaration-order independent. A source file, an include, or an imported module cannot change meaning merely by moving a type or extension before or after the code that uses it. The compiler keeps that guarantee through four ordered phases:
+Compilation is declaration-order independent. A source file, an include, or an imported module cannot change meaning merely by moving a type or extension before or after the code that uses it. The loader first establishes the compilation unit, then the compiler keeps that guarantee through four semantic phases:
 
-1. **Parse.** Parse every source in the compilation unit into syntax trees before asking what any type means.
+0. **Discover and select.** Starting from the requested source files, recursively discover imports and includes. Files are parsed as they are discovered so their dependency directives are visible. A condition guarding an include selects its branch using only the [loader-safe constant environment](#conditional-compilation). The result is the complete selected source graph.
+1. **Parse.** At the phase-0 handoff, every selected source has a syntax tree and every syntax error has been reported before the compiler asks what any type means.
 2. **Collect.** Collect definitions, type and interface identities, raw callable declarations, generic templates, and interface claims—including bounded `@extend` families—across the whole unit.
 3. **Resolve.** Resolve aliases, fields, callable signatures, generic arguments, and bounds against that complete inventory.
 4. **Check.** Check assertions, required extension methods, interface conformance, and function bodies only after resolution has made every relevant declaration available.
@@ -63,7 +64,7 @@ Resolution covers declarations whether or not executable code reaches them. Gene
 
 Reachable generic instances follow the same ordering through a fixed-point worklist. A call first requests an instance; the compiler substitutes and resolves its header and bounds, then queues its body for checking. That body may request more instances or instantiate types carrying new interface claims, so the compiler repeats resolution and checking until no work remains. Conformance checks only inspect methods specialized during resolution—they never specialize a receiver family themselves.
 
-LLVM emission begins only after all four phases and that fixed point succeed. Until then, structs, globals, callable signatures, and checked bodies live in backend-neutral compiler records; the output module has no LLVM types or values in it. `@sizeof` consults the selected target's layout through those semantic type records without lowering them. The backend then consumes the closed, checked program in one direction—types, globals, callable declarations, and finally bodies—and cannot discover a new generic instance while doing so.
+LLVM emission begins only after phase 0, all four semantic phases, and that fixed point succeed. Until then, structs, globals, callable signatures, and checked bodies live in backend-neutral compiler records; the output module has no LLVM types or values in it. `@sizeof` consults the selected target's layout through those semantic type records without lowering them. The backend then consumes the closed, checked program in one direction—types, globals, callable declarations, and finally bodies—and cannot discover a new generic instance while doing so.
 
 ### Editor support
 
