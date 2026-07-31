@@ -106,7 +106,7 @@ def register_method(gen: CodeGenerator, fn) -> None:
     'S::m' name, a generic one like a generic function, and a generic
     struct's becomes a template stamped per struct instantiation.
     """
-    from siec.codegen.functions import declare_function
+    from siec.codegen.functions import resolve_function
     from siec.codegen.generics import register_generic_function
     from siec.codegen.overloads import shown_signature
 
@@ -225,7 +225,7 @@ def register_method(gen: CodeGenerator, fn) -> None:
 
             register_generic_function(gen, fn)
         else:
-            declare_function(gen, fn)
+            resolve_function(gen, fn)
 
 
 def resolve_method(gen: CodeGenerator, receiver_type: str | None,
@@ -245,6 +245,7 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
     exact = (
         symbol in gen.generic_functions
         or symbol in gen.overloads
+        or symbol in gen.resolved_functions
         or isinstance(gen.module.globals.get(symbol), ir.Function)
     )
 
@@ -383,13 +384,13 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         else:
             from siec.codegen.worklist import resolve_function_instance
 
-            func = resolve_function_instance(
+            resolved_symbol = resolve_function_instance(
                 gen,
                 instance,
                 deferred=len(templates) != 1,
             )
             if site is not None:
-                gen.instantiation_sites.setdefault(func.name, site)
+                gen.instantiation_sites.setdefault(resolved_symbol, site)
 
     return symbol
 
@@ -434,6 +435,7 @@ def qualified_method(gen: CodeGenerator, name: str) -> str | None:
     from siec.codegen.aliases import expand_alias
 
     if (name in gen.generic_functions or name in gen.overloads
+            or name in gen.resolved_functions
             or isinstance(gen.module.globals.get(name), ir.Function)):
         return name
 
@@ -474,6 +476,7 @@ def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | Non
     # a declared 'enumerate' - the user's - wins over the builtin
     symbol = gen.resolve_symbol("enumerate")
     if (symbol in gen.generic_functions or symbol in gen.overloads
+            or symbol in gen.resolved_functions
             or isinstance(gen.module.globals.get(symbol), ir.Function)):
         return None
 

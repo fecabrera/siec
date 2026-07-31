@@ -23,25 +23,28 @@ def register_anonymous(gen: CodeGenerator, name: str, is_union: bool,
         return
 
     # deferred imports: struct registration builds on this module
-    from llvmlite import ir
-
     from siec.ast import Field
     from siec.codegen.generator import StructInfo
-    from siec.codegen.structs import union_storage
-    from siec.codegen.types import resolve_type
+    from siec.codegen.types import validate_type
 
     fields = [Field(field, type_) for field, type_ in pairs]
 
     try:
-        resolved = [resolve_type(f.type, gen.structs) for f in fields]
+        for field in fields:
+            validate_type(field.type, gen.structs)
     except TypeError:
         return
 
-    if is_union:
-        resolved = union_storage(gen, resolved)
+    if gen.types_lowered:
+        raise RuntimeError(
+            "LLVM emission attempted to register an anonymous type")
 
-    gen.structs[name] = StructInfo(ir.LiteralStructType(resolved), fields,
-                                   is_union=is_union)
+    gen.structs[name] = StructInfo(
+        None,
+        fields,
+        is_union=is_union,
+        literal=True,
+    )
 
 
 def names_type(gen: CodeGenerator, name: str) -> bool:

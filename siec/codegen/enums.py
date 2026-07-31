@@ -6,7 +6,6 @@ from siec.codegen.aliases import expand_alias, type_identity
 from siec.codegen.errors import source_location
 from siec.codegen.sizes import size_of
 from siec.codegen.generator import CodeGenerator, EnumInfo, StructInfo
-from siec.codegen.types import resolve_type
 
 INTEGER_TYPES = {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"}
 
@@ -72,7 +71,11 @@ def register_enums(gen: CodeGenerator, program: Program) -> None:
 
             info = gen.enums[enum.name]
             info.backing = enum.type
-            gen.structs[enum.name] = StructInfo(resolve_type(enum.type), [])
+            gen.structs[enum.name] = StructInfo(
+                None,
+                [],
+                backing=enum.type,
+            )
 
     active = []
 

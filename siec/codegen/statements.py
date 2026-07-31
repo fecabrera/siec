@@ -141,7 +141,10 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     """
     if isinstance(stmt, Let):
         # an unannotated 'let' takes its type from its initializer
-        type_name = stmt.type = expand_alias(gen, stmt.type)
+        if not getattr(stmt, "expanded", False):
+            stmt.type = expand_alias(gen, stmt.type)
+            stmt.expanded = True
+        type_name = stmt.type
         if type_name is None:
             type_name = infer_type(gen, stmt.value, scope)
             if type_name is None:

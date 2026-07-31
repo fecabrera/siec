@@ -179,3 +179,24 @@ def test_when_matches_any_of_its_values(run):
     }
     """
     assert run(source).returncode == 120
+
+
+def test_char_arms_match_an_integer_subject(run):
+    """
+    A char arm against an integer subject compares at the subject's own
+    width, like getopt-style option dispatch.
+    """
+    source = """
+    fn main() -> i32 {
+        let opt: i32 = 97;
+        case (opt) {
+        when 'a':
+            return 42;
+        when 'b':
+            return 1;
+        else:
+            return 2;
+        }
+    }
+    """
+    assert run(source).returncode == 42

@@ -1,4 +1,4 @@
-"""Registration of struct declarations as LLVM types."""
+"""Semantic registration and backend lowering of struct declarations."""
 
 from llvmlite import ir
 
@@ -7,15 +7,19 @@ from siec.codegen.aliases import expand_alias, type_identity
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.sizes import target_data
-from siec.codegen.types import is_reference, resolve_type
+from siec.codegen.types import is_reference, resolve_type, validate_type
 
 
 def register_structs(gen: CodeGenerator, program: Program) -> None:
     """
-    Register every struct as an identified LLVM type, then fill in its body.
+    Register every struct, then lower it for direct codegen callers.
+
+    The compiler pipeline uses ``declare_structs`` and ``define_structs``
+    separately, retaining backend-neutral semantic records through checking.
     """
     declare_structs(gen, program)
     define_structs(gen, program)
+    lower_structs(gen)
 
 
 def declare_structs(gen: CodeGenerator, program: Program) -> None:
@@ -26,10 +30,9 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
     claims, so a bounded generic named by a field can consult claims declared
     anywhere in the program.
     """
-    # first create empty identified types so a field may name any struct,
-    # including one declared later or the struct itself through a pointer;
-    # a bodiless forward declaration registers the type alone, taking its
-    # fields from the definition when one appears
+    # First create semantic identities so a field may name any struct,
+    # including one declared later or the struct itself through a pointer.
+    # LLVM identified types are created only after semantic checking.
     for struct in program.structs:
         with source_location(line=struct.line, file=struct.file):
             gen.current_file = struct.file
@@ -91,8 +94,10 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
             info = gen.structs.get(struct.name)
 
             if info is None:
-                ident = gen.module.context.get_identified_type(struct.name)
-                gen.structs[struct.name] = info = StructInfo(ident, struct.fields)
+                gen.structs[struct.name] = info = StructInfo(
+                    None,
+                    struct.fields,
+                )
             elif struct.fields is not None:
                 if info.fields is not None:
                     raise TypeError(f"struct {struct.name!r} is declared more than once")
@@ -101,7 +106,7 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
 
             # decorators apply from whichever declaration carries them
             if struct.packed:
-                info.type.packed = True
+                info.packed = True
 
             if struct.align is not None:
                 info.align = struct.align
@@ -114,10 +119,7 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
 
 
 def define_structs(gen: CodeGenerator, program: Program) -> None:
-    """Resolve and install every previously declared concrete struct body."""
-    # then set each body from the now-resolvable field types; a struct
-    # never given a body stays opaque, usable only through a pointer;
-    # an interface's fields are requirements, not storage
+    """Resolve every concrete struct body without lowering it to LLVM."""
     for struct in program.structs:
         if struct.fields is None or struct.params is not None or struct.is_interface:
             continue
@@ -137,17 +139,108 @@ def define_structs(gen: CodeGenerator, program: Program) -> None:
             # could fill it
             if info.is_union and any(f.default is not None for f in struct.fields):
                 raise TypeError(f"a union field cannot have a default value")
-            resolved = [resolve_type(f.type, gen.structs) for f in struct.fields]
+            for field in struct.fields:
+                validate_type(field.type, gen.structs)
 
-            # a union's fields share one storage: the most-aligned field's
-            # type carries the alignment, padding bytes reach the largest
+
+def lower_structs(gen: CodeGenerator) -> None:
+    """Materialize the checked struct inventory in the LLVM context."""
+    materialize_struct_types(
+        gen.structs,
+        gen.module.context,
+        gen.target,
+    )
+
+
+def materialize_struct_types(structs: dict, context: ir.Context,
+                             target: str) -> None:
+    """Populate one struct registry with LLVM types in the given context."""
+    for name, info in structs.items():
+        if info.type is None and info.backing is not None:
+            info.type = resolve_type(info.backing, structs)
+        elif info.type is None and not info.literal:
+            info.type = context.get_identified_type(name)
+            if info.packed:
+                info.type.packed = True
+
+    # literal structs build bottom-up, and identified bodies fill in over
+    # the same rounds: a union measures its members' layouts, so it waits
+    # until every member it carries by value is sized, wherever that
+    # member's own body comes from
+    pending = [
+        info for info in structs.values()
+        if info.type is None and info.literal and info.backing is None
+    ]
+    bodies = [
+        info for info in structs.values()
+        if not (info.literal or info.backing is not None
+                or info.fields is None or info.type.elements is not None)
+    ]
+    while pending or bodies:
+        progress = False
+        for info in list(bodies):
+            try:
+                resolved = [resolve_type(field.type, structs)
+                            for field in info.fields]
+            except TypeError:
+                continue
+
+            # a member naming a literal struct still under construction
+            # resolves to nothing yet; the next round retries it
+            if any(type_ is None for type_ in resolved):
+                continue
             if info.is_union:
-                resolved = union_storage(gen, resolved)
-
+                if not all(layout_sized(type_) for type_ in resolved):
+                    continue
+                resolved = union_storage(target, context, resolved)
             info.type.set_body(*resolved)
+            bodies.remove(info)
+            progress = True
+
+        for info in list(pending):
+            try:
+                resolved = [resolve_type(field.type, structs)
+                            for field in info.fields or ()]
+            except TypeError:
+                continue
+
+            if any(type_ is None for type_ in resolved):
+                continue
+            if info.is_union:
+                if not all(layout_sized(type_) for type_ in resolved):
+                    continue
+                resolved = union_storage(target, context, resolved)
+            info.type = ir.LiteralStructType(resolved)
+            pending.remove(info)
+            progress = True
+
+        if not progress:
+            raise TypeError("recursive anonymous struct type")
 
 
-def union_storage(gen: CodeGenerator, field_types: list) -> list:
+def layout_sized(type_: ir.Type, active: frozenset = frozenset()) -> bool:
+    """
+    Whether the target can already measure a type's size and alignment.
+    An identified struct without its body is not yet sized; a by-value
+    cycle is left for the reachable-layout check to diagnose.
+    """
+    if isinstance(type_, ir.IdentifiedStructType):
+        if type_.elements is None:
+            return False
+        if type_.name in active:
+            return True
+        return all(layout_sized(element, active | {type_.name})
+                   for element in type_.elements)
+    if isinstance(type_, ir.LiteralStructType):
+        return all(layout_sized(element, active)
+                   for element in type_.elements)
+    if isinstance(type_, (ir.ArrayType, ir.VectorType)):
+        return layout_sized(type_.element, active)
+    return True
+
+
+def union_storage(target: str, context: ir.Context,
+                  field_types: list) -> list:
     """
     The members backing a union: its most-aligned (then largest) field's
     type, padded with bytes up to the size of its largest.
@@ -158,8 +251,7 @@ def union_storage(gen: CodeGenerator, field_types: list) -> list:
     fields, not its padding. Aggregate-led unions store as an array of
     alignment-sized integers instead, so every byte survives a copy.
     """
-    data = target_data(gen.target)
-    context = gen.module.context
+    data = target_data(target)
 
     def measure(type_):
         return (type_.get_abi_alignment(data, context=context),

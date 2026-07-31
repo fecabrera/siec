@@ -216,6 +216,66 @@ def is_array_struct(type_: ir.Type | None) -> bool:
             and type_.elements[1] == ir.IntType(64))
 
 
+def validate_type(name: str | None, structs: dict | None = None,
+                  allow_opaque: bool = False) -> None:
+    """
+    Validate a resolved Sie type spelling without constructing an LLVM type.
+
+    This is the semantic counterpart of ``resolve_type``. Collection and
+    resolution use it while the backend is still empty; LLVM lowering calls
+    ``resolve_type`` only after the checked type inventory has been frozen.
+    """
+    if name is None:
+        return
+
+    name = strip_const(name)
+    if name.startswith("&"):
+        validate_type(name[1:], structs)
+        return
+
+    if (sized := sized_array(name)) is not None:
+        validate_type(sized[0], structs, allow_opaque)
+        return
+
+    if name.startswith("fn("):
+        params, ret, suffix = fn_type_parts(name)
+        validate_type(ret, structs)
+        for param in params:
+            validate_type(param, structs)
+
+        while suffix:
+            if suffix.startswith("*"):
+                suffix = suffix[1:]
+            elif suffix.startswith("[]"):
+                suffix = suffix[2:]
+            else:
+                raise TypeError(f"malformed function type {name!r}")
+        return
+
+    stripped = name.rstrip("*")
+    base, pointer_depth = stripped, len(name) - len(stripped)
+
+    if base.endswith("[]"):
+        validate_type(base[:-2], structs, allow_opaque=True)
+    elif (raw := raw_array(base)) is not None:
+        element_name, size, _ = raw
+        if not size.isdigit():
+            raise TypeError(f"unresolved raw array size {size!r} in {base!r}")
+        validate_type(element_name, structs)
+    elif base == "opaque":
+        if pointer_depth == 0:
+            raise TypeError("'opaque' can only be used as a pointer (opaque*)")
+    elif base in SCALAR_TYPES:
+        pass
+    elif structs and base in structs:
+        if (structs[base].fields is None and pointer_depth == 0
+                and not allow_opaque):
+            raise TypeError(f"struct {base!r} has no body and can only be "
+                            f"used through a pointer ({base}*)")
+    else:
+        raise TypeError(f"unknown type {base!r}")
+
+
 def resolve_type(name: str | None, structs: dict | None = None,
                  allow_opaque: bool = False) -> ir.Type:
     """

@@ -14,7 +14,9 @@ from siec.ast import (
     Function,
     IntLiteral,
     NullLiteral,
+    SizeOf,
     StrLiteral,
+    TypeId,
 )
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import (
@@ -177,8 +179,7 @@ def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
     params = gen.param_types.get(symbol, [])
 
     # trailing defaults make their parameters optional; varargs take extras
-    func = gen.module.globals.get(symbol)
-    var_arg = func is not None and func.function_type.var_arg
+    var_arg = symbol in gen.var_args
     defaults = gen.param_defaults.get(symbol, ([], None))[0]
 
     required = len(params)
@@ -288,7 +289,7 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     # an untyped literal adopts any numeric parameter it emits into, the
     # loosest fit: any candidate its default type reaches wins over it
     if to_class is not None and (
-            isinstance(arg, IntLiteral)
+            isinstance(arg, (IntLiteral, SizeOf, TypeId))
             or (isinstance(arg, FloatLiteral) and to_class[0] == "f")):
         return "adopt"
 

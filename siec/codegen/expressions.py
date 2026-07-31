@@ -1042,7 +1042,9 @@ def type_operand(gen: CodeGenerator, expr: Expr, scope: dict) -> Expr:
         spelling += f"<{','.join(expr.type_args)}>"
 
     try:
-        resolve_type(expand_alias(gen, spelling), gen.structs)
+        from siec.codegen.types import validate_type
+
+        validate_type(expand_alias(gen, spelling), gen.structs)
     except (TypeError, NameError):
         return expr
 
@@ -1134,7 +1136,9 @@ def typename_of(gen: CodeGenerator, name, scope: dict) -> str:
     expanded = expand_alias(gen, name)
 
     # naming nothing at all is an error, not a string
-    resolve_type(expanded, gen.structs)
+    from siec.codegen.types import validate_type
+
+    validate_type(expanded, gen.structs)
     return expanded
 
 

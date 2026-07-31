@@ -151,3 +151,23 @@ def test_calling_a_non_function_variable_is_rejected(compile_source):
     """
     with pytest.raises(TypeError, match="cannot call non-function variable"):
         compile_source(source)
+
+
+def test_null_clears_a_function_reference_parameter(run):
+    """
+    A bare function reference is a pointer at heart: 'null' passes where
+    a callback is expected, and fills reference variables the same way.
+    """
+    source = """
+    fn register(callback: fn(i32) -> i32) -> i32 {
+        if (callback == null) {
+            return 42;
+        }
+        return callback(0);
+    }
+
+    fn main() -> i32 {
+        return register(null);
+    }
+    """
+    assert run(source).returncode == 42

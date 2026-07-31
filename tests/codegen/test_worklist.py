@@ -107,3 +107,42 @@ def test_conformance_check_rejects_unresolved_claims():
             RuntimeError,
             match="cannot check unresolved interface claims"):
         interfaces.run_conformance(gen)
+
+
+def test_conformance_resolution_carries_no_active_function(monkeypatch):
+    """
+    A claim discovered while checking a body resolves between bodies. No
+    function is active then, so a specialization the claim requests cannot
+    record the previously checked body as its instantiation site.
+    """
+    observed = []
+    original = interfaces.resolve_conformance
+
+    def record(gen):
+        if gen.pending_conformance:
+            observed.append(gen.current_function)
+        return original(gen)
+
+    monkeypatch.setattr(interfaces, "resolve_conformance", record)
+
+    compile_with_state("""
+    interface Value {
+        fn value(const &self) -> i32;
+    }
+
+    struct Box<T>: Value {
+        value: T;
+    }
+
+    fn Box<T>::value(const &self) -> i32 {
+        return 42;
+    }
+
+    fn main() -> i32 {
+        let box: Box<i32> = { 0 };
+        return 0;
+    }
+    """)
+
+    assert observed
+    assert set(observed) == {None}

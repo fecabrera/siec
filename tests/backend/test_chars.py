@@ -71,3 +71,29 @@ def test_chars_in_constants_and_globals(run):
     }
     """
     assert run(source).returncode == 42
+
+
+def test_integer_literals_fill_char_and_bool_targets(run):
+    """
+    A bare integer literal adopts a 'char' or 'bool' target like the
+    small integer it emits as: declarations, element assignments, and
+    call arguments alike.
+    """
+    source = """
+    fn take(c: char) -> i32 {
+        return c as i32;
+    }
+
+    fn main() -> i32 {
+        let c: char = 40;
+        let flag: bool = 1;
+        let buf: char[4];
+        buf[0] = 0;
+        buf[1] = 2;
+        if (flag) {
+            return c as i32 + buf[1] as i32 + take(0);
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 42

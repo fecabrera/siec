@@ -1,13 +1,11 @@
 """Fixed-point checking for lazily requested function instances."""
 
-from llvmlite import ir
-
 from siec.ast import Function
 from siec.codegen.generator import CodeGenerator
 
 
 def resolve_function_instance(gen: CodeGenerator, instance: Function, *,
-                              deferred: bool = False) -> ir.Function:
+                              deferred: bool = False) -> str:
     """
     Resolve one substituted instance header and queue its body for checking.
 
@@ -16,21 +14,25 @@ def resolve_function_instance(gen: CodeGenerator, instance: Function, *,
     declaration, then records it as resolved. An overload whose body depends
     on overload selection waits until its first call activates it.
     """
-    from siec.codegen.functions import declare_function
+    from siec.codegen.functions import resolve_function
+
+    if gen.functions_lowered:
+        raise RuntimeError(
+            "LLVM emission attempted to resolve a function instance")
 
     gen.ungated_types += 1
     try:
-        func = declare_function(gen, instance)
+        symbol = resolve_function(gen, instance)
     finally:
         gen.ungated_types -= 1
 
-    gen.function_instance_states[func.name] = "resolved"
+    gen.function_instance_states[symbol] = "resolved"
     if deferred:
-        gen.deferred_overloads[func.name] = instance
+        gen.deferred_overloads[symbol] = instance
     else:
         gen.pending_functions.append(instance)
 
-    return func
+    return symbol
 
 
 def activate_function_instance(gen: CodeGenerator, symbol: str) -> None:
@@ -60,11 +62,15 @@ def run_semantic_worklist(gen: CodeGenerator) -> None:
     priority, so each round resolves their method dependencies before
     checking conformance or another body.
     """
-    from siec.codegen.functions import emit_function, link_once
+    from siec.codegen.checking import check_function
     from siec.codegen.interfaces import resolve_conformance, run_conformance
 
     while (gen.pending_conformance or gen.resolved_conformance
            or gen.pending_functions):
+        # conformance resolution runs between bodies, where no function is
+        # active: a specialization it requests must not record the previous
+        # body as its instantiation site
+        gen.current_function = None
         resolve_conformance(gen)
         run_conformance(gen)
 
@@ -77,13 +83,9 @@ def run_semantic_worklist(gen: CodeGenerator) -> None:
 
         gen.ungated_types += 1
         try:
-            emit_function(gen, instance)
+            check_function(gen, instance)
         finally:
             gen.ungated_types -= 1
 
         gen.function_instance_states[symbol] = "checked"
-
-        # Under separate compilation each unit stamps the instances it
-        # uses, so their duplicate definitions merge at link.
-        if gen.unit_files is not None:
-            link_once(gen, instance)
+        gen.checked_instance_bodies.append(instance)

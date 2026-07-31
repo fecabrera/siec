@@ -73,6 +73,35 @@ def test_unions_nest_in_structs_and_pointers(run):
     assert result.returncode == 42
 
 
+def test_union_measures_a_generic_instance_member(run):
+    """
+    An anonymous union may carry a generic struct instance by value; its
+    storage measures that member after the instance's body is lowered,
+    wherever the lowering order put it.
+    """
+    result = run("""
+        struct Payload {
+            tag: i32;
+            union {
+                boxed: Box<u8>;
+                number: i64;
+            };
+        }
+
+        struct Box<T> {
+            value: T;
+            length: u64;
+        }
+
+        fn main() -> i32 {
+            let p: Payload;
+            p.number = 42;
+            return p.number as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
 def test_narrow_field_reads_the_low_bytes(run):
     """
     A smaller field overlays the start of the storage (little-endian).

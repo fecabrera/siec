@@ -61,15 +61,20 @@ def make_volatile(inst: ir.Instruction) -> ir.Instruction:
 @dataclass
 class StructInfo:
     """
-    A registered struct: its LLVM type plus its ordered fields, for member
-    lookup, and its layout and access decorations ('@align(N)', '@volatile').
+    A registered struct's semantic fields, representation, and decorations.
+
+    ``type`` remains None through collection, resolution, and checking. The
+    backend attaches its LLVM representation only after semantics complete.
     A union's fields share one storage, accessed by reinterpretation.
     """
-    type: ir.Type
+    type: ir.Type | None
     fields: list[Field]
     align: int | None = None
     volatile: bool = False
     is_union: bool = False
+    packed: bool = False
+    literal: bool = False
+    backing: str | None = None
 
     def field(self, name: str) -> tuple[int, str]:
         """
@@ -110,6 +115,10 @@ class CodeGenerator:
         # a fresh context keeps identified struct types from colliding across modules
         self.module = ir.Module(name=module_name, context=ir.Context())
         self.module.triple = self.target
+        self.types_lowered = False
+        self.functions_lowered = False
+        self.semantic_complete = False
+        self.generic_type_depth = 0
         self.str_count = 0
         self.temporary_count = 0
         self.string_pool: dict[str, ir.GlobalVariable] = {}
@@ -128,6 +137,10 @@ class CodeGenerator:
         # type inference and argument coercion at calls
         self.return_types: dict[str, str | None] = {}
         self.param_types: dict[str, list[str]] = {}
+        # Canonical callable declarations resolved without LLVM. The backend
+        # lowers this inventory only after semantic checking has completed.
+        self.resolved_functions: dict[str, Function] = {}
+        self.function_signatures: dict[str, tuple] = {}
         # the symbols declared '@noreturn', whose bodies must not return
         self.noreturns: set[str] = set()
         # each overloaded name's candidates: (signature key, symbol) pairs,
@@ -163,6 +176,7 @@ class CodeGenerator:
         # symbols whose last parameter is the 'args...' Any[] sugar;
         # their calls pack extra arguments into it
         self.variadics: set[str] = set()
+        self.var_args: set[str] = set()
 
         # every type name wrapped 'as Any', by id: the runtime
         # '@typename' table, emitted once emission has seen every wrap
@@ -190,6 +204,15 @@ class CodeGenerator:
         # resolution queues them, and the fixed-point checker marks their
         # bodies checked before final backend work consumes the complete set.
         self.function_instance_states: dict[str, str] = {}
+        self.checked_functions: set[str] = set()
+        self.checked_instance_bodies: list[Function] = []
+        self.checked_default_types: set[str] = set()
+        self.checking_function: Function | None = None
+        self.checking_loop_depth = 0
+        # the concrete callee the last checked call resolved to, letting a
+        # call statement's path end when that callee never returns
+        self.checked_call: str | None = None
+        self.emitting = False
         # concrete definitions displaced by an '@override' declaration;
         # registration keeps their signatures, emission skips their bodies
         self.overridden_functions: set[int] = set()
@@ -277,6 +300,7 @@ class CodeGenerator:
         # the '@extern let' globals by name, mapped to their Sie types;
         # their storage lives in the module's globals
         self.globals: dict[str, str] = {}
+        self.resolved_globals: dict[str, object] = {}
 
         # '@static' functions and globals by (file, name), mapped to their
         # module symbols: each file's statics are invisible to every other
@@ -780,10 +804,14 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.constants import (register_builtin_constants,
                                         register_constants)
     from siec.codegen.enums import register_enums
-    from siec.codegen.functions import declare_function, emit_function
+    from siec.codegen.functions import (
+        emit_function,
+        lower_functions,
+        resolve_function,
+    )
     from siec.codegen.generics import register_generic_function
     from siec.codegen.methods import register_method
-    from siec.codegen.globals import register_globals
+    from siec.codegen.globals import lower_globals, register_globals
     from siec.codegen.structs import declare_structs, define_structs
 
     from siec.codegen.constants import BUILTIN_CONSTANTS
@@ -795,9 +823,6 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     gen = gen or CodeGenerator(module_name, target)
     gen.program = program
-    if debug:
-        from siec.codegen.debug import DebugInfo
-        gen.debug = DebugInfo(gen, module_name)
 
     gen.module_bindings = program.module_bindings
     gen.member_bindings = program.member_bindings
@@ -893,7 +918,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         elif fn.type_params is not None:
             register_generic_function(gen, fn)
         else:
-            declare_function(gen, fn)
+            resolve_function(gen, fn)
 
     from siec.codegen.overrides import validate_concrete_overrides
 
@@ -912,11 +937,44 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     resolve_conformance(gen)
     run_conformance(gen)
 
-    # With declarations checked, emit the bodies of the defined functions,
-    # an '@asm' function's assembly standing in for one; an imported file's emit
-    # only when this unit defines it - except its '@static's, which stay
-    # internal per unit like C's, and its '@inline's, which every unit
-    # defines so their bodies are there to inline, C99-style
+    # Check ordinary bodies against the resolved inventories. Generic calls
+    # request concrete headers and bodies for the fixed-point worklist below.
+    from siec.codegen.checking import check_function
+
+    for fn in program.functions:
+        if (fn.type_params is None and fn.receiver_params is None
+                and (fn.body is not None or fn.asm is not None)
+                and id(fn) not in gen.overridden_functions
+                and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
+            check_function(gen, fn)
+
+    # Calls met while checking bodies request concrete generic instances.
+    # Resolve their headers, claims, bounds, and bodies to a fixed point.
+    from siec.codegen.worklist import run_semantic_worklist
+
+    run_semantic_worklist(gen)
+
+    complete_semantics(gen)
+
+    # The semantic graph is complete and checked. Only now materialize its
+    # LLVM globals and callable declarations, then lower checked bodies.
+    from siec.codegen.structs import lower_structs
+
+    lower_structs(gen)
+    gen.types_lowered = True
+    lower_globals(gen)
+    lower_functions(gen)
+    gen.functions_lowered = True
+
+    # Debug metadata belongs to the emitted artifact too. Construct it only
+    # after the complete semantic program has crossed the check boundary.
+    if debug:
+        from siec.codegen.debug import DebugInfo
+
+        gen.debug = DebugInfo(gen, module_name)
+
+    gen.emitting = True
+
     for fn in program.functions:
         if (fn.type_params is None and fn.receiver_params is None
                 and (fn.body is not None or fn.asm is not None)
@@ -924,12 +982,19 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                 and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
             emit_function(gen, fn)
 
-    # Calls met while checking bodies request concrete generic instances.
-    # Resolve their headers, claims, and bounds, then check their bodies to
-    # a fixed point before final tables consume the complete reachable graph.
-    from siec.codegen.worklist import run_semantic_worklist
+    from siec.codegen.functions import link_once
 
-    run_semantic_worklist(gen)
+    for instance in gen.checked_instance_bodies:
+        gen.ungated_types += 1
+        try:
+            emit_function(gen, instance)
+        finally:
+            gen.ungated_types -= 1
+
+        if gen.unit_files is not None:
+            link_once(gen, instance)
+
+    gen.emitting = False
 
     # every wrap has been seen: the runtime '@typename' table can build
     from siec.codegen.expressions import finish_typename_table
@@ -943,3 +1008,35 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     report_deprecations(gen)
 
     return gen.module
+
+
+def complete_semantics(gen: CodeGenerator) -> None:
+    """
+    Close the checked semantic graph before the first output-IR mutation.
+
+    Target layouts are validated from semantic field records, including
+    concrete generic instances discovered by body checking. Any LLVM value or
+    identified type already present here is a phase-boundary violation.
+    """
+    from siec.codegen.sizes import type_layout
+
+    pending = (
+        gen.pending_conformance
+        or gen.resolved_conformance
+        or gen.pending_functions
+    )
+    if pending:
+        raise RuntimeError(
+            "semantic work remains at the LLVM lowering boundary")
+
+    for name, info in gen.structs.items():
+        if info.fields is not None or info.backing is not None:
+            type_layout(gen, name)
+
+    if (gen.module.globals
+            or gen.module.context.identified_types
+            or any(info.type is not None for info in gen.structs.values())):
+        raise RuntimeError(
+            "LLVM IR was constructed before semantic checking completed")
+
+    gen.semantic_complete = True

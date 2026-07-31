@@ -16,15 +16,19 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.enums import evaluate, evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.types import is_const, is_reference, resolve_type, sized_array, strip_const
+from siec.codegen.types import (
+    is_const,
+    is_reference,
+    resolve_type,
+    sized_array,
+    strip_const,
+    validate_type,
+)
 
 
 def register_globals(gen: CodeGenerator, program: Program) -> None:
     """
-    Declare every module-level variable: '@extern let' as external linkage,
-    its storage defined and initialized outside this program; '@static let'
-    as file-local storage defined here, under a mangled symbol its own file
-    resolves to, like a static function's.
+    Resolve every module-level variable without constructing LLVM storage.
     """
     for glob in program.globals:
         with source_location(line=glob.line, file=glob.file):
@@ -47,24 +51,14 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
                 gen.symbol_names[glob.name] = symbol = glob.symbol
                 gen.symbol_files[glob.name] = glob.file
 
-            if symbol in gen.globals or symbol in gen.module.globals:
+            if symbol in gen.globals:
                 raise TypeError(f"global {glob.name!r} is declared more than once")
 
             if is_reference(glob.type):
                 raise TypeError("a reference cannot type a variable")
 
-            var = ir.GlobalVariable(gen.module, resolve_type(glob.type, gen.structs),
-                                    name=symbol)
-
-            # an '@align(N)' struct's storage honors the declared alignment
-            if (align := gen.struct_align(glob.type)) is not None:
-                var.align = align
-
-            if glob.is_static:
-                var.linkage = "internal"
-                var.initializer = global_initializer(gen, glob, symbol)
-            else:
-                var.linkage = "external"
+            validate_type(glob.type, gen.structs)
+            validate_global_initializer(gen, glob)
 
             # a sized array declares an 'X[]', the size only directing its
             # backing - the same canonical type a local declaration records
@@ -73,6 +67,116 @@ def register_globals(gen: CodeGenerator, program: Program) -> None:
                 sie_type = f"const {sized[0]}" if is_const(sie_type) else sized[0]
 
             gen.globals[symbol] = sie_type
+            gen.resolved_globals[symbol] = glob
+
+
+def validate_global_initializer(gen: CodeGenerator, glob: Global) -> None:
+    """Validate initializer-only rules that do not require LLVM values."""
+    if (sized := sized_array(strip_const(glob.type))) is not None:
+        if glob.value is not None:
+            raise TypeError(f"a sized array takes its contents from its size; "
+                            f"initialize an {sized[0]!r} instead")
+        evaluate_size(gen, sized[1])
+        return
+
+    if glob.is_static and glob.value is not None:
+        validate_constant_value(gen, glob.value, glob.type)
+
+
+def validate_constant_value(gen: CodeGenerator, expr: Expr,
+                            sie_type: str) -> None:
+    """Check a static initializer without constructing an LLVM constant."""
+    target = strip_const(sie_type)
+
+    if isinstance(expr, AggregateLiteral):
+        info = gen.structs.get(target)
+        if info is None or not info.fields:
+            raise TypeError(
+                f"aggregate initializer needs a struct type, not "
+                f"{sie_type!r}")
+        if info.is_union:
+            raise TypeError("a union takes no aggregate literal; assign one "
+                            "of its fields instead")
+
+        if expr.names is None:
+            if len(expr.elements) != len(info.fields):
+                raise TypeError(
+                    f"aggregate literal has {len(expr.elements)} elements, "
+                    f"expected {len(info.fields)}")
+            pairs = zip(info.fields, expr.elements)
+        else:
+            fields = {field.name: field for field in info.fields}
+            seen = set()
+            pairs = []
+            for name, value in zip(expr.names, expr.elements):
+                if name not in fields:
+                    raise TypeError(
+                        f"aggregate literal names unknown field {name!r}")
+                if name in seen:
+                    raise TypeError(
+                        f"aggregate literal sets field {name!r} more than "
+                        "once")
+                seen.add(name)
+                pairs.append((fields[name], value))
+
+        for field, value in pairs:
+            validate_constant_value(gen, value, field.type)
+        return
+
+    if isinstance(expr, FloatLiteral):
+        if target not in ("f32", "f64"):
+            raise TypeError(
+                f"cannot initialize a {sie_type!r} value with a float")
+        return
+
+    if isinstance(expr, BoolLiteral):
+        if target not in ("bool", "i8", "i16", "i32", "i64",
+                          "u8", "u16", "u32", "u64"):
+            raise TypeError(
+                f"cannot initialize a {sie_type!r} value with a bool")
+        return
+
+    if isinstance(expr, NullLiteral):
+        if not target.endswith("*"):
+            raise TypeError(
+                f"'null' cannot initialize a {sie_type!r} value")
+        return
+
+    if isinstance(expr, StrLiteral):
+        if target not in ("char*", "char[]"):
+            raise TypeError(
+                f"cannot initialize a {sie_type!r} value with a string")
+        return
+
+    # The remaining supported forms are compile-time integer expressions:
+    # literals, constants, enum members, and their arithmetic.
+    info = gen.structs.get(target)
+    if (info is not None and info.backing is None
+            or target.endswith("[]")
+            or target.startswith("raw<")
+            or target.startswith("fn(")):
+        raise TypeError(
+            f"cannot initialize a {sie_type!r} value with an integer")
+    evaluate(gen, expr)
+
+
+def lower_globals(gen: CodeGenerator) -> None:
+    """Materialize the checked global inventory as LLVM storage."""
+    for symbol, glob in gen.resolved_globals.items():
+        var = ir.GlobalVariable(
+            gen.module,
+            resolve_type(glob.type, gen.structs),
+            name=symbol,
+        )
+
+        if (align := gen.struct_align(glob.type)) is not None:
+            var.align = align
+
+        if glob.is_static:
+            var.linkage = "internal"
+            var.initializer = global_initializer(gen, glob, symbol)
+        else:
+            var.linkage = "external"
 
 
 def global_initializer(gen: CodeGenerator, glob: Global, symbol: str) -> ir.Constant:

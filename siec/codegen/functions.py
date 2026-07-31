@@ -13,9 +13,13 @@ from siec.codegen.overloads import (
     overload_symbol,
     shown_signature,
 )
-from siec.codegen.results import check_results
 from siec.codegen.statements import emit_block
-from siec.codegen.types import is_reference, resolve_type, strip_const
+from siec.codegen.types import (
+    is_reference,
+    resolve_type,
+    strip_const,
+    validate_type,
+)
 
 
 def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:
@@ -29,7 +33,19 @@ def declare_function(gen: CodeGenerator, fn: Function) -> ir.Function:
         previous = gen.current_file
         gen.current_file = fn.file
         try:
-            return declare_function_body(gen, fn)
+            resolve_function_body(gen, fn)
+            return lower_function_body(gen, fn)
+        finally:
+            gen.current_file = previous
+
+
+def resolve_function(gen: CodeGenerator, fn: Function) -> str:
+    """Resolve and register a callable header without constructing LLVM IR."""
+    with source_location(line=fn.line, file=fn.file):
+        previous = gen.current_file
+        gen.current_file = fn.file
+        try:
+            return resolve_function_body(gen, fn)
         finally:
             gen.current_file = previous
 
@@ -59,13 +75,9 @@ def join_canonical_receiver(gen: CodeGenerator, fn) -> None:
         fn.receiver = canonical
 
 
-def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
+def resolve_function_body(gen: CodeGenerator, fn: Function) -> str:
     """
-    Build the function's declaration from its annotated Sie signature.
-
-    'main' is special: it's always i32 to the C runtime, returning 0 when
-    declared with no return type, and its 'args: char*[]' form keeps the
-    C-level (i32, char**) signature underneath.
+    Resolve a function's annotated Sie signature into the callable inventory.
     """
     join_canonical_receiver(gen, fn)
     if fn.receiver is not None and fn.is_private:
@@ -86,50 +98,9 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
             raise TypeError("a reference return must derive from a reference "
                             "parameter: the value must outlive the call")
 
-    if fn.name == "main" and fn.return_type is None:
-        ret_type = ir.IntType(32)
-    else:
-        ret_type = resolve_type(fn.return_type, gen.structs)
-
-    if main_takes_args(fn):
-        param_types = [ir.IntType(32), resolve_type("char**", gen.structs)]
-    else:
-        param_types = [resolve_type(p.type, gen.structs) for p in fn.params]
-
-    # an '@extern' function's struct parameters travel the C ABI: small
-    # ones reshaped into register values, large ones through memory
-    lowerings = None
-    if fn.is_extern:
-        lowerings = [
-            classify(gen, type_, info.is_union)
-            if (info := gen.structs.get(strip_const(param.type))) is not None
-            and info.fields is not None else DIRECT
-            for param, type_ in zip(fn.params, param_types)]
-
-        if all(lowering == DIRECT for lowering in lowerings):
-            lowerings = None
-        else:
-            param_types = [
-                type_ if kind == "direct"
-                else coerce if kind == "coerce" else ir.PointerType(type_)
-                for type_, (kind, coerce) in zip(param_types, lowerings)]
-
-    # a struct return comes back the C way too: reshaped into registers,
-    # or written through a hidden first 'sret' pointer
-    ret_lowering = None
-    if fn.is_extern and (
-            (info := gen.structs.get(strip_const(fn.return_type))) is not None
-            and info.fields is not None):
-        kind, coerce = classify(gen, ret_type, info.is_union)
-        if kind == "coerce":
-            ret_lowering = ("coerce", coerce, ret_type)
-            ret_type = coerce
-        elif kind == "indirect":
-            ret_lowering = ("indirect", None, ret_type)
-            param_types = [ir.PointerType(ret_type), *param_types]
-            ret_type = ir.VoidType()
-
-    func_type = ir.FunctionType(ret_type, param_types, var_arg=fn.var_arg)
+    validate_type(fn.return_type, gen.structs)
+    for param in fn.params:
+        validate_type(param.type, gen.structs)
 
     # an '@symbol' function lives under its chosen module symbol, its Sie
     # name resolving there from everywhere
@@ -187,16 +158,84 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     # an 'args...' function packs its calls' extra arguments
     if fn.variadic:
         gen.variadics.add(symbol)
+    if fn.var_arg:
+        gen.var_args.add(symbol)
 
-    # redeclarations are allowed as long as the signature matches
+    if fn.noreturn:
+        gen.noreturns.add(symbol)
+
+    signature = (
+        fn.return_type,
+        tuple(param.type for param in fn.params),
+        fn.var_arg,
+        fn.is_extern,
+        main_takes_args(fn),
+    )
+    existing = gen.function_signatures.get(symbol)
+    if existing is not None and existing != signature:
+        raise TypeError(f"conflicting declarations for function {fn.name!r}")
+
+    gen.function_signatures[symbol] = signature
+    gen.resolved_functions.setdefault(symbol, fn)
+    return symbol
+
+
+def lower_function_body(gen: CodeGenerator, fn: Function,
+                        symbol: str | None = None) -> ir.Function:
+    """Lower one resolved callable header into an LLVM declaration."""
+    if symbol is None:
+        symbol = overload_symbol(gen, gen.resolve_symbol(fn.name), fn.params)
+
+    if fn.name == "main" and fn.return_type is None:
+        ret_type = ir.IntType(32)
+    else:
+        ret_type = resolve_type(fn.return_type, gen.structs)
+
+    if main_takes_args(fn):
+        param_types = [ir.IntType(32), resolve_type("char**", gen.structs)]
+    else:
+        param_types = [resolve_type(p.type, gen.structs) for p in fn.params]
+
+    # an '@extern' function's struct parameters travel the C ABI: small
+    # ones reshaped into register values, large ones through memory
+    lowerings = None
+    if fn.is_extern:
+        lowerings = [
+            classify(gen, type_, info.is_union)
+            if (info := gen.structs.get(strip_const(param.type))) is not None
+            and info.fields is not None else DIRECT
+            for param, type_ in zip(fn.params, param_types)]
+
+        if all(lowering == DIRECT for lowering in lowerings):
+            lowerings = None
+        else:
+            param_types = [
+                type_ if kind == "direct"
+                else coerce if kind == "coerce" else ir.PointerType(type_)
+                for type_, (kind, coerce) in zip(param_types, lowerings)]
+
+    # a struct return comes back the C way too: reshaped into registers,
+    # or written through a hidden first 'sret' pointer
+    ret_lowering = None
+    if fn.is_extern and (
+            (info := gen.structs.get(strip_const(fn.return_type))) is not None
+            and info.fields is not None):
+        kind, coerce = classify(gen, ret_type, info.is_union)
+        if kind == "coerce":
+            ret_lowering = ("coerce", coerce, ret_type)
+            ret_type = coerce
+        elif kind == "indirect":
+            ret_lowering = ("indirect", None, ret_type)
+            param_types = [ir.PointerType(ret_type), *param_types]
+            ret_type = ir.VoidType()
+
+    func_type = ir.FunctionType(ret_type, param_types, var_arg=fn.var_arg)
     existing = gen.module.globals.get(symbol)
     if existing is not None:
         if not isinstance(existing, ir.Function):
             raise TypeError(f"{fn.name!r} is declared as both a function and a global")
-
         if existing.function_type != func_type:
             raise TypeError(f"conflicting declarations for function {fn.name!r}")
-
         func = existing
     else:
         func = ir.Function(gen.module, func_type, name=symbol)
@@ -204,20 +243,13 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
     if fn.is_static:
         func.linkage = "internal"
 
-    # an '@inline' function inlines into every caller, unconditionally;
-    # under separate compilation every unit that sees one defines it,
-    # C99-style, the duplicate definitions merging at link
     if fn.is_inline:
         func.attributes.add("alwaysinline")
-
         if gen.unit_files is not None and not fn.is_static:
             func.linkage = "linkonce_odr"
 
-    # an '@noreturn' function never gives control back: calls to it end
-    # their paths, and its own body must not return
     if fn.noreturn:
         func.attributes.add("noreturn")
-        gen.noreturns.add(symbol)
 
     # record the ABI lowerings for calls to mirror; x86-64's large
     # aggregates carry 'byval', copying onto the stack at the call, and an
@@ -239,6 +271,12 @@ def declare_function_body(gen: CodeGenerator, fn: Function) -> ir.Function:
                 arg.add_attribute("byval")
 
     return func
+
+
+def lower_functions(gen: CodeGenerator) -> None:
+    """Lower every resolved callable header after semantic checking."""
+    for symbol, fn in gen.resolved_functions.items():
+        lower_function_body(gen, fn, symbol)
 
 
 def link_once(gen: CodeGenerator, fn: Function) -> None:
@@ -271,6 +309,9 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
         symbol = overload_symbol(gen, gen.resolve_symbol(fn.name), fn.params)
         gen.current_function = symbol
         gen.current_line = fn.line
+        if gen.emitting and symbol not in gen.checked_functions:
+            raise RuntimeError(
+                f"LLVM emission received unchecked function {symbol!r}")
         func = gen.module.globals[symbol]
         if func.blocks:
             raise TypeError(f"function '{shown_signature(fn)}' "
@@ -335,12 +376,7 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                                            param.type, fn.line, arg=position)
 
         # emit the body statements starting from the entry block
-        params = dict(scope)
         emit_block(gen, builder, fn.body, scope)
-
-        # with every type in the body settled, confirm that each read of
-        # a result's members stands where its 'ok' tag allows it
-        check_results(gen, fn, params)
 
         # a void function may fall off the end, and so may main, whose
         # implicit exit code is 0; anything else must return

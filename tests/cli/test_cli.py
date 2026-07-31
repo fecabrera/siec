@@ -72,6 +72,31 @@ def test_static_functions_are_local_to_their_file(tmp_path, monkeypatch):
     assert subprocess.run([str(exe)]).returncode == 42
 
 
+def test_module_qualified_global_function_reference_is_callable(
+        tmp_path, capsys, monkeypatch):
+    """
+    A dotted call through an imported module's function-typed global
+    checks and lowers like any indirect call.
+    """
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "mod.sie").write_text("""\
+    @extern let release: fn(i32);
+    """)
+
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    import mod;
+
+    fn main() -> i32 {
+        mod.release(0);
+        return 0;
+    }
+    """)
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+    assert "release" in capsys.readouterr().out
+
+
 def test_another_files_static_is_undefined(tmp_path, monkeypatch, capsys):
     """
     A static never resolves from outside its own file.

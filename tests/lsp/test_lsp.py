@@ -32,7 +32,7 @@ def test_analyze_reports_the_error_with_its_line(tmp_path):
 
     report = analyze(src, [])
     assert report == Report(str(src.resolve()), 2,
-                            "cannot implicitly convert {i8*, i64} to i32")
+                            "cannot implicitly convert char[] to i32")
 
 
 def test_analyze_preserves_generic_call_trace(tmp_path):

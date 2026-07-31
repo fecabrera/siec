@@ -401,6 +401,58 @@ def test_constructor_picks_among_init_overloads(run):
     assert run(source).returncode == 42
 
 
+def test_constructor_stamps_generic_inits_beside_an_extension_overload(run):
+    """
+    An extension block's concrete 'init' on an aliased instantiation joins
+    the generic templates' overload set, not replaces it: a constructor
+    checked before the extension's own bodies still sees every candidate.
+    """
+    source = """
+    interface Tagged {
+        fn tag(const &self) -> i32;
+    }
+
+    struct Box<T> {
+        value: T;
+        length: u64;
+    }
+
+    fn Box<T>::init(&self, capacity: u64 = 8) {
+        self.value = 0 as T;
+        self.length = capacity;
+    }
+
+    fn Box<T>::init(&self, v: const T) {
+        self.value = v;
+        self.length = 1;
+    }
+
+    @type Crate = Box<i32>;
+
+    fn plain_length() -> u64 {
+        let plain = Crate();      // the defaulted generic overload: 8
+        return plain.length;
+    }
+
+    @extend Crate : Tagged {
+        fn init(&self, tag: const char*) {
+            self.init();
+            self.value = tag[0] as i32;
+        }
+
+        fn tag(const &self) -> i32 {
+            return self.value;
+        }
+    }
+
+    fn main() -> i32 {
+        let tagged = Crate("*");  // the extension overload: 42
+        return plain_length() as i32 + tagged.tag() - 34; // 16
+    }
+    """
+    assert run(source).returncode == 16
+
+
 def test_string_literal_fills_a_char_array_overload(run):
     """
     A string literal ranks as 'char*' but also fills a 'char[]'

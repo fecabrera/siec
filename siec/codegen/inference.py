@@ -884,7 +884,7 @@ def type_info(gen: CodeGenerator, type_name: str | None) -> StructInfo | None:
     if type_name and type_name.endswith("[]"):
         element = type_name[:-2]
         fields = [Field("data", f"{element}*"), Field("length", "u64")]
-        return StructInfo(resolve_type(type_name, gen.structs), fields)
+        return StructInfo(None, fields)
 
     return gen.structs.get(type_name)
 

@@ -57,6 +57,8 @@ This ordering is a compiler invariant, not a source-order rule. For example, `@t
 
 Reachable generic instances follow the same ordering through a fixed-point worklist. A call first requests an instance; the compiler substitutes and resolves its header and bounds, then queues its body for checking. That body may request more instances or instantiate types carrying new interface claims, so the compiler repeats resolution and checking until no work remains. Conformance checks only inspect methods specialized during resolution—they never specialize a receiver family themselves.
 
+LLVM emission begins only after all four phases and that fixed point succeed. Until then, structs, globals, callable signatures, and checked bodies live in backend-neutral compiler records; the output module has no LLVM types or values in it. `@sizeof` consults the selected target's layout through those semantic type records without lowering them. The backend then consumes the closed, checked program in one direction—types, globals, callable declarations, and finally bodies—and cannot discover a new generic instance while doing so.
+
 ### Editor support
 
 `sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, hover, and go-to-definition. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.

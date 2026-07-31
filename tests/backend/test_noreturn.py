@@ -42,6 +42,27 @@ def test_without_noreturn_the_return_is_still_required(compile_source):
         """)
 
 
+def test_generic_noreturn_call_satisfies_a_required_return(run):
+    """
+    A generic '@noreturn' function ends a path through its concrete
+    instance, like 'panic' closing a value-returning body.
+    """
+    source = EXIT + """
+    @noreturn fn die<T>(value: T) {
+        exit(value as i32);
+    }
+
+    fn quit(code: i32) -> i32 {
+        die(code);
+    }
+
+    fn main() -> i32 {
+        return quit(42);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_noreturn_body_ends_through_another_noreturn_call(run):
     """
     A '@noreturn' function's own body leaves through a noreturn call.

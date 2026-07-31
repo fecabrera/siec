@@ -18,9 +18,9 @@ from siec.codegen.types import (
     fn_type_parts,
     is_reference,
     raw_array,
-    resolve_type,
     strip_const,
     strip_reference,
+    validate_type,
 )
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -93,6 +93,16 @@ def substitute(type_name: str, mapping: dict) -> str:
 
 def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
                         checked: bool = True) -> str | None:
+    """Instantiate a generic type while the semantic graph is still open."""
+    gen.generic_type_depth += 1
+    try:
+        return _instantiate_generic(gen, name, seen, checked)
+    finally:
+        gen.generic_type_depth -= 1
+
+
+def _instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
+                         checked: bool = True) -> str | None:
     """
     Instantiate a generic spelling into a concrete canonical name: a
     struct template registers a real struct, an alias template expands
@@ -104,8 +114,6 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
     """
     # deferred imports: instantiation is a stage of alias expansion
     from siec.codegen.aliases import expand_alias
-    from siec.codegen.structs import union_storage
-
     if (parts := split_generic(name)) is None:
         return None
 
@@ -125,14 +133,16 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
 
         canonical = f"Tuple<{','.join(args)}>"
         if canonical not in gen.structs:
-            ident = gen.module.context.get_identified_type(canonical)
+            if gen.types_lowered:
+                raise RuntimeError(
+                    "LLVM emission attempted to instantiate a tuple type")
             fields = [Field(str(i), arg) for i, arg in enumerate(args)]
-            gen.structs[canonical] = StructInfo(ident, fields)
+            gen.structs[canonical] = StructInfo(None, fields)
 
             gen.ungated_types += 1
             try:
-                ident.set_body(*[resolve_type(f.type, gen.structs)
-                                 for f in fields])
+                for field in fields:
+                    validate_type(field.type, gen.structs)
             finally:
                 gen.ungated_types -= 1
 
@@ -195,6 +205,9 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
     canonical = f"{base}<{','.join(args)}>"
     if canonical in gen.structs:
         return canonical
+    if gen.types_lowered:
+        raise RuntimeError(
+            "LLVM emission attempted to instantiate a generic type")
 
     if gen.current_function is not None:
         gen.type_instantiation_sites.setdefault(
@@ -205,17 +218,20 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
     if template.fields is None:
         raise TypeError(f"generic struct {base!r} is declared without a body")
 
-    ident = gen.module.context.get_identified_type(canonical)
     mapping = dict(zip(template.params, args))
 
     # fields deep-copy so each instantiation owns its types and defaults
     fields = copy.deepcopy(template.fields)
     substitute_types(fields, mapping)
 
-    info = StructInfo(ident, fields, align=template.align,
-                      volatile=template.volatile, is_union=template.is_union)
-    if template.packed:
-        ident.packed = True
+    info = StructInfo(
+        None,
+        fields,
+        align=template.align,
+        volatile=template.volatile,
+        is_union=template.is_union,
+        packed=template.packed,
+    )
 
     gen.structs[canonical] = info
 
@@ -228,11 +244,8 @@ def instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
             if is_reference(field.type):
                 raise TypeError(f"field {field.name!r} cannot be a reference")
 
-        resolved = [resolve_type(f.type, gen.structs) for f in fields]
-        if info.is_union:
-            resolved = union_storage(gen, resolved)
-
-        ident.set_body(*resolved)
+        for field in fields:
+            validate_type(field.type, gen.structs)
 
         # the template's interface claims carry to each instance, its
         # arguments substituted in: 'List<T>: Iterable<T>' makes
@@ -910,7 +923,7 @@ def bind_to_target(gen: CodeGenerator, template, name: str, target_name: str):
 
     # handing the instance around reaches it as surely as calling it
     note_use(gen, symbol)
-    return gen.module.globals[symbol]
+    return gen.module.globals.get(symbol, symbol)
 
 
 def reference_type(gen: CodeGenerator, expr) -> str | None:
