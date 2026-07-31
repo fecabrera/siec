@@ -108,7 +108,14 @@ def parse_type_params(ts: TokenStream) -> tuple[list[str] | None, dict | None]:
 
         if ts.peek().syntax == ":":
             ts.next()
-            constraints[param] = parse_type(ts)
+            bounds = [parse_type(ts)]
+            while ts.peek().syntax == "&":
+                ts.next()
+                bounds.append(parse_type(ts))
+
+            ordered = tuple(sorted(set(bounds)))
+            constraints[param] = (ordered[0] if len(ordered) == 1
+                                  else ordered)
 
         if ts.peek().syntax != ",":
             break

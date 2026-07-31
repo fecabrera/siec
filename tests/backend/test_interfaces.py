@@ -677,6 +677,25 @@ def test_generic_interface_body(run):
     assert run(source).returncode == 0
 
 
+def test_generic_interface_intersection_bound(run, compile_source):
+    """A generic interface claim checks every bound on its argument."""
+    source = """
+    interface I1;
+    interface I2;
+    struct Both: I1, I2 {}
+    struct One: I1 {}
+
+    interface Accepts<T: I1 & I2>;
+    struct Good: Accepts<Both> {}
+
+    fn main() -> i32 { return 42; }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="does not implement interface 'I2'"):
+        compile_source(source.replace("Accepts<Both>", "Accepts<One>"))
+
+
 def test_struct_body_rejects_methods(compile_source):
     """
     Only interfaces declare actions in their bodies; a struct's methods

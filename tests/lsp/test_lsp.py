@@ -732,6 +732,25 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 3)]
 
 
+def test_inspect_renders_intersection_bounds(tmp_path):
+    """Hover preserves explicit intersections in generic signatures."""
+    analysis, src = unit(tmp_path, """\
+interface I1;
+interface I2;
+struct Both: I1, I2 {}
+
+fn choose<T: I2 & I1>(value: T) -> i32 { return 42; }
+
+fn main() -> i32 {
+    let value: Both = {};
+    return choose(value);
+}
+""")
+
+    finding = probe(analysis, src, 8, 11)
+    assert finding.text == "fn choose<T: I1 & I2>(value: T) -> i32"
+
+
 def test_inspect_sites_a_selected_function_override(tmp_path):
     """Hover and navigation omit the concrete implementation it replaces."""
     analysis, src = unit(tmp_path, """\

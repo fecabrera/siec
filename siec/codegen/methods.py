@@ -15,16 +15,9 @@ from llvmlite import ir
 from siec.ast import Call, Member, Var
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.generics import split_generic, substitute, substitute_types
+from siec.codegen.generics import (constraint_count, split_generic, substitute,
+                                   substitute_types)
 from siec.codegen.types import strip_const, strip_reference
-
-
-def constraint_count(constraints: dict | None) -> int:
-    """Count individual bounds, including intersections on one parameter."""
-    return sum(
-        len(value) if isinstance(value, tuple) else 1
-        for value in (constraints or {}).values()
-    )
 
 
 def method_signature(fn, mapping: dict | None = None) -> tuple:

@@ -94,6 +94,65 @@ def test_interface_bound_accepts_an_implementer(run):
     assert run(source).returncode == 42
 
 
+def test_intersection_bounds_support_direct_and_template_forms(
+        run, compile_source):
+    """Functions and receiver families require every explicit `&` bound."""
+    source = """
+    interface I1;
+    interface I2;
+
+    struct Both: I1, I2 {}
+    struct One: I1 {}
+
+    fn direct<T: I1 & I2>(value: T) -> i32 { return 10; }
+
+    @template<T: I1 & I2>
+    fn decorated<T>(value: T) -> i32 { return 10; }
+
+    @template<T: I1 & I2>
+    fn T::separate(const &self) -> i32 { return 6; }
+
+    @template<T: I1 & I2> {
+        fn grouped<T>(value: T) -> i32 { return 10; }
+        fn T::grouped_method(const &self) -> i32 { return 6; }
+    }
+
+    fn main() -> i32 {
+        let value: Both = {};
+        return direct(value) + decorated(value) + grouped(value)
+            + value.separate() + value.grouped_method();
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="does not implement interface 'I2'"):
+        compile_source(source.replace(
+            "let value: Both = {};",
+            "let value: One = {};",
+        ))
+
+
+def test_intersection_is_more_specific_than_a_single_bound(run):
+    """Each member of an intersection contributes overload specificity."""
+    source = """
+    interface I1;
+    interface I2;
+    struct Both: I1, I2 {}
+    struct One: I1 {}
+
+    fn pick<T>(value: T) -> i32 { return 1; }
+    fn pick<T: I1>(value: T) -> i32 { return 2; }
+    fn pick<T: I1 & I2>(value: T) -> i32 { return 42; }
+
+    fn main() -> i32 {
+        let both: Both = {};
+        let one: One = {};
+        return pick(both) + pick(one) - 2;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_interface_bound_infers_its_free_type_arguments(run):
     """
     A concrete claim supplies generic arguments named only inside another

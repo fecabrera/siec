@@ -27,6 +27,24 @@ IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 INSTANTIATION = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)<")
 
 
+def constraint_bounds(value: str | tuple) -> tuple[str, ...]:
+    """Return one bound value as its normalized intersection members."""
+    return value if isinstance(value, tuple) else (value,)
+
+
+def constraint_count(constraints: dict | None) -> int:
+    """Count individual bounds, including intersections on one parameter."""
+    return sum(len(constraint_bounds(value))
+               for value in (constraints or {}).values())
+
+
+def substitute_constraint(value: str | tuple, mapping: dict):
+    """Substitute every type spelling in one possibly intersected bound."""
+    bounds = tuple(substitute(bound, mapping)
+                   for bound in constraint_bounds(value))
+    return bounds[0] if len(bounds) == 1 else bounds
+
+
 def check_template_cycle(gen: CodeGenerator, name: str) -> None:
     """
     Reject a generic alias whose target reaches back to itself through
@@ -364,7 +382,8 @@ def template_identity(template) -> tuple:
     mapping = {p: f"#{i}" for i, p in enumerate(template.type_params)}
     constraints = tuple(
         (mapping[param], substitute(bound, mapping))
-        for param, bound in (template.constraints or {}).items()
+        for param, value in (template.constraints or {}).items()
+        for bound in constraint_bounds(value)
     )
     return template_key(template), constraints
 
@@ -532,16 +551,20 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
                 or not isinstance(arg, (AggregateLiteral, ArrayLiteral))):
             continue
 
-        required = substitute(constraints[placeholder], bindings)
         from siec.codegen.interfaces import constraints_hold
 
-        for family_param, claim, family_constraints, file in gen.array_claims:
-            family: dict = {}
-            unify(claim, required, [family_param], family)
-            if (family_param in family
-                    and constraints_hold(
-                        gen, family_constraints, family, file)):
-                bindings[placeholder] = f"{family[family_param]}[]"
+        for constraint in constraint_bounds(constraints[placeholder]):
+            required = substitute(constraint, bindings)
+            for entry in gen.array_claims:
+                family_param, claim, family_constraints, file = entry
+                family: dict = {}
+                unify(claim, required, [family_param], family)
+                if (family_param in family
+                        and constraints_hold(
+                            gen, family_constraints, family, file)):
+                    bindings[placeholder] = f"{family[family_param]}[]"
+                    break
+            if placeholder in bindings:
                 break
 
     infer_constraint_arguments(gen, template, bindings)
@@ -572,38 +595,40 @@ def infer_constraint_arguments(gen: CodeGenerator, template,
     while True:
         before = dict(bindings)
 
-        for placeholder, constraint in constraints.items():
+        for placeholder, value in constraints.items():
             concrete = bindings.get(placeholder)
             if concrete is None:
                 continue
 
-            required = substitute(constraint, bindings)
-            required_base = (split_generic(required) or (required, []))[0]
-            possibilities = []
+            for constraint in constraint_bounds(value):
+                required = substitute(constraint, bindings)
+                required_base = (split_generic(required) or (required, []))[0]
+                possibilities = []
 
-            for claim in claimed_interfaces(gen, concrete):
-                claim_base = (split_generic(claim) or (claim, []))[0]
-                if claim_base != required_base:
-                    continue
+                for claim in claimed_interfaces(gen, concrete):
+                    claim_base = (split_generic(claim) or (claim, []))[0]
+                    if claim_base != required_base:
+                        continue
 
-                trial = dict(bindings)
-                try:
-                    unify(required, claim, template.type_params, trial)
-                except TypeError:
-                    continue
+                    trial = dict(bindings)
+                    try:
+                        unify(required, claim, template.type_params, trial)
+                    except TypeError:
+                        continue
 
-                additions = {
-                    name: trial[name]
-                    for name in template.type_params
-                    if name not in bindings and name in trial
-                }
-                if additions not in possibilities:
-                    possibilities.append(additions)
+                    additions = {
+                        name: trial[name]
+                        for name in template.type_params
+                        if name not in bindings and name in trial
+                    }
+                    if additions not in possibilities:
+                        possibilities.append(additions)
 
-            # A type may claim several instantiations of one interface. Only
-            # infer when those claims agree; otherwise the call must spell T.
-            if len(possibilities) == 1:
-                bindings.update(possibilities[0])
+                # A type may claim several instantiations of one interface.
+                # Only infer when those claims agree; otherwise the call must
+                # spell the otherwise-hidden type argument.
+                if len(possibilities) == 1:
+                    bindings.update(possibilities[0])
 
         if bindings == before:
             return
@@ -687,7 +712,7 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
 
         strength = {"exact": 0, "implicit": 1, "adopt": 2}
         ranked = [
-            (strength[fit], -len(entry[0].constraints or {}),
+            (strength[fit], -constraint_count(entry[0].constraints),
              -int(entry[0].is_override), entry)
             for entry in resolved
             if (fit := generic_fit(gen, *entry, call, scope)) is not None

@@ -75,6 +75,28 @@ def test_bounded_struct_and_alias_reject_nonimplementers(compile_source):
         ))
 
 
+def test_struct_and_alias_intersection_bounds(run, compile_source):
+    """Struct and alias arguments must satisfy every intersected bound."""
+    source = """
+    interface I1;
+    interface I2;
+    struct Both: I1, I2 {}
+    struct One: I1 {}
+
+    struct Box<T: I1 & I2> { value: T; }
+    @type Wrapped<T: I1 & I2> = Box<T>;
+
+    fn main() -> i32 {
+        let value: Wrapped<Both> = {{}};
+        return 42;
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="does not implement interface 'I2'"):
+        compile_source(source.replace("Wrapped<Both>", "Wrapped<One>"))
+
+
 def test_nested_and_recursive_generics(run):
     """
     Arguments nest ('Box<Box<i32>>', splitting the lexer's '>>'), and a

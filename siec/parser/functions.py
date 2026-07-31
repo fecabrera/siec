@@ -162,7 +162,7 @@ def parse_template(ts: TokenStream) -> Program:
 
 def apply_template_environment(program: Program, params: list[str],
                                constraints: dict | None, line: int) -> None:
-    """Attach one '@template' environment to its extensions and methods."""
+    """Attach one '@template' environment to extensions and callables."""
     unsupported = (
         program.includes or program.structs or program.consts
         or program.enums or program.globals or program.aliases
@@ -171,7 +171,7 @@ def apply_template_environment(program: Program, params: list[str],
     )
     if unsupported:
         raise SyntaxError(f"line {line}: an '@template' block may contain "
-                          "only extensions and methods")
+                          "only extensions and functions or methods")
 
     actions = {id(action) for ext in program.extends for action in ext.actions}
     for ext in program.extends:
@@ -189,8 +189,17 @@ def apply_template_environment(program: Program, params: list[str],
         if id(fn) in actions:
             continue
         if fn.receiver is None:
-            raise SyntaxError(f"line {fn.line}: an '@template' declaration "
-                              "must be an extension or a method")
+            function_params = set(fn.type_params or ())
+            missing = [param for param in params
+                       if param not in function_params]
+            if missing:
+                shown = ", ".join(repr(param) for param in missing)
+                raise SyntaxError(
+                    f"line {fn.line}: template parameter {shown} is not "
+                    f"declared by generic function {fn.name!r}")
+
+            fn.constraints = merge_constraints(fn.constraints, constraints)
+            continue
 
         apply_method_template(fn, params, constraints)
 

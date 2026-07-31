@@ -734,6 +734,9 @@ def signature(fn: Function) -> str:
     """
     from siec.codegen.generics import substitute
 
+    def bound_text(value) -> str:
+        return " & ".join(value if isinstance(value, tuple) else (value,))
+
     mapping = {}
     type_params = list(fn.type_params or ())
     for param, constraint in (fn.constraints or {}).items():
@@ -747,7 +750,7 @@ def signature(fn: Function) -> str:
             and fn.receiver not in fn.receiver_params
             and not fn.receiver.endswith("[]")):
         receiver_params = ", ".join(
-            p + (f": {fn.receiver_constraints[p]}"
+            p + (f": {bound_text(fn.receiver_constraints[p])}"
                  if p in (fn.receiver_constraints or {}) else "")
             for p in fn.receiver_params
         )
@@ -756,7 +759,7 @@ def signature(fn: Function) -> str:
 
     if type_params:
         shown = ", ".join(
-            p + (f": {fn.constraints[p]}"
+            p + (f": {bound_text(fn.constraints[p])}"
                  if p in (fn.constraints or {}) else "")
             for p in type_params
         )
@@ -778,8 +781,12 @@ def struct_text(node) -> str:
         "union" if getattr(node, "is_union", False) else "struct"
     name = node.name
     if node.params:
+        def bound_text(value) -> str:
+            bounds = value if isinstance(value, tuple) else (value,)
+            return " & ".join(bounds)
+
         params = ", ".join(
-            p + (f": {node.constraints[p]}"
+            p + (f": {bound_text(node.constraints[p])}"
                  if p in (node.constraints or {}) else "")
             for p in node.params
         )

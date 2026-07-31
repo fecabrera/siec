@@ -12,7 +12,8 @@ from contextlib import contextmanager
 
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.generics import split_generic, substitute, unify
+from siec.codegen.generics import (split_generic, substitute,
+                                   substitute_constraint, unify)
 from siec.codegen.types import (
     SCALAR_TYPES,
     is_const,
@@ -1006,7 +1007,7 @@ def resolve_template_extend(gen: CodeGenerator, ext, base: str,
     renaming = dict(zip(args, template.params))
     claims = [substitute(s, renaming) for s in ext.interfaces]
     constraints = {
-        renaming.get(param, param): substitute(bound, renaming)
+        renaming.get(param, param): substitute_constraint(bound, renaming)
         for param, bound in (ext.constraints or {}).items()
     }
     entry = (claims, constraints, ext.file, ext.line)

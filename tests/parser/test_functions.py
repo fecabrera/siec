@@ -157,6 +157,33 @@ def test_generic_function_and_method_bounds(ts):
     assert method.constraints == {"U": "Iface<T>"}
 
 
+def test_explicit_intersection_bounds(ts):
+    """Direct generic bounds accept an unordered type-like intersection."""
+    fn = parse_function(ts("fn f<T: I2 & I1>(value: T) -> T { return value; }"))
+
+    assert fn.type_params == ["T"]
+    assert fn.constraints == {"T": ("I1", "I2")}
+
+
+def test_template_environment_applies_to_generic_functions(ts):
+    """Decorator and group forms add bounds to declared function parameters."""
+    program = parse_program(ts("""
+    @template<T: I1 & I2>
+    fn decorated<T>(value: T) -> T { return value; }
+
+    @template<T: I1 & I2> {
+        fn grouped<T>(value: T) -> T { return value; }
+        fn T::method(const &self) -> i32 { return 42; }
+    }
+    """))
+
+    decorated, grouped, method = program.functions
+    intersection = {"T": ("I1", "I2")}
+    assert decorated.constraints == intersection
+    assert grouped.constraints == intersection
+    assert method.receiver_constraints == intersection
+
+
 def test_bounded_extension_block_supplies_method_receivers(ts):
     """
     An extension block binds its receiver parameter and bounds for every

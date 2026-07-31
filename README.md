@@ -1120,9 +1120,12 @@ A parameter may carry a bound after `:`. An interface bound accepts any type tha
 fn hash<K: Hashable>(key: K) -> u64;
 fn size<T, U: Iterable<T>>(values: U) -> u64;
 fn word<T: u64>(value: T) -> T;
+fn ordered<T: Hashable & Comparable<T>>(value: T) -> T;
 ```
 
-An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the last declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
+`&` forms an explicit intersection: the argument must satisfy every listed type-like bound. Intersections work wherever bounds do, including generic functions, structs, aliases, interfaces, receiver methods, extensions, and `@template` environments. They are unordered—`I1 & I2` and `I2 & I1` describe the same bound—and each additional member makes an otherwise matching overload or override more specific.
+
+An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the third declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
 
 `Scalar` is a sealed builtin interface for the primitive value types: the signed and unsigned integers, `f32`, `f64`, `bool`, and `char`. It is useful when an implementation needs the builtin scalar representation while accepting every width. Structs, enums, pointers, and arrays do not satisfy it, and user declarations cannot claim it.
 
@@ -2495,7 +2498,7 @@ show(count);   // an i64 passes where the interface is required
 
 A primitive's operators stay the machine's: claiming `Eq<i64>` over `i64` declares a callable `eq` without `==` ever routing through it. The shorthands only reach structs and arrays, whose operators have nowhere else to come from.
 
-`@template<T: Bound>` supplies one generic environment to extensions and methods. Braces apply it to a group, so a claim and any sibling methods share exactly the same receiver parameters and bounds:
+`@template<T: Bound>` supplies one generic environment to extensions, generic functions, and methods. Braces apply it to a group, so declarations share the same bounds:
 
 ```
 @template<T: Scalar> {
@@ -2512,7 +2515,7 @@ A primitive's operators stay the machine's: claiming `Eq<i64>` over `i64` declar
 }
 ```
 
-Without braces it decorates the one extension or method following it. Repeat the decorator when separately placed declarations need the same environment:
+Without braces it decorates the one extension, generic function, or method following it. Repeat the decorator when separately placed declarations need the same environment:
 
 ```
 @template<T: Scalar>
@@ -2522,9 +2525,12 @@ Without braces it decorates the one extension or method following it. Repeat the
 
 @template<T: Scalar>
 fn T[]::first(const &self) -> T { return self[0]; }
+
+@template<T: Hashable & Formattable>
+fn show_key<T>(key: T) -> String { ... }
 ```
 
-Every template parameter must occur in the receiver type; ordinary generic functions and a method's own generic parameters keep declaring their parameters on `fn`. A bare receiver blankets the matching types themselves (`@extend T: Hashable`); a constructed receiver such as `T[]` blankets that family. The bound gates both the claims and methods. In the examples `i32[]` gets `Hashable`, `hash`, and `first`, while a struct's array gets none of them. The older compact header, `@extend<T: Scalar> T[]: Hashable`, remains accepted as the declaration-wise equivalent.
+Every receiver-template parameter must occur in the receiver type. A free function in a template environment declares those same parameters on `fn`; a method's own independent generic parameters remain on `fn` as well. A bare receiver blankets the matching types themselves (`@extend T: Hashable`); a constructed receiver such as `T[]` blankets that family. The bound gates both the claims and methods. In the examples `i32[]` gets `Hashable`, `hash`, and `first`, while a struct's array gets none of them. The older compact header, `@extend<T: Scalar> T[]: Hashable`, remains accepted as the declaration-wise equivalent.
 
 A decorator may constrain only part of an already-generic receiver. `@template<K: Hashable> @override fn Map<K, V>::hash(...)` applies the bound to `K` while `V` remains an unconstrained parameter of the `Map<K, V>` receiver family. Parameters written on the receiver are preserved; the decorator adds bounds rather than replacing the receiver's parameter list.
 
