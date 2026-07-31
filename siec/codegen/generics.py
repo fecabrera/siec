@@ -404,8 +404,11 @@ def rewrite_types(node, apply) -> None:
             setattr(node, field.name, [apply(v) for v in value])
         elif (field.name in ("constraints", "receiver_constraints")
               and value is not None):
-            setattr(node, field.name,
-                    {k: apply(v) for k, v in value.items()})
+            setattr(node, field.name, {
+                key: (tuple(apply(bound) for bound in bounds)
+                      if isinstance(bounds, tuple) else apply(bounds))
+                for key, bounds in value.items()
+            })
         else:
             rewrite_types(value, apply)
 

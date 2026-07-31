@@ -249,13 +249,37 @@ def test_template_decorator_parameter_must_belong_to_receiver(ts):
         """))
 
 
-def test_template_decorator_rejects_conflicting_receiver_bound(ts):
-    """One receiver parameter cannot acquire two different bounds."""
-    with pytest.raises(SyntaxError, match="conflicting bounds"):
-        parse_program(ts("""
-        @template<K: Hashable>
-        fn Map<K: Scalar, V>::hash(const &self) -> u64 { return 42; }
-        """))
+def test_template_decorator_intersects_existing_receiver_bound(ts):
+    """Repeated bounds on one receiver parameter form an intersection."""
+    program = parse_program(ts("""
+    @template<K: Hashable>
+    fn Map<K: Scalar, V>::hash(const &self) -> u64 { return 42; }
+    """))
+
+    assert program.functions[0].receiver_constraints == {
+        "K": ("Hashable", "Scalar"),
+    }
+
+
+def test_nested_template_decorator_in_extension_body(ts):
+    """A nested method template adds to its extension environment."""
+    program = parse_program(ts("""
+    @template<T: Formattable> {
+        @extend T[]: Formattable {
+            fn format(const &self) -> i32 { return 1; }
+
+            @template<T: Iterable<char>>
+            @override
+            fn format(const &self) -> i32 { return 42; }
+        }
+    }
+    """))
+
+    ordinary, override = program.functions
+    assert ordinary.receiver_constraints == {"T": "Formattable"}
+    assert override.receiver_constraints == {
+        "T": ("Formattable", "Iterable<char>"),
+    }
 
 
 def test_forward_declaration_has_no_body(ts):

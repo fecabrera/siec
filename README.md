@@ -2528,6 +2528,8 @@ Every template parameter must occur in the receiver type; ordinary generic funct
 
 A decorator may constrain only part of an already-generic receiver. `@template<K: Hashable> @override fn Map<K, V>::hash(...)` applies the bound to `K` while `V` remains an unconstrained parameter of the `Map<K, V>` receiver family. Parameters written on the receiver are preserved; the decorator adds bounds rather than replacing the receiver's parameter list.
 
+Templates may also decorate methods inside an extension block. Their bounds intersect with the enclosing environment: inside `@template<T: Formattable> @extend T[]: Formattable { ... }`, a method decorated with `@template<T: Iterable<char>>` applies only when `T` implements both interfaces. This is useful for a bounded `@override` that specializes one method without narrowing the extension's other methods or claims.
+
 Arrays still extend without a bound in two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. The block and separate spellings are interchangeable:
 
 ```

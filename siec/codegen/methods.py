@@ -19,6 +19,14 @@ from siec.codegen.generics import split_generic, substitute, substitute_types
 from siec.codegen.types import strip_const, strip_reference
 
 
+def constraint_count(constraints: dict | None) -> int:
+    """Count individual bounds, including intersections on one parameter."""
+    return sum(
+        len(value) if isinstance(value, tuple) else 1
+        for value in (constraints or {}).values()
+    )
+
+
 def method_signature(fn, mapping: dict | None = None) -> tuple:
     """A method's parameter and return types after an optional substitution."""
     mapping = mapping or {}
@@ -82,13 +90,11 @@ def select_method_overrides(gen: CodeGenerator, base: str, method: str,
             selected.extend(candidates)
             continue
 
-        rank = max(
-            len(template.receiver_constraints or {})
-            for template, _ in overrides
-        )
+        rank = max(constraint_count(template.receiver_constraints)
+                   for template, _ in overrides)
         winners = [
             entry for entry in overrides
-            if len(entry[0].receiver_constraints or {}) == rank
+            if constraint_count(entry[0].receiver_constraints) == rank
         ]
         if len(winners) != 1:
             raise TypeError(f"overrides of method {base + '::' + method!r} "

@@ -183,8 +183,7 @@ def apply_template_environment(program: Program, params: list[str],
         ext.params = list(params)
         ext.constraints = dict(constraints or {})
         for action in ext.actions:
-            action.receiver_params = list(params)
-            action.receiver_constraints = dict(constraints or {})
+            apply_method_template(action, params, constraints)
 
     for fn in program.functions:
         if id(fn) in actions:
@@ -193,26 +192,36 @@ def apply_template_environment(program: Program, params: list[str],
             raise SyntaxError(f"line {fn.line}: an '@template' declaration "
                               "must be an extension or a method")
 
-        receiver_params = list(fn.receiver_params or ())
-        require_template_receiver(
-            fn.receiver, params, fn.line, receiver_params)
+        apply_method_template(fn, params, constraints)
 
-        # A spelled generic receiver introduces all of its placeholders.
-        # The environment may constrain only some of them, as in
-        # '@template<K: I> fn Map<K, V>::f'. Keep V in the receiver family
-        # while adding K's bound.
-        if not receiver_params:
-            fn.receiver_params = list(params)
 
-        receiver_constraints = dict(fn.receiver_constraints or {})
-        for param, bound in (constraints or {}).items():
-            previous = receiver_constraints.get(param)
-            if previous is not None and previous != bound:
-                raise SyntaxError(f"line {fn.line}: receiver parameter "
-                                  f"{param!r} has conflicting bounds "
-                                  f"{previous!r} and {bound!r}")
-            receiver_constraints[param] = bound
-        fn.receiver_constraints = receiver_constraints
+def merge_constraints(left: dict | None, right: dict | None) -> dict:
+    """Merge bound maps, retaining intersections on the same parameter."""
+    merged = dict(left or {})
+    for param, bound in (right or {}).items():
+        previous = merged.get(param)
+        bounds = previous if isinstance(previous, tuple) else (previous,)
+        bounds += bound if isinstance(bound, tuple) else (bound,)
+        ordered = tuple(sorted(value for value in set(bounds)
+                               if value is not None))
+        merged[param] = ordered[0] if len(ordered) == 1 else ordered
+    return merged
+
+
+def apply_method_template(fn: Function, params: list[str],
+                          constraints: dict | None) -> None:
+    """Add one template environment to an already parsed receiver method."""
+    receiver_params = list(fn.receiver_params or ())
+    require_template_receiver(fn.receiver, params, fn.line, receiver_params)
+
+    # A spelled generic receiver introduces all of its placeholders. The
+    # environment may constrain only some of them, as in
+    # '@template<K: I> fn Map<K, V>::f'. Keep V in the receiver family.
+    if not receiver_params:
+        fn.receiver_params = list(params)
+
+    fn.receiver_constraints = merge_constraints(
+        fn.receiver_constraints, constraints)
 
 
 def require_template_receiver(receiver: str, params: list[str],
@@ -310,11 +319,42 @@ def parse_method_body(ts: TokenStream, receiver: str,
     ts.expect("sym", "{")
     methods = []
     while ts.peek().syntax != "}":
+        if ts.peek().value == "@" and ts.peek(1).value == "template":
+            methods.extend(parse_receiver_template(
+                ts, receiver, receiver_params, receiver_constraints))
+            continue
+
         method = parse_function(ts, receiver, receiver_params)
-        method.receiver_constraints = receiver_constraints
+        method.receiver_constraints = merge_constraints(
+            method.receiver_constraints, receiver_constraints)
         methods.append(method)
 
     ts.next()
+    return methods
+
+
+def parse_receiver_template(ts: TokenStream, receiver: str,
+                            receiver_params: list[str] | None,
+                            receiver_constraints: dict | None) -> list:
+    """Parse a template decorator or group nested in a receiver body."""
+    line = ts.peek().line
+    ts.expect("sym", "@")
+    ts.expect("ident", "template")
+    params, constraints = parse_type_params(ts)
+    if params is None:
+        raise SyntaxError(f"line {line}: '@template' needs type parameters")
+
+    if ts.peek().syntax == "{":
+        methods = parse_method_body(
+            ts, receiver, receiver_params, receiver_constraints)
+    else:
+        method = parse_function(ts, receiver, receiver_params)
+        method.receiver_constraints = merge_constraints(
+            method.receiver_constraints, receiver_constraints)
+        methods = [method]
+
+    for method in methods:
+        apply_method_template(method, params, constraints)
     return methods
 
 

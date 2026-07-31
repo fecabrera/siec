@@ -141,6 +141,40 @@ def test_bounded_override_constrains_subset_of_receiver_parameters(run):
     assert run(source).returncode == 42
 
 
+def test_nested_template_override_intersects_extension_bounds(run):
+    """A nested override must satisfy both its own and its outer bound."""
+    source = """
+    interface Outer;
+    interface Inner<T>;
+
+    struct Both {}
+    @extend Both: Outer, Inner<char>;
+
+    struct OuterOnly {}
+    @extend OuterOnly: Outer;
+
+    struct Box<T> { value: T; }
+
+    fn Box<T>::answer(const &self) -> i32 { return 1; }
+
+    @template<T: Outer> {
+        @extend Box<T>: Outer {
+            @template<T: Inner<char>>
+            @override
+            fn answer(const &self) -> i32 { return 42; }
+        }
+    }
+
+    fn main() -> i32 {
+        let both: Box<Both> = {{}};
+        let outer: Box<OuterOnly> = {{}};
+        let plain: Box<i32> = {0};
+        return both.answer() + outer.answer() + plain.answer() - 2;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_bounded_generic_function_override_is_more_specific(run):
     """The same override rule applies to constrained generic functions."""
     source = """

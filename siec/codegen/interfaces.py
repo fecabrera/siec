@@ -1103,23 +1103,25 @@ def check_constraint_set(gen: CodeGenerator, constraints: dict | None,
     from siec.codegen.aliases import expand_alias
 
     with declaration_view(gen, file):
-        for placeholder, spelling in (constraints or {}).items():
+        for placeholder, value in (constraints or {}).items():
             concrete = mapping.get(placeholder)
             if concrete is None:
                 continue
 
-            required, is_interface_bound = expand_bound(
-                gen, substitute(spelling, mapping))
-            if is_interface_bound:
-                if not type_implements(gen, concrete, required):
-                    raise TypeError(f"type {concrete!r} does not implement "
-                                    f"interface {required!r}")
-                continue
+            bounds = value if isinstance(value, tuple) else (value,)
+            for spelling in bounds:
+                required, is_interface_bound = expand_bound(
+                    gen, substitute(spelling, mapping))
+                if is_interface_bound:
+                    if not type_implements(gen, concrete, required):
+                        raise TypeError(f"type {concrete!r} does not implement "
+                                        f"interface {required!r}")
+                    continue
 
-            concrete = expand_alias(gen, concrete, checked=False)
-            if strip_const(concrete) != strip_const(required):
-                raise TypeError(f"type {concrete!r} does not satisfy bound "
-                                f"{required!r}")
+                concrete = expand_alias(gen, concrete, checked=False)
+                if strip_const(concrete) != strip_const(required):
+                    raise TypeError(f"type {concrete!r} does not satisfy bound "
+                                    f"{required!r}")
 
 
 def constraints_hold(gen: CodeGenerator, constraints: dict | None,

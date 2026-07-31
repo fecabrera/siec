@@ -341,8 +341,10 @@ def resolve_constraints(gen: CodeGenerator, owner,
         name = sorted(unknown)[0]
         raise TypeError(f"bound names undeclared type parameter {name!r}")
 
-    for bound in constraints.values():
-        resolve_bound(gen, bound, parameters)
+    for value in constraints.values():
+        bounds = value if isinstance(value, tuple) else (value,)
+        for bound in bounds:
+            resolve_bound(gen, bound, parameters)
 
 
 def resolve_claim(gen: CodeGenerator, spelling: str,
