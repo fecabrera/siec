@@ -1,4 +1,5 @@
 import { malloc, realloc, free } from stdlib;
+import { FNV1a } from std.hashing;
 import { Formattable } from std.format;
 
 @private @const DEFAULT_LIST_CAPACITY = 2;
@@ -287,6 +288,17 @@ fn List<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
     self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
     self.capacity = capacity;
+}
+
+@template<T: Scalar>
+@extend List<T>: Hashable {
+    fn hash(const &self) -> u64 {
+        let h = FNV1a();
+        foreach (k : self) {
+            h.ingest(k as u64);
+        }
+        return h.hash;
+    }
 }
 
 @extend T[]

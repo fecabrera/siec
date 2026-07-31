@@ -1,0 +1,86 @@
+import { panic } from std;
+import { format } from std.format;
+import { String, List, Map } from std.collections;
+import { Decimal } from std.decimal;
+import { Hashable } from std.hashing;
+
+@type TOMLString = String;
+@type TOMLArray = List<TOMLObject>;
+@type TOMLTable = Map<char[], TOMLObject>;
+@type TOMLInteger = i64;
+@type TOMLFloat = Decimal;
+@type TOMLBool = bool;
+
+enum TOMLObjectType {
+    String,
+    Array,
+    Table,
+    Integer,
+    Float,
+    Bool,
+}
+
+struct TOMLObject: Formattable {
+    type: TOMLObjectType;
+    union {
+        str: TOMLString;
+        arr: TOMLArray;
+        tab: TOMLTable;
+        int: TOMLInteger;
+        flt: TOMLFloat;
+        bol: TOMLBool;
+    };
+}
+
+fn TOMLObject::init(&self, type: TOMLObjectType) {
+    self.type = type;
+
+    case (type) {
+    when TOMLObjectType::String:
+        self.str = TOMLString();
+    when TOMLObjectType::Array:
+        self.arr = TOMLArray();
+    when TOMLObjectType::Table:
+        self.tab = TOMLTable();
+    when TOMLObjectType::Float:
+        self.flt = TOMLFloat();
+    }
+}
+
+fn TOMLObject::destroy(&self) {
+    case (self.type) {
+    when TOMLObjectType::String:
+        self.str.destroy();
+    when TOMLObjectType::Array:
+        foreach (v : self.arr) v.destroy();
+        self.arr.destroy();
+    when TOMLObjectType::Table:
+        foreach (entry : self.tab) entry.value.destroy();
+        self.tab.destroy();
+    when TOMLObjectType::Float:
+        self.flt.destroy();
+    }
+}
+
+fn TOMLObject::format(const &self, modifiers: const &char[]) -> String {
+    case (self.type) {
+    when TOMLObjectType::String:
+        let str = String();
+        str += '"';
+        str += self.str;
+        str += '"';
+        return str;
+    when TOMLObjectType::Array:
+        return self.arr.format(modifiers);
+    when TOMLObjectType::Table:
+        return self.tab.format(modifiers);
+    when TOMLObjectType::Integer:
+        return self.int.format(modifiers);
+    when TOMLObjectType::Float:
+        return self.flt.format(modifiers);
+    when TOMLObjectType::Bool:
+        return self.bol.format(modifiers);
+    else:
+        panic("unknown type {}", self.type);
+    }
+}
