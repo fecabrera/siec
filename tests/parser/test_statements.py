@@ -17,6 +17,7 @@ from siec.ast import (
     Let,
     Member,
     MemberAssign,
+    Move,
     Return,
     StrLiteral,
     UnaryOp,
@@ -141,6 +142,11 @@ def test_assignment(ts):
     'name = expr;' parses to an Assign node.
     """
     assert parse_statement(ts("num = f();")) == Assign("num", Call("f", []))
+
+
+def test_move_assignment_marks_its_source(ts):
+    """`move` wraps the owned place consumed by an assignment."""
+    assert parse_statement(ts("a = move b;")) == Assign("a", Move(Var("b")))
 
 
 def test_compound_assignment_keeps_its_shape(ts):

@@ -370,7 +370,15 @@ def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
             gen, builder, name, expansion, stmt.value, stmt.line, scope)
         return
 
-    resolve_lvalue(gen, builder, target, scope).store(stmt.value)
+    place = resolve_lvalue(gen, builder, target, scope)
+    from siec.codegen.assignment import assignment_action
+
+    action = assignment_action(gen, target, place.type, stmt.value, scope)
+    if action.call is not None:
+        emit_expression(gen, builder, action.call, None, scope)
+        return
+
+    place.store(action.value)
 
 
 def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
@@ -427,7 +435,16 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
 
     # The address is emitted by cached_load() and retained for store(), so a
     # complex target is evaluated exactly once without a synthetic scope name.
-    place.store(BinaryOp(stmt.op, place.cached_load(), stmt.value))
+    replacement = BinaryOp(stmt.op, place.cached_load(), stmt.value)
+    from siec.codegen.assignment import assignment_action
+
+    action = assignment_action(
+        gen, place.target, place.type, replacement, scope)
+    if action.call is not None:
+        emit_expression(gen, builder, action.call, None, scope)
+        return
+
+    place.store(action.value)
 
 
 def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,

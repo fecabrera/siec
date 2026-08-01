@@ -235,6 +235,12 @@ class UnaryOp:
 
 
 @dataclass
+class Move:
+    """An explicit transfer of ownership from one assignable value."""
+    operand: "Expr"
+
+
+@dataclass
 class BinaryOp:
     """
     A binary operation applying an operator to two subexpressions.
@@ -268,7 +274,7 @@ class Ternary:
 
 Expr = (IntLiteral | FloatLiteral | StrLiteral | BoolLiteral | CharLiteral
         | AggregateLiteral | BlockExpr | ArrayLiteral | Var | EnumMember | Call
-        | Index | Slice | Member | Cast | UnaryOp | BinaryOp | CachedExpr
+        | Index | Slice | Member | Cast | UnaryOp | Move | BinaryOp | CachedExpr
         | Ternary)
 
 

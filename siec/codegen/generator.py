@@ -38,6 +38,7 @@ class Variable:
     slot: ir.Instruction
     type: str
     volatile: bool = False
+    moved: bool = False
 
 
 def make_volatile(inst: ir.Instruction) -> ir.Instruction:
@@ -539,6 +540,21 @@ PRELUDE = """
 // unlike an ordinary interface, user declarations cannot claim it
 interface Scalar;
 
+// Clone constructs a new value from a borrowed value of the same concrete
+// type. Assignment uses it only when no specialized AssignFrom<Self> exists.
+interface Clone;
+
+fn Clone::clone(const &self) -> Self;
+
+// Borrowed assignment preserves its source; consuming assignment takes it.
+interface AssignFrom<T>;
+
+fn AssignFrom<T>::assign_from(&self, source: const &T);
+
+interface Assign<T>;
+
+fn Assign<T>::assign(&self, source: T);
+
 interface Iterator<T>;
 
 fn Iterator<T>::has_next(&self) -> bool;
@@ -879,7 +895,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(struct.name for struct in prelude.structs)
-    gen.builtin_names.update(("Result", "Ok", "Error", "Scalar",
+    gen.builtin_names.update(("Result", "Ok", "Error", "Scalar", "Clone",
+                              "AssignFrom", "Assign",
                               "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",
                               "ArrayIterator", "ConstArrayIterator",

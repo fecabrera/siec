@@ -25,6 +25,7 @@ from siec.ast import (
     IntLiteral,
     Member,
     MethodCall,
+    Move,
     NullLiteral,
     SizeOf,
     Slice,
@@ -184,6 +185,9 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     if isinstance(expr, CachedExpr):
         return expr_sie_type(gen, expr.expr, scope)
+
+    if isinstance(expr, Move):
+        return expr_sie_type(gen, expr.operand, scope)
 
     # a string or array literal is the fat array it builds; only an
     # explicit pointer context takes it as a bare pointer instead

@@ -417,6 +417,8 @@ def resolve_callable_header(gen: CodeGenerator, fn, *,
         parameters = frozenset(
             [*(fn.receiver_params or ()), *(fn.type_params or ())]
         )
+        if interface_action:
+            parameters = parameters | {"Self"}
         resolve_constraints(gen, fn, parameters)
         resolve_constraints(
             gen,

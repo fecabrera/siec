@@ -305,6 +305,7 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                                 f"got {len(args)}")
 
             mapping = dict(zip(iface.params or (), args))
+            mapping["Self"] = name
             check_constraints(gen, iface, mapping)
 
             # every interface field, at its declared type
@@ -344,8 +345,15 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
     """
     from siec.codegen.methods import resolve_method
 
+    action_interface = (split_generic(spelling) or (spelling, []))[0]
+
     def bare(param: str) -> str:
         return strip_const(strip_reference(strip_const(param)))
+
+    def value_shape(param: str) -> str:
+        if action_interface in ("Assign", "AssignFrom"):
+            return param
+        return bare(param)
 
     required_instance = takes_self(action)
     required_const = required_instance and is_const(action.params[0].type)
@@ -400,7 +408,8 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
             continue
 
         have_values = have_params[1 if required_instance else 0:]
-        if [bare(p) for p in have_values] != [bare(p) for p in required]:
+        if ([value_shape(p) for p in have_values]
+                != [value_shape(p) for p in required]):
             continue
 
         shape_matched = True
@@ -458,7 +467,8 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
 
         have = [expand_lax(gen, substitute(pattern, bindings))
                 for pattern in patterns]
-        if [bare(p) for p in have] != [bare(p) for p in required]:
+        if ([value_shape(p) for p in have]
+                != [value_shape(p) for p in required]):
             continue
 
         shape_matched = True

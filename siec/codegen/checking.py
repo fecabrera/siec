@@ -32,6 +32,7 @@ from siec.ast import (
     Member,
     MemberAssign,
     MethodCall,
+    Move,
     NullLiteral,
     RefAssign,
     Return,
@@ -71,9 +72,9 @@ from siec.codegen.types import (
 NO_EMIT = object()
 
 
-def checked_variable(type_name: str) -> Variable:
+def checked_variable(type_name: str, *, moved: bool = False) -> Variable:
     """A scope entry carrying only its semantic type."""
-    return Variable(None, type_name)
+    return Variable(None, type_name, moved=moved)
 
 
 def check_function(gen: CodeGenerator, fn: Function) -> None:
@@ -133,6 +134,15 @@ def check_block(gen: CodeGenerator, statements: list, scope: dict,
     return terminates
 
 
+def merge_moved(parent: dict, paths: list[dict]) -> None:
+    """Conservatively merge ownership states from continuing CFG paths."""
+    for name, variable in list(parent.items()):
+        states = [path[name].moved for path in paths if name in path]
+        if states:
+            parent[name] = checked_variable(
+                variable.type, moved=any(states))
+
+
 def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     loop: bool = False,
                     emit_type: str | None | object = NO_EMIT) -> bool:
@@ -188,7 +198,19 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
         if isinstance(stmt, (Assign, MemberAssign, RefAssign, IndexAssign)):
             target = assignment_target(stmt)
             target_type = mutable_lvalue_type(gen, target, scope)
-            check_expression(gen, stmt.value, scope, target_type)
+            from siec.codegen.assignment import assignment_action
+
+            action = assignment_action(
+                gen, target, target_type, stmt.value, scope)
+            if action.call is not None:
+                check_expression(gen, action.call, scope)
+            else:
+                check_expression(gen, action.value, scope, target_type)
+
+            if isinstance(target, Var) and target.name in scope:
+                variable = scope[target.name]
+                scope[target.name] = checked_variable(
+                    variable.type, moved=False)
             return False
 
         if isinstance(stmt, CompoundAssign):
@@ -209,12 +231,15 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 )
                 return False
 
-            check_expression(
-                gen,
-                BinaryOp(stmt.op, stmt.target, stmt.value),
-                scope,
-                target_type,
-            )
+            replacement = BinaryOp(stmt.op, stmt.target, stmt.value)
+            from siec.codegen.assignment import assignment_action
+
+            action = assignment_action(
+                gen, stmt.target, target_type, replacement, scope)
+            if action.call is not None:
+                check_expression(gen, action.call, scope)
+            else:
+                check_expression(gen, action.value, scope, target_type)
             return False
 
         if isinstance(stmt, Return):
@@ -249,27 +274,37 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     and gen.checked_call in gen.noreturns)
 
         if isinstance(stmt, Block):
-            return check_block(
+            inner = dict(scope)
+            terminates = check_block(
                 gen,
                 stmt.body,
-                dict(scope),
+                inner,
                 fn,
                 loop=loop,
                 emit_type=emit_type,
             )
+            if not terminates:
+                merge_moved(scope, [inner])
+            return terminates
 
         if isinstance(stmt, If):
             check_expression(gen, stmt.condition, scope)
-            left = check_block(gen, stmt.body, dict(scope), fn,
+            left_scope = dict(scope)
+            left = check_block(gen, stmt.body, left_scope, fn,
                                loop=loop, emit_type=emit_type)
-            right = (stmt.orelse is not None and check_block(
-                gen,
-                stmt.orelse,
-                dict(scope),
-                fn,
-                loop=loop,
-                emit_type=emit_type,
-            ))
+            right_scope = dict(scope)
+            right = False
+            if stmt.orelse is not None:
+                right = check_block(
+                    gen, stmt.orelse, right_scope, fn,
+                    loop=loop, emit_type=emit_type)
+
+            continuing = []
+            if not left:
+                continuing.append(left_scope)
+            if not right:
+                continuing.append(right_scope)
+            merge_moved(scope, continuing)
             return bool(left and right)
 
         if isinstance(stmt, Case):
@@ -292,6 +327,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             from siec.codegen.inference import numeric_class
 
             arms = []
+            continuing = []
             for arm in stmt.arms:
                 for value in arm.values:
                     # a char arm against an integer subject constant-emits
@@ -303,45 +339,50 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                         else subject
                     )
                     check_expression(gen, value, scope, arm_expected)
-                arms.append(check_block(
-                    gen,
-                    arm.body,
-                    dict(scope),
-                    fn,
-                    loop=loop,
-                    emit_type=emit_type,
-                ))
-            other = (stmt.orelse is not None and check_block(
-                gen,
-                stmt.orelse,
-                dict(scope),
-                fn,
-                loop=loop,
-                emit_type=emit_type,
-            ))
+                arm_scope = dict(scope)
+                terminates = check_block(
+                    gen, arm.body, arm_scope, fn,
+                    loop=loop, emit_type=emit_type)
+                arms.append(terminates)
+                if not terminates:
+                    continuing.append(arm_scope)
+            other_scope = dict(scope)
+            other = False
+            if stmt.orelse is not None:
+                other = check_block(
+                    gen, stmt.orelse, other_scope, fn,
+                    loop=loop, emit_type=emit_type)
+            if not other:
+                continuing.append(other_scope)
+            merge_moved(scope, continuing)
             return bool(arms and all(arms) and other)
 
         if isinstance(stmt, While):
             check_expression(gen, stmt.condition, scope)
+            inner = dict(scope)
             gen.checking_loop_depth += 1
             try:
-                check_block(gen, stmt.body, dict(scope), fn, loop=True,
+                check_block(gen, stmt.body, inner, fn, loop=True,
                             emit_type=emit_type)
             finally:
                 gen.checking_loop_depth -= 1
+            merge_moved(scope, [scope, inner])
             return False
 
         if isinstance(stmt, For):
             inner = dict(scope)
             check_statement(gen, stmt.init, inner, fn, loop=True)
             check_expression(gen, stmt.condition, inner)
+            body_scope = dict(inner)
             gen.checking_loop_depth += 1
             try:
-                check_block(gen, stmt.body, dict(inner), fn, loop=True,
+                check_block(gen, stmt.body, body_scope, fn, loop=True,
                             emit_type=emit_type)
-                check_statement(gen, stmt.step, inner, fn, loop=True)
+                check_statement(gen, stmt.step, body_scope, fn, loop=True)
             finally:
                 gen.checking_loop_depth -= 1
+            merge_moved(inner, [inner, body_scope])
+            merge_moved(scope, [inner])
             return False
 
         if isinstance(stmt, Foreach):
@@ -548,6 +589,7 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
                     emit_type=emit_type)
     finally:
         gen.checking_loop_depth -= 1
+    merge_moved(scope, [scope, inner])
 
 
 def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
@@ -564,6 +606,9 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             reference_template,
             reference_type,
         )
+
+        if expr.name in scope and scope[expr.name].moved:
+            raise TypeError(f"use of moved value {expr.name!r}")
 
         if expr.type_args is not None:
             template = reference_template(gen, expr.name)
@@ -803,6 +848,20 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
         typename_of(gen, expr.name, scope)
         return "u64" if isinstance(expr, TypeId) else "const char[]"
+
+    if isinstance(expr, Move):
+        if not isinstance(expr.operand, Var) or expr.operand.name not in scope:
+            raise TypeError("'move' requires an owned local variable")
+        if scope[expr.operand.name].moved:
+            raise TypeError(f"value {expr.operand.name!r} was already moved")
+        moved_type = lvalue_type(gen, expr.operand, scope)
+        if is_const(moved_type) or is_reference(moved_type):
+            raise TypeError(f"cannot move a {moved_type!r} value")
+        scope[expr.operand.name] = checked_variable(moved_type, moved=True)
+        if expected is not None:
+            require_fit(gen, expr.operand, moved_type, expected)
+            return expected
+        return moved_type
 
     if isinstance(expr, Index):
         from siec.codegen.inference import item_call

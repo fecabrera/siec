@@ -27,6 +27,7 @@ from siec.ast import (
     IntLiteral,
     Member,
     MethodCall,
+    Move,
     NullLiteral,
     Return,
     SizeOf,
@@ -84,6 +85,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             expr.value = emit_expression(gen, builder, expr.expr,
                                          expected_type, scope)
         return expr.value
+
+    if isinstance(expr, Move):
+        return emit_expression(
+            gen, builder, expr.operand, expected_type, scope)
 
     # dispatch on the node type; each branch returns an LLVM value
     if isinstance(expr, IntLiteral):

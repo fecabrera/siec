@@ -315,6 +315,48 @@ Their value can be assigned at runtime through the operator `=`:
 v = <expr>;
 ```
 
+#### Assignment and ownership
+
+Initialization creates a new value and never invokes an assignment interface. Plain assignment updates an existing value, selecting its operation from the right-hand expression's ownership:
+
+```
+a = b;       // borrows b
+a = move b;  // consumes b; using b afterward is an error
+a = make();  // consumes the unnamed temporary
+```
+
+`move` takes an owned local variable as a whole. It cannot move a constant, reference, temporary, field, or indexed element, and a value moved on any continuing control-flow path cannot be read again until its variable is directly reinitialized. `a = move a` is rejected. A temporary needs no marker because no name remains through which to use it.
+
+Three builtin interfaces customize the operation:
+
+```
+interface Clone {
+    fn clone(const &self) -> Self;
+}
+
+interface AssignFrom<T> {
+    fn assign_from(&self, source: const &T);
+}
+
+interface Assign<T> {
+    fn assign(&self, source: T);
+}
+```
+
+For `a: A` and `b: B`, `a = b` calls `a.assign_from(b)` when `A` implements `AssignFrom<B>`. If `A` and `B` are the same type and there is no such implementation, `Clone` supplies the fallback: clone `b`, then store that new value into `a`. `a = move b` and assignments from temporaries call `a.assign(...)` when `A` implements `Assign<B>`. Without a matching claim, assignment retains the ordinary built-in coercion and store.
+
+`AssignFrom` is the reusable-storage path: it preserves its source and may update the destination without allocating a replacement. `Assign` receives ownership and may take the source's resources directly. `Clone` constructs an independent value and is useful outside assignment as well:
+
+```
+struct Buffer: Clone, AssignFrom<Buffer>, Assign<Buffer> { ... }
+
+fn Buffer::clone(const &self) -> Buffer { ... }
+fn Buffer::assign_from(&self, source: const &Buffer) { ... }
+fn Buffer::assign(&self, source: Buffer) { ... }
+```
+
+Claims enforce those exact ownership signatures: `AssignFrom<T>` requires `const &T`, while `Assign<T>` requires `T`. Compound assignment's fallback result is a temporary and therefore follows the consuming assignment path. Trait-indexed assignment remains `set_item`; any replacement policy for the indexed value belongs inside that method.
+
 ### Constants
 
 Constants are compile-time constant expressions declared through `@const`. Unlike a `let` variable, a constant has no storage of its own: it's substituted with its value at compile time, similar to a type-safe version of C's `#define`. They must be initialized and cannot be reassigned. The type annotation is optional, inferred from the value when omitted:

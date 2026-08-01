@@ -19,6 +19,7 @@ from siec.ast import (
     IntLiteral,
     Member,
     MethodCall,
+    Move,
     NullLiteral,
     SizeOf,
     Slice,
@@ -168,6 +169,9 @@ def parse_primary(ts: TokenStream) -> Expr:
     # carried, handing the error to its arm
     if tok.kind == "kw" and tok.value == "try":
         return parse_try(ts, tok.line)
+
+    if tok.kind == "kw" and tok.value == "move":
+        return Move(parse_primary(ts))
 
     # prefix '-', '~', 'not', '&', and '*' bind tighter than any binary operator
     if tok.syntax == "-":
