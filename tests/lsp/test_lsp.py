@@ -732,6 +732,36 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 3)]
 
 
+def test_method_hover_does_not_instantiate_after_compilation(tmp_path):
+    """Hover reads an unused generic method without reopening compilation."""
+    from siec.lsp import declaration_sites, method_finding
+
+    analysis, src = unit(tmp_path, """\
+struct Box<T> { value: T; }
+
+fn Box<T>::get(const &self) -> const &T { return self.value; }
+
+fn main() -> i32 {
+    let box: Box<i32>;
+    return 0;
+}
+""")
+
+    assert analysis.report is None
+    assert "Box<i32>::get" not in analysis.gen.instantiated_functions
+
+    finding = method_finding(
+        analysis,
+        declaration_sites(analysis.program),
+        "Box<i32>",
+        "get",
+    )
+
+    assert finding.text == "fn Box<T>::get(const &Box<T>) -> const &T"
+    assert finding.targets == [(str(src.resolve()), 3)]
+    assert "Box<i32>::get" not in analysis.gen.instantiated_functions
+
+
 def test_inspect_renders_intersection_bounds(tmp_path):
     """Hover preserves explicit intersections in generic signatures."""
     analysis, src = unit(tmp_path, """\

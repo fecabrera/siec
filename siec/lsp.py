@@ -1256,7 +1256,10 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
                 or any(unresolved(actual) for actual in mapping.values()))
 
     try:
-        symbol = resolve_method(gen, base, name)
+        # Inspection reads the completed compiler index. It must not stamp a
+        # previously unused generic method after semantic checking and LLVM
+        # lowering have ended; the template lookup below supplies its hover.
+        symbol = resolve_method(gen, base, name, specialize=False)
     except (TypeError, NameError):
         symbol = None
 
