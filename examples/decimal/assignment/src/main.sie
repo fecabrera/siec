@@ -1,0 +1,18 @@
+import std.io;
+import { Decimal } from std.decimal;
+
+fn main() -> i32 {
+    let dec = Decimal();
+    defer dec.destroy();
+    
+    dec = 3;
+    std.io.println("{}", dec);
+    
+    dec = 3 as i64;
+    std.io.println("{}", dec);
+
+    dec = "3.14159";
+    std.io.println("{}", dec);
+
+    return 0;
+}

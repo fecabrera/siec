@@ -15,7 +15,12 @@ import { String } from std.collections;
 }
 
 struct Decimal
-    : Add<Decimal, Decimal>,
+    : AssignFrom<Decimal>,
+      AssignFrom<char[]>,
+      AssignFrom<String>,
+      AssignFrom<i64>,
+      AssignFrom<u64>,
+      Add<Decimal, Decimal>,
       Add<Decimal, i64>,
       Add<Decimal, u64>,
       Sub<Decimal, Decimal>,
@@ -56,7 +61,7 @@ fn Decimal::init(&self) {
 
 fn Decimal::init(&self, value: const &Decimal) {
     self.init();
-    self.assign(value);
+    self.assign_from(value);
 }
 
 /**
@@ -66,7 +71,7 @@ fn Decimal::init(&self, value: const &Decimal) {
  */
 fn Decimal::init(&self, value: i64) {
     self.init();
-    self.assign(value);
+    self.assign_from(value);
 }
 
 /**
@@ -76,7 +81,7 @@ fn Decimal::init(&self, value: i64) {
  */
 fn Decimal::init(&self, value: u64) {
     self.init();
-    self.assign(value);
+    self.assign_from(value);
 }
 
 /**
@@ -84,9 +89,14 @@ fn Decimal::init(&self, value: u64) {
  *
  * @param value The value to initialize the Decimal with.
  */
-fn Decimal::init(&self, value: const char[]) {
+fn Decimal::init(&self, value: const &char[]) {
     self.init();
-    self.assign(value);
+    self.assign_from(value);
+}
+
+fn Decimal::init(&self, value: const &String) {
+    self.init();
+    self.assign_from(value);
 }
 
 /**
@@ -118,7 +128,7 @@ fn Decimal::to_string(const &self) -> String {
     return String(ptr);
 }
 
-fn Decimal::assign(&self, value: const &Decimal) {
+fn Decimal::assign_from(&self, value: const &Decimal) {
     mpdecimal.mpd_copy(self.mpd, value.mpd, self.ctx);
 }
 
@@ -127,7 +137,23 @@ fn Decimal::assign(&self, value: const &Decimal) {
  *
  * @param value The value to set the Decimal to.
  */
-fn Decimal::assign(&self, value: const i64) {
+fn Decimal::assign_from(&self, value: const &char[]) {
+    mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
+}
+
+fn Decimal::assign_from(&self, value: const &String) {
+    let str = String(value);
+    defer str.destroy();
+    str.null_terminate();
+    mpdecimal.mpd_set_string(self.mpd, str.as_const_array(), self.ctx);
+}
+
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
+fn Decimal::assign_from(&self, value: const &i64) {
     mpdecimal.mpd_set_i64(self.mpd, value, self.ctx);
 }
 
@@ -136,17 +162,8 @@ fn Decimal::assign(&self, value: const i64) {
  *
  * @param value The value to set the Decimal to.
  */
-fn Decimal::assign(&self, value: const u64) {
+fn Decimal::assign_from(&self, value: const &u64) {
     mpdecimal.mpd_set_u64(self.mpd, value, self.ctx);
-}
-
-/**
- * Set the value of the Decimal.
- *
- * @param value The value to set the Decimal to.
- */
-fn Decimal::assign(&self, value: const char[]) {
-    mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
 }
 
 /**

@@ -10,6 +10,7 @@ struct List<T>
       Add<List<T>, T>,
       AddAssign<Iterable<T>>,
       AddAssign<T>,
+      AssignFrom<Iterable<T>>,
       Eq<List<T>>,
       Eq<T[]>,
       Formattable {
@@ -91,7 +92,7 @@ fn List<T>::reset(&self) {
  *
  * @param str The iterable to set the List to.
  */
-fn List<T>::assign(&self, str: const &Iterable<char>) {
+fn List<T>::assign_from(&self, str: const &Iterable<T>) {
     self.reset();
     self.append(str);
 }

@@ -49,7 +49,7 @@ fn TOMLObject::init(&self, type: TOMLObjectType) {
 
 fn TOMLObject::string(value: const &Iterable<char>) -> TOMLObject {
     let obj = TOMLObject(TOMLObjectType::String);
-    obj.str.assign(value);
+    obj.str = value;
     return obj;
 }
 
@@ -69,13 +69,13 @@ fn TOMLObject::integer(value: TOMLInteger) -> TOMLObject {
 
 fn TOMLObject::float(value: const &Decimal) -> TOMLObject {
     let obj = TOMLObject(TOMLObjectType::Float);
-    obj.flt.assign(value);
+    obj.flt = value;
     return obj;
 }
 
 fn TOMLObject::float(value: const &Iterable<char>) -> TOMLObject {
     let obj = TOMLObject(TOMLObjectType::Float);
-    obj.flt.assign(value);
+    obj.flt = value;
     return obj;
 }
 
