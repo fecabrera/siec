@@ -310,6 +310,12 @@ fn List<T>::eq(const &self, arr: const &T[]) -> bool {
     return true;
 }
 
+/**
+ * Format the List.
+ *
+ * @param modifiers The modifiers to format the List with.
+ * @return The formatted List.
+ */
 @inline
 fn List<T>::format(const &self, modifiers: const &char[]) -> String {
     return self.as_const_array().format(modifiers);
@@ -335,6 +341,11 @@ fn List<T>::grow(&self) {
 
 @template<T: Scalar>
 @extend List<T>: Hashable {
+    /**
+     * Hash the List.
+     *
+     * @return The hash of the List.
+     */
     fn hash(const &self) -> u64 {
         let h = FNV1a();
         foreach (k : self) {

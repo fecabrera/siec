@@ -80,6 +80,12 @@ fn Map<K, V>::destroy(&self) {
     self.capacity = 0;
 }
 
+/**
+ * Format the Map.
+ *
+ * @param modifiers The modifiers to format the Map with.
+ * @return The formatted Map.
+ */
 fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     let str = String();
     str += "{";
@@ -92,6 +98,12 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     return str;
 }
 
+/**
+ * Format the Map.
+ *
+ * @param modifiers The modifiers to format the Map with.
+ * @return The formatted Map.
+ */
 @template<K: Iterable<char>>
 @override
 fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
