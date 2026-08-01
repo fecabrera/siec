@@ -137,7 +137,7 @@ fn compress_file(src: &File, dst: &File) -> Result<ProgramError> {
             strm.next_out = next_out;
 
             ret = deflate(&strm, flush);
-            if (ret != z_status::Z_OK) {
+            if (ret != z_status::Z_OK and ret != z_status::Z_STREAM_END) {
                 std.io.println(std.io.stderr, "deflate() returned {}", ret);
                 return Error(ProgramError::DeflateError);
             }
