@@ -2096,6 +2096,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "drop_statement"
+        },
+        {
+          "type": "SYMBOL",
           "name": "try_statement"
         },
         {
@@ -5152,6 +5156,23 @@
               "type": "BLANK"
             }
           ]
+        }
+      ]
+    },
+    "drop_statement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "drop"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_expression"
+        },
+        {
+          "type": "STRING",
+          "value": ";"
         }
       ]
     }

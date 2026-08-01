@@ -379,6 +379,7 @@ module.exports = grammar({
         $.continue_statement,
         $.emit_statement,
         $.defer_statement,
+        $.drop_statement,
         $.try_statement,
         $.block,
         ";",
@@ -811,6 +812,10 @@ module.exports = grammar({
         field("name", $.identifier),
         optional(seq(":", field("bound", $.type))),
       ),
+
+    // Kept last so adding the statement does not renumber the grammar's
+    // established expression and lexical symbols in generated parsers.
+    drop_statement: ($) => seq("drop", $._expression, ";"),
   },
 });
 

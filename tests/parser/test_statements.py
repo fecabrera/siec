@@ -9,6 +9,7 @@ from siec.ast import (
     Call,
     CompoundAssign,
     Defer,
+    Drop,
     ExprStmt,
     If,
     Index,
@@ -39,6 +40,12 @@ def test_statement_line_is_excluded_from_equality(ts):
     Two statements differing only in line still compare equal.
     """
     assert parse_statement(ts("\n\nreturn 1;")) == Return(IntLiteral(1))
+
+
+def test_drop_parses_a_place_expression(ts):
+    """Manual destruction retains the complete place it targets."""
+    assert parse_statement(ts("drop value.field;")) == Drop(
+        Member(Var("value"), "field"))
 
 
 def test_block_collects_statements_between_braces(ts):

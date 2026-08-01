@@ -58,6 +58,7 @@
   "continue"
   "emit"
   "defer"
+  "drop"
 ] @keyword.control.return
 
 [

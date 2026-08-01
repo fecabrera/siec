@@ -317,7 +317,7 @@ v = <expr>;
 
 #### Assignment and ownership
 
-Initialization creates a new value and never invokes an assignment interface. Plain assignment updates an existing value, selecting its operation from the right-hand expression's ownership:
+Initialization creates a new value and never invokes an assignment interface. Initializing from a named value that implements `Destroy` moves that value into the new binding; ordinary values retain their usual value-copy behavior. Plain assignment updates an existing value, selecting its operation from the right-hand expression's ownership:
 
 ```
 a = b;       // borrows b
@@ -356,6 +356,59 @@ fn Buffer::assign(&self, source: Buffer) { ... }
 ```
 
 Claims enforce those exact ownership signatures: `AssignFrom<T>` requires `const &T`, while `Assign<T>` requires `T`. Compound assignment's fallback result is a temporary and therefore follows the consuming assignment path. Trait-indexed assignment remains `set_item`; any replacement policy for the indexed value belongs inside that method.
+
+#### Destruction and RAII
+
+The builtin `Destroy` interface gives an owned value deterministic cleanup:
+
+```
+interface Destroy {
+    fn destroy(&self);
+}
+```
+
+Its receiver is mutable because releasing a resource normally invalidates the value. A `const &self` implementation does not satisfy the interface. Conformance is nominal: a method merely named `destroy` is not enough; the type must claim `Destroy` explicitly.
+
+Every initialized local or by-value parameter whose concrete type implements `Destroy` owns one cleanup responsibility. The compiler calls `destroy` when that value leaves its lexical scope, including through `return`, `break`, `continue`, and `emit`. Cleanups share the scope's `defer` stack and therefore run in strict reverse registration order:
+
+```
+let first = Resource();
+defer log();
+let second = Resource();
+// second.destroy(), log(), first.destroy()
+```
+
+A `const T` value is a read-only, non-owning view when `T` implements `Destroy`. Const by-value parameters borrow their arguments rather than taking cleanup responsibility, and const by-value accessors may return a container element without moving it. A temporary passed to such a parameter remains owned by the caller and is destroyed after the complete call. Storing a const view into owning storage is still a copy of an owned resource and therefore requires an explicit cloning or assignment contract.
+
+Runtime ownership flags cover conditional initialization and moves, so only the path that still owns a value destroys it. A whole local passed to an owned parameter, returned, emitted, or used to initialize another destructible binding transfers its cleanup responsibility and cannot be read again. Fields and indexed elements cannot be moved independently; partial moves would require per-field ownership state.
+
+A destructible temporary borrowed by a `const &T` parameter lives through the complete containing call expression and is then destroyed. A temporary passed by value transfers into the parameter instead, which is destroyed when the callee returns unless ownership moves onward. A discarded temporary is destroyed at the end of its expression statement.
+
+Move assignment transfers the responsibility explicitly:
+
+```
+target = move source;
+```
+
+When `Assign<T>` is implemented, `target.assign(source)` owns the entire replacement policy and its source parameter is contractually adopted rather than automatically destroyed on return. Without `Assign<T>`, same-type move assignment computes the replacement, destroys the old target if initialized, stores the value, and disarms the source. Borrowed assignment of a destructible value requires `AssignFrom<T>` or `Clone`; a raw value copy is rejected because it would create two owners of one resource.
+
+`Destroy::destroy` owns the complete cleanup of its type, including any destructible fields. The compiler does not recursively destroy fields behind the method: that would double-drop custom containers. Tagged unions in particular must inspect their tag and manually destroy only the active member:
+
+```
+fn TOMLObject::destroy(&self) {
+    case (self.type) {
+    when TOMLObjectType::String:
+        drop self.str;
+    when TOMLObjectType::Array:
+        drop self.arr;
+    // ...
+    }
+}
+```
+
+`drop place;` performs the same operation explicitly on a mutable local, reference, field, or native indexed place. This is primarily how a custom container destroys owned members; a tagged union selects only its active field. Dropping a whole local consumes its cleanup responsibility and makes subsequent use an error until direct assignment reinitializes it. Calling `value.destroy()` directly has the same whole-local behavior. Consequently, an existing `defer value.destroy()` remains exactly-once after the type starts implementing `Destroy`: the explicit defer runs first and disarms the later automatic cleanup.
+
+Automatic destruction covers structured control flow. Process termination, foreign exceptions, signals, and aborting `panic` paths do not unwind Sie scopes. Global and static values have program lifetime and are not automatically destroyed at process exit.
 
 ### Constants
 

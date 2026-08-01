@@ -357,6 +357,8 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
 
     required_instance = takes_self(action)
     required_const = required_instance and is_const(action.params[0].type)
+    requires_mutable_receiver = action_interface in (
+        "Assign", "AssignFrom", "Destroy")
     required_start = 1 if required_instance else 0
     required = [expand_lax(gen, substitute(p.type, mapping))
                 for p in action.params[required_start:]]
@@ -393,6 +395,9 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
 
         receiver_kind_matched = True
         if required_const and not is_const(first):
+            receiver_const_mismatch = True
+            return False
+        if requires_mutable_receiver and is_const(first):
             receiver_const_mismatch = True
             return False
 
@@ -676,15 +681,29 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
     return found
 
 
-def claimed_interfaces(gen: CodeGenerator, concrete: str) -> set[str]:
+def claimed_interfaces(gen: CodeGenerator, concrete: str,
+                       required: str | None = None) -> set[str]:
     """
     The concrete interface spellings a type claims, including an array
-    family's claims with its element substituted.
+    family's claims with its element substituted. When one required
+    interface is being queried, discard families with a different base
+    before canonicalizing their arguments; inspecting ``Destroy`` must not
+    instantiate types mentioned only by an unrelated ``Add<X>`` claim.
     """
     concrete = strip_const(concrete)
-    claims = set(gen.implements.get(concrete, set()))
+    required_base = ((split_generic(required) or (required, []))[0]
+                     if required is not None else None)
 
-    if concrete in SCALAR_TYPES:
+    def relevant(spelling: str) -> bool:
+        base = (split_generic(spelling) or (spelling, []))[0]
+        return required_base is None or base == required_base
+
+    claims = {
+        claim for claim in gen.implements.get(concrete, set())
+        if relevant(claim)
+    }
+
+    if concrete in SCALAR_TYPES and relevant("Scalar"):
         claims.add("Scalar")
 
     if concrete.endswith("[]"):
@@ -692,11 +711,14 @@ def claimed_interfaces(gen: CodeGenerator, concrete: str) -> set[str]:
         claims.update(
             canonical_interface(gen, substitute(claim, {param: element}))
             for param, claim, constraints, file in gen.array_claims
-            if constraints_hold(
+            if relevant(claim) and constraints_hold(
                 gen, constraints, {param: element}, file)
         )
 
     for param, spellings, constraints, file in gen.generic_claims:
+        spellings = [claim for claim in spellings if relevant(claim)]
+        if not spellings:
+            continue
         mapping = {param: concrete}
         if constraints_hold(gen, constraints, mapping, file):
             claims.update(
@@ -728,7 +750,7 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
 
     gen.interface_queries.add(query)
     try:
-        claims = claimed_interfaces(gen, concrete)
+        claims = claimed_interfaces(gen, concrete, required)
     finally:
         gen.interface_queries.remove(query)
 

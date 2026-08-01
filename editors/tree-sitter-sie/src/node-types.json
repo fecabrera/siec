@@ -1672,6 +1672,10 @@
           "named": true
         },
         {
+          "type": "drop_statement",
+          "named": true
+        },
+        {
           "type": "emit_statement",
           "named": true
         },
@@ -1744,6 +1748,10 @@
         },
         {
           "type": "destructuring_statement",
+          "named": true
+        },
+        {
+          "type": "drop_statement",
           "named": true
         },
         {
@@ -3186,6 +3194,125 @@
     }
   },
   {
+    "type": "drop_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "aggregate_literal",
+          "named": true
+        },
+        {
+          "type": "array_literal",
+          "named": true
+        },
+        {
+          "type": "arrow_expression",
+          "named": true
+        },
+        {
+          "type": "asm_expression",
+          "named": true
+        },
+        {
+          "type": "binary_expression",
+          "named": true
+        },
+        {
+          "type": "block_expression",
+          "named": true
+        },
+        {
+          "type": "boolean_literal",
+          "named": true
+        },
+        {
+          "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "cast_expression",
+          "named": true
+        },
+        {
+          "type": "char_literal",
+          "named": true
+        },
+        {
+          "type": "compile_time_expression",
+          "named": true
+        },
+        {
+          "type": "field_expression",
+          "named": true
+        },
+        {
+          "type": "float_literal",
+          "named": true
+        },
+        {
+          "type": "generic_reference",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "index_expression",
+          "named": true
+        },
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "null_literal",
+          "named": true
+        },
+        {
+          "type": "parenthesized_expression",
+          "named": true
+        },
+        {
+          "type": "scoped_identifier",
+          "named": true
+        },
+        {
+          "type": "self",
+          "named": true
+        },
+        {
+          "type": "slice_expression",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "ternary_expression",
+          "named": true
+        },
+        {
+          "type": "try_expression",
+          "named": true
+        },
+        {
+          "type": "tuple_expression",
+          "named": true
+        },
+        {
+          "type": "unary_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "else_arm",
     "named": true,
     "fields": {},
@@ -3219,6 +3346,10 @@
         },
         {
           "type": "destructuring_statement",
+          "named": true
+        },
+        {
+          "type": "drop_statement",
           "named": true
         },
         {
@@ -4064,6 +4195,10 @@
             "named": true
           },
           {
+            "type": "drop_statement",
+            "named": true
+          },
+          {
             "type": "emit_statement",
             "named": true
           },
@@ -4896,6 +5031,10 @@
             "named": true
           },
           {
+            "type": "drop_statement",
+            "named": true
+          },
+          {
             "type": "emit_statement",
             "named": true
           },
@@ -5431,6 +5570,10 @@
             "named": true
           },
           {
+            "type": "drop_statement",
+            "named": true
+          },
+          {
             "type": "emit_statement",
             "named": true
           },
@@ -5616,6 +5759,10 @@
           },
           {
             "type": "destructuring_statement",
+            "named": true
+          },
+          {
+            "type": "drop_statement",
             "named": true
           },
           {
@@ -9083,6 +9230,10 @@
           "named": true
         },
         {
+          "type": "drop_statement",
+          "named": true
+        },
+        {
           "type": "emit_statement",
           "named": true
         },
@@ -9159,6 +9310,10 @@
           },
           {
             "type": "destructuring_statement",
+            "named": true
+          },
+          {
+            "type": "drop_statement",
             "named": true
           },
           {
@@ -9586,6 +9741,10 @@
   },
   {
     "type": "defer",
+    "named": false
+  },
+  {
+    "type": "drop",
     "named": false
   },
   {

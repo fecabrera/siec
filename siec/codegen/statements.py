@@ -12,6 +12,7 @@ from siec.ast import (
     CompoundAssign,
     Continue,
     Defer,
+    Drop,
     Emit,
     ExprStmt,
     For,
@@ -54,8 +55,9 @@ from siec.codegen.generator import (
     entry_alloca,
     make_volatile,
 )
-from siec.codegen.lvalues import ItemLValue, resolve_lvalue
+from siec.codegen.lvalues import AddressLValue, ItemLValue, resolve_lvalue
 from siec.codegen.types import (
+    is_const,
     is_reference,
     resolve_type,
     sized_array,
@@ -70,7 +72,24 @@ COMPOUND_METHODS = {"+": "add_assign", "-": "sub_assign", "*": "mul_assign",
                     "/": "div_assign", "%": "rem_assign"}
 
 
-def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: dict) -> None:
+def emit_full_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr,
+                         scope: dict, *, boolean: bool = False,
+                         expected=None):
+    """Emit one non-statement expression and end its temporary lifetime."""
+    from siec.codegen.ownership import (begin_temporary_frame,
+                                       finish_temporary_frame)
+
+    owns = begin_temporary_frame(gen)
+    if boolean:
+        value = emit_bool(gen, builder, expr, scope)
+    else:
+        value = emit_expression(gen, builder, expr, expected, scope)
+    finish_temporary_frame(gen, builder, owns)
+    return value
+
+
+def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list,
+               scope: dict, initial_cleanups=None) -> None:
     """
     Emit statements in order, stopping once the current block is terminated.
 
@@ -78,7 +97,7 @@ def emit_block(gen: CodeGenerator, builder: ir.IRBuilder, stmts: list, scope: di
     falls off its end; a 'return' or 'emit' leaving it early flushes them
     itself, along the exiting path.
     """
-    gen.defer_frames.append([])
+    gen.defer_frames.append(list(initial_cleanups or ()))
 
     for stmt in stmts:
         emit_statement(gen, builder, stmt, scope)
@@ -103,8 +122,14 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
     gen.flush_loop_floors.append(len(gen.loop_targets))
     try:
         for frame in reversed(frames):
-            for stmt, snapshot in reversed(frame):
-                emit_statement(gen, builder, stmt, snapshot)
+            for entry in reversed(frame):
+                from siec.codegen.ownership import DropCleanup, emit_drop_cleanup
+
+                if isinstance(entry, DropCleanup):
+                    emit_drop_cleanup(gen, builder, entry)
+                else:
+                    stmt, snapshot = entry
+                    emit_statement(gen, builder, stmt, snapshot)
     finally:
         gen.flush_loop_floors.pop()
         gen.flushing_defers -= 1
@@ -173,14 +198,36 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if (align := gen.struct_align(type_name)) is not None:
             slot.align = align
 
-        scope[stmt.name] = Variable(slot, type_name)
+        from siec.codegen.ownership import (DropCleanup, destroyable,
+                                           new_drop_flag, set_drop_flag)
+
+        owned = destroyable(gen, type_name)
+        drop_flag = new_drop_flag(builder, stmt.name) if owned else None
+        scope[stmt.name] = Variable(
+            slot, type_name, drop_flag=drop_flag)
+        if owned:
+            gen.defer_frames[-1].append(
+                DropCleanup(stmt.name, scope[stmt.name]))
 
         if gen.debug is not None:
             gen.debug.declare_variable(builder, slot, stmt.name, type_name, stmt.line)
 
         if stmt.value is not None:
+            from siec.codegen.ownership import (begin_temporary_frame,
+                                               consume_temporary,
+                                               finish_temporary_frame)
+
+            owns = begin_temporary_frame(gen)
             volatile_store(gen, builder.store(
                 emit_coerced(gen, builder, stmt.value, type_name, scope), slot))
+            if not is_const(type_name):
+                consume_temporary(gen, stmt.value)
+            from siec.codegen.ownership import disarm_expression
+
+            if not is_const(type_name):
+                disarm_expression(gen, builder, stmt.value, scope)
+            set_drop_flag(builder, scope[stmt.name], True)
+            finish_temporary_frame(gen, builder, owns)
         else:
             # a bare declaration of a struct with field defaults starts
             # from them, its undefaulted fields zeroed
@@ -188,12 +235,23 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
             if (default := default_value(gen, builder, type_name)) is not None:
                 volatile_store(gen, builder.store(default, slot))
+                set_drop_flag(builder, scope[stmt.name], True)
     elif isinstance(stmt, LetTuple):
         emit_let_tuple(gen, builder, stmt, scope)
     elif isinstance(stmt, CompoundAssign):
+        from siec.codegen.ownership import (begin_temporary_frame,
+                                           finish_temporary_frame)
+
+        owns = begin_temporary_frame(gen)
         emit_compound_assign(gen, builder, stmt, scope)
+        finish_temporary_frame(gen, builder, owns)
     elif isinstance(stmt, (Assign, MemberAssign, RefAssign, IndexAssign)):
+        from siec.codegen.ownership import (begin_temporary_frame,
+                                           finish_temporary_frame)
+
+        owns = begin_temporary_frame(gen)
         emit_assignment(gen, builder, stmt, scope)
+        finish_temporary_frame(gen, builder, owns)
     elif isinstance(stmt, Block):
         # a block runs in a child scope: writes to outer variables persist
         # through their shared slots, while inner declarations end with it
@@ -220,6 +278,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         # slots make later writes visible when it finally runs, while
         # later shadowing declarations stay out of sight
         gen.defer_frames[-1].append((stmt.stmt, dict(scope)))
+    elif isinstance(stmt, Drop):
+        emit_expression(
+            gen, builder, MethodCall(stmt.target, "destroy", []), None, scope)
+        if isinstance(stmt.target, Var) and stmt.target.name in scope:
+            from siec.codegen.ownership import set_drop_flag
+
+            set_drop_flag(builder, scope[stmt.target.name], False)
     elif isinstance(stmt, Emit):
         # store the value into the enclosing block expression's slot and
         # jump past the block, ending it early like a return ends a function
@@ -244,6 +309,11 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
         # the value is computed before the scopes being left run their defers
         builder.store(value, slot)
+        from siec.codegen.ownership import (consume_temporary,
+                                           disarm_expression)
+
+        consume_temporary(gen, stmt.value)
+        disarm_expression(gen, builder, stmt.value, scope)
         flush_defers(gen, builder, gen.defer_frames[depth:])
         builder.branch(end_block)
     elif isinstance(stmt, (Break, Continue)):
@@ -313,7 +383,19 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                 return
 
             # the return value is computed before any deferred statement runs
+            from siec.codegen.ownership import (begin_temporary_frame,
+                                               consume_temporary,
+                                               finish_temporary_frame)
+
+            owns = begin_temporary_frame(gen)
             value = emit_coerced(gen, builder, stmt.value, ret_type, scope)
+            if not is_const(ret_type):
+                consume_temporary(gen, stmt.value)
+            from siec.codegen.ownership import disarm_expression
+
+            if not is_const(ret_type):
+                disarm_expression(gen, builder, stmt.value, scope)
+            finish_temporary_frame(gen, builder, owns)
             flush_defers(gen, builder, gen.defer_frames)
             builder.ret(value)
     elif isinstance(stmt, ExprStmt):
@@ -328,7 +410,22 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
                     emit_block(gen, builder, expansion.body, dict(scope))
                 return
 
+        from siec.codegen.ownership import (begin_temporary_frame,
+                                           finish_temporary_frame)
+
+        owns = begin_temporary_frame(gen)
         value = emit_expression(gen, builder, stmt.expr, None, scope)
+
+        from siec.codegen.ownership import (destroyable,
+                                           manually_destroyed_local,
+                                           set_drop_flag)
+
+        if (name := manually_destroyed_local(stmt.expr)) in scope:
+            variable = scope[name]
+            if destroyable(gen, variable.type):
+                set_drop_flag(builder, variable, False)
+
+        finish_temporary_frame(gen, builder, owns)
 
         # a statement calling an '@noreturn' function ends its path: the
         # block terminates here, satisfying any required return after it
@@ -378,7 +475,42 @@ def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
         emit_expression(gen, builder, action.call, None, scope)
         return
 
+    from siec.codegen.ownership import (DropCleanup, consume_temporary,
+                                       destroyable,
+                                       disarm_expression,
+                                       emit_drop_cleanup, emit_drop_slot,
+                                       set_drop_flag)
+
+    if isinstance(place, AddressLValue) and destroyable(gen, place.type):
+        # Preserve ordinary assignment evaluation order: retain the target
+        # address, compute the replacement completely, then release the old
+        # value before storing the new owner.
+        address = place.address()
+        emitted = emit_coerced(
+            gen, builder, action.value, place.type, place.scope)
+        consume_temporary(gen, action.value)
+        disarm_expression(gen, builder, action.value, scope)
+
+        variable = (scope.get(target.name)
+                    if isinstance(target, Var) else None)
+        if variable is not None and variable.drop_flag is not None:
+            emit_drop_cleanup(
+                gen, builder, DropCleanup(target.name, variable))
+        else:
+            emit_drop_slot(gen, builder, address, place.type)
+
+        store = builder.store(emitted, address)
+        volatile_store(gen, store)
+        if variable is not None:
+            set_drop_flag(builder, variable, True)
+        return
+
     place.store(action.value)
+
+    consume_temporary(gen, action.value)
+    disarm_expression(gen, builder, action.value, scope)
+    if isinstance(target, Var) and target.name in scope:
+        set_drop_flag(builder, scope[target.name], True)
 
 
 def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
@@ -469,8 +601,18 @@ def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
     value = builder.insert_value(value, data, 0)
     value = builder.insert_value(value, ir.Constant(ir.IntType(64), size), 1)
 
-    scope[stmt.name] = Variable(entry_alloca(builder, var_type, stmt.name), sie_type)
+    from siec.codegen.ownership import (DropCleanup, destroyable,
+                                       new_drop_flag)
+
+    owned = destroyable(gen, sie_type)
+    drop_flag = new_drop_flag(builder, stmt.name, owned) if owned else None
+    scope[stmt.name] = Variable(
+        entry_alloca(builder, var_type, stmt.name), sie_type,
+        drop_flag=drop_flag)
     builder.store(value, scope[stmt.name].slot)
+    if owned:
+        gen.defer_frames[-1].append(
+            DropCleanup(stmt.name, scope[stmt.name]))
 
     if gen.debug is not None:
         gen.debug.declare_variable(builder, scope[stmt.name].slot,
@@ -490,8 +632,9 @@ def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: di
 
     # compare non-boolean conditions against zero, like an if's
     builder.position_at_end(cond_block)
-    builder.cbranch(emit_bool(gen, builder, stmt.condition, scope),
-                    body_block, end_block)
+    condition = emit_full_expression(
+        gen, builder, stmt.condition, scope, boolean=True)
+    builder.cbranch(condition, body_block, end_block)
 
     # the body runs in a child scope of its own, fresh each iteration,
     # and loops back to the condition unless it returned
@@ -659,8 +802,9 @@ def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) 
     builder.branch(cond_block)
 
     builder.position_at_end(cond_block)
-    builder.cbranch(emit_bool(gen, builder, stmt.condition, loop_scope),
-                    body_block, end_block)
+    condition = emit_full_expression(
+        gen, builder, stmt.condition, loop_scope, boolean=True)
+    builder.cbranch(condition, body_block, end_block)
 
     # the body runs in a child scope, fresh each iteration; the step follows
     # in a block of its own, where a 'continue' lands, then control returns
@@ -737,7 +881,7 @@ def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict
             arm.values = [type_operand(gen, value, scope)
                           for value in arm.values]
 
-    subject = emit_expression(gen, builder, stmt.subject, None, scope)
+    subject = emit_full_expression(gen, builder, stmt.subject, scope)
     if not isinstance(subject.type, (ir.IntType, ir.PointerType,
                                      ir.FloatType, ir.DoubleType)):
         raise TypeError(f"cannot match on a value of type {subject.type}")
@@ -751,7 +895,8 @@ def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict
         # type, like a comparison's right side
         cond = None
         for value_expr in arm.values:
-            value = emit_expression(gen, builder, value_expr, subject.type, scope)
+            value = emit_full_expression(
+                gen, builder, value_expr, scope, expected=subject.type)
             if isinstance(subject.type, (ir.FloatType, ir.DoubleType)):
                 test = builder.fcmp_ordered("==", subject, value)
             else:
@@ -791,7 +936,8 @@ def emit_if(gen: CodeGenerator, builder: ir.IRBuilder, stmt: If, scope: dict) ->
     Emit an if/else as a conditional branch over new basic blocks.
     """
     # compare non-boolean conditions against zero, C-style
-    cond = emit_bool(gen, builder, stmt.condition, scope)
+    cond = emit_full_expression(
+        gen, builder, stmt.condition, scope, boolean=True)
 
     func = builder.function
     then_block = func.append_basic_block("if.then")

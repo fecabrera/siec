@@ -11,6 +11,7 @@ from siec.ast import (
     CompoundAssign,
     Continue,
     Defer,
+    Drop,
     Emit,
     ExprStmt,
     For,
@@ -308,6 +309,15 @@ def parse_statement(ts: TokenStream):
         stmt = parse_step(ts)
         ts.expect("sym", ";")
         return Defer(stmt, line=line)
+
+    # 'drop place;' immediately invokes Destroy and consumes a whole local's
+    # automatic cleanup responsibility. Fields remain under their enclosing
+    # type's custom destruction policy.
+    if tok.kind == "kw" and tok.value == "drop":
+        ts.next()
+        target = parse_expression(ts)
+        ts.expect("sym", ";")
+        return Drop(target, line=line)
 
     # 'emit expr;' produces the enclosing block expression's value
     if tok.kind == "kw" and tok.value == "emit":

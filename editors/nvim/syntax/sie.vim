@@ -14,7 +14,7 @@ syn keyword sieImport import from
 " control flow
 syn keyword sieConditional if else case when
 syn keyword sieRepeat while for foreach
-syn keyword sieStatement return break continue emit defer
+syn keyword sieStatement return break continue emit defer drop
 syn keyword sieException try except
 syn keyword sieOperatorWord and or not as
 
@@ -26,6 +26,7 @@ syn keyword sieSelf self
 " the builtin types, and the builtin declarations the prelude ships
 syn keyword sieType i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 bool char opaque raw
 syn keyword sieBuiltinType Any Result Tuple Scalar Iterator ConstIterator Iterable
+syn keyword sieBuiltinType Clone AssignFrom Assign Destroy
 syn keyword sieBuiltinType ArrayIterator ConstArrayIterator Enumerated
 syn keyword sieBuiltinType ConstEnumerated EnumerateIterator
 syn keyword sieBuiltinType ConstEnumerateIterator

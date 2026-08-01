@@ -563,6 +563,13 @@ class Defer:
 
 
 @dataclass
+class Drop:
+    """A manual destruction of one mutable owned place."""
+    target: Expr
+    line: int = _line()
+
+
+@dataclass
 class ExprStmt:
     """
     An expression evaluated as a statement, its result discarded.

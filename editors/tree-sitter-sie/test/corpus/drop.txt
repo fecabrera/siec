@@ -1,0 +1,21 @@
+====================
+Explicit destruction
+====================
+
+fn destroy_active(&self) {
+  drop self.value;
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (function_name
+      name: (identifier))
+    parameters: (parameters
+      (self_parameter))
+    body: (block
+      (drop_statement
+        (field_expression
+          value: (self)
+          field: (identifier))))))

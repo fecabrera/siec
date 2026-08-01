@@ -337,10 +337,12 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
 
         # the scope maps each name to a typed stack slot; spill the parameters into theirs
         scope = {}
+        parameter_cleanups = []
         if main_takes_args(fn):
             spill_main_args(gen, builder, fn, func, scope)
         else:
-            for arg, param in zip(func.args, fn.params):
+            for position, (arg, param) in enumerate(
+                    zip(func.args, fn.params)):
                 arg.name = param.name
 
                 # a reference parameter's slot IS the caller's address:
@@ -355,7 +357,21 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                 if (align := gen.struct_align(param.type)) is not None:
                     slot.align = align
 
-                scope[param.name] = Variable(slot, param.type)
+                from siec.codegen.ownership import (DropCleanup,
+                                                   assign_adopts_parameter,
+                                                   destroyable,
+                                                   new_drop_flag)
+
+                owned = (destroyable(gen, param.type)
+                         and not assign_adopts_parameter(
+                             gen, fn, position))
+                drop_flag = (new_drop_flag(builder, param.name, True)
+                             if owned else None)
+                scope[param.name] = Variable(
+                    slot, param.type, drop_flag=drop_flag)
+                if owned:
+                    parameter_cleanups.append(
+                        DropCleanup(param.name, scope[param.name]))
                 store = builder.store(arg, slot)
                 if gen.volatile_struct(arg.type):
                     make_volatile(store)
@@ -376,7 +392,9 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                                            param.type, fn.line, arg=position)
 
         # emit the body statements starting from the entry block
-        emit_block(gen, builder, fn.body, scope)
+        emit_block(
+            gen, builder, fn.body, scope,
+            initial_cleanups=parameter_cleanups)
 
         # a void function may fall off the end, and so may main, whose
         # implicit exit code is 0; anything else must return

@@ -77,6 +77,14 @@ def assignment_action(gen: CodeGenerator, target, target_type: str,
         return AssignmentAction(
             None, MethodCall(source, "clone", []))
 
+    if target_type == source_type:
+        from siec.codegen.ownership import destroyable
+
+        if destroyable(gen, target_type):
+            raise TypeError(
+                f"cannot copy owned {source_type!r} value: implement "
+                f"AssignFrom<{source_type}> or Clone, or use 'move'")
+
     return AssignmentAction(None, source)
 
 

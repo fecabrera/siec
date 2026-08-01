@@ -17,6 +17,7 @@ from siec.ast import (
     CompoundAssign,
     Continue,
     Defer,
+    Drop,
     Emit,
     Expr,
     ExprStmt,
@@ -95,6 +96,11 @@ def check_function(gen: CodeGenerator, fn: Function) -> None:
             for param in fn.params
         }
         params = dict(scope)
+        from siec.codegen.ownership import assign_adopts_parameter
+
+        for position, param in enumerate(fn.params):
+            if not assign_adopts_parameter(gen, fn, position):
+                check_owned_cleanup(gen, param.name, scope)
         terminates = check_block(gen, fn.body or [], scope, fn)
 
         from siec.codegen.results import check_results
@@ -143,6 +149,48 @@ def merge_moved(parent: dict, paths: list[dict]) -> None:
                 variable.type, moved=any(states))
 
 
+def check_owned_cleanup(gen: CodeGenerator, name: str, scope: dict) -> None:
+    """Resolve the destructor an owned scope binding will invoke."""
+    from siec.codegen.ownership import destroyable
+
+    if destroyable(gen, scope[name].type):
+        check_expression(
+            gen, MethodCall(Var(name), "destroy", []), scope)
+
+
+def check_temporary_cleanup(gen: CodeGenerator, type_name: str | None,
+                            scope: dict) -> None:
+    """Resolve cleanup for a destructible rvalue without a source name."""
+    from siec.codegen.ownership import destroyable
+
+    if not destroyable(gen, type_name):
+        return
+    name = ".temporary.drop"
+    inner = dict(scope)
+    inner[name] = checked_variable(strip_const(type_name))
+    check_expression(gen, MethodCall(Var(name), "destroy", []), inner)
+
+
+def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
+                             scope: dict) -> None:
+    """Transfer a destructible value expression into a new owner."""
+    from siec.codegen.ownership import destroyable
+
+    if isinstance(expr, Move):
+        return
+    if not destroyable(gen, type_name):
+        return
+    if isinstance(expr, Var) and expr.name in scope:
+        variable = scope[expr.name]
+        if variable.moved:
+            raise TypeError(f"use of moved value {expr.name!r}")
+        scope[expr.name] = checked_variable(variable.type, moved=True)
+        return
+    if isinstance(expr, (Member, Index)):
+        raise TypeError("cannot move part of an owned value; move the whole "
+                        "local variable")
+
+
 def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     loop: bool = False,
                     emit_type: str | None | object = NO_EMIT) -> bool:
@@ -185,9 +233,16 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 if inferred and checked is not None:
                     type_name = checked
                     stmt.type = checked
+                # A const binding is a read-only, non-owning value view. It
+                # never takes the source's destruction responsibility.
+                ownership_type = (type_name if is_const(type_name)
+                                  else checked or type_name)
+                consume_owned_expression(
+                    gen, stmt.value, ownership_type, scope)
             else:
                 check_type_defaults(gen, type_name)
             scope[stmt.name] = checked_variable(type_name)
+            check_owned_cleanup(gen, stmt.name, scope)
             return False
 
         if isinstance(stmt, LetTuple):
@@ -262,6 +317,13 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 scope,
                 strip_reference(return_type),
             )
+            # A reference return borrows a place; it does not move that
+            # place's owned value out of its container. The stripped type is
+            # still the right checking context for implicit reference
+            # binding, but only a by-value result transfers ownership.
+            if not is_reference(return_type) and not is_const(return_type):
+                consume_owned_expression(
+                    gen, stmt.value, strip_reference(return_type), scope)
             return True
 
         if isinstance(stmt, ExprStmt):
@@ -269,7 +331,16 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             # the resolved callee decides, so a generic 'panic' instance
             # or a picked overload terminates like a concrete call
             gen.checked_call = None
-            check_expression(gen, stmt.expr, scope)
+            result = check_expression(gen, stmt.expr, scope)
+            check_temporary_cleanup(gen, result, scope)
+            from siec.codegen.ownership import (destroyable,
+                                               manually_destroyed_local)
+
+            if (name := manually_destroyed_local(stmt.expr)) in scope:
+                variable = scope[name]
+                if destroyable(gen, variable.type):
+                    scope[name] = checked_variable(
+                        variable.type, moved=True)
             return (isinstance(stmt.expr, (Call, MethodCall))
                     and gen.checked_call in gen.noreturns)
 
@@ -398,6 +469,31 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                             emit_type=emit_type)
             return False
 
+        if isinstance(stmt, Drop):
+            target_type = mutable_lvalue_type(gen, stmt.target, scope)
+            from siec.codegen.ownership import destroyable
+
+            if isinstance(stmt.target, Index):
+                from siec.codegen.inference import item_call
+
+                if item_call(
+                        gen, stmt.target, scope, "get_item") is not None:
+                    raise TypeError("cannot drop a trait-indexed value: "
+                                    "the container owns its element")
+
+            if not destroyable(gen, target_type):
+                raise TypeError(
+                    f"cannot drop {target_type!r}: the type does not "
+                    "implement Destroy")
+            check_expression(
+                gen, MethodCall(stmt.target, "destroy", []), scope)
+            if isinstance(stmt.target, Var) and stmt.target.name in scope:
+                variable = scope[stmt.target.name]
+                if not is_reference(variable.type):
+                    scope[stmt.target.name] = checked_variable(
+                        variable.type, moved=True)
+            return False
+
         if isinstance(stmt, Emit):
             if emit_type is NO_EMIT:
                 raise TypeError("'emit' outside a block expression")
@@ -405,6 +501,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 raise TypeError("nothing here takes a value: the result this "
                                 "'try' unwraps carries only an error")
             check_expression(gen, stmt.value, scope, emit_type)
+            consume_owned_expression(gen, stmt.value, emit_type, scope)
             return True
 
         if isinstance(stmt, (Break, Continue)):
@@ -644,13 +741,16 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 f"{expr.method!r}")
         args = ([expr.receiver, *expr.args] if takes_receiver(gen, symbol)
                 else expr.args)
-        return check_call(
+        call = Call(symbol, args, expr.type_args)
+        result = check_call(
             gen,
-            Call(symbol, args, expr.type_args),
+            call,
             scope,
             expected,
             resolved=symbol,
         )
+        expr.resolved_symbol = getattr(call, "resolved_symbol", symbol)
+        return result
 
     if isinstance(expr, Member):
         from siec.codegen.inference import fold_qualified
@@ -996,6 +1096,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
     from siec.codegen.overloads import pick_overload
     from siec.codegen.worklist import activate_function_instance
 
+    written_call = call
+
     if call.name in gen.macros:
         from siec.codegen.macros import macro_expansion, macro_view
 
@@ -1159,6 +1261,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
     note_use(gen, symbol)
     gen.checked_call = symbol
+    call.resolved_symbol = symbol
+    written_call.resolved_symbol = symbol
     return strip_reference(gen.return_types.get(symbol))
 
 
@@ -1211,7 +1315,9 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
         if is_reference(param):
             check_reference_argument(gen, arg, param, scope)
         else:
-            check_expression(gen, arg, scope, param)
+            actual = check_expression(gen, arg, scope, param)
+            if not is_const(param):
+                consume_owned_expression(gen, arg, actual or param, scope)
     for arg in call.args[fixed:]:
         check_expression(gen, arg, scope)
 
@@ -1238,6 +1344,8 @@ def check_reference_argument(gen: CodeGenerator, arg: Expr, param: str,
     """Check an implicitly borrowed call argument without creating an address."""
     referenced = strip_reference(param)
     declared = expr_sie_type(gen, arg, scope)
+    if isinstance(arg, (Call, MethodCall, AggregateLiteral, ArrayLiteral)):
+        check_temporary_cleanup(gen, referenced, scope)
 
     if declared is not None:
         if strip_const(declared) != strip_const(referenced):

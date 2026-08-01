@@ -579,7 +579,7 @@ def expression_receiver(tokens: list[Token], end: int, dot: Token,
         "&", "|", "^", "&&", "||",
         "and", "or",
         "return", "emit", "let", "if", "while", "for", "foreach",
-        "case", "when", "defer",
+        "case", "when", "defer", "drop",
     }
 
     depth: list[str] = []

@@ -39,6 +39,8 @@ class Variable:
     type: str
     volatile: bool = False
     moved: bool = False
+    # runtime ownership bit for a value whose type implements Destroy
+    drop_flag: ir.Instruction | None = None
 
 
 def make_volatile(inst: ir.Instruction) -> ir.Instruction:
@@ -271,6 +273,10 @@ class CodeGenerator:
         # one frame of deferred (statement, scope) pairs per open scope,
         # innermost last: what runs when each scope ends
         self.defer_frames: list[list] = []
+
+        # borrowed destructible rvalues materialized by each active call;
+        # the call destroys them in reverse argument-evaluation order
+        self.borrowed_temporary_frames: list[list] = []
 
         # nonzero while deferred statements are being flushed, where a
         # 'return' or 'emit' would flush the very frame holding it
@@ -554,6 +560,12 @@ fn AssignFrom<T>::assign_from(&self, source: const &T);
 interface Assign<T>;
 
 fn Assign<T>::assign(&self, source: T);
+
+// Destroy releases an owned value's resources. The compiler invokes it
+// exactly once when that ownership reaches the end of its lifetime.
+interface Destroy;
+
+fn Destroy::destroy(&self);
 
 interface Iterator<T>;
 
@@ -896,7 +908,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(struct.name for struct in prelude.structs)
     gen.builtin_names.update(("Result", "Ok", "Error", "Scalar", "Clone",
-                              "AssignFrom", "Assign",
+                              "AssignFrom", "Assign", "Destroy",
                               "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",
                               "ArrayIterator", "ConstArrayIterator",

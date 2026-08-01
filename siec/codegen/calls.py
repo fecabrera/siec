@@ -214,16 +214,26 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # as-is, except an f32, which promotes to f64 like C's default promotions
     sie_params = gen.param_types.get(func.name, [])
 
-    args = []
-    for i, arg in enumerate(call.args):
-        if i < len(sie_params):
-            args.append(emit_argument(gen, builder, arg, sie_params[i], scope))
-        else:
-            value = emit_expression(gen, builder, arg, None, scope)
-            if isinstance(value.type, ir.FloatType):
-                value = builder.fpext(value, ir.DoubleType())
+    from siec.codegen.ownership import begin_temporary_frame
 
-            args.append(value)
+    owns_temporary_frame = begin_temporary_frame(gen)
+
+    args = []
+    try:
+        for i, arg in enumerate(call.args):
+            if i < len(sie_params):
+                args.append(emit_argument(
+                    gen, builder, arg, sie_params[i], scope))
+            else:
+                value = emit_expression(gen, builder, arg, None, scope)
+                if isinstance(value.type, ir.FloatType):
+                    value = builder.fpext(value, ir.DoubleType())
+
+                args.append(value)
+    except Exception:
+        if owns_temporary_frame:
+            gen.borrowed_temporary_frames.pop()
+        raise
 
     # omitted arguments take their declared defaults, emitted under the
     # declaring file's view, away from any local names
@@ -249,11 +259,19 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         if kind == "indirect":
             out = entry_alloca(builder, struct_type, "sret.out")
             builder.call(func, [out, *args])
-            return builder.load(out)
+            result = builder.load(out)
+            finish_borrowed_temporaries(
+                gen, builder, owns_temporary_frame)
+            return result
 
-        return lift_return(gen, builder, builder.call(func, args), struct_type)
+        result = lift_return(
+            gen, builder, builder.call(func, args), struct_type)
+        finish_borrowed_temporaries(gen, builder, owns_temporary_frame)
+        return result
 
     result = builder.call(func, args)
+
+    finish_borrowed_temporaries(gen, builder, owns_temporary_frame)
 
     # a reference return is the referenced value's address; reading the
     # call as a value loads through it
@@ -261,6 +279,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         return result if as_address else builder.load(result)
 
     return result
+
+
+def finish_borrowed_temporaries(gen: CodeGenerator, builder,
+                                owns_frame: bool) -> None:
+    """Destroy borrowed rvalues after the outermost containing call."""
+    from siec.codegen.ownership import finish_temporary_frame
+
+    finish_temporary_frame(gen, builder, owns_frame)
 
 
 def pack_variadic(gen: CodeGenerator, call: Call, expected: int,
@@ -299,7 +325,17 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
     from siec.codegen.expressions import emit_expression, emit_lvalue
 
     if not is_reference(param_name):
-        return emit_coerced(gen, builder, arg, param_name, scope)
+        value = emit_coerced(gen, builder, arg, param_name, scope)
+        from siec.codegen.ownership import (consume_temporary,
+                                           disarm_expression)
+
+        # A const by-value parameter receives a non-owning view. A temporary
+        # remains the caller's responsibility and is destroyed after the
+        # complete call; a named source remains armed in its own scope.
+        if not is_const(param_name):
+            consume_temporary(gen, arg)
+            disarm_expression(gen, builder, arg, scope)
+        return value
 
     referenced = strip_reference(param_name)
     arg_name = expr_sie_type(gen, arg, scope)
@@ -326,27 +362,52 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
             raise TypeError(f"cannot bind a {arg_name!r} value to a mutable "
                             f"{param_name!r} parameter")
 
-    try:
+    from siec.ast import Cast, Index, Member, MethodCall, UnaryOp
+    from siec.codegen.inference import enum_backing, numeric_class, type_info
+    from siec.codegen.ownership import (TemporaryDrop, destroyable,
+                                       expression_returns_reference)
+
+    # A represented aggregate cast may deliberately reinterpret an existing
+    # place (for example a layout-compatible view returned by reference).
+    # Numeric and pointer casts instead produce values; a method receiver
+    # materializes that converted value rather than retyping the operand's
+    # storage. This is what makes ``(const_i32 as i64).method()`` a legal
+    # call on a fresh i64 temporary.
+    cast_place = (isinstance(arg, Cast)
+                  and type_info(gen, arg.type) is not None
+                  and numeric_class(enum_backing(gen, arg.type)) is None)
+    addressable = (
+        isinstance(arg, (Var, Member, Index))
+        or cast_place
+        or isinstance(arg, UnaryOp) and arg.op == "*"
+        or isinstance(arg, (Call, MethodCall))
+        and expression_returns_reference(gen, arg)
+    )
+    if addressable:
         return emit_lvalue(gen, builder, arg, scope)
-    except TypeError:
+
+    try:
         # a literal has no storage to alias, and no declared type to
         # spill at; against a 'const &T' it materializes at the
         # parameter's own type - a mutable reference stays an error,
         # its writes would land on the temporary
-        if arg_name is None:
-            if is_const(referenced):
-                value = emit_coerced(gen, builder, arg, referenced, scope)
-                slot = entry_alloca(builder, value.type, "ref.spill")
-                builder.store(value, slot)
-                return slot
-
+        if arg_name is None and not is_const(referenced):
             raise TypeError(f"a {param_name!r} parameter needs an "
                             "assignable argument") from None
 
-        value = emit_expression(gen, builder, arg, None, scope)
+        value = emit_coerced(gen, builder, arg, referenced, scope)
         slot = entry_alloca(builder, value.type, "ref.spill")
         builder.store(value, slot)
+        from siec.codegen.ownership import temporary_registered
+
+        if (destroyable(gen, referenced)
+                and not temporary_registered(gen, arg)
+                and gen.borrowed_temporary_frames):
+            gen.borrowed_temporary_frames[-1].append(
+                TemporaryDrop(slot, strip_const(referenced), id(arg)))
         return slot
+    except TypeError:
+        raise
 
 
 def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,

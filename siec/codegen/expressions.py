@@ -87,8 +87,12 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return expr.value
 
     if isinstance(expr, Move):
-        return emit_expression(
+        value = emit_expression(
             gen, builder, expr.operand, expected_type, scope)
+        from siec.codegen.ownership import disarm_expression
+
+        disarm_expression(gen, builder, expr, scope)
+        return value
 
     # dispatch on the node type; each branch returns an LLVM value
     if isinstance(expr, IntLiteral):
@@ -323,12 +327,20 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         raise NameError(f"undefined variable {expr.name!r}")
 
     if isinstance(expr, Call):
-        return emit_call(gen, builder, expr, scope)
+        value = emit_call(gen, builder, expr, scope)
+        from siec.codegen.ownership import track_value_temporary
+
+        return track_value_temporary(
+            gen, builder, expr, value, expr_sie_type(gen, expr, scope))
 
     if isinstance(expr, MethodCall):
         from siec.codegen.methods import emit_method_call
 
-        return emit_method_call(gen, builder, expr, scope)
+        value = emit_method_call(gen, builder, expr, scope)
+        from siec.codegen.ownership import track_value_temporary
+
+        return track_value_temporary(
+            gen, builder, expr, value, expr_sie_type(gen, expr, scope))
 
     if isinstance(expr, Index):
         from siec.codegen.inference import item_call
@@ -568,7 +580,14 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
 
     # a '&T'-returning call's value IS an address: assignable storage
     if isinstance(expr, Call):
-        return emit_call(gen, builder, expr, scope, as_address=True)
+        address = emit_call(gen, builder, expr, scope, as_address=True)
+        from siec.codegen.ownership import (expression_returns_reference,
+                                           register_address_temporary)
+
+        if not expression_returns_reference(gen, expr):
+            register_address_temporary(
+                gen, address, expr_sie_type(gen, expr, scope), expr)
+        return address
 
     if isinstance(expr, MethodCall):
         from siec.codegen.methods import emit_method_call
