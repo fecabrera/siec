@@ -23,28 +23,28 @@ enum OpenError {
     PermissionDenied,
 }
 
-@extend OpenError: Formattable;
-
-/**
- * Format the OpenError.
- *
- * @param modifiers The modifiers to format the OpenError with.
- * @return The formatted OpenError.
- */
-fn OpenError::format(const &self, modifiers: const &char[]) -> String {
-    case (self) {
-    when OpenError::SystemError:
-        return String("System error");
-    when OpenError::AlreadyOpen:
-        return String("Already open");
-    when OpenError::InvalidMode:
-        return String("Invalid mode");
-    when OpenError::NotFound:
-        return String("Not found");
-    when OpenError::PermissionDenied:
-        return String("Permission denied");
-    else:
-        return String("Unknown error");
+@extend OpenError: Formattable {
+    /**
+    * Format the OpenError.
+    *
+    * @param modifiers The modifiers to format the OpenError with.
+    * @return The formatted OpenError.
+    */
+    fn format(const &self, modifiers: const &char[]) -> String {
+        case (self) {
+        when OpenError::SystemError:
+            return String("System error");
+        when OpenError::AlreadyOpen:
+            return String("Already open");
+        when OpenError::InvalidMode:
+            return String("Invalid mode");
+        when OpenError::NotFound:
+            return String("Not found");
+        when OpenError::PermissionDenied:
+            return String("Permission denied");
+        else:
+            return String("Unknown error");
+        }
     }
 }
 
