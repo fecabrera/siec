@@ -16,7 +16,7 @@ syn keyword sieConditional if else case when
 syn keyword sieRepeat while for foreach
 syn keyword sieStatement return break continue emit defer drop
 syn keyword sieException try except
-syn keyword sieOperatorWord and or not as
+syn keyword sieOperatorWord and or not as move
 
 " literals
 syn keyword sieBoolean true false

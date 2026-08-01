@@ -9047,6 +9047,10 @@
             "named": false
           },
           {
+            "type": "move",
+            "named": false
+          },
+          {
             "type": "not",
             "named": false
           },
@@ -9819,6 +9823,10 @@
     "type": "line_comment",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "move",
+    "named": false
   },
   {
     "type": "not",

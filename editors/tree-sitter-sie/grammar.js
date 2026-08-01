@@ -672,7 +672,7 @@ module.exports = grammar({
     unary_expression: ($) =>
       prec.right(
         PREC.unary,
-        seq(field("operator", choice("-", "~", "not", "*", "&")), field("operand", $._expression)),
+        seq(field("operator", choice("-", "~", "not", "*", "&", "move")), field("operand", $._expression)),
       ),
 
     cast_expression: ($) =>

@@ -65,6 +65,7 @@
 ] @keyword.exception
 
 "as" @keyword.operator
+"move" @keyword.operator
 
 ; the directives, every one spelled '@name'
 [

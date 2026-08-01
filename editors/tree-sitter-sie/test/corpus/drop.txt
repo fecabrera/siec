@@ -49,3 +49,36 @@ fn Slot<T>::drop(&self) {
               field: (identifier))
             field: (identifier))
           arguments: (arguments))))))
+
+====================
+Move expression
+====================
+
+fn transfer(target: &Resource, source: Resource) {
+  target = move source;
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (function_name
+      name: (identifier))
+    parameters: (parameters
+      (parameter
+        name: (identifier)
+        type: (type
+          (reference_type
+            (type
+              (qualified_type
+                (identifier))))))
+      (parameter
+        name: (identifier)
+        type: (type
+          (qualified_type
+            (identifier)))))
+    body: (block
+      (assignment_statement
+        target: (identifier)
+        value: (unary_expression
+          operand: (identifier))))))

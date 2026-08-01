@@ -126,7 +126,7 @@
                 },
                 {
                     "name": "keyword.operator.expression.sie",
-                    "match": "\\b(as)\\b"
+                    "match": "\\b(as|move)\\b"
                 },
                 {
                     "name": "storage.type.sie",
