@@ -5,9 +5,9 @@ import pytest
 
 def test_variadics_pack_into_any_arrays(run):
     """
-    'fn f(s: T, args...)' is 'args: Any[]': extra call arguments wrap
-    and pack, none packs empty, an Any[] argument forwards as-is, and
-    methods take the sugar too.
+    'fn f(s: T, args...)' is 'args: const Any[]': extra call arguments wrap
+    and pack into a borrowed view, none packs empty, an Any[] argument
+    forwards as-is, and methods take the sugar too.
     """
     source = """
     struct Counter { count: i32; }
@@ -82,4 +82,19 @@ def test_variadic_must_close_the_parameters(compile_source):
         compile_source("""
         @extern fn f(args...);
         fn main() -> i32 { return 0; }
+        """)
+
+
+def test_variadic_pack_is_const(compile_source):
+    """A variadic callee cannot mutate the caller-owned argument pack."""
+    with pytest.raises(TypeError, match="cannot mutate a 'const Any\\[\\]'"):
+        compile_source("""
+        fn replace(args...) {
+            args[0] = 42 as Any;
+        }
+
+        fn main() -> i32 {
+            replace(1);
+            return 0;
+        }
         """)

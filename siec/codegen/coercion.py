@@ -142,6 +142,7 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
             and strip_const(strip_reference(operand_name)) == "Any"):
         value = emit_expression(gen, builder, expr.operand, None, scope)
         data = builder.extract_value(value, 1, name="any.data")
+
         typed = builder.bitcast(
             data, ir.PointerType(resolve_type(expr.type, gen.structs)))
         return builder.load(typed, name="any.value")

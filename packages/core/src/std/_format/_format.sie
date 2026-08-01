@@ -47,7 +47,7 @@ fn format(str: const &Iterable<char>, args...) -> String {
                     let arg = args[i] as char*;
                     result.append(arg);
                 when Formattable:
-                    let arg = args[i] as Formattable;
+                    let arg = args[i] as const Formattable;
                     let tmp = arg.format(modifier.as_array());
                     result.append(tmp);
                 else:

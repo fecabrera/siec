@@ -196,7 +196,7 @@ class CodeGenerator:
         # view resolves the default expressions at call sites
         self.param_defaults: dict[str, tuple[list, str]] = {}
 
-        # symbols whose last parameter is the 'args...' Any[] sugar;
+        # symbols whose last parameter is the 'args...' const Any[] sugar;
         # their calls pack extra arguments into it
         self.variadics: set[str] = set()
         self.var_args: set[str] = set()

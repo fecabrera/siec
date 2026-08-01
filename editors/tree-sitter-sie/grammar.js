@@ -344,7 +344,7 @@ module.exports = grammar({
         optional(seq("=", field("default", $._expression))),
       ),
 
-    // 'args...' is the trailing 'Any[]' sugar
+    // 'args...' is the trailing borrowed 'const Any[]' sugar
     variadic_parameter: ($) => seq(field("name", $.identifier), "..."),
 
     attribute: ($) =>

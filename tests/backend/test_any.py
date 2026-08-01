@@ -77,6 +77,33 @@ def test_any_is_one_concrete_type(run):
     assert run(source).returncode == 0
 
 
+def test_any_const_view_borrows_owned_value(run):
+    """An erased owned value can be inspected without gaining another owner."""
+    source = """
+    @static let drops: i32 = 0;
+
+    struct Resource: Destroy { value: i32; }
+    fn Resource::destroy(&self) { drops += 1; }
+
+    fn read(args...) -> i32 {
+        let resource = args[0] as const Resource;
+        return resource.value;
+    }
+
+    fn exercise() -> i32 {
+        let resource: Resource = { 42 };
+        if (read(resource) != 42) return 1;
+        return drops;
+    }
+
+    fn main() -> i32 {
+        if (exercise() != 0) return 1;
+        return drops - 1;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_when_interface_expands_per_implementer(run):
     """
     A 'when Iface:' arm of a '@typeof' case is a generic arm: one arm

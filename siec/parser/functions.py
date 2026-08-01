@@ -753,15 +753,15 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         param_line = ts.peek().line
         param_name = ts.expect("ident").value
 
-        # 'name...' is sugar for a trailing 'name: Any[]': extra call
-        # arguments pack into it, each wrapped as an Any
+        # 'name...' is sugar for a trailing 'name: const Any[]': extra call
+        # arguments pack into this borrowed view, each wrapped as an Any
         if ts.peek().value == "...":
             if is_extern:
                 raise SyntaxError(f"line {param_line}: an '@extern' function "
                                   "takes C varargs: a bare '...'")
 
             ts.next()
-            params.append(Param(param_name, "Any[]"))
+            params.append(Param(param_name, "const Any[]"))
             variadic = True
             break
 

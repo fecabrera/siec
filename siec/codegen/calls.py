@@ -193,7 +193,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     expected = len(func.function_type.args) - hidden
 
     # a 'name...' variadic packs the call's extra arguments into its
-    # trailing Any[]; an explicit Any[] argument forwards as-is
+    # trailing const Any[]; an explicit Any[] argument forwards as-is
     if func.name in gen.variadics:
         call = pack_variadic(gen, call, expected, scope)
 
@@ -293,8 +293,8 @@ def pack_variadic(gen: CodeGenerator, call: Call, expected: int,
                   scope: dict) -> Call:
     """
     Rewrite a call to an 'args...' function: the arguments past the
-    fixed ones wrap as Anys and pack into one Any[] literal - an empty
-    one when none are given. Passing an Any[] itself forwards it.
+    fixed ones wrap as Anys and pack into one borrowed const Any[] view - an
+    empty one when none are given. Passing an Any[] itself forwards it.
     """
     from siec.ast import ArrayLiteral, Cast
     from siec.codegen.inference import infer_type
@@ -304,7 +304,7 @@ def pack_variadic(gen: CodeGenerator, call: Call, expected: int,
     if len(call.args) < fixed:
         return call
 
-    # exactly filled, the last already an Any[]: a forward, not a pack
+    # exactly filled, the last already an Any[] view: a forward, not a pack
     if len(call.args) == expected:
         last = infer_type(gen, call.args[-1], scope)
         if last is not None and strip_const(strip_reference(last)) == "Any[]":

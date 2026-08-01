@@ -1273,18 +1273,18 @@ Qualified spellings work the same way: `util.identity<i32>` and a bare `util.ide
 
 #### Variadic functions
 
-A last parameter spelled `name...` is sugar for `name: Any[]`: each extra call argument wraps as an [Any](#any) and packs into the array, an empty one when none are given.
+A last parameter spelled `name...` is sugar for `name: const Any[]`: each extra call argument wraps as an [Any](#any) and packs into a borrowed array view, an empty one when none are given. The callee can inspect and forward that pack but cannot mutate it.
 
 ```
 fn println(str: const char[], args...) {
-    // args: Any[]; args.length counts the extras
+    // args: const Any[]; args.length counts the extras
 }
 
 println("hello world");        // args.length = 0
 println("hello {}", "world");  // args.length = 1
 ```
 
-The body dispatches on each element with [`@typeof`](#any), and passing an `Any[]` itself forwards it as-is instead of re-packing, so variadics delegate to one another. Methods take the sugar too. `@extern` functions keep C's bare `...`, which passes arguments the C way instead.
+The body dispatches on each element with [`@typeof`](#any), and passing an `Any[]` or `const Any[]` itself forwards it as-is instead of re-packing, so variadics delegate to one another. Methods take the sugar too. `@extern` functions keep C's bare `...`, which passes arguments the C way instead.
 
 #### Extern
 
@@ -2029,7 +2029,7 @@ struct Any {
 `v as Any` spills a copy of the value into the enclosing function's frame and pairs its address with its type's id. Since every `Any` is this one struct, an `Any[]` holds heterogeneous values, and a function over them is one function, never stamped per payload:
 
 ```
-fn log(args: Any[]) {
+fn log(args: const Any[]) {
     foreach (arg : args) {
         case (@typeof(arg)) {
             when char[]: // ...
@@ -2041,6 +2041,8 @@ fn log(args: Any[]) {
 
 log([1 as Any, "text" as Any, 2.5 as Any]);
 ```
+
+The array and its `Any` entries are borrowed views. When an erased payload owns resources, inspect it through a const cast (`arg as const Resource`); that view receives no independent cleanup responsibility. Acquiring another owner remains explicit, for example by cloning that const view.
 
 `@typeof(x)` yields the type id an expression carries: an `Any` operand reads its runtime `id` field, and any other operand folds to its static type's `@typeid` at compile time (the operand is never evaluated). Comparing it against a bare type name means the type's id, in `==`/`!=` and in `when` arms, where non-identifier spellings (`char[]`, `i32*`) work too:
 

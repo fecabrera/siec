@@ -119,6 +119,26 @@ def test_map_slots_own_insert_replace_remove_grow_and_destroy(
     assert result.returncode == 42
 
 
+def test_map_formatting_borrows_the_variadic_owner(monkeypatch, tmp_path):
+    """Formatting through Any does not destroy its owned Map argument."""
+    result = run_core(monkeypatch, tmp_path, r"""
+    import { Map } from std.collections;
+    import { println } from std.io;
+
+    fn main() -> i32 {
+        let map = Map<char[], i32>();
+        map.set("abc", 1);
+        map.set("def", 2);
+        map.set("ghi", 3);
+        println("{}", map);
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout.startswith("{")
+    assert '"abc": 1' in result.stdout
+
+
 def test_stack_slots_transfer_growth_pop_peek_and_destroy(
         monkeypatch, tmp_path):
     """Stack owns its live slot prefix and exposes only a const top borrow."""

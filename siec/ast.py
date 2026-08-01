@@ -613,7 +613,7 @@ class Function:
     receiver_constraints: dict | None = None
     # bound per generic type parameter, tuples representing intersections
     constraints: dict | None = None
-    variadic: bool = False  # 'args...': the last param is an 'Any[]' sugar
+    variadic: bool = False  # 'args...': trailing borrowed 'const Any[]' sugar
     deprecated: str | None = None  # '@deprecated("...")': the advice its uses warn with
     removed: str | None = None  # '@remove("...")': the advice its uses fail with
     is_private: bool = False  # '@private': visible textually, never through import
