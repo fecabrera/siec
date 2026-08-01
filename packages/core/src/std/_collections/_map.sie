@@ -15,9 +15,19 @@ enum MapIndexError {
     NotFound,
 }
 
-struct KeyValuePair<K, V> {
+struct KeyValuePair<K, V>: Formattable {
     key: const K;
     value: V;
+
+    fn format(const &self, modifiers: const &char[]) -> String {
+        return format("{}: {}", self.key, self.value);
+    }
+
+    @template<K: Iterable<char>>
+    @override
+    fn format(const &self, modifiers: const &char[]) -> String {
+        return format("\"{}\": {}", self.key, self.value);
+    }
 }
 
 @private
@@ -39,11 +49,93 @@ struct Map<K: Hashable, V>
 struct MapIterator<K, V>: Iterator<KeyValuePair<K, V>> {
     entries: MapEntry<K, V>[];
     index: u64;
+
+    /**
+    * Initializes the iterator with the given entries.
+    *
+    * @param entries The entries to initialize the iterator with.
+    */
+    fn init(&self, entries: MapEntry<K, V>[]) {
+        self = {entries, 0};
+    }
+
+    /**
+    * Checks if the iterator has a next element.
+    *
+    * @return True if the iterator has a next element, false otherwise.
+    */
+    fn has_next(&self) -> bool {
+        while (self.index < self.entries.length) {
+            if (self.entries[self.index].state == MapEntryState::Used)
+                return true;
+
+            self.index += 1;
+        }
+
+        return false;
+    }
+
+    /**
+    * Gets the next element from the iterator.
+    *
+    * @return The next element from the iterator.
+    */
+    fn next(&self) -> &KeyValuePair<K, V> {
+        while (self.index < self.entries.length) {
+            defer self.index += 1;
+            
+            if (self.entries[self.index].state == MapEntryState::Used)
+                return self.entries[self.index] as KeyValuePair<K, V>;
+        }
+
+        panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
+    }
 }
 
 struct ConstMapIterator<K, V>: ConstIterator<KeyValuePair<K, V>> {
     entries: const MapEntry<K, V>[];
     index: u64;
+
+    /**
+    * Initializes the const iterator with the given entries.
+    *
+    * @param entries The entries to initialize the const iterator with.
+    */
+    fn init(&self, entries: const MapEntry<K, V>[]) {
+        self = {entries, 0};
+    }
+
+    /**
+    * Checks if the const iterator has a next element.
+    *
+    * @return True if the const iterator has a next element, false otherwise.
+    */
+    fn has_next(&self) -> bool {
+        while (self.index < self.entries.length) {
+            if (self.entries[self.index].state == MapEntryState::Used)
+                return true;
+            
+            self.index += 1;
+        }
+
+        return false;
+    }
+
+    /**
+    * Gets the next element from the const iterator.
+    *
+    * @return The next element from the const iterator.
+    */
+    fn next(&self) -> const &KeyValuePair<K, V> {
+        while (self.index < self.entries.length) {
+            defer self.index += 1;
+
+            if (self.entries[self.index].state == MapEntryState::Used)
+                return self.entries[self.index] as const KeyValuePair<K, V>;
+        }
+
+        panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
+    }
 }
 
 /**
@@ -91,27 +183,7 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     str += "{";
     foreach (entry : enumerate(self)) {
         if (entry.index) str += ", ";
-        str += format("{}: {}", entry.value.key, entry.value.value);
-    }
-    str += "}";
-
-    return str;
-}
-
-/**
- * Format the Map.
- *
- * @param modifiers The modifiers to format the Map with.
- * @return The formatted Map.
- */
-@template<K: Iterable<char>>
-@override
-fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
-    let str = String();
-    str += "{";
-    foreach (entry : enumerate(self)) {
-        if (entry.index) str += ", ";
-        str += format("\"{}\": {}", entry.value.key, entry.value.value);
+        str += entry.value.format(modifiers);
     }
     str += "}";
 
@@ -296,86 +368,4 @@ fn Map<K, V>::iterator(&self) -> MapIterator<K, V> {
  */
 fn Map<K, V>::const_iterator(const &self) -> ConstMapIterator<K, V> {
     return ConstMapIterator<K, V>({self.entries, self.capacity});
-}
-
-/**
- * Initializes the iterator with the given entries.
- *
- * @param entries The entries to initialize the iterator with.
- */
-fn MapIterator<K, V>::init(&self, entries: MapEntry<K, V>[]) {
-    self = {entries, 0};
-}
-
-/**
- * Checks if the iterator has a next element.
- *
- * @return True if the iterator has a next element, false otherwise.
- */
-fn MapIterator<K, V>::has_next(&self) -> bool {
-    while (self.index < self.entries.length) {
-        if (self.entries[self.index].state == MapEntryState::Used)
-            return true;
-
-        self.index += 1;
-    }
-
-    return false;
-}
-
-/**
- * Gets the next element from the iterator.
- *
- * @return The next element from the iterator.
- */
-fn MapIterator<K, V>::next(&self) -> &KeyValuePair<K, V> {
-    while (self.index < self.entries.length) {
-        defer self.index += 1;
-        
-        if (self.entries[self.index].state == MapEntryState::Used)
-            return self.entries[self.index] as KeyValuePair<K, V>;
-    }
-
-    panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
-}
-
-/**
- * Initializes the const iterator with the given entries.
- *
- * @param entries The entries to initialize the const iterator with.
- */
-fn ConstMapIterator<K, V>::init(&self, entries: const MapEntry<K, V>[]) {
-    self = {entries, 0};
-}
-
-/**
- * Checks if the const iterator has a next element.
- *
- * @return True if the const iterator has a next element, false otherwise.
- */
-fn ConstMapIterator<K, V>::has_next(&self) -> bool {
-    while (self.index < self.entries.length) {
-        if (self.entries[self.index].state == MapEntryState::Used)
-            return true;
-        
-        self.index += 1;
-    }
-
-    return false;
-}
-
-/**
- * Gets the next element from the const iterator.
- *
- * @return The next element from the const iterator.
- */
-fn ConstMapIterator<K, V>::next(&self) -> const &KeyValuePair<K, V> {
-    while (self.index < self.entries.length) {
-        defer self.index += 1;
-
-        if (self.entries[self.index].state == MapEntryState::Used)
-            return self.entries[self.index] as const KeyValuePair<K, V>;
-    }
-
-    panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
 }

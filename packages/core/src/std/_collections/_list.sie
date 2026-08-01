@@ -5,6 +5,7 @@ import { Formattable } from std.format;
 
 struct List<T>
     : Destroy,
+      Clone,
       Iterable<T>,
       GetItem<u64, T>,
       SetItem<u64, T>,
@@ -65,6 +66,17 @@ fn List<T>::destroy(&self) {
     self.data = null;
     self.length = 0;
     self.capacity = 0;
+}
+
+/**
+ * Clone the List
+ *
+ * @return The cloned list
+ */
+fn List<T>::clone(const &self) -> List<T> {
+    let lst = List<T>(self.capacity);
+    lst.append(self);
+    return lst;
 }
 
 /**

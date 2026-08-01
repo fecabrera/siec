@@ -1,0 +1,23 @@
+import std.io;
+import { Queue, String } from std.collections;
+
+fn main() -> i32 {
+    let q1 = Queue<String>();
+    
+    q1.push(String("hello"));
+    q1.push(String("world"));
+    
+    std.io.println("q1");
+    foreach (entry : enumerate(q1)) {
+        std.io.println("{}: {}", entry.index, entry.value);
+    }
+
+    let q2 = q1.clone();
+
+    std.io.println("q2");
+    foreach (entry : enumerate(q2)) {
+        std.io.println("{}: {}", entry.index, entry.value);
+    }
+
+    return 0;
+}

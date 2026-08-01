@@ -7,15 +7,31 @@ struct QueueNode<T> {
     next: QueueNode<T>* = null;
 }
 
-// Linked-list FIFO queue<T>. Values enqueue at the tail and dequeue at the
-// head, both in O(1). Nodes are heap-allocated per push.
-struct Queue<T>: Destroy, Iterable<T> {
-    head: QueueNode<T>*;   // front: next to dequeue (oldest)
-    tail: QueueNode<T>*;   // back: last enqueued (newest)
-}
-
 struct QueueIterator<T>: Iterator<T> {
     current: QueueNode<T>*; // next node to yield
+
+    /**
+     * Check if the QueueIterator has a next element.
+     *
+     * @return True if the QueueIterator has a next element, false otherwise.
+     */
+    fn has_next(&self) -> bool {
+        return self.current != null;
+    }
+    
+    /**
+     * Get the next element from the QueueIterator.
+     *
+     * @return The next element from the QueueIterator.
+     */
+    fn next(&self) -> &T {
+        if (not self.current)
+            panic("cannot advance an exhausted QueueIterator");
+    
+        let current = self.current;
+        self.current = self.current->next;
+        return current->value.get_mut();
+    }
 }
 
 @private
@@ -25,6 +41,39 @@ struct ConstQueueCursor<T> {
 
 struct ConstQueueIterator<T>: ConstIterator<T> {
     cursor: ConstQueueCursor<T>; // replaced whole as the iterator advances
+
+    /**
+     * Check if the ConstQueueIterator has a next element.
+     *
+     * @return True if the ConstQueueIterator has a next element, false otherwise.
+     */
+    fn has_next(const &self) -> bool {
+        return self.cursor.current != null;
+    }
+    
+    /**
+     * Get the next element from the ConstQueueIterator.
+     *
+     * @return The next element from the ConstQueueIterator.
+     */
+    fn next(&self) -> const &T {
+        if (not self.cursor.current)
+            panic("cannot advance an exhausted ConstQueueIterator");
+    
+        let current = self.cursor.current;
+        self.cursor = { current->next };
+        return current->value.get();
+    }
+}
+
+// Linked-list FIFO queue<T>. Values enqueue at the tail and dequeue at the
+// head, both in O(1). Nodes are heap-allocated per push.
+struct Queue<T>
+    : Clone,
+      Destroy,
+      Iterable<T> {
+    head: QueueNode<T>*;   // front: next to dequeue (oldest)
+    tail: QueueNode<T>*;   // back: last enqueued (newest)
 }
 
 /**
@@ -48,6 +97,14 @@ fn Queue<T>::destroy(&self) {
     }
 
     self.tail = null;
+}
+
+fn Queue<T>::clone(const &self) -> Queue<T> {
+    let q = Queue<T>();
+    foreach (v : self) {
+        q.push_from(v);
+    }
+    return q;
 }
 
 /**
@@ -148,50 +205,4 @@ fn Queue<T>::iterator(&self) -> QueueIterator<T> {
  */
 fn Queue<T>::const_iterator(const &self) -> ConstQueueIterator<T> {
     return { { self.head } };
-}
-
-/**
- * Check if the QueueIterator has a next element.
- *
- * @return True if the QueueIterator has a next element, false otherwise.
- */
-fn QueueIterator<T>::has_next(&self) -> bool {
-    return self.current != null;
-}
-
-/**
- * Get the next element from the QueueIterator.
- *
- * @return The next element from the QueueIterator.
- */
-fn QueueIterator<T>::next(&self) -> &T {
-    if (not self.current)
-        panic("cannot advance an exhausted QueueIterator");
-
-    let current = self.current;
-    self.current = self.current->next;
-    return current->value.get_mut();
-}
-
-/**
- * Check if the ConstQueueIterator has a next element.
- *
- * @return True if the ConstQueueIterator has a next element, false otherwise.
- */
-fn ConstQueueIterator<T>::has_next(const &self) -> bool {
-    return self.cursor.current != null;
-}
-
-/**
- * Get the next element from the ConstQueueIterator.
- *
- * @return The next element from the ConstQueueIterator.
- */
-fn ConstQueueIterator<T>::next(&self) -> const &T {
-    if (not self.cursor.current)
-        panic("cannot advance an exhausted ConstQueueIterator");
-
-    let current = self.cursor.current;
-    self.cursor = { current->next };
-    return current->value.get();
 }
