@@ -343,7 +343,7 @@ interface Assign<T> {
 }
 ```
 
-For `a: A` and `b: B`, `a = b` calls `a.assign_from(b)` when `A` implements `AssignFrom<B>`. If `A` and `B` are the same type and there is no such implementation, `Clone` supplies the fallback: clone `b`, then store that new value into `a`. `a = move b` and assignments from temporaries call `a.assign(...)` when `A` implements `Assign<B>`. Without a matching claim, assignment retains the ordinary built-in coercion and store.
+For `a: A` and `b: B`, `a = b` calls `a.assign_from(b)` when `A` implements `AssignFrom<B>`. If `A` and `B` are the same type and there is no such implementation, `Clone` supplies the fallback: clone `b`, then store that new value into `a`. `a = move b` and assignments from temporaries call `a.assign(...)` when `A` implements `Assign<B>`. A temporary may fall back to `AssignFrom<B>`, borrowing its materialized value for the call; an explicit `move` never becomes a borrow. Assignment contracts admit the same implicit conversions as parameters, including numeric widening and concrete implementations of an interface-typed contract. Without a matching claim, assignment retains the ordinary built-in coercion and store.
 
 `AssignFrom` is the reusable-storage path: it preserves its source and may update the destination without allocating a replacement. `Assign` receives ownership and may take the source's resources directly. `Clone` constructs an independent value and is useful outside assignment as well:
 
@@ -1753,7 +1753,7 @@ fn main() {
 }
 ```
 
-A reference parameter normally aliases assignable storage in the caller. A `const &T` parameter only reads, so a literal may pass too: it materializes at the parameter's own type, referenced in place. A mutable `&T` still needs the caller's storage, since writes to a temporary would vanish with it.
+A reference parameter normally aliases assignable storage in the caller. A `const &T` parameter only reads, so a literal or implicitly convertible value may pass too: it converts when necessary, materializes at the parameter's type, and is referenced in place. A mutable `&T` still needs caller storage of exactly that type, since conversion would make a temporary and writes to it would vanish.
 
 A function may also return a reference, `-> &T`, provided it has a reference parameter to derive it from, the receiver usually; returning storage that dies with the call (a local, a parameter's copy) has no reference to give. The `return` takes the value's address, and the call's result reads as the T it aliases, like a reference parameter does: reading copies the value out, while calling a [method](#methods) on it, or returning it along, keeps aliasing the original.
 

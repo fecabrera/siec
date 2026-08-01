@@ -1241,13 +1241,26 @@ def check_reference_argument(gen: CodeGenerator, arg: Expr, param: str,
 
     if declared is not None:
         if strip_const(declared) != strip_const(referenced):
-            raise TypeError(
-                f"cannot bind a {declared!r} value to a {param!r} "
-                "parameter")
+            from siec.codegen.overloads import parameter_fit
+
+            if (not is_const(referenced)
+                    or parameter_fit(
+                        gen, arg, declared, strip_const(referenced)) is None):
+                raise TypeError(
+                    f"cannot bind a {declared!r} value to a {param!r} "
+                    "parameter")
+            check_expression(gen, arg, scope, strip_const(referenced))
+            return
         if is_const(declared) and not is_const(referenced):
             raise TypeError(
                 f"cannot bind a {declared!r} value to a mutable "
                 f"{param!r} parameter")
+
+        # Type inference can identify a call's result without resolving the
+        # function instance that produces it. Check the expression itself
+        # before borrowing its storage so every constructor and generic call
+        # needed by emission is present after the checking phase.
+        check_expression(gen, arg, scope, referenced)
 
     try:
         lvalue_type(gen, arg, scope)

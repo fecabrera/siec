@@ -110,6 +110,46 @@ def test_assignment_interface_source_accepts_implementers(run):
     assert run(source).returncode == 42
 
 
+def test_assign_from_accepts_numeric_widening(run):
+    """Assignment materializes widened values for const-reference actions."""
+    source = """
+    struct Wide: AssignFrom<i64> { value: i64; }
+
+    fn Wide::assign_from(&self, source: const &i64) {
+        self.value = source;
+    }
+
+    fn main() -> i32 {
+        let target: Wide = { 0 };
+        target = 40;
+        let source: i32 = 42;
+        target = source;
+        return target.value as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_assign_from_temporary_resolves_generic_constructor(run):
+    """Borrowing a constructed temporary resolves all code before emission."""
+    source = """
+    struct Value<T> { value: T; }
+    fn Value<T>::init(&self, value: T) { self.value = value; }
+
+    struct Holder: AssignFrom<Value<i32>> { value: i32; }
+    fn Holder::assign_from(&self, source: const &Value<i32>) {
+        self.value = source.value;
+    }
+
+    fn main() -> i32 {
+        let target: Holder = { 0 };
+        target = Value<i32>(42);
+        return target.value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_compound_fallback_uses_consuming_assignment(run):
     """A binary operator's temporary result reaches Assign<Self>."""
     source = """

@@ -227,13 +227,22 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     """
     target = strip_const(param)
 
-    # a reference parameter aliases its argument in place: exact type only
+    # A mutable reference aliases its argument in place and therefore needs
+    # the exact type. A const reference may instead borrow a materialized
+    # converted value, so ordinary implicit conversion participates in
+    # overload selection for it.
     if is_reference(target):
         if arg_type is None:
-            return None
+            return (parameter_fit(gen, arg, arg_type,
+                                  strip_const(strip_reference(param)))
+                    if is_const(param) else None)
 
-        return ("exact" if strip_const(arg_type) == strip_const(strip_reference(target))
-                else None)
+        if strip_const(arg_type) == strip_const(strip_reference(target)):
+            return "exact"
+        if is_const(param):
+            return parameter_fit(
+                gen, arg, arg_type, strip_const(strip_reference(param)))
+        return None
 
     # an untypeable argument adapts to what its shape can fill: an
     # aggregate literal a struct or array parameter with as many fields,

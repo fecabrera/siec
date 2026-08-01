@@ -34,7 +34,8 @@ def assignment_action(gen: CodeGenerator, target, target_type: str,
             gen, target, scope, "set_item", value) is not None:
         return AssignmentAction(None, value)
 
-    consuming = isinstance(value, Move) or not isinstance(
+    explicit_move = isinstance(value, Move)
+    consuming = explicit_move or not isinstance(
         value, (Var, Member, Index))
     if (isinstance(value, Move) and isinstance(value.operand, Var)
             and isinstance(target, Var)
@@ -53,12 +54,21 @@ def assignment_action(gen: CodeGenerator, target, target_type: str,
     source_type = canonical_value_type(gen, source_type)
 
     if consuming:
-        if accepts_source(gen, target_type, "Assign", source_type):
+        if accepts_source(
+                gen, target_type, "Assign", source_type, source):
             return AssignmentAction(
                 MethodCall(target, "assign", [value]), None)
+        # An unnamed temporary may be borrowed for this call when no
+        # consuming action exists. An explicit move, on the other hand,
+        # promises consumption and never silently becomes a borrow.
+        if (not explicit_move and accepts_source(
+                gen, target_type, "AssignFrom", source_type, source)):
+            return AssignmentAction(
+                MethodCall(target, "assign_from", [source]), None)
         return AssignmentAction(None, value)
 
-    if accepts_source(gen, target_type, "AssignFrom", source_type):
+    if accepts_source(
+            gen, target_type, "AssignFrom", source_type, source):
         return AssignmentAction(
             MethodCall(target, "assign_from", [source]), None)
 
@@ -77,7 +87,7 @@ def canonical_value_type(gen: CodeGenerator, spelling: str) -> str:
 
 
 def accepts_source(gen: CodeGenerator, target: str, interface: str,
-                   source: str) -> bool:
+                   source: str, expression) -> bool:
     """Whether one assignment claim accepts the concrete source type."""
     required = f"{interface}<{source}>"
     if type_implements(gen, target, required):
@@ -95,6 +105,14 @@ def accepts_source(gen: CodeGenerator, target: str, interface: str,
         contract_base = (split_generic(contract) or (contract, []))[0]
         if (contract_base in gen.interfaces
                 and type_implements(gen, source, contract)):
+            return True
+
+        # Assignment follows ordinary value conversion rules as well. In
+        # particular, an i32 source selects AssignFrom<i64> through the
+        # documented same-family widening conversion.
+        from siec.codegen.overloads import parameter_fit
+
+        if parameter_fit(gen, expression, source, contract) is not None:
             return True
 
     return False

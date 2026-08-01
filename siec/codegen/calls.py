@@ -305,11 +305,21 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
     arg_name = expr_sie_type(gen, arg, scope)
 
     if arg_name is not None:
-        # the callee aliases the storage itself, so the types must match
-        # exactly: no widening can happen in place
+        # A mutable reference aliases the caller's storage and therefore
+        # needs an exact type. A const reference may point at a converted
+        # spill, since the callee cannot observe that it is temporary.
         if strip_const(arg_name) != strip_const(referenced):
-            raise TypeError(f"cannot bind a {arg_name!r} value to a "
-                            f"{param_name!r} parameter")
+            from siec.codegen.overloads import parameter_fit
+
+            if (not is_const(referenced)
+                    or parameter_fit(
+                        gen, arg, arg_name, strip_const(referenced)) is None):
+                raise TypeError(f"cannot bind a {arg_name!r} value to a "
+                                f"{param_name!r} parameter")
+            value = emit_coerced(gen, builder, arg, referenced, scope)
+            slot = entry_alloca(builder, value.type, "ref.spill")
+            builder.store(value, slot)
+            return slot
 
         # a const value only binds to a 'const &T'
         if is_const(arg_name) and not is_const(referenced):
