@@ -14,7 +14,7 @@ CORE_INCLUDES = (
 )
 
 
-def run_core(monkeypatch, tmp_path, source: str):
+def run_core(monkeypatch, tmp_path, source: str, *arguments: str):
     """Compile and run one program against the workspace core sources."""
     path = tmp_path / "main.sie"
     executable = tmp_path / "main"
@@ -26,7 +26,8 @@ def run_core(monkeypatch, tmp_path, source: str):
     args.extend(("-o", executable))
 
     assert run_cli(monkeypatch, *args) == 0
-    return subprocess.run([str(executable)], capture_output=True, text=True)
+    return subprocess.run(
+        [str(executable), *arguments], capture_output=True, text=True)
 
 
 RESOURCE = r"""
@@ -112,6 +113,102 @@ def test_map_slots_own_insert_replace_remove_grow_and_destroy(
     fn main() -> i32 {
         exercise();
         if (clones != 1 or drops != 9 or dropped_ids != 38) return 1;
+        return 42;
+    }
+    """)
+    assert result.returncode == 42
+
+
+def test_empty_container_access_panics(monkeypatch, tmp_path):
+    """Element-requiring core APIs diagnose empty or exhausted storage."""
+    source = r"""
+    import { List, Queue, Stack } from std.collections;
+    import { atoi } from stdlib;
+
+    fn main(argc: i32, argv: char**) -> i32 {
+        let operation = atoi(argv[1]);
+
+        if (operation == 0) {
+            let list = List<i32>();
+            list.pop();
+        }
+        if (operation == 1) {
+            let list = List<i32>();
+            let value = list[0];
+        }
+        if (operation == 2) {
+            let list = List<i32>();
+            list[0] = 42;
+        }
+        if (operation == 3) {
+            let stack = Stack<i32>();
+            stack.pop();
+        }
+        if (operation == 4) {
+            let stack = Stack<i32>();
+            stack.peek();
+        }
+        if (operation == 5) {
+            let queue = Queue<i32>();
+            queue.pop();
+        }
+        if (operation == 6) {
+            let queue = Queue<i32>();
+            queue.peek();
+        }
+        if (operation == 7) {
+            let queue = Queue<i32>();
+            let iterator = queue.iterator();
+            iterator.next();
+        }
+
+        let queue = Queue<i32>();
+        let iterator = queue.const_iterator();
+        iterator.next();
+        return 0;
+    }
+    """
+    expected = (
+        "cannot pop an empty List",
+        "List index is out of bounds",
+        "List index is out of bounds",
+        "cannot pop an empty Stack",
+        "cannot peek an empty Stack",
+        "cannot pop an empty Queue",
+        "cannot peek an empty Queue",
+        "cannot advance an exhausted QueueIterator",
+        "cannot advance an exhausted ConstQueueIterator",
+    )
+
+    executable = tmp_path / "main"
+    for operation, message in enumerate(expected):
+        if operation == 0:
+            result = run_core(monkeypatch, tmp_path, source, str(operation))
+        else:
+            result = subprocess.run(
+                [str(executable), str(operation)],
+                capture_output=True,
+                text=True,
+            )
+        assert result.returncode != 0
+        assert message in result.stderr
+
+
+def test_const_queue_iterator_advances_without_mutating_values(
+        monkeypatch, tmp_path):
+    """A const queue iterator advances its cursor and borrows each value."""
+    result = run_core(monkeypatch, tmp_path, r"""
+    import { Queue } from std.collections;
+
+    fn main() -> i32 {
+        let queue = Queue<i32>();
+        queue.push(20);
+        queue.push(22);
+
+        let iterator = queue.const_iterator();
+        if (iterator.next() != 20) return 1;
+        if (iterator.next() != 22) return 2;
+        if (iterator.has_next()) return 3;
         return 42;
     }
     """)

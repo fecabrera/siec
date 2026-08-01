@@ -430,6 +430,8 @@ slot.drop();                  // destroys the value and leaves no live T
 
 These operations are deliberately not gated by an `unsafe` keyword or block. Sie permits direct low-level memory manipulation, and a programmer using a slot is responsible for meeting its initialization preconditions. The standard containers provide the safe API boundary: `List<T>` uses `length` to identify its initialized slot range, while `Map<K, V>` initializes bucket metadata and treats key/value slots as live only for occupied buckets. Their callers continue to work with `T`, references to `T`, and ordinary moves without handling slots themselves.
 
+Core collection APIs that require an existing element panic when the container is empty. Indexed `List<T>` access likewise panics when the index is outside its initialized range. APIs that explicitly represent absence, such as `Map<K, V>::get`, retain their `Result` contract instead.
+
 Automatic destruction covers structured control flow. Process termination, foreign exceptions, signals, and aborting `panic` paths do not unwind Sie scopes. Global and static values have program lifetime and are not automatically destroyed at process exit.
 
 ### Constants
