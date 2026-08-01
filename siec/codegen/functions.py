@@ -330,6 +330,11 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
             gen.debug.enter_function(fn, func)
             builder.debug_metadata = gen.debug.location(fn.line)
 
+        from siec.codegen.slots import emit_slot_function
+
+        if emit_slot_function(gen, builder, fn, func):
+            return
+
         # an '@asm' function's parameters feed its assembly directly
         if fn.asm is not None:
             emit_asm_function(gen, builder, fn, func)

@@ -122,6 +122,42 @@ def test_temporaries_drop_after_borrow_or_owned_parameter_use(run):
     )
 
 
+def test_operator_rewrite_preserves_temporary_ownership(run):
+    """A desugared operator result transfers the source expression's owner."""
+    source = RESOURCE + r"""
+    @extend Resource: Add<Resource, i32>;
+
+    fn Resource::add(&self, amount: const i32) -> Resource {
+        return Resource(self.id + amount);
+    }
+
+    fn make_added() -> Resource {
+        let base = Resource(40);
+        return base + 2;
+    }
+
+    fn main() -> i32 {
+        let base = Resource(10);
+        let bound = base + 1;
+        inspect(bound);
+        inspect(base + 2);
+        consume(base + 3);
+        let returned = make_added();
+        inspect(returned);
+        return 0;
+    }
+    """
+    result = run(source)
+    assert result.returncode == 0
+    assert result.stdout == (
+        "use 11\n"
+        "use 12\ndrop 12\n"
+        "consume 13\ndrop 13\n"
+        "drop 40\nuse 42\n"
+        "drop 42\ndrop 11\ndrop 10\n"
+    )
+
+
 def test_return_transfers_local_ownership_to_the_caller(run):
     """A returned local is disarmed and the receiving binding drops it once."""
     result = run(RESOURCE + r"""

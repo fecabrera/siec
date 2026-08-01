@@ -530,7 +530,9 @@ def rewrite_enumerate(gen: CodeGenerator, call: Call, scope: dict) -> Call | Non
     finally:
         gen.ungated_types -= 1
 
-    return Call(symbol, [arg])
+    from siec.codegen.ownership import inherit_expression_identity
+
+    return inherit_expression_identity(call, Call(symbol, [arg]))
 
 
 def method_reference(gen: CodeGenerator, expr) -> ir.Function | None:

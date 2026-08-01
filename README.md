@@ -408,6 +408,28 @@ fn TOMLObject::destroy(&self) {
 
 `drop place;` performs the same operation explicitly on a mutable local, reference, field, or native indexed place. This is primarily how a custom container destroys owned members; a tagged union selects only its active field. Dropping a whole local consumes its cleanup responsibility and makes subsequent use an error until direct assignment reinitializes it. Calling `value.destroy()` directly has the same whole-local behavior. Consequently, an existing `defer value.destroy()` remains exactly-once after the type starts implementing `Destroy`: the explicit defer runs first and disarms the later automatic cleanup.
 
+#### Raw storage slots
+
+`Slot<T>` is the builtin raw-storage form of `T`: it has exactly `T`'s size and alignment, but a slot does not automatically contain, copy, move, or destroy a live `T`. Its methods make each lifetime transition explicit:
+
+```sie
+let slot: Slot<Resource>;
+
+slot.write(Resource());       // uninitialized -> initialized; takes ownership
+inspect(slot.get());          // borrows as const &Resource
+slot.replace(Resource());     // destroys the old value, then takes the new one
+let value = slot.take();      // initialized -> uninitialized; returns ownership
+
+slot.write_from(value);       // copies a plain T, or clones an owned T
+slot.get_mut().update();      // mutable borrow of an initialized value
+slot.assign_to(target);       // assigns its borrowed value into an existing T
+slot.drop();                  // destroys the value and leaves no live T
+```
+
+`write`, `write_from`, `take`, `get`, `get_mut`, `assign_to`, `replace`, and `drop` are compiler-backed ordinary methods. `write` and `write_from` require an uninitialized slot. The other operations require an initialized slot: `take` and `drop` end that lifetime, while `replace` preserves it. `write_from` copies a non-owning value directly, but an owned `T: Destroy` must also implement `Clone`; a shallow borrowed copy is rejected. `assign_to` follows ordinary borrowed-assignment policy for an existing target, preferring `AssignFrom<T>` and otherwise cloning an owned value. `Slot<T>` itself does not implement `Destroy`, because it carries no runtime initialized flag and therefore cannot decide whether a value is live.
+
+These operations are deliberately not gated by an `unsafe` keyword or block. Sie permits direct low-level memory manipulation, and a programmer using a slot is responsible for meeting its initialization preconditions. The standard containers provide the safe API boundary: `List<T>` uses `length` to identify its initialized slot range, while `Map<K, V>` initializes bucket metadata and treats key/value slots as live only for occupied buckets. Their callers continue to work with `T`, references to `T`, and ordinary moves without handling slots themselves.
+
 Automatic destruction covers structured control flow. Process termination, foreign exceptions, signals, and aborting `panic` paths do not unwind Sie scopes. Global and static values have program lifetime and are not automatically destroyed at process exit.
 
 ### Constants

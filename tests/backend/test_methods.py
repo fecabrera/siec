@@ -335,15 +335,15 @@ def test_generic_reference_returns_chain(run):
     'List<T>::get -> &T' chains through nested instantiations.
     """
     source = """
-    struct Slot<T> { value: T; }
+    struct Cell<T> { value: T; }
 
     struct Grid<T> {
-        cell: Slot<T>;
+        cell: Cell<T>;
     }
 
-    fn Slot<T>::set(self: &Slot<T>, value: T) { self.value = value; }
+    fn Cell<T>::set(self: &Cell<T>, value: T) { self.value = value; }
 
-    fn Grid<T>::at(self: &Grid<T>) -> &Slot<T> {
+    fn Grid<T>::at(self: &Grid<T>) -> &Cell<T> {
         return self.cell;
     }
 

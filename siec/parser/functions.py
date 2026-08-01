@@ -687,13 +687,13 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         ts.next()
         ts.next()
         receiver, receiver_params = f"{name}[]", [name]
-        name = f"{receiver}::{ts.expect('ident').value}"
+        name = f"{receiver}::{ts.expect_name('drop').value}"
         type_params, constraints = placeholders(ts)
     elif ts.peek().syntax == "::":
         ts.next()
         receiver, receiver_params = name, params_list
         receiver_constraints = params_constraints
-        name = f"{receiver}::{ts.expect('ident').value}"
+        name = f"{receiver}::{ts.expect_name('drop').value}"
         type_params, constraints = placeholders(ts)
     else:
         type_params = params_list

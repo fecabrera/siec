@@ -249,7 +249,7 @@ module.exports = grammar({
       seq(
         repeat($.attribute),
         "fn",
-        field("name", $.identifier),
+        field("name", $._method_identifier),
         optional(field("type_parameters", $.type_parameters)),
         field("parameters", $.parameters),
         optional(seq("->", field("return_type", $.type))),
@@ -319,7 +319,7 @@ module.exports = grammar({
         optional(
           seq(
             "::",
-            field("method", $.identifier),
+            field("method", $._method_identifier),
             optional(field("method_type_parameters", $.type_parameters)),
           ),
         ),
@@ -643,15 +643,15 @@ module.exports = grammar({
             choice($.identifier, $.field_expression, $.generic_reference),
           ),
           "::",
-          field("name", $.identifier),
+          field("name", $._method_identifier),
         ),
       ),
 
     field_expression: ($) =>
-      prec(PREC.postfix, seq(field("value", $._expression), ".", field("field", $.identifier))),
+      prec(PREC.postfix, seq(field("value", $._expression), ".", field("field", $._method_identifier))),
 
     arrow_expression: ($) =>
-      prec(PREC.postfix, seq(field("value", $._expression), "->", field("field", $.identifier))),
+      prec(PREC.postfix, seq(field("value", $._expression), "->", field("field", $._method_identifier))),
 
     index_expression: ($) =>
       prec(PREC.postfix, seq(field("value", $._expression), "[", field("index", $._expression), "]")),
@@ -786,6 +786,10 @@ module.exports = grammar({
      * ------------------------------------------------------------------ */
 
     identifier: ($) => /[a-zA-Z_]\w*/,
+
+    // 'drop' starts a statement but remains available as a method name,
+    // notably for the builtin Slot<T>::drop raw-storage operation.
+    _method_identifier: ($) => choice($.identifier, alias("drop", $.identifier)),
 
     integer_literal: ($) => token(choice(/\d+/, /0[xX][0-9a-fA-F]+/)),
     float_literal: ($) => token(/\d+\.\d+/),

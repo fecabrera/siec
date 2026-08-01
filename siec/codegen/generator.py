@@ -654,6 +654,37 @@ interface SetItem<K, V>;
 
 fn SetItem<K, V>::set_item(&self, key: const K, value: V);
 
+/**
+ * Raw storage with T's layout and no automatic initialized lifetime.
+ */
+struct Slot<T> {
+    value: T;
+}
+
+/** Move an owned value into uninitialized storage. */
+fn Slot<T>::write(&self, value: T) {}
+
+/** Copy a plain value, or clone an owned value, into uninitialized storage. */
+fn Slot<T>::write_from(&self, value: const &T) {}
+
+/** Move the initialized value out and leave the storage uninitialized. */
+fn Slot<T>::take(&self) -> T { return self.value; }
+
+/** Borrow the initialized value. */
+fn Slot<T>::get(const &self) -> const &T { return &self.value; }
+
+/** Mutably borrow the initialized value. */
+fn Slot<T>::get_mut(&self) -> &T { return &self.value; }
+
+/** Apply borrowed assignment to an existing target. */
+fn Slot<T>::assign_to(const &self, target: &T) {}
+
+/** Destroy the initialized value and leave the storage uninitialized. */
+fn Slot<T>::drop(&self) {}
+
+/** Destroy the initialized value and move a replacement into its storage. */
+fn Slot<T>::replace(&self, value: T) {}
+
 struct ArrayIterator<T>: Iterator<T> {
     arr: T[];
     index: u64;

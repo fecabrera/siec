@@ -55,6 +55,9 @@ def macro_expansion(gen: CodeGenerator, call: Call):
 
     if macro.body is None:
         call.expansion = substitute(copy.deepcopy(macro.value), mapping)
+        from siec.codegen.ownership import inherit_expression_identity
+
+        inherit_expression_identity(call, call.expansion)
         return call.expansion
 
     body = [substitute(copy.deepcopy(stmt), mapping) for stmt in macro.body]

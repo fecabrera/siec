@@ -135,14 +135,17 @@ def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | N
                              and not name.endswith("[]")):
         return None
 
+    from siec.codegen.ownership import inherit_expression_identity
+
     call = MethodCall(expr.left, method, [expr.right])
     if expr.op == "!=":
-        return UnaryOp("not", call)
+        return inherit_expression_identity(expr, UnaryOp("not", call))
 
     if method == "cmp":
-        return BinaryOp(expr.op, call, IntLiteral(0))
+        return inherit_expression_identity(
+            expr, BinaryOp(expr.op, call, IntLiteral(0)))
 
-    return call
+    return inherit_expression_identity(expr, call)
 
 
 def item_call(gen: "CodeGenerator", expr: Index, scope: dict,
@@ -168,8 +171,11 @@ def item_call(gen: "CodeGenerator", expr: Index, scope: dict,
     if resolve_method(gen, name, method) is None:
         return None
 
+    from siec.codegen.ownership import inherit_expression_identity
+
     args = [expr.index] if value is None else [expr.index, value]
-    return MethodCall(expr.base, method, args)
+    return inherit_expression_identity(
+        expr, MethodCall(expr.base, method, args))
 
 
 def is_float(type_: ir.Type) -> bool:

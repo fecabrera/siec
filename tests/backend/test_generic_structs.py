@@ -127,16 +127,16 @@ def test_generic_unions_and_sizeof(run):
     'union S<T>' instantiates the same way, and '@sizeof' sees the layout.
     """
     source = """
-    union Slot<T> {
+    union Storage<T> {
         value: T;
         bits: u64;
     }
 
     fn main() -> i32 {
-        let s: Slot<f64>;
+        let s: Storage<f64>;
         s.value = 1.0;
 
-        if (@sizeof(Slot<f64>) != 8 or s.bits != 0x3FF0000000000000) {
+        if (@sizeof(Storage<f64>) != 8 or s.bits != 0x3FF0000000000000) {
             return 0;
         }
         return 42;

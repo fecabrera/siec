@@ -354,7 +354,7 @@ def parse_primary(ts: TokenStream) -> Expr:
 
         if ts.peek().syntax == "::":
             ts.next()
-            member = ts.expect("ident").value
+            member = ts.expect_name("drop").value
 
             # a call after '::' is a method's fully qualified form,
             # 'S::method(s)', optionally with explicit type arguments
@@ -391,7 +391,7 @@ def parse_primary(ts: TokenStream) -> Expr:
         # type arguments joining the receiver type's name
         if type_args is not None and ts.peek().syntax == "::":
             ts.next()
-            member = ts.expect("ident").value
+            member = ts.expect_name("drop").value
             name = f"{tok.value}<{','.join(type_args)}>::{member}"
 
             method_args = None
@@ -675,8 +675,9 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 expr = Index(expr, start)
         elif tok.value == "->":
             # 'p->field' reaches through a pointer: '(*p).field', C-style
-            expr = Member(UnaryOp("*", expr), ts.expect("ident").value)
+            expr = Member(
+                UnaryOp("*", expr), ts.expect_name("drop").value)
         else:
-            expr = Member(expr, ts.expect("ident").value)
+            expr = Member(expr, ts.expect_name("drop").value)
 
     return expr

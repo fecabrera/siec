@@ -39,3 +39,12 @@ class TokenStream:
             raise SyntaxError(f"line {tok.line}: expected {want!r}, got {tok.value!r}")
         
         return tok
+
+    def expect_name(self, *keywords: str) -> Token:
+        """Consume an identifier, permitting named keywords in member position."""
+        tok = self.next()
+        if tok.kind != "ident" and not (
+                tok.kind == "kw" and tok.value in keywords):
+            raise SyntaxError(
+                f"line {tok.line}: expected 'ident', got {tok.value!r}")
+        return tok

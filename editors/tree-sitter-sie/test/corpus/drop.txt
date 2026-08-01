@@ -19,3 +19,33 @@ fn destroy_active(&self) {
         (field_expression
           value: (self)
           field: (identifier))))))
+
+====================
+Drop method
+====================
+
+fn Slot<T>::drop(&self) {
+  self.value.drop();
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (function_name
+      name: (identifier)
+      type_parameters: (type_parameters
+        (type_parameter
+          name: (identifier)))
+      method: (identifier))
+    parameters: (parameters
+      (self_parameter))
+    body: (block
+      (expression_statement
+        (call_expression
+          function: (field_expression
+            value: (field_expression
+              value: (self)
+              field: (identifier))
+            field: (identifier))
+          arguments: (arguments))))))

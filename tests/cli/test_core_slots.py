@@ -1,0 +1,118 @@
+"""Runtime ownership tests for the core List and Map slot storage."""
+
+import subprocess
+from pathlib import Path
+
+from tests.cli.test_cli import run_cli
+
+
+ROOT = Path(__file__).parents[2]
+CORE_INCLUDES = (
+    ROOT / "packages/libc/src",
+    ROOT / "packages/posix/src",
+    ROOT / "packages/core/src",
+)
+
+
+def run_core(monkeypatch, tmp_path, source: str):
+    """Compile and run one program against the workspace core sources."""
+    path = tmp_path / "main.sie"
+    executable = tmp_path / "main"
+    path.write_text(source)
+
+    args = [path]
+    for include in CORE_INCLUDES:
+        args.extend(("-I", include))
+    args.extend(("-o", executable))
+
+    assert run_cli(monkeypatch, *args) == 0
+    return subprocess.run([str(executable)], capture_output=True, text=True)
+
+
+RESOURCE = r"""
+import { String } from std.collections;
+import { Formattable } from std.format;
+
+@static let drops: i32 = 0;
+@static let dropped_ids: i32 = 0;
+@static let clones: i32 = 0;
+
+struct Resource: Destroy, Clone, Formattable { id: i32; }
+fn Resource::init(&self, id: i32) { self.id = id; }
+fn Resource::destroy(&self) {
+    drops += 1;
+    dropped_ids += self.id;
+}
+fn Resource::clone(const &self) -> Resource {
+    clones += 1;
+    return Resource(self.id);
+}
+fn Resource::format(const &self, modifiers: const &char[]) -> String {
+    return String();
+}
+"""
+
+
+def test_list_slots_own_growth_replacement_pop_and_reset(monkeypatch, tmp_path):
+    """List transfers each live slot exactly once across every operation."""
+    result = run_core(monkeypatch, tmp_path, RESOURCE + r"""
+    import { List } from std.collections;
+
+    fn exercise() -> i32 {
+        let list = List<Resource>();
+        list.push(Resource(1));
+        list.push(Resource(2));
+        list[0] = Resource(3);
+        let popped = list.pop();
+        list.push(Resource(4));
+
+        let source = Resource(5);
+        list.push_from(source);
+        list.reset();
+
+        {
+            let nested = List<List<Resource>>();
+            let inner = List<Resource>();
+            inner.push(Resource(6));
+            nested.push(move inner);
+        }
+        return popped.id;
+    }
+
+    fn main() -> i32 {
+        if (exercise() != 2) return 1;
+        if (clones != 1 or drops != 7 or dropped_ids != 26) return 2;
+        return 42;
+    }
+    """)
+    assert result.returncode == 42
+
+
+def test_map_slots_own_insert_replace_remove_grow_and_destroy(
+        monkeypatch, tmp_path):
+    """Map owns only occupied key/value slots, including after rehashing."""
+    result = run_core(monkeypatch, tmp_path, RESOURCE + r"""
+    import { Map } from std.collections;
+
+    fn exercise() {
+        let map = Map<char[], Resource>();
+        map.set("a", Resource(1));
+        map.set("a", Resource(2));
+        map.set("b", Resource(3));
+        map.remove("b");
+        map.set("c", Resource(4));
+        map.set("d", Resource(5));
+        map.set("e", Resource(6));
+        map.set("f", Resource(7));
+
+        let out = Resource(8);
+        map.get("a", out);
+    }
+
+    fn main() -> i32 {
+        exercise();
+        if (clones != 1 or drops != 9 or dropped_ids != 38) return 1;
+        return 42;
+    }
+    """)
+    assert result.returncode == 42

@@ -1219,7 +1219,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_method_identifier"
           }
         },
         {
@@ -1711,7 +1711,7 @@
                   "name": "method",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "identifier"
+                    "name": "_method_identifier"
                   }
                 },
                 {
@@ -3810,7 +3810,7 @@
             "name": "name",
             "content": {
               "type": "SYMBOL",
-              "name": "identifier"
+              "name": "_method_identifier"
             }
           }
         ]
@@ -3839,7 +3839,7 @@
             "name": "field",
             "content": {
               "type": "SYMBOL",
-              "name": "identifier"
+              "name": "_method_identifier"
             }
           }
         ]
@@ -3868,7 +3868,7 @@
             "name": "field",
             "content": {
               "type": "SYMBOL",
-              "name": "identifier"
+              "name": "_method_identifier"
             }
           }
         ]
@@ -4934,6 +4934,24 @@
     "identifier": {
       "type": "PATTERN",
       "value": "[a-zA-Z_]\\w*"
+    },
+    "_method_identifier": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "drop"
+          },
+          "named": true,
+          "value": "identifier"
+        }
+      ]
     },
     "integer_literal": {
       "type": "TOKEN",

@@ -14,7 +14,7 @@ def test_tuples_build_and_index(run):
         return (t[1], t[0]);
     }
 
-    struct Slot { pair: Tuple<u8, f64>; }
+    struct Holder { pair: Tuple<u8, f64>; }
 
     fn main() -> i32 {
         let t: Tuple<i32, f64>;
@@ -35,7 +35,7 @@ def test_tuples_build_and_index(run):
         let n: Tuple<Tuple<i32, i32>, i32> = ((1, 2), 3);
         if (n[0][1] != 2 or n[2 - 1] != 3) { return 6; }
 
-        let slot: Slot = { (5, 1.5) };       // a struct field
+        let slot: Holder = { (5, 1.5) };     // a struct field
         if (slot.pair[0] != 5) { return 7; }
 
         let one = (42,);                     // the single-element spelling

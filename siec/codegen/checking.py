@@ -91,6 +91,12 @@ def check_function(gen: CodeGenerator, fn: Function) -> None:
             gen.checked_functions.add(symbol)
             return
 
+        from siec.codegen.slots import check_slot_function
+
+        if check_slot_function(gen, fn):
+            gen.checked_functions.add(symbol)
+            return
+
         scope = {
             param.name: checked_variable(param.type)
             for param in fn.params

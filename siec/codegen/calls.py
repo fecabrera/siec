@@ -398,13 +398,15 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
         value = emit_coerced(gen, builder, arg, referenced, scope)
         slot = entry_alloca(builder, value.type, "ref.spill")
         builder.store(value, slot)
-        from siec.codegen.ownership import temporary_registered
+        from siec.codegen.ownership import (expression_identity,
+                                           temporary_registered)
 
         if (destroyable(gen, referenced)
                 and not temporary_registered(gen, arg)
                 and gen.borrowed_temporary_frames):
             gen.borrowed_temporary_frames[-1].append(
-                TemporaryDrop(slot, strip_const(referenced), id(arg)))
+                TemporaryDrop(slot, strip_const(referenced),
+                              expression_identity(arg)))
         return slot
     except TypeError:
         raise

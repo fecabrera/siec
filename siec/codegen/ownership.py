@@ -26,6 +26,20 @@ class TemporaryDrop:
     expression: int | None = None
 
 
+def expression_identity(expr) -> int | None:
+    """Return the ownership key shared by an expression and its rewrites."""
+    if expr is None:
+        return None
+    return getattr(expr, "ownership_identity", id(expr))
+
+
+def inherit_expression_identity(source, rewritten):
+    """Make a desugared expression retain its source's ownership identity."""
+    if rewritten is not None:
+        rewritten.ownership_identity = expression_identity(source)
+    return rewritten
+
+
 def destroyable(gen: CodeGenerator, type_name: str | None) -> bool:
     """Whether an owned value carries the nominal Destroy contract."""
     if ("Destroy" not in gen.interfaces
@@ -119,7 +133,7 @@ def register_address_temporary(gen: CodeGenerator, slot,
         gen.borrowed_temporary_frames[-1].append(
             TemporaryDrop(
                 slot, strip_const(type_name),
-                id(expr) if expr is not None else None))
+                expression_identity(expr)))
 
 
 def track_value_temporary(gen: CodeGenerator, builder, expr, value,
@@ -133,7 +147,7 @@ def track_value_temporary(gen: CodeGenerator, builder, expr, value,
     slot = entry_alloca(builder, value.type, "owned.temporary")
     builder.store(value, slot)
     gen.borrowed_temporary_frames[-1].append(
-        TemporaryDrop(slot, strip_const(type_name), id(expr)))
+        TemporaryDrop(slot, strip_const(type_name), expression_identity(expr)))
     return builder.load(slot, name="owned.value")
 
 
@@ -141,7 +155,7 @@ def consume_temporary(gen: CodeGenerator, expr) -> None:
     """Remove a full-expression temporary transferred into another owner."""
     if not gen.borrowed_temporary_frames:
         return
-    identity = id(expr)
+    identity = expression_identity(expr)
     frame = gen.borrowed_temporary_frames[-1]
     for index in range(len(frame) - 1, -1, -1):
         if frame[index].expression == identity:
@@ -151,7 +165,7 @@ def consume_temporary(gen: CodeGenerator, expr) -> None:
 
 def temporary_registered(gen: CodeGenerator, expr) -> bool:
     """Whether this expression already owns one tracked temporary slot."""
-    identity = id(expr)
+    identity = expression_identity(expr)
     return bool(gen.borrowed_temporary_frames and any(
         cleanup.expression == identity
         for cleanup in gen.borrowed_temporary_frames[-1]
