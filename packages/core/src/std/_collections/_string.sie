@@ -48,7 +48,7 @@ import { Formattable } from std.format;
     */
     fn eq(const &self, arr: const char*) -> bool {
         for (let i: u64 = 0; i < self.length; i += 1) {
-            if (arr[i] == 0 or self.data[i] != arr[i])
+            if (arr[i] == 0 or self.data[i].get() != arr[i])
                 return false;
         }
 

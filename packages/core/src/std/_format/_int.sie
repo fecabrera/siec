@@ -61,8 +61,6 @@ fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
     }
     
     let buf = String();
-    defer buf.destroy();
-
     let num = value;
     while (true) {
         buf.push(mayus ? _hexu[num % base] : _hex[num % base]);
@@ -101,7 +99,7 @@ fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
     }
 
     for(let i: u64 = 0; i < buf.length; i += 1) {
-        str.push(buf.data[buf.length - i - 1]);
+        str.push(buf[buf.length - i - 1]);
     }
 
     return str;

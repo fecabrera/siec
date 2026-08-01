@@ -2,7 +2,7 @@ import { panic } from std;
 import { format } from std.format;
 import { Hashable } from std.hashing;
 import { String } from std.collections;
-import { malloc, realloc, free } from stdlib;
+import { malloc, free } from stdlib;
 
 @private
 enum MapEntryState {
@@ -22,14 +22,15 @@ struct KeyValuePair<K, V> {
 
 @private
 struct MapEntry<K, V> {
-    key: const K;
-    value: V;
+    key: Slot<K>;
+    value: Slot<V>;
     state: MapEntryState;
 }
 
-struct Map<K: Hashable, V>:
-    Iterable<KeyValuePair<K, V>>,
-    Formattable {
+struct Map<K: Hashable, V>
+    : Destroy,
+      Iterable<KeyValuePair<K, V>>,
+      Formattable {
     entries: MapEntry<K, V>*;
     size: u64;
     capacity: u64;
@@ -64,6 +65,13 @@ fn Map<K, V>::init(&self, capacity: u64 = 0) {
  * Destroys the map and frees the memory.
  */
 fn Map<K, V>::destroy(&self) {
+    for (let i: u64 = 0; i < self.capacity; i += 1) {
+        if (self.entries[i].state == MapEntryState::Used) {
+            self.entries[i].key.drop();
+            self.entries[i].value.drop();
+        }
+    }
+
     if (self.entries)
         free(self.entries);
 
@@ -77,9 +85,7 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     str += "{";
     foreach (entry : enumerate(self)) {
         if (entry.index) str += ", ";
-        let tmp = format("{}: {}", entry.value.key, entry.value.value);
-        defer tmp.destroy();
-        str += tmp;
+        str += format("{}: {}", entry.value.key, entry.value.value);
     }
     str += "}";
 
@@ -93,9 +99,7 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     str += "{";
     foreach (entry : enumerate(self)) {
         if (entry.index) str += ", ";
-        let tmp = format("\"{}\": {}", entry.value.key, entry.value.value);
-        defer tmp.destroy();
-        str += tmp;
+        str += format("\"{}\": {}", entry.value.key, entry.value.value);
     }
     str += "}";
 
@@ -109,19 +113,48 @@ fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
  * @return The entry for the given key.
  */
 @private
-fn Map<K: Hashable, V>::get_used_entry(const &self, key: const &K) -> Result<MapEntry<K, V>*, MapIndexError> {
+fn Map<K: Hashable, V>::get_used_entry(const &self, key: const &K) -> const MapEntry<K, V>* {
+    if (not self.capacity)
+        return null;
+
+    let entries = self.entries;
     let slot = key.hash() % self.capacity;
 
     while (self.entries[slot].state != MapEntryState::Empty) {
         if (self.entries[slot].state == MapEntryState::Used) {
-            if (self.entries[slot].key == key) {
-                return Ok(self.entries[slot]);
+            if (self.entries[slot].key.get() == key) {
+                return &entries[slot];
             }
         }
         slot = (slot + 1) % self.capacity;
     }
 
-    return Error(MapIndexError::NotFound);
+    return null;
+}
+
+/**
+ * Gets the mutable used entry for the given key.
+ *
+ * @param key The key to get the entry for.
+ * @return The entry for the given key.
+ */
+@private
+fn Map<K: Hashable, V>::get_used_entry_mut(&self, key: const &K) -> MapEntry<K, V>* {
+    if (not self.capacity)
+        return null;
+
+    let entries = self.entries;
+    let slot = key.hash() % self.capacity;
+
+    while (entries[slot].state != MapEntryState::Empty) {
+        if (entries[slot].state == MapEntryState::Used) {
+            if (entries[slot].key.get() == key)
+                return &entries[slot];
+        }
+        slot = (slot + 1) % self.capacity;
+    }
+
+    return null;
 }
 
 /**
@@ -131,24 +164,28 @@ fn Map<K: Hashable, V>::get_used_entry(const &self, key: const &K) -> Result<Map
  * @return The entry for the given key.
  */
 @private
-fn Map<K: Hashable, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
+fn Map<K: Hashable, V>::get_entry(&self, key: const &K) -> MapEntry<K, V>* {
     if (self.size * 10 >= self.capacity * 7)
         self.grow();
-    
+
+    let entries = self.entries;
     let slot = key.hash() % self.capacity;
+    let tombstone: MapEntry<K, V>* = null;
 
     while (self.entries[slot].state != MapEntryState::Empty) {
-        if (self.entries[slot].state == MapEntryState::Used) {
-            if (self.entries[slot].key == key)
-                return self.entries[slot];
-        } else {
-            return self.entries[slot];
-        }
+        if (entries[slot].state == MapEntryState::Used) {
+            if (entries[slot].key.get() == key)
+                return &entries[slot];
+        } else if (not tombstone)
+            tombstone = &entries[slot];
 
         slot = (slot + 1) % self.capacity;
     }
 
-    return self.entries[slot];
+    if (tombstone)
+        return tombstone;
+
+    return &entries[slot];
 }
 
 /**
@@ -159,8 +196,11 @@ fn Map<K: Hashable, V>::get_entry(&self, key: const &K) -> &MapEntry<K, V> {
  * @return The result of the operation.
  */
 fn Map<K, V>::get(const &self, key: const &K, out: &V) -> Result<MapIndexError> {
-    let entry = try self.get_used_entry(key, entry);
-    out = entry->value;
+    let entry = self.get_used_entry(key);
+    if (not entry)
+        return Error(MapIndexError::NotFound);
+
+    entry->value.assign_to(out);
     return Ok();
 }
 
@@ -171,12 +211,15 @@ fn Map<K, V>::get(const &self, key: const &K, out: &V) -> Result<MapIndexError> 
  * @param value The value to set.
  */
 fn Map<K, V>::set(&self, key: const &K, value: V) {
-    self.get_entry(key) = {
-        state = MapEntryState::Used,
-        key = key,
-        value = value,
-    };
-    
+    let entry = self.get_entry(key);
+    if (entry->state == MapEntryState::Used) {
+        entry->value.replace(move value);
+        return;
+    }
+
+    entry->key.write_from(key);
+    entry->value.write(move value);
+    entry->state = MapEntryState::Used;
     self.size += 1;
 }
 
@@ -187,7 +230,12 @@ fn Map<K, V>::set(&self, key: const &K, value: V) {
  * @return The result of the operation.
  */
 fn Map<K, V>::remove(&self, key: const &K) -> Result<MapIndexError> {
-    let entry = try self.get_used_entry(key, entry);
+    let entry = self.get_used_entry_mut(key);
+    if (not entry)
+        return Error(MapIndexError::NotFound);
+
+    entry->key.drop();
+    entry->value.drop();
     entry->state = MapEntryState::Tombstone;
     self.size -= 1;
     return Ok();
@@ -198,15 +246,26 @@ fn Map<K, V>::remove(&self, key: const &K) -> Result<MapIndexError> {
  */
 @private
 fn Map<K, V>::grow(&self) {
-    let tmp = Map<K, V>(self.capacity ? 2 * self.capacity : 5);
+    let old_capacity = self.capacity;
+    let old_entries = self.entries;
 
-    foreach (entry : self) {
-        tmp.set(entry.key, entry.value);
+    self.capacity = self.capacity ? 2 * self.capacity : 5;
+    self.entries = malloc(self.capacity * @sizeof(MapEntry<K, V>)) as MapEntry<K, V>*;
+
+    for (let i: u64 = 0; i < self.capacity; i += 1)
+        self.entries[i].state = MapEntryState::Empty;
+
+    for(let i: u64 = 0; i < old_capacity; i += 1) {
+        if (old_entries[i].state == MapEntryState::Used) {
+            let entry = self.get_entry(old_entries[i].key.get());
+            entry->key.write(old_entries[i].key.take());
+            entry->value.write(old_entries[i].value.take());
+            entry->state = MapEntryState::Used;
+            old_entries[i].state = MapEntryState::Empty;
+        }
     }
-    
-    self.destroy();
-    
-    self = tmp;
+
+    free(old_entries);
 }
 
 /**

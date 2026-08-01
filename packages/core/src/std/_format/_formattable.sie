@@ -85,9 +85,7 @@ interface Formattable {
             result += '[';
             foreach (el : enumerate(self)) {
                 if (el.index) result += ", ";
-                let tmp = el.value.format(modifiers);
-                defer tmp.destroy();
-                result += tmp;
+                result += el.value.format(modifiers);
             }
             result += ']';
             return result;
@@ -102,10 +100,8 @@ fn T[]::format(const &self, modifiers: const &char[]) -> String {
     result += '[';
     foreach (el : enumerate(self)) {
         if (el.index) result += ", ";
-        let tmp = el.value.format(modifiers);
-        defer tmp.destroy();
         result += '"';
-        result += tmp;
+        result += el.value.format(modifiers);
         result += '"';
     }
     result += ']';

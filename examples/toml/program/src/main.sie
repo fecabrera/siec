@@ -5,7 +5,6 @@ import { TOMLObject, TOMLObjectType } from toml;
 
 fn main() -> i32 {
     let obj = TOMLObject::table();
-    defer obj.destroy();
 
     obj.tab.set("hello", TOMLObject::integer(5));
     

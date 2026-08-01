@@ -8,10 +8,7 @@ fn main(args: const char*[]) -> i32 {
 	}
 
     let a = Decimal(args[1]);
-    defer a.destroy();
-
     let b = Decimal(args[2]);
-    defer b.destroy();
     
     std.io.println("{}", a == b);
 

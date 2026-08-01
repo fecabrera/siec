@@ -197,7 +197,6 @@ fn main(args: char*[]) -> i32 {
     let request = std.format.format(
         "GET {} HTTP/1.0\r\nHost: {}\r\nConnection: close\r\nUser-Agent: sie-openssl\r\n\r\n",
         path, host);
-    defer request.destroy();
 
     if (BIO_write(bio, request.data as const opaque*, request.length as i32) <= 0) {
         report("write");

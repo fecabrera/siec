@@ -18,8 +18,6 @@ import { IOWritable } from _ifaces;
  */
 fn print(stream: &IOWritable, str: const Iterable<char>, args...) {
     let tmp = format(str, args);
-    defer tmp.destroy();
-
     stream.write(tmp.as_const_bytes());
 }
 
@@ -32,8 +30,6 @@ fn print(stream: &IOWritable, str: const Iterable<char>, args...) {
  */
 fn println(stream: &IOWritable, str: const &Iterable[], args...) {
     let tmp = format(str, args);
-    defer tmp.destroy();
-    
     tmp.push('\n');
     stream.write(tmp.as_const_bytes());
 }

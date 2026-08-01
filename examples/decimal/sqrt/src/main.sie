@@ -8,12 +8,8 @@ fn main(args: const char*[]) -> i32 {
 	}
 
     let dec = Decimal(args[1]);
-    defer dec.destroy();
-
-    let result = dec.sqrt();
-    defer result.destroy();
     
-    std.io.println("{}", result);
+    std.io.println("{}", dec.sqrt());
 
     return 0;
 }

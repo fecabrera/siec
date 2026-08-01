@@ -8,7 +8,6 @@ fn main(args: char*[]) -> i32 {
 	}
 
     let dec = Decimal(args[1]);
-    defer dec.destroy();
 
     std.io.println("{}", dec.hash());
 

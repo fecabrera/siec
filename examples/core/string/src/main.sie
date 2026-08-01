@@ -4,7 +4,6 @@ import { String } from std.collections;
 fn main() -> i32 {
     // create an empty string
     let str1 = String();
-    defer str1.destroy();
 
     // append a string literal
     str1 += "hello";
@@ -14,7 +13,6 @@ fn main() -> i32 {
     
     // create a string from another
     let str2 = String(str1);
-    defer str2.destroy();
 
     // print the result of the equality check
     std.io.println("str1 == str2: {}", str1 == str2);
@@ -33,14 +31,12 @@ fn main() -> i32 {
     
     // create a string from a literal
     let str3 = String("hello world");
-    defer str3.destroy();
     
     // print str3
     std.io.println(str3);
 
     // create an empty string
     let str4 = String();
-    defer str4.destroy();
 
     // append a string
     str4 += str3;
@@ -50,17 +46,17 @@ fn main() -> i32 {
 
     // create a string from adding another string and a string literal
     let str5 = str1 + ", world";
-    defer str5.destroy();
 
     // print str5
     std.io.println(str5);
 
     // create a string from adding another string and a string literal
     let str6 = "hello" + ", world";
-    defer str6.destroy();
 
     // print str6
     std.io.println(str6);
+
+    std.io.println("{}", String("hello") == "hello");
 
     return 0;
 }

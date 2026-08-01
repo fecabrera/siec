@@ -3,7 +3,6 @@ import { Decimal } from std.decimal;
 
 fn main() -> i32 {
     let dec = Decimal();
-    defer dec.destroy();
     
     dec = 3;
     std.io.println("{}", dec);

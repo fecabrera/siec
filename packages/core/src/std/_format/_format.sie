@@ -10,11 +10,9 @@ import { Formattable } from _formattable;
  */
 fn format(str: const &Iterable<char>, args...) -> String {
     let result = String();
+    let modifier = String();
 
     let i: u64 = 0;
-
-    let modifier = String();
-    defer modifier.destroy();
 
     let bracket_open = false;
     let bracket_closed = false;
@@ -51,7 +49,6 @@ fn format(str: const &Iterable<char>, args...) -> String {
                 when Formattable:
                     let arg = args[i] as Formattable;
                     let tmp = arg.format(modifier.as_array());
-                    defer tmp.destroy();
                     result.append(tmp);
                 else:
                     result.append(@typename(args[i]));

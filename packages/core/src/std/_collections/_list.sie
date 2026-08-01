@@ -1,9 +1,10 @@
-import { malloc, realloc, free } from stdlib;
+import { malloc, free } from stdlib;
 import { FNV1a } from std.hashing;
 import { Formattable } from std.format;
 
 struct List<T>
-    : Iterable<T>,
+    : Destroy,
+      Iterable<T>,
       GetItem<u64, T>,
       SetItem<u64, T>,
       Add<List<T>, Iterable<T>>,
@@ -14,7 +15,7 @@ struct List<T>
       Eq<List<T>>,
       Eq<T[]>,
       Formattable {
-    data: T* = null;
+    data: Slot<T>* = null;
     length: u64;
     capacity: u64;
 }
@@ -25,7 +26,7 @@ struct List<T>
  * @param capacity The capacity of the List.
  */
 fn List<T>::init(&self, capacity: u64 = 0) {
-    self.data = malloc(capacity * @sizeof(T)) as T*;
+    self.data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
     self.length = 0;
     self.capacity = capacity;
 }
@@ -37,7 +38,7 @@ fn List<T>::init(&self, capacity: u64 = 0) {
  */
 fn List<T>::init(&self, v: const T) {
     self.init();
-    self.push(v);
+    self.push_from(v);
 }
 
 /**
@@ -54,6 +55,9 @@ fn List<T>::init(&self, arr: const &Iterable<T>) {
  * Destroy the List.
  */
 fn List<T>::destroy(&self) {
+    for (let i: u64 = 0; i < self.length; i += 1)
+        self.data[i].drop();
+
     if (self.data)
         free(self.data);
 
@@ -68,7 +72,7 @@ fn List<T>::destroy(&self) {
  * @return The List as an array.
  */
 fn List<T>::as_array(&self) -> T[] {
-    return {self.data, self.length};
+    return {self.data as T*, self.length};
 }
 
 /**
@@ -77,13 +81,16 @@ fn List<T>::as_array(&self) -> T[] {
  * @return The List as an array.
  */
 fn List<T>::as_const_array(const &self) -> const T[] {
-    return {self.data, self.length};
+    return {self.data as const T*, self.length};
 }
 
 /**
  * Reset the List.
  */
 fn List<T>::reset(&self) {
+    for (let i: u64 = 0; i < self.length; i += 1)
+        self.data[i].drop();
+
     self.length = 0;
 }
 
@@ -105,7 +112,7 @@ fn List<T>::assign_from(&self, str: const &Iterable<T>) {
  */
 @deprecated("use operator [], get_item() or set_item()")
 fn List<T>::get(&self, index: const u64) -> &T {
-    return self.data[index];
+    return self.data[index].get_mut();
 }
 
 /**
@@ -115,7 +122,7 @@ fn List<T>::get(&self, index: const u64) -> &T {
  * @return The element at the given index.
  */
 fn List<T>::get_item(const &self, index: const u64) -> const T {
-    return self.data[index];
+    return self.data[index].get();
 }
 
 /**
@@ -125,7 +132,7 @@ fn List<T>::get_item(const &self, index: const u64) -> const T {
  * @param value The value to set at the given index.
  */
 fn List<T>::set_item(&self, index: const u64, value: T) {
-    self.data[index] = value;
+    self.data[index].replace(move value);
 }
 
 /**
@@ -133,11 +140,26 @@ fn List<T>::set_item(&self, index: const u64, value: T) {
  *
  * @param value The element to push to the List.
  */
-fn List<T>::push(&self, value: const T) {
+fn List<T>::push(&self, value: T) {
     if (self.length == self.capacity)
         self.grow();
 
-    self.data[self.length] = value;
+    self.data[self.length].write(move value);
+    self.length += 1;
+}
+
+/**
+ * Copy the given borrowed element to the List.
+ *
+ * An owned element is cloned; a plain value is copied directly.
+ *
+ * @param value The borrowed element to copy to the List.
+ */
+fn List<T>::push_from(&self, value: const &T) {
+    if (self.length == self.capacity)
+        self.grow();
+
+    self.data[self.length].write_from(value);
     self.length += 1;
 }
 
@@ -148,7 +170,7 @@ fn List<T>::push(&self, value: const T) {
  */
 fn List<T>::pop(&self) -> T {
     self.length -= 1;
-    return self.data[self.length];
+    return self.data[self.length].take();
 }
 
 /**
@@ -182,7 +204,7 @@ fn List<T>::add_assign(&self, it: const &Iterable<T>) {
  */
 fn List<T>::append(&self, arr: const T*, n: u64) {
     for (let i: u64 = 0; i < n; i += 1) {
-        self.push(arr[i]);
+        self.push_from(arr[i]);
     }
 }
 
@@ -194,7 +216,7 @@ fn List<T>::append(&self, arr: const T*, n: u64) {
  */
 fn List<T>::add(&self, value: const T) -> List<T> {
     let result = List<T>(self);
-    result.push(value);
+    result.push_from(value);
     return result;
 }
 
@@ -206,7 +228,7 @@ fn List<T>::add(&self, value: const T) -> List<T> {
  */
 @inline
 fn List<T>::add_assign(&self, value: const T) {
-    self.push(value);
+    self.push_from(value);
 }
 
 /**
@@ -216,7 +238,7 @@ fn List<T>::add_assign(&self, value: const T) {
  */
 fn List<T>::append(&self, it: const &Iterable<T>) {
     foreach (el : it) {
-        self.push(el);
+        self.push_from(el);
     }
 }
 
@@ -250,7 +272,7 @@ fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
         return false;
 
     for (let i: u64 = 0; i < lst.length; i += 1) {
-        if (self.data[i] != lst.data[i])
+        if (self.data[i].get() != lst.data[i].get())
             return false;
     }
 
@@ -268,7 +290,7 @@ fn List<T>::eq(const &self, arr: const &T[]) -> bool {
         return false;
 
     for (let i: u64 = 0; i < arr.length; i += 1) {
-        if (self.data[i] != arr[i])
+        if (self.data[i].get() != arr[i])
             return false;
     }
 
@@ -286,7 +308,15 @@ fn List<T>::format(const &self, modifiers: const &char[]) -> String {
 @private
 fn List<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : 1;
-    self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
+    let data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
+
+    for (let i: u64 = 0; i < self.length; i += 1)
+        data[i].write(self.data[i].take());
+
+    if (self.data)
+        free(self.data);
+
+    self.data = data;
     self.capacity = capacity;
 }
 

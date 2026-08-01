@@ -20,7 +20,7 @@ enum TOMLObjectType {
     Bool,
 }
 
-struct TOMLObject: Formattable {
+struct TOMLObject: Destroy, Formattable {
     type: TOMLObjectType;
     union {
         str: TOMLString;
@@ -37,13 +37,13 @@ fn TOMLObject::init(&self, type: TOMLObjectType) {
 
     case (type) {
     when TOMLObjectType::String:
-        self.str = TOMLString();
+        self.str.init();
     when TOMLObjectType::Array:
-        self.arr = TOMLArray();
+        self.arr.init();
     when TOMLObjectType::Table:
-        self.tab = TOMLTable();
+        self.tab.init();
     when TOMLObjectType::Float:
-        self.flt = TOMLFloat();
+        self.flt.init();
     }
 }
 
@@ -88,15 +88,13 @@ fn TOMLObject::bool(value: bool) -> TOMLObject {
 fn TOMLObject::destroy(&self) {
     case (self.type) {
     when TOMLObjectType::String:
-        self.str.destroy();
+        drop self.str;
     when TOMLObjectType::Array:
-        foreach (v : self.arr) v.destroy();
-        self.arr.destroy();
+        drop self.arr;
     when TOMLObjectType::Table:
-        foreach (entry : self.tab) entry.value.destroy();
-        self.tab.destroy();
+        drop self.tab;
     when TOMLObjectType::Float:
-        self.flt.destroy();
+        drop self.flt;
     }
 }
 

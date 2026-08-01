@@ -15,7 +15,9 @@ import { String } from std.collections;
 }
 
 struct Decimal
-    : AssignFrom<Decimal>,
+    : Destroy,
+      Clone,
+      AssignFrom<Decimal>,
       AssignFrom<char[]>,
       AssignFrom<String>,
       AssignFrom<i64>,
@@ -116,6 +118,10 @@ fn Decimal::destroy(&self) {
     mpdecimal.mpd_del(self.mpd);
 }
 
+fn Decimal::clone(const &self) -> Decimal {
+    return Decimal(self);
+}
+
 /**
  * Convert the Decimal to a string.
  *
@@ -143,7 +149,6 @@ fn Decimal::assign_from(&self, value: const &char[]) {
 
 fn Decimal::assign_from(&self, value: const &String) {
     let str = String(value);
-    defer str.destroy();
     str.null_terminate();
     mpdecimal.mpd_set_string(self.mpd, str.as_const_array(), self.ctx);
 }
@@ -625,8 +630,7 @@ fn Decimal::is_zero(const &self) -> bool {
 }
 
 fn Decimal::hash(const &self) -> u64 {
-    let tmp = Decimal(self);
-    defer tmp.destroy();
+    let tmp = self.clone();
 
     let sign = mpdecimal.mpd_sign(tmp.mpd);
     let tz = mpdecimal.mpd_trail_zeros(tmp.mpd);

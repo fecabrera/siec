@@ -2,7 +2,7 @@ import { malloc, realloc, free } from stdlib;
 
 @const DEFAULT_STACK_CAPACITY = 2;
 
-struct Stack<T> {
+struct Stack<T>: Destroy {
     data: T*;
     top: u64;
     capacity: u64;
