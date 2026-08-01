@@ -33,7 +33,8 @@ fn _format_str(value: const &char[], modifier: const &char[]) -> String {
     let state = StrFmtState::SIDE;
     let pad_side = PaddingSide::RIGHT;
     let pad: u64 = 0;
-    
+    let quotes = false;
+
     let i: u64 = 0;
     while (i < modifier.length) {
         let c = modifier[i];
@@ -54,6 +55,9 @@ fn _format_str(value: const &char[], modifier: const &char[]) -> String {
                 continue;
             }
         when StrFmtState::FORMAT:
+            if (c == 'r') {
+                quotes = true;
+            }
             break;
         }
         i += 1;
@@ -65,7 +69,13 @@ fn _format_str(value: const &char[], modifier: const &char[]) -> String {
         }
     }
 
+    if (quotes)
+        str.push('"');
+    
     str.append(value);
+
+    if (quotes)
+        str.push('"');
 
     if (pad_side == PaddingSide::RIGHT) {
         for (let i = value.length; i < pad; i += 1) {
