@@ -1,5 +1,12 @@
 import { panic } from _panic;
 
+/**
+ * Assert that the given condition is true, otherwise panic with the given message and arguments.
+ *
+ * @param cond The condition to assert.
+ * @param msg The message to panic with.
+ * @param args The arguments to panic with.
+ */
 fn assert(cond: bool, msg: const char[], args...) {
     if (not cond) {
         panic(msg, args);

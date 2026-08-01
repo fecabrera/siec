@@ -2,6 +2,12 @@ import { abort } from stdlib;
 import { println } from std.io;
 import { String } from std.collections;
 
+/**
+ * Panic with the given message and arguments.
+ *
+ * @param msg The message to panic with.
+ * @param args The arguments to panic with.
+ */
 @noreturn
 fn panic(msg: const Iterable<T>[], args...) {
     println(stderr, msg, args);

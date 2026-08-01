@@ -96,6 +96,11 @@ fn Decimal::init(&self, value: const &char[]) {
     self.assign_from(value);
 }
 
+/**
+ * Initialize the Decimal with the default context and the given value.
+ *
+ * @param value The value to initialize the Decimal with.
+ */
 fn Decimal::init(&self, value: const &String) {
     self.init();
     self.assign_from(value);
@@ -118,6 +123,11 @@ fn Decimal::destroy(&self) {
     mpdecimal.mpd_del(self.mpd);
 }
 
+/**
+ * Clone the Decimal.
+ *
+ * @return The cloned Decimal.
+ */
 fn Decimal::clone(const &self) -> Decimal {
     return Decimal(self);
 }
@@ -134,6 +144,11 @@ fn Decimal::to_string(const &self) -> String {
     return String(ptr);
 }
 
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
 fn Decimal::assign_from(&self, value: const &Decimal) {
     mpdecimal.mpd_copy(self.mpd, value.mpd, self.ctx);
 }
@@ -147,6 +162,11 @@ fn Decimal::assign_from(&self, value: const &char[]) {
     mpdecimal.mpd_set_string(self.mpd, value, self.ctx);
 }
 
+/**
+ * Set the value of the Decimal.
+ *
+ * @param value The value to set the Decimal to.
+ */
 fn Decimal::assign_from(&self, value: const &String) {
     let str = String(value);
     str.null_terminate();
@@ -614,21 +634,41 @@ fn Decimal::ceil(&self) -> Decimal {
     return result;
 }
 
+/**
+ * Check if the value of the Decimal is positive.
+ *
+ * @return True if the value of the Decimal is positive, false otherwise.
+ */
 @inline
 fn Decimal::is_positive(const &self) -> bool {
     return mpdecimal.mpd_sign(self.mpd) == 0;
 }
 
+/**
+ * Check if the value of the Decimal is negative.
+ *
+ * @return True if the value of the Decimal is negative, false otherwise.
+ */
 @inline
 fn Decimal::is_negative(const &self) -> bool {
     return mpdecimal.mpd_sign(self.mpd) == 1;
 }
 
+/**
+ * Check if the value of the Decimal is zero.
+ *
+ * @return True if the value of the Decimal is zero, false otherwise.
+ */
 @inline
 fn Decimal::is_zero(const &self) -> bool {
     return mpdecimal.mpd_iszero(self.mpd) == 1;
 }
 
+/**
+ * Calculate the hash of the Decimal.
+ *
+ * @return The hash of the Decimal.
+ */
 fn Decimal::hash(const &self) -> u64 {
     let tmp = self.clone();
 
@@ -651,6 +691,12 @@ fn Decimal::hash(const &self) -> u64 {
     return h.hash;
 }
 
+/**
+ * Format the Decimal.
+ *
+ * @param modifiers The modifiers to format the Decimal with.
+ * @return The formatted Decimal.
+ */
 @inline
 fn Decimal::format(const &self, modifiers: const &char[]) -> String {
     return self.to_string();

@@ -11,8 +11,22 @@ enum PaddingSide {
     RIGHT,
 }
 
+/**
+ * Macro to format the given string.
+ *
+ * @param value The string to format.
+ * @param modifier The modifiers to format the string with.
+ * @return The formatted string.
+ */
 @macro format_str(value, modifier) = _format_str(value, modifier);
 
+/**
+ * Format the given string.
+ *
+ * @param value The string to format.
+ * @param modifier The modifiers to format the string with.
+ * @return The formatted string.
+ */
 @static
 fn _format_str(value: const &char[], modifier: const &char[]) -> String {
     let str = String();

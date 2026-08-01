@@ -5,6 +5,11 @@
 
 @template<T: Scalar> {
     @extend T: Hashable {
+        /**
+        * Calculate the hash of the scalar.
+        *
+        * @return The hash of the scalar.
+        */
         @inline
         fn hash(const &self) -> u64 {
             return splitmix64(self);
@@ -12,6 +17,11 @@
     }
 
     @extend T[]: Hashable {
+        /**
+         * Calculate the hash of the array.
+         *
+         * @return The hash of the array.
+         */
         fn hash(const &self) -> u64 {
             let h = FNV1a();
             foreach (k : self) {

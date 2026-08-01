@@ -7,6 +7,13 @@ interface Formattable {
     fn format(const &self, modifiers: const &char[]) -> String;
 }
 
+/**
+ * Format the i64.
+ *
+ * @param self The i64 to format.
+ * @param modifiers The modifiers to format the i64 with.
+ * @return The formatted i64.
+ */
 @extend i64: Formattable {
     fn format(const &self, modifiers: const &char[]) -> String {
         let neg = false;
@@ -19,48 +26,104 @@ interface Formattable {
     }
 }
 
+/**
+ * Format the i32.
+ *
+ * @param self The i32 to format.
+ * @param modifiers The modifiers to format the i32 with.
+ * @return The formatted i32.
+ */
 @extend i32: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return (self as i64).format(modifiers);
     }
 }
 
+/**
+ * Format the i16.
+ *
+ * @param self The i16 to format.
+ * @param modifiers The modifiers to format the i16 with.
+ * @return The formatted i16.
+ */
 @extend i16: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return (self as i64).format(modifiers);
     }
 }
 
+/**
+ * Format the i8.
+ *
+ * @param self The i8 to format.
+ * @param modifiers The modifiers to format the i8 with.
+ * @return The formatted i8.
+ */
 @extend i8: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return (self as i64).format(modifiers);
     }
 }
 
+/**
+ * Format the u64.
+ *
+ * @param self The u64 to format.
+ * @param modifiers The modifiers to format the u64 with.
+ * @return The formatted u64.
+ */
 @extend u64: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return format_int(self, modifiers, false);
     }
 }
 
+/**
+ * Format the u32.
+ *
+ * @param self The u32 to format.
+ * @param modifiers The modifiers to format the u32 with.
+ * @return The formatted u32.
+ */
 @extend u32: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return format_int(self, modifiers, false);
     }
 }
 
+/**
+ * Format the u16.
+ *
+ * @param self The u16 to format.
+ * @param modifiers The modifiers to format the u16 with.
+ * @return The formatted u16.
+ */
 @extend u16: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return format_int(self, modifiers, false);
     }
 }
 
+/**
+ * Format the u8.
+ *
+ * @param self The u8 to format.
+ * @param modifiers The modifiers to format the u8 with.
+ * @return The formatted u8.
+ */
 @extend u8: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return format_int(self, modifiers, false);
     }
 }
 
+/**
+ * Format the bool.
+ *
+ * @param self The bool to format.
+ * @param modifiers The modifiers to format the bool with.
+ * @return The formatted bool.
+ */
 @extend bool: Formattable { 
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         if (modifiers == "y")
@@ -72,12 +135,26 @@ interface Formattable {
     }
 }
 
+/**
+ * Format the char.
+ *
+ * @param self The char to format.
+ * @param modifiers The modifiers to format the char with.
+ * @return The formatted char.
+ */
 @extend char: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
         return String(self);
     } 
 }
 
+/**
+ * Format the array.
+ *
+ * @param self The array to format.
+ * @param modifiers The modifiers to format the array with.
+ * @return The formatted array.
+ */
 @template<T: Formattable> {
     @extend T[]: Formattable {
         fn format(const &self, modifiers: const &char[]) -> String {
@@ -93,6 +170,13 @@ interface Formattable {
     }
 }
 
+/**
+ * Format the iterable of characters.
+ *
+ * @param self The iterable of characters to format.
+ * @param modifiers The modifiers to format the iterable of characters with.
+ * @return The formatted iterable of characters.
+ */
 @template<T: Iterable<char>>
 @override
 fn T[]::format(const &self, modifiers: const &char[]) -> String {
@@ -108,6 +192,13 @@ fn T[]::format(const &self, modifiers: const &char[]) -> String {
     return result;
 }
 
+/**
+ * Format the character array.
+ *
+ * @param self The character array to format.
+ * @param modifiers The modifiers to format the character array with.
+ * @return The formatted character array.
+ */
 @override
 @inline fn char[]::format(const &self, modifiers: const &char[]) -> String {
     return format_str(self, modifiers);

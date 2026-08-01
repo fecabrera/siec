@@ -9,8 +9,24 @@ enum IntFormatterState {
 @static let _hex: char[] = "0123456789abcdef";
 @static let _hexu: char[] = "0123456789ABCDEF";
 
+/**
+ * Macro to format the given integer.
+ *
+ * @param value The integer to format.
+ * @param modifiers The modifiers to format the integer with.
+ * @param neg Whether the integer is negative.
+ * @return The formatted integer.
+ */
 @macro format_int(value, modifiers, neg) = _format_int(value, modifiers, neg);
 
+/**
+ * Format the given integer.
+ *
+ * @param value The integer to format.
+ * @param modifiers The modifiers to format the integer with.
+ * @param neg Whether the integer is negative.
+ * @return The formatted integer.
+ */
 @static
 fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
     let str = String();

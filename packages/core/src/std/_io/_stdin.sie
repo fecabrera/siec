@@ -6,8 +6,18 @@ import { IOReadable, IOError } from _ifaces;
 @static let __stdin: Stdin;
 @macro stdin = __stdin;
 
+/**
+ * The standard input stream.
+ */
 struct Stdin: IOReadable {}
 
+/**
+ * Read the given number of bytes from the standard input stream.
+ *
+ * @param buf The buffer to read the bytes into.
+ * @param count The number of bytes to read.
+ * @return The number of bytes read.
+ */
 fn Stdin::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
     if (buf.length < count) return Error(IOError::InvalidBuffer);
 
@@ -29,6 +39,12 @@ fn Stdin::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
     return Ok(res);
 }
 
+/**
+ * Read the given number of bytes from the standard input stream.
+ *
+ * @param buf The buffer to read the bytes into.
+ * @return The number of bytes read.
+ */
 fn Stdin::read(&self, buf: &u8[]) -> Result<i64, IOError> {
     return self.read(buf, buf.length);
 }

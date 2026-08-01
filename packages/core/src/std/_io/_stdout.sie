@@ -6,7 +6,18 @@ import { IOWritable, IOError } from _ifaces;
 @static let __stdout: Stdout;
 @macro stdout = __stdout;
 
+/**
+ * The standard output stream.
+ */
 struct Stdout: IOWritable {}
+
+/**
+ * Write the given buffer to the standard output stream.
+ *
+ * @param buf The buffer to write.
+ * @param count The number of bytes to write.
+ * @return The number of bytes written.
+ */
 
 fn Stdout::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
     if (buf.length < count) return Error(IOError::InvalidBuffer);
@@ -29,6 +40,12 @@ fn Stdout::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
     return Ok(res);
 }
 
+/**
+ * Write the given buffer to the standard output stream.
+ *
+ * @param buf The buffer to write.
+ * @return The number of bytes written.
+ */
 fn Stdout::write(&self, buf: const &u8[]) -> Result<i64, IOError> {
     return self.write(buf, buf.length);
 }

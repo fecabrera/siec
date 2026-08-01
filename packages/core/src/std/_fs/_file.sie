@@ -25,6 +25,12 @@ enum OpenError {
 
 @extend OpenError: Formattable;
 
+/**
+ * Format the OpenError.
+ *
+ * @param modifiers The modifiers to format the OpenError with.
+ * @return The formatted OpenError.
+ */
 fn OpenError::format(const &self, modifiers: const &char[]) -> String {
     case (self) {
     when OpenError::SystemError:
@@ -176,11 +182,24 @@ fn File::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
     return Ok(res);
 }
 
+/**
+ * Read the given number of bytes from the file.
+ *
+ * @param buf The buffer to read the bytes into.
+ * @return The number of bytes read.
+ */
 @inline
 fn File::read(&self, buf: &u8[]) -> Result<i64, IOError> {
     return self.read(buf, buf.length);
 }
 
+/**
+ * Write the given buffer to the file.
+ *
+ * @param buf The buffer to write.
+ * @param count The number of bytes to write.
+ * @return The number of bytes written.
+ */
 fn File::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
     if (not self.open) return Error(IOError::NotOpen);
     if (not self.mode & FileMode::Write) return Error(IOError::PermissionDenied);
@@ -207,11 +226,24 @@ fn File::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
     return Ok(res);
 }
 
+/**
+ * Write the given buffer to the file.
+ *
+ * @param buf The buffer to write.
+ * @return The number of bytes written.
+ */
 @inline
 fn File::write(&self, buf: const &u8[]) -> Result<i64, IOError> {
     return self.write(buf, buf.length);
 }
 
+/**
+ * Seek to the given offset from the given origin.
+ *
+ * @param offset The offset to seek to.
+ * @param origin The origin to seek from.
+ * @return The result of the operation.
+ */
 fn File::seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
     if (not self.open) return Error(IOError::NotOpen);
     
