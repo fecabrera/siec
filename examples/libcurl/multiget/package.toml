@@ -1,0 +1,10 @@
+[package]
+name = "multiget"
+description = "Fetch multiple URLs concurrently with libcurl"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+libcurl = "*"

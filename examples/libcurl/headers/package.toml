@@ -1,0 +1,10 @@
+[package]
+name = "headers"
+description = "Inspect response headers with libcurl"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+libcurl = "*"

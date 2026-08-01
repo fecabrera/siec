@@ -7,6 +7,7 @@ keywords = ["bindings", "libcurl", "curl"]
 
 [library]
 sources = ["src/"]
+libs = ["curl"]
 
 [dependencies]
 posix = "~1"

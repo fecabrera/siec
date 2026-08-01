@@ -1,0 +1,10 @@
+[package]
+name = "get"
+description = "Fetch a URL with libcurl"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+libcurl = "*"

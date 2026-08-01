@@ -1,0 +1,10 @@
+[package]
+name = "url"
+description = "Inspect URL components with libcurl"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+libcurl = "*"
