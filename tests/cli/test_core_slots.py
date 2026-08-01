@@ -119,6 +119,88 @@ def test_map_slots_own_insert_replace_remove_grow_and_destroy(
     assert result.returncode == 42
 
 
+def test_stack_slots_transfer_growth_pop_peek_and_destroy(
+        monkeypatch, tmp_path):
+    """Stack owns its live slot prefix and exposes only a const top borrow."""
+    result = run_core(monkeypatch, tmp_path, RESOURCE + r"""
+    import { Stack } from std.collections;
+
+    fn exercise() -> i32 {
+        let stack = Stack<Resource>(1);
+        stack.push(Resource(1));
+        stack.push(Resource(2));
+        stack.push(Resource(3));
+
+        let source = Resource(5);
+        stack.push_from(source);
+
+        if (stack.peek().id != 5) return 1;
+        stack.pop();
+        let popped = stack.pop();
+        if (popped.id != 3 or stack.peek().id != 2) return 2;
+
+        {
+            let outer = Stack<Stack<Resource>>();
+            let inner = Stack<Resource>();
+            inner.push(Resource(4));
+            outer.push(move inner);
+        }
+        return 42;
+    }
+
+    fn main() -> i32 {
+        if (exercise() != 42) return 1;
+        if (clones != 1 or drops != 6 or dropped_ids != 20) return 2;
+        return 42;
+    }
+    """)
+    assert result.returncode == 42
+
+
+def test_queue_slots_transfer_pop_peek_iteration_and_destroy(
+        monkeypatch, tmp_path):
+    """Queue nodes own one slot until pop or queue destruction ends it."""
+    result = run_core(monkeypatch, tmp_path, RESOURCE + r"""
+    import { Queue } from std.collections;
+
+    fn exercise() -> i32 {
+        let queue = Queue<Resource>();
+        queue.push(Resource(1));
+        queue.push(Resource(2));
+        queue.push(Resource(3));
+
+        let source = Resource(5);
+        queue.push_from(source);
+
+        if (queue.peek().id != 1) return 1;
+
+        let iterator = queue.iterator();
+        if (iterator.next().id != 1 or iterator.next().id != 2) return 2;
+
+        let const_iterator = queue.const_iterator();
+        if (const_iterator.next().id != 1) return 3;
+
+        let popped = queue.pop();
+        if (popped.id != 1 or queue.peek().id != 2) return 4;
+
+        {
+            let outer = Queue<Queue<Resource>>();
+            let inner = Queue<Resource>();
+            inner.push(Resource(4));
+            outer.push(move inner);
+        }
+        return 42;
+    }
+
+    fn main() -> i32 {
+        if (exercise() != 42) return 1;
+        if (clones != 1 or drops != 6 or dropped_ids != 20) return 2;
+        return 42;
+    }
+    """)
+    assert result.returncode == 42
+
+
 def test_empty_container_access_panics(monkeypatch, tmp_path):
     """Element-requiring core APIs diagnose empty or exhausted storage."""
     source = r"""

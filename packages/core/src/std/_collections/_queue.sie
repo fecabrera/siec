@@ -3,13 +3,13 @@ import { panic } from std;
 
 @private
 struct QueueNode<T> {
-    value: T;
+    value: Slot<T>;
     next: QueueNode<T>* = null;
 }
 
 // Linked-list FIFO queue<T>. Values enqueue at the tail and dequeue at the
 // head, both in O(1). Nodes are heap-allocated per push.
-struct Queue<T>: Iterable<T> {
+struct Queue<T>: Destroy, Iterable<T> {
     head: QueueNode<T>*;   // front: next to dequeue (oldest)
     tail: QueueNode<T>*;   // back: last enqueued (newest)
 }
@@ -39,10 +39,14 @@ fn Queue<T>::init(&self) {
  * Destroy the Queue.
  */
 fn Queue<T>::destroy(&self) {
-    while (not self.is_empty())
-        self.pop();
+    while (self.head) {
+        let node = self.head;
+        self.head = node->next;
 
-    self.head = null;
+        node->value.drop();
+        free(node);
+    }
+
     self.tail = null;
 }
 
@@ -53,7 +57,8 @@ fn Queue<T>::destroy(&self) {
  */
 fn Queue<T>::push(&self, value: T) {
     let node = malloc(@sizeof(QueueNode<T>)) as QueueNode<T>*;
-    *node = { value = value };
+    node->next = null;
+    node->value.write(move value);
     
     if (self.tail == null) {
         self.head = node;
@@ -61,6 +66,27 @@ fn Queue<T>::push(&self, value: T) {
         self.tail->next = node;
     }
     
+    self.tail = node;
+}
+
+/**
+ * Copy the given borrowed value to the Queue.
+ *
+ * An owned value is cloned; a plain value is copied directly.
+ *
+ * @param value The borrowed value to copy to the Queue.
+ */
+fn Queue<T>::push_from(&self, value: const &T) {
+    let node = malloc(@sizeof(QueueNode<T>)) as QueueNode<T>*;
+    node->next = null;
+    node->value.write_from(value);
+
+    if (self.tail == null) {
+        self.head = node;
+    } else {
+        self.tail->next = node;
+    }
+
     self.tail = node;
 }
 
@@ -79,7 +105,7 @@ fn Queue<T>::pop(&self) -> T {
     if (self.head == null)
         self.tail = null;
     
-    let value = node->value;
+    let value = node->value.take();
     free(node);
 
     return value;
@@ -90,11 +116,11 @@ fn Queue<T>::pop(&self) -> T {
  *
  * @return The last element from the Queue.
  */
-fn Queue<T>::peek(const &self) -> T {
+fn Queue<T>::peek(const &self) -> const &T {
     if (self.is_empty())
         panic("cannot peek an empty Queue");
 
-    return self.head->value;
+    return self.head->value.get();
 }
 
 /**
@@ -144,7 +170,7 @@ fn QueueIterator<T>::next(&self) -> &T {
 
     let current = self.current;
     self.current = self.current->next;
-    return current->value;
+    return current->value.get_mut();
 }
 
 /**
@@ -167,5 +193,5 @@ fn ConstQueueIterator<T>::next(&self) -> const &T {
 
     let current = self.cursor.current;
     self.cursor = { current->next };
-    return current->value;
+    return current->value.get();
 }

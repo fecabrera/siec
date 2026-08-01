@@ -1,8 +1,8 @@
-import { malloc, realloc, free } from stdlib;
+import { malloc, free } from stdlib;
 import { panic } from std;
 
 struct Stack<T>: Destroy {
-    data: T*;
+    data: Slot<T>*;
     top: u64;
     capacity: u64;
 }
@@ -13,7 +13,7 @@ struct Stack<T>: Destroy {
  * @param capacity The capacity of the Stack.
  */
 fn Stack<T>::init(&self, capacity: u64 = 0) {
-    self.data = malloc(capacity * @sizeof(T)) as T*;
+    self.data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
     self.top = 0;
     self.capacity = capacity;
 }
@@ -22,7 +22,11 @@ fn Stack<T>::init(&self, capacity: u64 = 0) {
  * Destroy the Stack.
  */
 fn Stack<T>::destroy(&self) {
-    free(self.data);
+    for (let i: u64 = 0; i < self.top; i += 1)
+        self.data[i].drop();
+
+    if (self.data)
+        free(self.data);
 
     self.data = null;
     self.top = 0;
@@ -38,7 +42,22 @@ fn Stack<T>::push(&self, value: T) {
     if (self.top == self.capacity)
         self.grow();
 
-    self.data[self.top] = value;
+    self.data[self.top].write(move value);
+    self.top += 1;
+}
+
+/**
+ * Copy the given borrowed value to the Stack.
+ *
+ * An owned value is cloned; a plain value is copied directly.
+ *
+ * @param value The borrowed value to copy to the Stack.
+ */
+fn Stack<T>::push_from(&self, value: const &T) {
+    if (self.top == self.capacity)
+        self.grow();
+
+    self.data[self.top].write_from(value);
     self.top += 1;
 }
 
@@ -52,7 +71,7 @@ fn Stack<T>::pop(&self) -> T {
         panic("cannot pop an empty Stack");
 
     self.top -= 1;
-    return self.data[self.top];
+    return self.data[self.top].take();
 }
 
 /**
@@ -60,11 +79,11 @@ fn Stack<T>::pop(&self) -> T {
  *
  * @return The last element from the Stack.
  */
-fn Stack<T>::peek(const &self) -> &T {
+fn Stack<T>::peek(const &self) -> const &T {
     if (not self.top)
         panic("cannot peek an empty Stack");
 
-    return self.data[self.top - 1];
+    return self.data[self.top - 1].get();
 }
 
 /**
@@ -82,6 +101,14 @@ fn Stack<T>::is_empty(const &self) -> bool {
 @private
 fn Stack<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : 1;
-    self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
+    let data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
+
+    for (let i: u64 = 0; i < self.top; i += 1)
+        data[i].write(self.data[i].take());
+
+    if (self.data)
+        free(self.data);
+
+    self.data = data;
     self.capacity = capacity;
 }
