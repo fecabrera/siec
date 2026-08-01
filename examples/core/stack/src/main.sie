@@ -1,0 +1,22 @@
+import std.io;
+import { Stack, String } from std.collections;
+
+fn main() -> i32 {
+    let s1 = Stack<String>();
+    s1.push(String("hello"));
+    s1.push(String("world"));
+
+    std.io.println("s1.peek(): {}", s1.peek());
+
+    let s2 = s1.clone();
+
+    while (not s1.is_empty()) {
+        std.io.println("{}", s1.pop());
+    }
+
+    while (not s2.is_empty()) {
+        std.io.println("{}", s2.pop());
+    }
+
+    return 0;
+}

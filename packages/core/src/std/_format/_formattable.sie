@@ -144,7 +144,9 @@ interface Formattable {
  */
 @extend char: Formattable {
     @inline fn format(const &self, modifiers: const &char[]) -> String {
-        return String(self);
+        let str = String();
+        str.push(self);
+        return str;
     } 
 }
 

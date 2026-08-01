@@ -5,7 +5,6 @@ import { Formattable } from std.format;
 
 struct List<T>
     : Destroy,
-      Clone,
       Iterable<T>,
       GetItem<u64, T>,
       SetItem<u64, T>,
@@ -21,6 +20,14 @@ struct List<T>
     length: u64;
     capacity: u64;
 }
+
+// A List can clone only when copying one of its elements is defined. Scalars
+// copy directly; owned elements delegate to their own Clone implementation.
+@template<T: Scalar>
+@extend List<T>: Clone;
+
+@template<T: Clone>
+@extend List<T>: Clone;
     
 /**
  * Initialize the List.
@@ -31,16 +38,6 @@ fn List<T>::init(&self, capacity: u64 = 0) {
     self.data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
     self.length = 0;
     self.capacity = capacity;
-}
-
-/**
- * Initialize the List with the given iterable.
- *
- * @param arr The iterable to initialize the List with.
- */
-fn List<T>::init(&self, v: const T) {
-    self.init();
-    self.push_from(v);
 }
 
 /**

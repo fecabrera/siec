@@ -1,7 +1,7 @@
 import { malloc, free } from stdlib;
 import { panic } from std;
 
-struct Stack<T>: Destroy {
+struct Stack<T>: Destroy, Clone {
     data: Slot<T>*;
     top: u64;
     capacity: u64;
@@ -31,6 +31,19 @@ fn Stack<T>::destroy(&self) {
     self.data = null;
     self.top = 0;
     self.capacity = 0;
+}
+
+/**
+ * Clones the Stack.
+ *
+ * @return The cloned Stack.
+ */
+fn Stack<T>::clone(const &self) -> Stack<T> {
+    let s = Stack<T>(self.capacity);
+    for (let i: u64 = 0; i < self.top; i += 1) {
+        s.push_from(self.data[i].get());
+    }
+    return s;
 }
 
 /**
