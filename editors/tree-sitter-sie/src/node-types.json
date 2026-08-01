@@ -43,6 +43,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -3823,6 +3833,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "action_declaration",
+          "named": true
+        },
         {
           "type": "method_declaration",
           "named": true
@@ -7822,6 +7836,14 @@
         },
         {
           "type": "field_declaration",
+          "named": true
+        },
+        {
+          "type": "method_declaration",
+          "named": true
+        },
+        {
+          "type": "template_declaration",
           "named": true
         }
       ]

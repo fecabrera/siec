@@ -696,18 +696,41 @@ def test_generic_interface_intersection_bound(run, compile_source):
         compile_source(source.replace("Accepts<Both>", "Accepts<One>"))
 
 
-def test_struct_body_rejects_methods(compile_source):
-    """
-    Only interfaces declare actions in their bodies; a struct's methods
-    are declared outside it.
-    """
-    with pytest.raises(SyntaxError, match="declared outside its body"):
-        compile_source("""
-        struct S {
-            fn get(&self) -> i32;
+def test_struct_body_accepts_method_declarations(compile_source):
+    """A struct body supplies its type as a nested method's receiver."""
+    compile_source("""
+    struct S {
+        fn get(&self) -> i32;
+    }
+    fn main() -> i32 { return 0; }
+    """)
+
+
+def test_nested_struct_method_satisfies_an_interface(run):
+    """Interface conformance sees methods collected from a struct body."""
+    source = """
+    interface Readable {
+        fn read(const &self) -> i32;
+    }
+
+    struct Value: Readable {
+        value: i32;
+
+        fn read(const &self) -> i32 {
+            return self.value;
         }
-        fn main() -> i32 { return 0; }
-        """)
+    }
+
+    fn read<T: Readable>(value: const &T) -> i32 {
+        return value.read();
+    }
+
+    fn main() -> i32 {
+        let value: Value = { 42 };
+        return read(value);
+    }
+    """
+    assert run(source).returncode == 42
 
 
 def test_interface_body_rejects_respelled_actions(compile_source):

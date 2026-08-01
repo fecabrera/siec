@@ -653,7 +653,8 @@ class Struct:
     constraints: dict | None = None  # bounds, tuples for intersections
     is_interface: bool = False  # 'interface I': an abstract type, no storage
     interfaces: list[str] | None = None  # 'struct S: I, J': what it implements
-    actions: list = field(default_factory=list)  # an interface body's 'fn' signatures
+    # receiver methods nested in the body; interface entries are requirements
+    actions: list = field(default_factory=list)
     is_private: bool = False  # '@private': visible textually, never through import
     line: int = _line()
     file: str = _file()

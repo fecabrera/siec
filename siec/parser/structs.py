@@ -92,22 +92,33 @@ def parse_struct(ts: TokenStream) -> Struct:
 
     ts.expect("sym", "{")
 
-    # 'name: type [= default];' fields until the closing brace
+    # Fields and methods share the body. A nested method receives the
+    # enclosing type's name, parameters, and bounds; after parsing it is the
+    # same top-level 'fn S<T>::m' declaration as the out-of-line spelling.
     fields = []
     actions = []
     while ts.peek().value != "}":
-        # an interface declares its actions in its body: each 'fn'
-        # signature spells the 'fn I::m(...)' it means
-        if ts.peek().value == "fn":
-            if not is_interface:
-                raise SyntaxError(f"line {ts.peek().line}: a struct's methods "
-                                  "are declared outside its body, "
-                                  "'fn S::m(...)'")
-
+        # An interface declares required actions; a struct or union declares
+        # ordinary methods. In either case the enclosing declaration supplies
+        # the receiver, so the method name itself stays unqualified.
+        if ts.peek().value == "fn" or ts.peek().value == "@":
             # deferred import: functions and structs are mutually recursive
-            from siec.parser.functions import parse_function
+            from siec.parser.functions import (
+                merge_constraints,
+                parse_function,
+                parse_receiver_template,
+            )
 
-            actions.append(parse_function(ts, name, params))
+            if ts.peek().value == "@" and ts.peek(1).value == "template":
+                nested = parse_receiver_template(
+                    ts, name, params, constraints)
+            else:
+                nested = [parse_function(ts, name, params)]
+
+            for method in nested:
+                method.receiver_constraints = merge_constraints(
+                    method.receiver_constraints, constraints)
+                actions.append(method)
             continue
 
         # an unnamed 'struct { ... }' or 'union { ... }' member hoists its

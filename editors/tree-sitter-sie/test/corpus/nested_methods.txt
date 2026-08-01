@@ -1,0 +1,88 @@
+=====================
+Nested struct methods
+=====================
+
+struct S<A> {
+  value: A;
+  fn f(&self, value: A);
+  fn g(const &self, values: A[]) -> A {
+    return self.value;
+  }
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (identifier)
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier)))
+    body: (struct_body
+      (field_declaration
+        name: (identifier)
+        type: (type
+          (qualified_type
+            (identifier))))
+      (action_declaration
+        name: (identifier)
+        parameters: (parameters
+          (self_parameter)
+          (parameter
+            name: (identifier)
+            type: (type
+              (qualified_type
+                (identifier))))))
+      (method_declaration
+        name: (identifier)
+        parameters: (parameters
+          (self_parameter)
+          (parameter
+            name: (identifier)
+            type: (type
+              (array_type
+                (type
+                  (qualified_type
+                    (identifier)))))))
+        return_type: (type
+          (qualified_type
+            (identifier)))
+        body: (block
+          (return_statement
+            (field_expression
+              value: (self)
+              field: (identifier))))))))
+
+===============================
+Nested receiver template method
+===============================
+
+struct S<A> {
+  @template<A: Iface>
+  @override
+  fn f(const &self);
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (identifier)
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier)))
+    body: (struct_body
+      (template_declaration
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (identifier)
+            bound: (type
+              (qualified_type
+                (identifier)))))
+        declaration: (function_declaration
+          (attribute
+            name: (attribute_name))
+          name: (function_name
+            name: (identifier))
+          parameters: (parameters
+            (self_parameter)))))))

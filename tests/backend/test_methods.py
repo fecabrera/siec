@@ -3,6 +3,144 @@
 import pytest
 
 
+def test_methods_may_be_defined_inside_the_struct(run):
+    """A struct body supplies the receiver for its nested method bodies."""
+    source = """
+    struct Counter {
+        value: i32;
+
+        fn bump(&self, by: i32) {
+            self.value += by;
+        }
+
+        fn get(const &self) -> i32 {
+            return self.value;
+        }
+    }
+
+    fn main() -> i32 {
+        let counter: Counter = { 40 };
+        counter.bump(2);
+        return counter.get();
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_nested_generic_struct_methods_inherit_parameters_and_bounds(run):
+    """Nested methods see receiver parameters and bounds plus their own."""
+    source = """
+    interface Value;
+    @extend i32: Value;
+
+    struct Box<T: Value> {
+        value: T;
+
+        fn replace<U: Value>(&self, value: U) -> T {
+            let old = self.value;
+            self.value = value as T;
+            return old;
+        }
+
+        fn get(const &self) -> T {
+            return self.value;
+        }
+    }
+
+    fn main() -> i32 {
+        let box: Box<i32> = { 40 };
+        return box.replace(2) + box.get();
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_nested_receiver_template_override(run):
+    """A nested '@template' can specialize the enclosing method family."""
+    source = """
+    interface Special;
+    @extend i32: Special;
+
+    struct Box<T> {
+        fn answer(const &self) -> i32 { return 1; }
+
+        @template<T: Special>
+        @override
+        fn answer(const &self) -> i32 { return 42; }
+    }
+
+    fn main() -> i32 {
+        let special: Box<i32> = {};
+        let ordinary: Box<char> = {};
+        return special.answer() + ordinary.answer() - 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_nested_declaration_may_be_defined_out_of_line(run):
+    """The nested and qualified spellings share one method declaration."""
+    source = """
+    struct Counter {
+        value: i32;
+        fn get(const &self) -> i32;
+    }
+
+    fn Counter::get(const &self) -> i32 {
+        return self.value;
+    }
+
+    fn main() -> i32 {
+        let counter: Counter = { 42 };
+        return counter.get();
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_nested_generic_declaration_may_be_defined_out_of_line(run):
+    """A generic receiver declaration pairs with its body in either order."""
+    prelude = """
+    interface Value;
+    @extend i32: Value;
+    """
+
+    declaration = """
+    struct Box<T: Value> {
+        value: T;
+        fn get(const &self) -> T;
+    }
+    """
+
+    definition = """
+    fn Box<T>::get(const &self) -> T {
+        return self.value;
+    }
+    """
+
+    main = """
+    fn main() -> i32 {
+        let box: Box<i32> = { 42 };
+        return box.get();
+    }
+    """
+    assert run(prelude + declaration + definition + main).returncode == 42
+    assert run(prelude + definition + declaration + main).returncode == 42
+
+
+def test_unused_nested_generic_method_declaration_needs_no_body(run):
+    """An unused generic declaration remains a declaration, not a body."""
+    source = """
+    struct S<A> {
+        fn f(&self, value: A);
+        fn g(&self, values: A[]);
+    }
+
+    fn main() -> i32 { return 42; }
+    """
+    assert run(source).returncode == 42
+
+
 def test_methods_act_on_the_instance(run):
     """
     Both call forms reach the method, and the '&S' receiver mutates the

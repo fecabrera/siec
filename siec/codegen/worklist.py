@@ -27,6 +27,12 @@ def resolve_function_instance(gen: CodeGenerator, instance: Function, *,
         gen.ungated_types -= 1
 
     gen.function_instance_states[symbol] = "resolved"
+    if instance.body is None and instance.asm is None:
+        # A generic declaration can be supplied by another compilation unit,
+        # just like an ordinary forward function declaration. Its concrete
+        # instance needs a header, but has no body to check or emit here.
+        return symbol
+
     if deferred:
         gen.deferred_overloads[symbol] = instance
     else:

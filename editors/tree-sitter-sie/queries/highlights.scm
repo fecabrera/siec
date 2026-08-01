@@ -155,6 +155,10 @@
   method: (identifier) @function.method)
 (action_declaration name: (identifier) @function.method)
 (method_declaration name: (identifier) @function.method)
+(struct_body
+  (template_declaration
+    (function_declaration
+      name: (function_name name: (identifier) @function.method))))
 
 (call_expression function: (identifier) @function.call)
 (call_expression function: (field_expression field: (identifier) @function.method.call))

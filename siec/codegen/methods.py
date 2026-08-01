@@ -45,6 +45,23 @@ def normalized_method_signature(fn) -> tuple:
     return method_signature(fn, mapping)
 
 
+def inherit_receiver_constraints(target, source) -> None:
+    """Merge bounds carried by another declaration of one method family."""
+    inherited = source.receiver_constraints or {}
+    if target.receiver_constraints is None:
+        target.receiver_constraints = copy.deepcopy(inherited)
+        return
+
+    for param, bound in inherited.items():
+        previous = target.receiver_constraints.get(param)
+        bounds = previous if isinstance(previous, tuple) else (previous,)
+        bounds += bound if isinstance(bound, tuple) else (bound,)
+        ordered = tuple(sorted(value for value in set(bounds)
+                               if value is not None))
+        target.receiver_constraints[param] = (
+            ordered[0] if len(ordered) == 1 else ordered)
+
+
 def concrete_type_like(gen: CodeGenerator, spelling: str) -> bool:
     """Whether a receiver argument contains no free type placeholders."""
     from siec.codegen.interfaces import is_type_name
@@ -151,10 +168,6 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
                 gen.removed[f"{base}::{fn.name.partition('::')[2]}"] = fn.removed
                 return
 
-            if fn.body is None and fn.asm is None:
-                raise TypeError(f"method {fn.name!r} needs a body: there is "
-                                "nothing to declare without one")
-
             # a generic struct's method may overload like any other, its
             # templates stamped together per struct instantiation; only
             # one may take type parameters of its own (an interface
@@ -184,10 +197,44 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
                 raise TypeError(f"method '{shown_signature(fn)}' "
                                 "has no matching declaration to override")
 
-            if same:
-                if not fn.is_override:
+            if same and not fn.is_override:
+                exact = [
+                    template for template in same
+                    if (not template.is_override
+                        and normalized_method_signature(template)
+                        == normalized_method_signature(fn))
+                ]
+                if not exact:
+                    raise TypeError(f"conflicting declarations for method "
+                                    f"'{shown_signature(fn)}'")
+
+                defines = fn.body is not None or fn.asm is not None
+                definitions = [
+                    template for template in exact
+                    if template.body is not None or template.asm is not None
+                ]
+                if defines and definitions:
                     raise TypeError(f"method '{shown_signature(fn)}' "
                                     "is declared more than once")
+
+                if defines:
+                    # A body may live outside the struct after its nested
+                    # declaration. Keep the body as the family template and
+                    # carry across receiver bounds supplied by the struct.
+                    for declaration in exact:
+                        inherit_receiver_constraints(fn, declaration)
+                    first = templates.index(exact[0])
+                    templates[first] = fn
+                    for declaration in exact[1:]:
+                        templates.remove(declaration)
+                else:
+                    # Definition collection is order-independent: a nested
+                    # declaration seen after its out-of-line body still lends
+                    # the struct's bounds to the retained template.
+                    inherit_receiver_constraints(exact[0], fn)
+                return
+
+            if same:
 
                 targets = [
                     template for template in same

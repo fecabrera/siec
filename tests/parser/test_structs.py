@@ -21,6 +21,59 @@ def test_empty_struct(ts):
     assert parse_struct(ts("struct Empty { }")) == Struct("Empty", [])
 
 
+def test_struct_methods_use_the_enclosing_receiver(ts):
+    """Methods nested with fields retain the enclosing generic receiver."""
+    struct = parse_struct(ts("""
+        struct S<A> {
+            value: A;
+            fn f(&self, value: A);
+            @inline fn g(const &self, values: A[]) -> A { return self.value; }
+        }
+    """))
+
+    assert [field.name for field in struct.fields] == ["value"]
+    assert [method.name for method in struct.actions] == ["S::f", "S::g"]
+    assert all(method.receiver == "S" for method in struct.actions)
+    assert all(method.receiver_params == ["A"] for method in struct.actions)
+    assert struct.actions[0].params[0].type == "&S<A>"
+    assert struct.actions[0].params[1].type == "A"
+    assert struct.actions[0].body is None
+    assert struct.actions[1].params[0].type == "const &S<A>"
+    assert struct.actions[1].is_inline
+    assert struct.actions[1].body is not None
+
+
+def test_nested_methods_inherit_struct_bounds(ts):
+    """A nested generic method carries the receiver's declared bounds."""
+    struct = parse_struct(ts("""
+        struct S<A: I1 & I2> {
+            fn convert<U: I3>(const &self, value: U) -> A;
+        }
+    """))
+
+    method = struct.actions[0]
+    assert method.receiver_constraints == {"A": ("I1", "I2")}
+    assert method.type_params == ["U"]
+    assert method.constraints == {"U": "I3"}
+
+
+def test_nested_receiver_template_constrains_an_override(ts):
+    """A nested '@template' decorates a method on the enclosing family."""
+    struct = parse_struct(ts("""
+        struct S<A, B> {
+            @template<A: Iface>
+            @override
+            fn f(const &self) -> B;
+        }
+    """))
+
+    method = struct.actions[0]
+    assert method.receiver == "S"
+    assert method.receiver_params == ["A", "B"]
+    assert method.receiver_constraints == {"A": "Iface"}
+    assert method.is_override
+
+
 def test_struct_fields_keep_pointer_and_struct_types(ts):
     """
     Field types are parsed like any other type annotation.

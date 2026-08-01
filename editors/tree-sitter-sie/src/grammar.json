@@ -1100,6 +1100,14 @@
               {
                 "type": "SYMBOL",
                 "name": "action_declaration"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "method_declaration"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "template_declaration"
               }
             ]
           }
@@ -1114,6 +1122,13 @@
       "type": "SEQ",
       "members": [
         {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "attribute"
+          }
+        },
+        {
           "type": "STRING",
           "value": "fn"
         },
@@ -1122,7 +1137,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_method_identifier"
           }
         },
         {
@@ -1190,8 +1205,17 @@
         {
           "type": "REPEAT",
           "content": {
-            "type": "SYMBOL",
-            "name": "method_declaration"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "action_declaration"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "method_declaration"
+              }
+            ]
           }
         },
         {
@@ -1285,10 +1309,6 @@
             {
               "type": "SYMBOL",
               "name": "asm_body"
-            },
-            {
-              "type": "STRING",
-              "value": ";"
             }
           ]
         }

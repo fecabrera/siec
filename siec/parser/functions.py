@@ -81,8 +81,8 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             struct = parse_struct(ts)
             program.structs.append(struct)
 
-            # an interface body's actions are the top-level declarations
-            # they spell
+            # Methods nested in a struct, union, or interface body are the
+            # top-level receiver declarations they spell.
             program.functions.extend(struct.actions)
         elif ts.peek().value == "enum":
             program.enums.append(parse_enum(ts))

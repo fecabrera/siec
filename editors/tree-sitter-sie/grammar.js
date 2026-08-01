@@ -227,23 +227,33 @@ module.exports = grammar({
       ),
 
     struct_body: ($) =>
-      seq("{", repeat(choice($.field_declaration, $.action_declaration)), "}"),
+      seq(
+        "{",
+        repeat(choice(
+          $.field_declaration,
+          $.action_declaration,
+          $.method_declaration,
+          $.template_declaration,
+        )),
+        "}",
+      ),
 
-    // an interface's body holds the signatures it requires
+    // A receiver method declaration with its body supplied elsewhere.
     action_declaration: ($) =>
       seq(
+        repeat($.attribute),
         "fn",
-        field("name", $.identifier),
+        field("name", $._method_identifier),
         optional(field("type_parameters", $.type_parameters)),
         field("parameters", $.parameters),
         optional(seq("->", field("return_type", $.type))),
         ";",
       ),
 
-    // An extension block supplies the receiver for each method. This rule
-    // is deliberately receiver-neutral so struct bodies can reuse it when
-    // inline struct methods are added.
-    extend_body: ($) => seq("{", repeat($.method_declaration), "}"),
+    // A struct, interface, or extension block supplies the receiver for each
+    // method, so declarations inside them carry only the method's own name.
+    extend_body: ($) =>
+      seq("{", repeat(choice($.action_declaration, $.method_declaration)), "}"),
 
     method_declaration: ($) =>
       seq(
@@ -253,7 +263,7 @@ module.exports = grammar({
         optional(field("type_parameters", $.type_parameters)),
         field("parameters", $.parameters),
         optional(seq("->", field("return_type", $.type))),
-        choice(field("body", $.block), $.asm_body, ";"),
+        choice(field("body", $.block), $.asm_body),
       ),
 
     field_declaration: ($) =>

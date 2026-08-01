@@ -2326,9 +2326,52 @@ r.value = 42; // reaches the unnamed union's field directly
 Structs can have methods, which are a special type of function that acts
 on a specific struct type.
 
-Similar to regular functions, they're declared through the `fn` keyword,
-but their name is marked by the prefix `S::`, where `S` is the struct
-they're registered to.
+Similar to regular functions, they're declared through the `fn` keyword.
+They may live inside the struct body, where the enclosing struct supplies
+their receiver type:
+
+```
+struct S<A> {
+    value: A;
+
+    fn set(&self, value: A) {
+        self.value = value;
+    }
+
+    fn get(const &self) -> A {
+        return self.value;
+    }
+}
+```
+
+The struct's type parameters and bounds are in scope throughout a nested
+method. A method may also declare generic parameters of its own after its
+name. A nested `@template` may further constrain the enclosing receiver
+family, including for an `@override`, in the same form as an out-of-line
+method.
+
+The out-of-line spelling prefixes the method name with `S::`, where `S` is
+the struct it belongs to. Both spellings declare the same method and may be
+used together, so a struct can present a method's signature while keeping
+its body elsewhere:
+
+```
+struct S<A> {
+    fn set(&self, value: A);
+    fn get(const &self) -> A;
+}
+
+fn S<A>::set(&self, value: A) {
+    self.value = value;
+}
+
+fn S<A>::get(const &self) -> A {
+    return self.value;
+}
+```
+
+A body may be nested or out of line independently for each method. Fields
+and methods may appear in either order inside the struct.
 
 Their first param is the receiver and is always a reference, meaning that
 the method acts on the instance itself and not on a copy.
