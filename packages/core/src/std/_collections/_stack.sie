@@ -1,7 +1,5 @@
 import { malloc, realloc, free } from stdlib;
 
-@const DEFAULT_STACK_CAPACITY = 2;
-
 struct Stack<T>: Destroy {
     data: T*;
     top: u64;
@@ -13,7 +11,7 @@ struct Stack<T>: Destroy {
  *
  * @param capacity The capacity of the Stack.
  */
-fn Stack<T>::init(&self, capacity: u64 = DEFAULT_STACK_CAPACITY) {
+fn Stack<T>::init(&self, capacity: u64 = 0) {
     self.data = malloc(capacity * @sizeof(T)) as T*;
     self.top = 0;
     self.capacity = capacity;
@@ -76,7 +74,7 @@ fn Stack<T>::is_empty(const &self) -> bool {
  */
 @private
 fn Stack<T>::grow(&self) {
-    let capacity = self.capacity ? self.capacity * 2 : DEFAULT_LIST_CAPACITY;
+    let capacity = self.capacity ? self.capacity * 2 : 1;
     self.data = realloc(self.data, capacity * @sizeof(T)) as T*;
     self.capacity = capacity;
 }
