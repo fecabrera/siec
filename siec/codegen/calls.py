@@ -38,7 +38,9 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     # a macro call expands in place instead of resolving a function; in
     # an untyped context its 'emit' value types the block
-    if call.name in gen.macros:
+    from siec.codegen.macros import resolve_macro_use
+
+    if resolve_macro_use(gen, call, scope) is not None:
         from siec.codegen.expressions import emit_block_expr, emit_expression
         from siec.codegen.inference import infer_type
         from siec.codegen.macros import macro_expansion, macro_view

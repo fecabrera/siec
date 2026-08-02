@@ -41,6 +41,32 @@ def test_qualified_access(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_qualified_macro_access(tmp_path, monkeypatch):
+    """Module qualification reaches both function-like and object macros."""
+    (tmp_path / "macros.sie").write_text("""
+        @macro twice(value) = value + value;
+        @macro answer = 42;
+        @macro convert<T>(value) = value as T;
+        @static let slot: i64 = 0;
+        @macro place = slot;
+        @macro bump(value) { value += 1; }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import macros;
+
+        fn main() -> i32 {
+            let value: i64 = macros.convert<i64>(macros.twice(20));
+            macros.bump(value);
+            macros.place = value;
+            return (macros.place + macros.answer - 41) as i32;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_member_imports_with_aliases(tmp_path, monkeypatch):
     """
     'import { f as g, C } from a.b;' binds chosen members unqualified.

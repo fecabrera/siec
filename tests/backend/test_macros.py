@@ -256,6 +256,23 @@ def test_macro_argument_evaluates_per_use(run):
     assert run(source).returncode == 0
 
 
+def test_lexical_values_shadow_both_macro_forms(run):
+    """The centralized macro resolver gives lexical values first refusal."""
+    source = """
+    @macro value = 1;
+    @macro apply(arg) = arg + arg;
+
+    fn increment(arg: i32) -> i32 { return arg + 1; }
+
+    fn main() -> i32 {
+        let value = 20;
+        let apply: fn(i32) -> i32 = increment;
+        return value + apply(21);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_macro_without_emit_is_a_statement(run):
     """
     A block macro with no 'emit' produces no value: calling it as a

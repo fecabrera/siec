@@ -175,6 +175,16 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         # the modifier plays no part in what the cast does; only the
         # represented type directs the conversion
         target_name = strip_const(expr.type)
+        source_name = strip_const(operand_name)
+
+        # Function references are pointers to their declared signatures.
+        # An explicit cast may erase or restore that signature for C APIs
+        # such as GLib's GCallback; the programmer owns the ABI contract.
+        if (target_name.startswith("fn(")
+                and (source_name or "").startswith("fn(")
+                and isinstance(target_type, ir.PointerType)
+                and isinstance(value.type, ir.PointerType)):
+            return builder.bitcast(value, target_type)
 
         # any pointer casts to 'opaque*', the same way it decays to it
         if target_name == "opaque*":
@@ -197,7 +207,6 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         # 'i8[]'/'u8[]' and 'char[]' cast into each other, the length
         # adjusting for the null terminator a char[] excludes; the
         # underlying pointer is assumed null-terminated
-        source_name = strip_const(operand_name)
         delta = None
         if target_name == "char[]" and source_name in ("i8[]", "u8[]"):
             delta = -1
@@ -309,11 +318,13 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # a macro use is its expansion: an object-like one's bare name reads
     # as a call; an expression substitutes and coerces in place, and a
     # block's each 'emit' coerces to the target below
-    if (isinstance(expr, Var) and expr.name in gen.macros
-            and gen.macros[expr.name].params is None):
-        expr = Call(expr.name, [], expr.type_args)
+    from siec.codegen.macros import resolve_macro_use
 
-    if isinstance(expr, Call) and expr.name in gen.macros:
+    use = resolve_macro_use(gen, expr, scope)
+    if use is not None:
+        expr = use.call
+
+    if use is not None:
         from siec.codegen.macros import macro_expansion, macro_view
 
         expansion = macro_expansion(gen, expr)

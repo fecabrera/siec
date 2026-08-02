@@ -271,9 +271,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
         # 'name<T>' is an object-like generic macro use when that name is
         # a macro; only other such spellings are generic function references.
-        if expr.name in gen.macros and gen.macros[expr.name].params is None:
-            return emit_call(
-                gen, builder, Call(expr.name, [], expr.type_args), scope)
+        from siec.codegen.macros import resolve_macro_use
+
+        if (use := resolve_macro_use(gen, expr, scope)) is not None:
+            return emit_call(gen, builder, use.call, scope)
 
         # 'f<i32>' outside a call references a generic function's
         # instance, resolved and gated by its own dotted or plain name

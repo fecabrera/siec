@@ -217,9 +217,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         # An object-like generic macro is written as 'name<T>' without a
         # value-argument list. Its type arguments belong to the expansion,
         # not to a generic function reference.
-        if expr.name in gen.macros and gen.macros[expr.name].params is None:
-            return expr_sie_type(
-                gen, Call(expr.name, [], expr.type_args), scope)
+        from siec.codegen.macros import resolve_macro_use
+
+        if (use := resolve_macro_use(gen, expr, scope)) is not None:
+            return expr_sie_type(gen, use.call, scope)
 
         # 'f<i32>' outside a call has its instance's function type,
         # resolved and gated by its own dotted or plain name
@@ -274,9 +275,13 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         return expr_sie_type(gen, Call(symbol, args, expr.type_args), scope)
 
     if isinstance(expr, Call):
+        from siec.codegen.macros import resolve_macro_use
+
+        use = resolve_macro_use(gen, expr, scope)
+
         # a macro call types as its expansion: the substituted expression,
         # or a block's 'emit' value, resolved in the macro's file's view
-        if expr.name in gen.macros:
+        if use is not None:
             from siec.codegen.macros import first_emit, macro_expansion, macro_view
 
             expansion = macro_expansion(gen, expr)
@@ -590,11 +595,13 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     # a macro use infers as its expansion, literal defaults included;
     # a bare object-like macro reads as its call
-    if (isinstance(expr, Var) and expr.name in gen.macros
-            and gen.macros[expr.name].params is None):
-        expr = Call(expr.name, [], expr.type_args)
+    from siec.codegen.macros import resolve_macro_use
 
-    if isinstance(expr, Call) and expr.name in gen.macros:
+    use = resolve_macro_use(gen, expr, scope)
+    if use is not None:
+        expr = use.call
+
+    if use is not None:
         from siec.codegen.macros import first_emit, macro_expansion, macro_view
 
         expansion = macro_expansion(gen, expr)
@@ -680,7 +687,11 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
 
         return None
 
-    if isinstance(expr, Call) and expr.name in gen.macros:
+    from siec.codegen.macros import resolve_macro_use
+
+    use = resolve_macro_use(gen, expr, scope)
+    if use is not None:
+        expr = use.call
         if gen.macros[expr.name].body is not None:
             return TypeError(f"macro {expr.name!r} does not 'emit' a value")
 

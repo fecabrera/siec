@@ -713,10 +713,10 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         if expr.name in scope and scope[expr.name].moved:
             raise TypeError(f"use of moved value {expr.name!r}")
 
-        if (expr.name not in scope and expr.name in gen.macros
-                and gen.macros[expr.name].params is None):
-            return check_call(
-                gen, Call(expr.name, [], expr.type_args), scope, expected)
+        from siec.codegen.macros import resolve_macro_use
+
+        if (use := resolve_macro_use(gen, expr, scope)) is not None:
+            return check_call(gen, use.call, scope, expected)
 
         if expr.type_args is not None:
             template = reference_template(gen, expr.name)
@@ -1109,7 +1109,9 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
     written_call = call
 
-    if call.name in gen.macros:
+    from siec.codegen.macros import resolve_macro_use
+
+    if resolve_macro_use(gen, call, scope) is not None:
         from siec.codegen.macros import macro_expansion, macro_view
 
         expansion = macro_expansion(gen, call)

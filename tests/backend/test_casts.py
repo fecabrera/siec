@@ -144,6 +144,27 @@ def test_pointer_casts_between_pointer_types(run):
     assert run(source).returncode == 0
 
 
+def test_function_reference_casts_reinterpret_the_signature(run):
+    """
+    An explicit cast may erase and restore a function signature for a C API;
+    both forms retain the same function address.
+    """
+    source = """
+    @type Callback = fn();
+
+    fn increment(value: i32) -> i32 {
+        return value + 1;
+    }
+
+    fn main() -> i32 {
+        let callback: Callback = increment as Callback;
+        let restored = callback as fn(i32) -> i32;
+        return restored(41);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_struct_cast_reinterprets_place_and_value_assignment_copies(run):
     """
     A struct cast can provide a retyped place to a reference return. Reading

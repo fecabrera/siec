@@ -2,12 +2,129 @@
 
 import copy
 from contextlib import contextmanager
-from dataclasses import fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 
 from siec.ast import (Assign, Block, BlockExpr, Call, Emit, Index,
                       IndexAssign, Member, MemberAssign, Var)
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
+
+
+def _resolve_macro_name(gen: CodeGenerator, name: str) -> str | None:
+    """
+    Resolve a macro use through the same module/member bindings as other
+    declarations. The returned spelling is the registered, unqualified macro
+    name; None means the written name does not denote a visible macro.
+    """
+    if "." in name:
+        resolved = gen.resolve_qualified(name.split("."))
+    else:
+        resolved = gen.member_bindings.get((gen.current_file, name), name)
+        if resolved == name and not gen.sees(name):
+            return None
+
+    return resolved if resolved in gen.macros else None
+
+
+def _resolve_macro_call(gen: CodeGenerator, call: Call) -> str | None:
+    """Resolve and canonicalize a call's possibly qualified macro name."""
+    if (getattr(call, "macro_resolved", False)
+            and call.name in gen.macros):
+        return call.name
+
+    previous = gen.current_file
+    gen.current_file = getattr(call, "macro_argument_file", previous)
+    try:
+        name = _resolve_macro_name(gen, call.name)
+    finally:
+        gen.current_file = previous
+    if name is not None:
+        call.name = name
+        call.macro_resolved = True
+    return name
+
+
+def _resolve_macro_var(gen: CodeGenerator, var: Var) -> str | None:
+    """Resolve and canonicalize an object-like macro reference."""
+    if getattr(var, "macro_resolved", False) and var.name in gen.macros:
+        return var.name
+
+    # A qualified member chain is folded to its exported name and carries
+    # the module file it came through. That lookup already checked exports.
+    if (getattr(var, "module_file", None) is not None
+            and var.name in gen.macros):
+        var.macro_resolved = True
+        return var.name
+
+    previous = gen.current_file
+    gen.current_file = getattr(var, "macro_argument_file", previous)
+    try:
+        name = _resolve_macro_name(gen, var.name)
+    finally:
+        gen.current_file = previous
+    if name is not None:
+        var.name = name
+        var.macro_resolved = True
+    return name
+
+
+def _object_macro_call(var: Var, name: str) -> Call:
+    """Build the resolved zero-value-argument call for an object macro."""
+    call = Call(name, [], var.type_args)
+    call.macro_resolved = True
+    for attr in ("macro_argument_file", "macro_type_args_resolved"):
+        if hasattr(var, attr):
+            setattr(call, attr, getattr(var, attr))
+    return call
+
+
+@dataclass(frozen=True)
+class MacroUse:
+    """One canonical macro invocation shared by every compiler phase."""
+    name: str
+    call: Call
+
+
+def resolve_macro_use(gen: CodeGenerator, expr, scope: dict) -> MacroUse | None:
+    """
+    Resolve every macro spelling in one place: qualified or plain, imported
+    or local, function-like calls and object-like references. Lexical values
+    shadow declarations before lookup, and substituted arguments retain the
+    source view where they were written.
+    """
+    if isinstance(expr, Call):
+        if expr.name in scope:
+            return None
+        name = _resolve_macro_call(gen, expr)
+        return MacroUse(name, expr) if name is not None else None
+
+    # A qualified object-like use is initially a member chain. Fold it here
+    # as part of declaration resolution so lvalue paths and value paths see
+    # exactly the same macro use.
+    if isinstance(expr, Member):
+        names = []
+        root = expr
+        while isinstance(root, Member):
+            names.append(root.field)
+            root = root.base
+        if not isinstance(root, Var) or root.name in scope:
+            return None
+        names.append(root.name)
+        found = gen.resolve_member(list(reversed(names)))
+        if found is None:
+            return None
+        var = Var(found[0], qualified=True)
+        var.module_file = found[1]
+        return resolve_macro_use(gen, var, scope)
+
+    if not isinstance(expr, Var) or expr.name in scope:
+        return None
+
+    name = _resolve_macro_var(gen, expr)
+    if name is None or gen.macros[name].params is not None:
+        return None
+
+    return MacroUse(name, _object_macro_call(expr, name))
 
 
 @contextmanager
@@ -90,11 +207,13 @@ def macro_expansion(gen: CodeGenerator, call: Call):
             raise TypeError(f"macro {call.name!r} takes {len(macro.params)} "
                             f"argument(s), got {len(call.args)}")
 
+        for arg in call.args:
+            mark_macro_argument_view(arg, gen.current_file)
         mapping = dict(zip(macro.params, call.args))
 
     if macro.body is None:
         call.expansion = copy.deepcopy(macro.value)
-        prepare_macro_type_arguments(gen, call.expansion, macro)
+        prepare_macro_template(gen, call.expansion, macro)
         if type_mapping:
             from siec.codegen.generics import substitute_types
 
@@ -106,7 +225,7 @@ def macro_expansion(gen: CodeGenerator, call: Call):
         return call.expansion
 
     body = copy.deepcopy(macro.body)
-    prepare_macro_type_arguments(gen, body, macro)
+    prepare_macro_template(gen, body, macro)
     if type_mapping:
         from siec.codegen.generics import substitute_types
 
@@ -124,14 +243,9 @@ def macro_place(gen: CodeGenerator, expr, scope: dict):
     object-like macro's bare name, or a function-like one's call. None
     when the expression is no macro use; a scope variable shadows one.
     """
-    if (isinstance(expr, Var) and expr.name not in scope
-            and expr.name in gen.macros
-            and gen.macros[expr.name].params is None):
-        return expr.name, macro_expansion(
-            gen, Call(expr.name, [], expr.type_args))
-
-    if isinstance(expr, Call) and expr.name in gen.macros:
-        return expr.name, macro_expansion(gen, expr)
+    use = resolve_macro_use(gen, expr, scope)
+    if use is not None:
+        return use.name, macro_expansion(gen, use.call)
 
     return None
 
@@ -194,10 +308,10 @@ def substitute(node, mapping: dict):
     return node
 
 
-def prepare_macro_type_arguments(gen: CodeGenerator, node, macro) -> None:
+def prepare_macro_template(gen: CodeGenerator, node, macro) -> None:
     """
-    Canonicalize explicit type arguments written in a macro definition
-    before value arguments are spliced into it.
+    Resolve nested macro uses and canonicalize explicit type arguments written
+    in a macro definition before value arguments are spliced into it.
 
     A nested generic macro changes the active declaration view. Its type
     arguments nevertheless belong to the surrounding macro's source: in
@@ -208,11 +322,17 @@ def prepare_macro_type_arguments(gen: CodeGenerator, node, macro) -> None:
     """
     if isinstance(node, list):
         for item in node:
-            prepare_macro_type_arguments(gen, item, macro)
+            prepare_macro_template(gen, item, macro)
         return
 
     if not is_dataclass(node):
         return
+
+    with macro_view(gen, macro.name):
+        if isinstance(node, Call):
+            resolve_macro_use(gen, node, {})
+        elif isinstance(node, Var):
+            resolve_macro_use(gen, node, {})
 
     type_args = getattr(node, "type_args", None)
     if type_args is not None:
@@ -228,7 +348,28 @@ def prepare_macro_type_arguments(gen: CodeGenerator, node, macro) -> None:
 
     for field in fields(node):
         if field.name != "type_args":
-            prepare_macro_type_arguments(gen, getattr(node, field.name), macro)
+            prepare_macro_template(gen, getattr(node, field.name), macro)
+
+
+def mark_macro_argument_view(node, file: str) -> None:
+    """
+    Retain where a value argument was written when substitution carries it
+    through one or more macro declaration views. Resolution still happens at
+    use time, after lexical locals have had their normal chance to shadow it.
+    """
+    if isinstance(node, list):
+        for item in node:
+            mark_macro_argument_view(item, file)
+        return
+
+    if not is_dataclass(node):
+        return
+
+    if not hasattr(node, "macro_argument_file"):
+        node.macro_argument_file = file
+
+    for field in fields(node):
+        mark_macro_argument_view(getattr(node, field.name), file)
 
 
 def first_emit(node) -> Emit | None:
