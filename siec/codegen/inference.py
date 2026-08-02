@@ -214,6 +214,13 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.name in scope:
             return strip_reference(scope[expr.name].type)
 
+        # An object-like generic macro is written as 'name<T>' without a
+        # value-argument list. Its type arguments belong to the expansion,
+        # not to a generic function reference.
+        if expr.name in gen.macros and gen.macros[expr.name].params is None:
+            return expr_sie_type(
+                gen, Call(expr.name, [], expr.type_args), scope)
+
         # 'f<i32>' outside a call has its instance's function type,
         # resolved and gated by its own dotted or plain name
         if expr.type_args is not None:
@@ -236,10 +243,6 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
             with constant_view(gen, const):
                 return expr_sie_type(gen, const.value, scope)
-
-        # a bare object-like macro reads as its expansion, C's 'errno'-style
-        if expr.name in gen.macros and gen.macros[expr.name].params is None:
-            return expr_sie_type(gen, Call(expr.name, []), scope)
 
         # a global carries its declared type
         symbol = gen.resolve_symbol(expr.name)
@@ -589,7 +592,7 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a bare object-like macro reads as its call
     if (isinstance(expr, Var) and expr.name in gen.macros
             and gen.macros[expr.name].params is None):
-        expr = Call(expr.name, [])
+        expr = Call(expr.name, [], expr.type_args)
 
     if isinstance(expr, Call) and expr.name in gen.macros:
         from siec.codegen.macros import first_emit, macro_expansion, macro_view

@@ -269,6 +269,12 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return load
 
+        # 'name<T>' is an object-like generic macro use when that name is
+        # a macro; only other such spellings are generic function references.
+        if expr.name in gen.macros and gen.macros[expr.name].params is None:
+            return emit_call(
+                gen, builder, Call(expr.name, [], expr.type_args), scope)
+
         # 'f<i32>' outside a call references a generic function's
         # instance, resolved and gated by its own dotted or plain name
         if expr.type_args is not None:
@@ -292,10 +298,6 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                     return emit_coerced(gen, builder, const.value, const.type, scope)
 
                 return emit_expression(gen, builder, const.value, expected_type, scope)
-
-        # a bare object-like macro expands in place, C's 'errno'-style
-        if expr.name in gen.macros and gen.macros[expr.name].params is None:
-            return emit_call(gen, builder, Call(expr.name, []), scope)
 
         # a global loads its current value from its storage; the current
         # file's statics resolve first, other files' never

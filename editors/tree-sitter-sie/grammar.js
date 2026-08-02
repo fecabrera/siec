@@ -152,6 +152,7 @@ module.exports = grammar({
       seq(
         "@macro",
         field("name", $.identifier),
+        optional(field("type_parameters", $.type_parameters)),
         optional(field("parameters", $.macro_parameters)),
         choice(
           seq("=", field("value", $._expression), ";"),

@@ -385,7 +385,17 @@ def parse_primary(ts: TokenStream) -> Expr:
         type_args = None
         if ts.peek().syntax == "<":
             type_args = parse_type_arguments(
-                ts, followers=("(", ";", ",", ")", "]", "}", ":", "::"))
+                ts,
+                followers=(
+                    "(", ";", ",", ")", "]", "}", ":", "::",
+                    ".", "->", "[", "as", "?", "=",
+                    "+=", "-=", "*=", "/=", "%=", "**=", "<<=",
+                    ">>=", "&=", "|=", "^=",
+                    "or", "and", "<", ">", "<=", ">=", "==", "!=",
+                    "|", "^", "&", "<<", ">>", "+", "-", "*", "/",
+                    "%", "**",
+                ),
+            )
 
         # 'S<T>::method(...)' calls through the generic instance, the
         # type arguments joining the receiver type's name

@@ -383,6 +383,11 @@ def make_assignment(target, value, line: int):
     an indexed element, or a dereferenced pointer.
     """
     if isinstance(target, Var):
+        # A generic object-like macro keeps its '<...>' arguments as part
+        # of the place. RefAssign retains the full expression until macro
+        # expansion decides what storage it names.
+        if target.type_args is not None:
+            return RefAssign(target, value, line=line)
         return Assign(target.name, value, line=line)
 
     if isinstance(target, Member):

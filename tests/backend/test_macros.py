@@ -147,6 +147,91 @@ def test_macro_calls_macro(run):
     assert run(source).returncode == 0
 
 
+def test_generic_macro_substitutes_types(run):
+    """Explicit macro type arguments rewrite casts and nested generic uses."""
+    source = """
+    fn forward<T>(value: T) -> T { return value; }
+
+    @macro converted<T>(value) = forward<T>(value as T);
+
+    fn main() -> i32 {
+        let value: i64 = converted<i64>(42);
+        if (value != 42) { return 1; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_generic_object_macro_expands_without_value_arguments(run):
+    """An object-like generic macro is used as 'name<T>', without '()'."""
+    source = """
+    @macro zero<T> {
+        let value: T = 0;
+        emit value;
+    }
+
+    fn main() -> i32 {
+        let value: i64 = zero<i64>;
+        return value as i32;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_generic_object_macro_remains_an_assignable_place(run):
+    """The '<...>' arguments survive parsing when a generic macro is assigned."""
+    source = """
+    @static let slot: i64 = 0;
+    @macro place<T> = *(&slot as T*);
+
+    fn main() -> i32 {
+        place<i64> = 42;
+        return (place<i64> as i32) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
+def test_generic_macro_checks_bounds(run, compile_source):
+    """Macro bounds use the same type-like constraint rules as functions."""
+    source = """
+    @macro width<T: Scalar> = @sizeof(T);
+    fn main() -> i32 { return (width<i32> as i32) - 4; }
+    """
+    assert run(source).returncode == 0
+
+    with pytest.raises(
+            TypeError,
+            match="type 'char\\[\\]' does not implement interface 'Scalar'"):
+        compile_source("""
+        @macro width<T: Scalar> = @sizeof(T);
+        fn main() -> i32 { return width<char[]> as i32; }
+        """)
+
+
+def test_generic_macro_requires_the_right_explicit_type_arguments(
+        compile_source):
+    """Generic macro arguments are explicit and checked independently."""
+    with pytest.raises(TypeError, match="requires explicit type arguments"):
+        compile_source("""
+        @macro value<T> = @sizeof(T);
+        fn main() -> i32 { return value as i32; }
+        """)
+
+    with pytest.raises(TypeError, match="takes 2 type arguments, got 1"):
+        compile_source("""
+        @macro value<T, U> = @sizeof(T) + @sizeof(U);
+        fn main() -> i32 { return value<i32> as i32; }
+        """)
+
+    with pytest.raises(TypeError, match="takes no type arguments"):
+        compile_source("""
+        @macro value = 42;
+        fn main() -> i32 { return value<i32>; }
+        """)
+
+
 def test_macro_argument_evaluates_per_use(run):
     """
     Substitution is textual: an argument named twice in the body runs

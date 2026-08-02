@@ -3,7 +3,7 @@
 from siec.ast import Const
 from siec.parser.expressions import parse_expression
 from siec.parser.stream import TokenStream
-from siec.parser.types import parse_type
+from siec.parser.types import parse_type, parse_type_params
 
 
 def parse_const(ts: TokenStream, *, is_private: bool = False,
@@ -38,6 +38,7 @@ def parse_macro(ts: TokenStream) -> Const:
         @macro name(a, b) = <expr>;        function-like, an expression
         @macro name(a, b) { ... }          function-like, a block; 'emit'
                                            inside produces the call's value
+        @macro name<T>(value) = value as T; generic: types are explicit
     """
     # deferred import: statements and expressions are mutually recursive
     from siec.parser.statements import parse_block
@@ -46,6 +47,7 @@ def parse_macro(ts: TokenStream) -> Const:
     ts.expect("sym", "@")
     ts.expect("ident", "macro")
     name = ts.expect("ident").value
+    type_params, constraints = parse_type_params(ts)
 
     # '(' opens a function-like macro's parameter list; without one the
     # macro is object-like, expanding on its bare name
@@ -64,8 +66,11 @@ def parse_macro(ts: TokenStream) -> Const:
         ts.next()
         value = parse_expression(ts)
         ts.expect("sym", ";")
-        return Const(name, None, value, params=params, is_macro=True, line=line)
+        return Const(name, None, value, params=params,
+                     type_params=type_params, constraints=constraints,
+                     is_macro=True, line=line)
 
     body = parse_block(ts)
-    return Const(name, None, None, params=params, body=body, is_macro=True,
-                 line=line)
+    return Const(name, None, None, params=params, body=body,
+                 type_params=type_params, constraints=constraints,
+                 is_macro=True, line=line)

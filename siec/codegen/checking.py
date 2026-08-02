@@ -713,6 +713,11 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         if expr.name in scope and scope[expr.name].moved:
             raise TypeError(f"use of moved value {expr.name!r}")
 
+        if (expr.name not in scope and expr.name in gen.macros
+                and gen.macros[expr.name].params is None):
+            return check_call(
+                gen, Call(expr.name, [], expr.type_args), scope, expected)
+
         if expr.type_args is not None:
             template = reference_template(gen, expr.name)
             if template is not None:

@@ -3,7 +3,7 @@
 import pytest
 
 from siec.ast import BinaryOp, Const, FloatLiteral, IntLiteral, Var
-from siec.parser.constants import parse_const
+from siec.parser.constants import parse_const, parse_macro
 from siec.parser.functions import parse_program
 
 
@@ -53,3 +53,15 @@ def test_constant_requires_an_initializer(ts):
     """
     with pytest.raises(SyntaxError, match="expected '='"):
         parse_const(ts("@const X;"))
+
+
+def test_generic_macro_parameters_and_bounds(ts):
+    """A macro carries type parameters separately from value parameters."""
+    macro = parse_macro(ts(
+        "@macro convert<T: Scalar, U>(value) = value as T;"))
+
+    assert macro.name == "convert"
+    assert macro.type_params == ["T", "U"]
+    assert macro.constraints == {"T": "Scalar"}
+    assert macro.params == ["value"]
+    assert macro.is_macro

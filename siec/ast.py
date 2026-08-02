@@ -710,12 +710,16 @@ class Const:
     substituted at each use, parameters standing for the argument
     expressions. 'params' of None marks an object-like macro, expanding
     on its bare name; a list, function-like, expanding on its call.
+    'type_params' carries the explicit generic arguments substituted into
+    type positions in either form.
     """
     name: str
     type: str | None
     value: Expr | None
     params: list[str] | None = None
     body: list | None = None
+    type_params: list[str] | None = None
+    constraints: dict | None = None
     is_macro: bool = False
     is_private: bool = False  # '@private @const': not offered by the module
     line: int = _line()

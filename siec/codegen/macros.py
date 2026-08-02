@@ -14,13 +14,22 @@ from siec.codegen.generator import CodeGenerator
 def macro_view(gen: CodeGenerator, name: str):
     """
     Resolve names under the macro's defining file's view: an expansion's
-    own names live where the macro was written, not where it is used.
+    own names live where the macro was written, not where it is used. A
+    generic expansion has already canonicalized its explicit arguments;
+    like a generic function instance, those compiler-carried types are no
+    longer gated by the template file's imports.
     """
     previous = gen.current_file
-    gen.current_file = gen.macros[name].file
+    macro = gen.macros[name]
+    gen.current_file = macro.file
+    generic = macro.type_params is not None
+    if generic:
+        gen.ungated_types += 1
     try:
         yield
     finally:
+        if generic:
+            gen.ungated_types -= 1
         gen.current_file = previous
 
 
@@ -38,8 +47,38 @@ def macro_expansion(gen: CodeGenerator, call: Call):
         return cached
 
     macro = gen.macros[call.name]
-    if call.type_args:
-        raise TypeError(f"macro {call.name!r} takes no type arguments")
+    if macro.type_params is None:
+        if call.type_args is not None:
+            raise TypeError(f"macro {call.name!r} takes no type arguments")
+        type_mapping = {}
+    else:
+        if call.type_args is None:
+            raise TypeError(f"generic macro {call.name!r} requires explicit "
+                            "type arguments")
+
+        expected = len(macro.type_params)
+        if len(call.type_args) != expected:
+            raise TypeError(
+                f"generic macro {call.name!r} takes {expected} type "
+                f"argument{'s' if expected != 1 else ''}, "
+                f"got {len(call.type_args)}")
+
+        if getattr(call, "macro_type_args_resolved", False):
+            type_args = call.type_args
+        else:
+            from siec.codegen.aliases import expand_alias
+
+            type_args = [expand_alias(gen, arg) for arg in call.type_args]
+        for arg in type_args:
+            if arg.startswith("const ") or arg.startswith("&"):
+                raise TypeError(f"cannot expand macro {call.name!r} with "
+                                f"{arg!r}: the argument carries a modifier")
+
+        type_mapping = dict(zip(macro.type_params, type_args))
+        if macro.constraints:
+            from siec.codegen.interfaces import check_constraints
+
+            check_constraints(gen, macro, type_mapping)
 
     if macro.params is None:
         if call.args:
@@ -54,13 +93,25 @@ def macro_expansion(gen: CodeGenerator, call: Call):
         mapping = dict(zip(macro.params, call.args))
 
     if macro.body is None:
-        call.expansion = substitute(copy.deepcopy(macro.value), mapping)
+        call.expansion = copy.deepcopy(macro.value)
+        prepare_macro_type_arguments(gen, call.expansion, macro)
+        if type_mapping:
+            from siec.codegen.generics import substitute_types
+
+            substitute_types(call.expansion, type_mapping)
+        call.expansion = substitute(call.expansion, mapping)
         from siec.codegen.ownership import inherit_expression_identity
 
         inherit_expression_identity(call, call.expansion)
         return call.expansion
 
-    body = [substitute(copy.deepcopy(stmt), mapping) for stmt in macro.body]
+    body = copy.deepcopy(macro.body)
+    prepare_macro_type_arguments(gen, body, macro)
+    if type_mapping:
+        from siec.codegen.generics import substitute_types
+
+        substitute_types(body, type_mapping)
+    body = substitute(body, mapping)
 
     call.expansion = (BlockExpr(body) if first_emit(body) is not None
                       else Block(body, line=macro.line))
@@ -76,7 +127,8 @@ def macro_place(gen: CodeGenerator, expr, scope: dict):
     if (isinstance(expr, Var) and expr.name not in scope
             and expr.name in gen.macros
             and gen.macros[expr.name].params is None):
-        return expr.name, macro_expansion(gen, Call(expr.name, []))
+        return expr.name, macro_expansion(
+            gen, Call(expr.name, [], expr.type_args))
 
     if isinstance(expr, Call) and expr.name in gen.macros:
         return expr.name, macro_expansion(gen, expr)
@@ -140,6 +192,43 @@ def substitute(node, mapping: dict):
             setattr(node, field.name, substitute(getattr(node, field.name), mapping))
 
     return node
+
+
+def prepare_macro_type_arguments(gen: CodeGenerator, node, macro) -> None:
+    """
+    Canonicalize explicit type arguments written in a macro definition
+    before value arguments are spliced into it.
+
+    A nested generic macro changes the active declaration view. Its type
+    arguments nevertheless belong to the surrounding macro's source: in
+    ``OUTER = INNER<Private>()``, ``Private`` resolves beside ``OUTER``.
+    Canonicalizing here preserves that ownership across nested expansion.
+    Doing it before value substitution also leaves type arguments inside a
+    caller expression under the caller's own view.
+    """
+    if isinstance(node, list):
+        for item in node:
+            prepare_macro_type_arguments(gen, item, macro)
+        return
+
+    if not is_dataclass(node):
+        return
+
+    type_args = getattr(node, "type_args", None)
+    if type_args is not None:
+        from siec.codegen.aliases import expand_alias
+
+        parameters = frozenset(macro.type_params or ())
+        with macro_view(gen, macro.name):
+            node.type_args = [
+                expand_alias(gen, arg, parameters=parameters)
+                for arg in type_args
+            ]
+        node.macro_type_args_resolved = True
+
+    for field in fields(node):
+        if field.name != "type_args":
+            prepare_macro_type_arguments(gen, getattr(node, field.name), macro)
 
 
 def first_emit(node) -> Emit | None:

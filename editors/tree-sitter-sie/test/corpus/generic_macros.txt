@@ -1,0 +1,36 @@
+==================
+Generic macros
+==================
+
+@macro zero<T: Scalar> = @sizeof(T);
+@macro convert<T, U>(value) = value as T;
+
+---
+
+(source_file
+  (macro_declaration
+    name: (identifier)
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier)
+        bound: (type
+          (qualified_type
+            (identifier)))))
+    value: (compile_time_expression
+      argument: (type
+        (qualified_type
+          (identifier)))))
+  (macro_declaration
+    name: (identifier)
+    type_parameters: (type_parameters
+      (type_parameter
+        name: (identifier))
+      (type_parameter
+        name: (identifier)))
+    parameters: (macro_parameters
+      (identifier))
+    value: (cast_expression
+      value: (identifier)
+      type: (type
+        (qualified_type
+          (identifier))))))

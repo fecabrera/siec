@@ -1117,10 +1117,12 @@ def test_outline_names_macros_apart_from_constants():
         @const WIDTH = 8;
         @macro errno = 42;
         @macro twice(v) = v + v;
+        @macro converted<T>(v) = v as T;
     """)
 
     assert [(s.name, s.kind) for s in symbols] == [
         ("WIDTH", "constant"),
         ("errno", "macro"),
         ("twice", "macro"),
+        ("converted", "macro"),
     ]

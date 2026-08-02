@@ -875,6 +875,43 @@ def test_macro_names_resolve_in_their_own_module(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 0
 
 
+def test_nested_generic_macro_type_arguments_keep_the_outer_view(
+        tmp_path, monkeypatch):
+    """
+    A type argument written in one macro resolves there even when its
+    expansion invokes a generic macro declared in another module.
+    """
+    (tmp_path / "generic.sie").write_text("""
+        @macro convert<T>(value) = value as T;
+        @macro pointer<T>(value) = value as T*;
+    """)
+    (tmp_path / "wrapper.sie").write_text("""
+        import { convert, pointer } from generic;
+
+        @type Private = i64;
+        struct Hidden;
+        @macro widen(value) = convert<Private>(value);
+        @macro hidden_pointer(value) = pointer<Hidden>(value);
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { hidden_pointer, widen } from wrapper;
+
+        struct Local;
+
+        fn main() -> i32 {
+            let value: i64 = widen(42);
+            let local: Local* = null;
+            hidden_pointer(local);
+            return (value - 42) as i32;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0
+
+
 def test_conformance_checks_in_the_interface_view(tmp_path, monkeypatch):
     """
     Conformance expands an action's types without the user's view in the

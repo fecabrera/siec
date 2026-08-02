@@ -311,7 +311,7 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # block's each 'emit' coerces to the target below
     if (isinstance(expr, Var) and expr.name in gen.macros
             and gen.macros[expr.name].params is None):
-        expr = Call(expr.name, [])
+        expr = Call(expr.name, [], expr.type_args)
 
     if isinstance(expr, Call) and expr.name in gen.macros:
         from siec.codegen.macros import macro_expansion, macro_view
