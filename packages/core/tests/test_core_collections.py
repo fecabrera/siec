@@ -1,17 +1,24 @@
-"""Runtime ownership tests for the core List and Map slot storage."""
+"""Runtime ownership tests for core collection storage and iteration."""
 
 import subprocess
+import sys
 from pathlib import Path
 
-from tests.cli.test_cli import run_cli
+from siec.cli import main
 
 
-ROOT = Path(__file__).parents[2]
+ROOT = Path(__file__).parents[3]
 CORE_INCLUDES = (
     ROOT / "packages/libc/src",
     ROOT / "packages/posix/src",
     ROOT / "packages/core/src",
 )
+
+
+def run_cli(monkeypatch, *argv):
+    """Invoke the compiler command without depending on its test helpers."""
+    monkeypatch.setattr(sys, "argv", ["siec", *map(str, argv)])
+    return main()
 
 
 def run_core(monkeypatch, tmp_path, source: str, *arguments: str):
@@ -84,6 +91,38 @@ def test_list_slots_own_growth_replacement_pop_and_reset(monkeypatch, tmp_path):
         if (exercise() != 2) return 1;
         if (clones != 1 or drops != 7 or dropped_ids != 26) return 2;
         return 42;
+    }
+    """)
+    assert result.returncode == 42
+
+
+def test_list_does_not_require_owned_elements_to_be_cloneable(
+        monkeypatch, tmp_path):
+    """A movable, destructible element does not make List falsely Clone."""
+    result = run_core(monkeypatch, tmp_path, r"""
+    import { List, String } from std.collections;
+    import { Formattable } from std.format;
+
+    @static let drops: i32 = 0;
+
+    struct Resource: Destroy, Formattable {
+        value: i32;
+    }
+
+    fn Resource::destroy(&self) {
+        drops += self.value;
+    }
+
+    fn Resource::format(const &self, modifiers: const &char[]) -> String {
+        return String();
+    }
+
+    fn main() -> i32 {
+        {
+            let list = List<Resource>();
+            list.push({ 42 });
+        }
+        return drops;
     }
     """)
     assert result.returncode == 42
