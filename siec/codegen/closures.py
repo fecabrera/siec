@@ -3,7 +3,7 @@
 from llvmlite import ir
 
 from siec.ast import Function
-from siec.codegen.generator import Variable, entry_alloca
+from siec.codegen.generator import Variable
 from siec.codegen.types import fn_type_parts, resolve_type, strip_const
 
 
@@ -47,8 +47,64 @@ def check_closure(gen, expr, scope: dict) -> str:
     return closure_type(expr)
 
 
+def _heap_slot(gen, builder: ir.IRBuilder, type_: ir.Type, name: str,
+               alignment: int | None = None):
+    """Allocate suitably aligned process-lifetime storage for a capture."""
+    from siec.codegen.sizes import target_data
+
+    data = target_data(gen.target)
+    size = type_.get_abi_size(data, context=gen.module.context)
+    natural = type_.get_abi_alignment(data, context=gen.module.context)
+    alignment = max(alignment or 1, natural)
+
+    opaque = ir.PointerType(ir.IntType(8))
+    malloc_type = ir.FunctionType(opaque, [ir.IntType(64)])
+    malloc = gen.module.globals.get("malloc")
+    if malloc is None:
+        malloc = ir.Function(gen.module, malloc_type, name="malloc")
+    elif not isinstance(malloc, ir.Function) or malloc.function_type != malloc_type:
+        raise TypeError("closure storage requires malloc(u64) -> opaque*")
+
+    # malloc already supplies fundamental alignment. Preserve explicit larger
+    # struct alignment as well; environments are intentionally retained when
+    # their opaque pointer escapes into a foreign callback API.
+    requested = size + max(0, alignment - 1)
+    raw = builder.call(malloc, [ir.Constant(ir.IntType(64), requested)],
+                       name=f"{name}.allocation")
+    if alignment > 1:
+        integer = builder.ptrtoint(raw, ir.IntType(64))
+        integer = builder.add(
+            integer, ir.Constant(ir.IntType(64), alignment - 1))
+        integer = builder.and_(
+            integer, ir.Constant(ir.IntType(64), -alignment))
+        raw = builder.inttoptr(integer, opaque)
+    return builder.bitcast(raw, ir.PointerType(type_), name=name)
+
+
+def _promote_capture(gen, builder: ir.IRBuilder, variable: Variable,
+                     name: str) -> None:
+    """Move one captured local into storage which may outlive its frame."""
+    if variable.capture_promoted:
+        return
+
+    value_type = variable.slot.type.pointee
+    alignment = gen.struct_align(variable.type)
+    promoted = _heap_slot(gen, builder, value_type,
+                          f"closure.capture.{name}", alignment)
+    builder.store(builder.load(variable.slot), promoted)
+    variable.slot = promoted
+
+    if variable.drop_flag is not None:
+        promoted_flag = _heap_slot(
+            gen, builder, ir.IntType(1), f"closure.capture.{name}.drop")
+        builder.store(builder.load(variable.drop_flag), promoted_flag)
+        variable.drop_flag = promoted_flag
+
+    variable.capture_promoted = True
+
+
 def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
-    """Build a stack environment and its erased closure pair."""
+    """Build a stable environment and its erased closure pair."""
     params, ret, _ = fn_type_parts(closure_type(expr))
     opaque = ir.PointerType(ir.IntType(8))
     invoke_type = ir.FunctionType(
@@ -64,11 +120,12 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
     captured = [(name, scope[name]) for name in expr.captures
                 if name in scope]
     env_type = ir.LiteralStructType([opaque] * (1 + len(captured)))
-    env = entry_alloca(builder, env_type, f"closure.env.{serial}")
+    env = _heap_slot(gen, builder, env_type, f"closure.env.{serial}")
     erased_invoke = builder.bitcast(invoke, opaque)
     builder.store(erased_invoke, builder.gep(
         env, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)]))
-    for index, (_, variable) in enumerate(captured, 1):
+    for index, (name, variable) in enumerate(captured, 1):
+        _promote_capture(gen, builder, variable, name)
         pointer = builder.bitcast(variable.slot, opaque)
         builder.store(pointer, builder.gep(
             env, [ir.Constant(ir.IntType(32), 0),
@@ -86,7 +143,8 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
                         ir.Constant(ir.IntType(32), index)]))
         slot = inner_builder.bitcast(erased, variable.slot.type)
         inner_scope[name] = Variable(slot, variable.type,
-                                     drop_flag=variable.drop_flag)
+                                     drop_flag=variable.drop_flag,
+                                     capture_promoted=True)
 
     for arg, param in zip(invoke.args[1:], expr.params):
         arg.name = param.name

@@ -41,6 +41,9 @@ class Variable:
     moved: bool = False
     # runtime ownership bit for a value whose type implements Destroy
     drop_flag: ir.Instruction | None = None
+    # a closure may replace the original stack slot with stable heap storage;
+    # every scope entry sharing this Variable then observes the promoted slot
+    capture_promoted: bool = False
 
 
 def make_volatile(inst: ir.Instruction) -> ir.Instruction:

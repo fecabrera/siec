@@ -1927,7 +1927,7 @@ fn Application::connect_activate(
 }
 ```
 
-Captured variables are borrowed from their original storage, and the environment currently has that storage's lexical lifetime. Passing `callback.env` to code which retains it beyond that lifetime is an unsafe operation: the programmer must disconnect the callback before the captured scope ends. A safe library wrapper should tie disconnection to an owned connection or use the foreign API's destroy notification to own and release a promoted environment.
+Captured variables are promoted to stable shared storage when the closure is formed. The original scope and every closure capturing that variable therefore observe the same value, and `callback.env` remains valid when a foreign callback retains it beyond the creating function's return. Promoted closure storage is currently retained for the process lifetime. Future release support can let safe library wrappers reclaim it through a foreign API's destroy notification or an owned connection which disconnects before releasing its environment.
 
 #### Type aliases
 

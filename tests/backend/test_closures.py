@@ -91,6 +91,48 @@ def test_closure_mutates_outer_local(run):
     assert run(source).returncode == 42
 
 
+def test_returned_closure_keeps_captured_storage_alive(run):
+    source = """
+    fn make_callback() -> closure fn() -> i32 {
+        let value = 40;
+        return () -> i32 => {
+            value += 1;
+            return value;
+        };
+    }
+
+    fn main() -> i32 {
+        let callback = make_callback();
+        callback();
+        return callback();
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_returned_closure_environment_works_through_foreign_abi(run):
+    source = """
+    fn invoke_foreign(callback: fn(opaque*) -> i32,
+                      data: opaque*) -> i32 {
+        return callback(data);
+    }
+
+    fn make_callback() -> closure fn() -> i32 {
+        let value = 42;
+        return () -> i32 => { return value; };
+    }
+
+    fn main() -> i32 {
+        let callback = make_callback();
+        return invoke_foreign(
+            callback as fn(opaque*) -> i32,
+            callback.env
+        );
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_method_accepts_arrow_closure(run):
     source = """
     struct Invoker {
