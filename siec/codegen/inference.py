@@ -17,6 +17,7 @@ from siec.ast import (
     Call,
     Cast,
     CharLiteral,
+    ClosureExpr,
     EnumMember,
     Expr,
     Field,
@@ -196,6 +197,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, Move):
         return expr_sie_type(gen, expr.operand, scope)
 
+    if isinstance(expr, ClosureExpr):
+        from siec.codegen.closures import closure_type
+
+        return closure_type(expr)
+
     # a string or array literal is the fat array it builds; only an
     # explicit pointer context takes it as a bare pointer instead
     if isinstance(expr, StrLiteral):
@@ -298,8 +304,11 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         # a call through a function reference yields the reference's return
         # type, a '&T' return reading as the T it aliases
-        if expr.name in scope and strip_const(scope[expr.name].type).startswith("fn("):
-            return strip_reference(fn_type_parts(strip_const(scope[expr.name].type))[1])
+        if (expr.name in scope
+                and strip_const(scope[expr.name].type).startswith(
+                    ("fn(", "closure fn("))):
+            return strip_reference(fn_type_parts(
+                strip_const(scope[expr.name].type))[1])
 
         # the builtin 'enumerate(x)' types as its '__enumerate' instance
         if expr.name == "enumerate":
@@ -415,6 +424,10 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a member access yields the field's type; an aliasing field (a pointer
     # or array) keeps a const base's contract
     if isinstance(expr, Member):
+        base_type = strip_const(expr_sie_type(gen, expr.base, scope) or "")
+        if base_type.startswith("closure fn(") and expr.field == "env":
+            return "opaque*"
+
         # a pure name chain may be a module's member, spelled qualified
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return expr_sie_type(gen, folded, scope)

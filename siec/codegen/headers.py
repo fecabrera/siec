@@ -85,7 +85,8 @@ def resolve_header_type(gen: CodeGenerator, spelling: str | None,
         )
         return f"&{inner}"
 
-    if spelling.startswith("fn("):
+    if spelling.startswith("fn(") or spelling.startswith("closure fn("):
+        closure = spelling.startswith("closure ")
         params, ret, suffix = fn_type_parts(spelling)
         resolved = ",".join(
             resolve_header_type(
@@ -97,7 +98,7 @@ def resolve_header_type(gen: CodeGenerator, spelling: str | None,
             )
             for param in params
         )
-        result = f"fn({resolved})"
+        result = f"{'closure ' if closure else ''}fn({resolved})"
         if ret is not None:
             result += "->" + resolve_header_type(
                 gen,

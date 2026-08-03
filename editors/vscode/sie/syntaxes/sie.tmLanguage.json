@@ -118,7 +118,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.sie",
-                    "match": "\\b(if|else|while|for|foreach|case|when|break|continue|return|defer|drop|emit|try|except)\\b"
+                    "match": "\\b(if|else|while|for|foreach|case|when|break|continue|return|defer|drop|emit|try|except|closure)\\b"
                 },
                 {
                     "name": "keyword.operator.logical.sie",

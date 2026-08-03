@@ -96,6 +96,8 @@ def resolve_macro_use(gen: CodeGenerator, expr, scope: dict) -> MacroUse | None:
     if isinstance(expr, Call):
         if expr.name in scope:
             return None
+        if not hasattr(expr, "macro_argument_file"):
+            expr.macro_argument_file = gen.current_file
         name = _resolve_macro_call(gen, expr)
         return MacroUse(name, expr) if name is not None else None
 
@@ -175,8 +177,11 @@ def macro_expansion(gen: CodeGenerator, call: Call):
             type_args = call.type_args
         else:
             from siec.codegen.aliases import expand_alias
+            from siec.codegen.resolution import expression_view
 
-            type_args = [expand_alias(gen, arg) for arg in call.type_args]
+            with expression_view(gen, call):
+                type_args = [expand_alias(gen, arg)
+                             for arg in call.type_args]
         for arg in type_args:
             if arg.startswith("const ") or arg.startswith("&"):
                 raise TypeError(f"cannot expand macro {call.name!r} with "

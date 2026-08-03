@@ -46,6 +46,9 @@ module.exports = grammar({
     // 'try f()' completes on its own, so what follows the call decides
     // whether an arm is coming or the whole 'try' is an operand
     [$.try_expression, $._expression],
+    // Parentheses begin both grouped expressions and arrow parameters;
+    // the following '=>' selects the closure reading.
+    [$.closure_expression, $.parenthesized_expression],
   ],
 
   rules: {
@@ -391,12 +394,22 @@ module.exports = grammar({
         $.emit_statement,
         $.defer_statement,
         $.drop_statement,
+        $.local_function_declaration,
         $.try_statement,
         $.block,
         ";",
       ),
 
     let_statement: ($) => seq($._let_binding, ";"),
+
+    local_function_declaration: ($) =>
+      seq(
+        "fn",
+        field("name", $.identifier),
+        field("parameters", $.parameters),
+        optional(seq("->", field("return_type", $.type))),
+        field("body", $.block),
+      ),
 
     _let_binding: ($) =>
       seq(
@@ -571,6 +584,7 @@ module.exports = grammar({
         $.compile_time_expression,
         $.asm_expression,
         $.try_expression,
+        $.closure_expression,
       ),
 
     self: ($) => "self",
@@ -581,6 +595,16 @@ module.exports = grammar({
       seq("(", $._expression, ",", commaSep($._expression), optional(","), ")"),
 
     block_expression: ($) => prec(1, seq("{", repeat1($._statement), "}")),
+
+    closure_expression: ($) =>
+      prec(PREC.postfix + 1, seq(
+        field("parameters", $.closure_parameters),
+        optional(seq("->", field("return_type", $.type))),
+        "=>",
+        field("body", $.block),
+      )),
+
+    closure_parameters: ($) => seq("(", commaSep($.parameter), ")"),
 
     // 'try res except (e) { ... }' takes the value a result carried,
     // its arm taking over where an error came back instead; what it
@@ -762,6 +786,7 @@ module.exports = grammar({
         $.reference_type,
         $.const_type,
         $.function_type,
+        $.closure_type,
         $.raw_type,
         $.anonymous_type,
       ),
@@ -788,6 +813,8 @@ module.exports = grammar({
         ")",
         optional(seq("->", $.type)),
       )),
+
+    closure_type: ($) => seq("closure", $.function_type),
 
     raw_type: ($) =>
       prec.right(seq("@raw", $.type_arguments, optional(seq("[", $._expression, "]")))),

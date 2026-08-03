@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from siec.ast import Body, For, Function, Let, Program
+from siec.ast import Body, For, Function, Let, LocalFunction, Program
 from siec.cli import error_parts
 from siec.codegen import CodeGenerator, codegen
 from siec.codegen.generator import Variable
@@ -678,6 +678,12 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
 
         lines[node.name] = node.line
 
+    def declare_local_function(node: LocalFunction) -> None:
+        from siec.codegen.closures import closure_type
+
+        scope[node.name] = Variable(None, closure_type(node.value))
+        lines[node.name] = node.line
+
     def active_body(node) -> Body | None:
         """
         The immediate nested body containing the cursor, wherever a
@@ -719,6 +725,9 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
             if (isinstance(statement, Let) and statement.line
                     and statement.line <= line):
                 declare(statement)
+            elif (isinstance(statement, LocalFunction) and statement.line
+                  and statement.line <= line):
+                declare_local_function(statement)
 
     walk(fn.body)
     return scope, lines

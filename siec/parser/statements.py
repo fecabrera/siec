@@ -22,6 +22,7 @@ from siec.ast import (
     IntLiteral,
     Let,
     LetTuple,
+    LocalFunction,
     Member,
     MemberAssign,
     MethodCall,
@@ -259,6 +260,16 @@ def parse_statement(ts: TokenStream):
     # a bare '{' opens a block statement, a statement list in its own scope
     if tok.syntax == "{":
         return Block(parse_block(ts), line=line)
+
+    # A named function inside a body is a closure value in that lexical
+    # scope. Its signature uses the same compact grammar as an anonymous one.
+    if tok.kind == "kw" and tok.value == "fn":
+        ts.next()
+        name = ts.expect("ident").value
+        from siec.parser.expressions import parse_closure_tail
+
+        value = parse_closure_tail(ts, line, name)
+        return LocalFunction(name, value, line=line)
 
     # 'let name: type' with an optional '= <expr>' initializer; the type
     # may be omitted when an initializer follows to infer it from

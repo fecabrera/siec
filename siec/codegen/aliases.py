@@ -187,13 +187,14 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
 
     # a function reference type expands its parameter and return names,
     # keeping any '*'/'[]' suffix on the reference itself
-    if name.startswith("fn("):
+    if name.startswith("fn(") or name.startswith("closure fn("):
+        closure = name.startswith("closure ")
         params, ret, suffix = fn_type_parts(name)
         expanded_params = ",".join(
             expand_alias(gen, p, seen, checked, parameters)
             for p in params
         )
-        expanded = f"fn({expanded_params})"
+        expanded = f"{'closure ' if closure else ''}fn({expanded_params})"
 
         if ret is not None:
             expanded += f"->{expand_alias(

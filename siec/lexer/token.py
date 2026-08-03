@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "foreach",
             "case", "when", "break", "continue", "emit", "defer", "and", "or",
             "not", "struct", "union", "enum", "true", "false", "null", "as",
-            "try", "except", "move", "drop"}
+            "try", "except", "move", "drop", "closure"}
 
 
 def int_value(text: str) -> int:

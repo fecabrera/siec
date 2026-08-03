@@ -17,6 +17,7 @@ syn keyword sieRepeat while for foreach
 syn keyword sieStatement return break continue emit defer drop
 syn keyword sieException try except
 syn keyword sieOperatorWord and or not as move
+syn keyword sieType closure
 
 " literals
 syn keyword sieBoolean true false

@@ -484,7 +484,9 @@ def unify(pattern: str | None, concrete: str | None,
     if raw_p is not None and raw_c is not None:
         return unify(raw_p[0], raw_c[0], type_params, bindings)
 
-    if pattern.startswith("fn(") and concrete.startswith("fn("):
+    if ((pattern.startswith("fn(") and concrete.startswith("fn("))
+            or (pattern.startswith("closure fn(")
+                and concrete.startswith("closure fn("))):
         p_params, p_ret, _ = fn_type_parts(pattern)
         c_params, c_ret, _ = fn_type_parts(concrete)
         for p, c in zip(p_params, c_params):

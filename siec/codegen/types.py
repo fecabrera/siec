@@ -173,6 +173,9 @@ def fn_type_parts(name: str) -> tuple[list[str], str | None, str]:
     A '->' after the parameter list claims the whole rest of the name for the
     return type; a suffix can only follow a function type with no return.
     """
+    if name.startswith("closure "):
+        name = name.removeprefix("closure ")
+
     # find the ')' matching the opening paren of the parameter list
     depth = 0
     for end, ch in enumerate(name):
@@ -235,6 +238,15 @@ def validate_type(name: str | None, structs: dict | None = None,
 
     if (sized := sized_array(name)) is not None:
         validate_type(sized[0], structs, allow_opaque)
+        return
+
+    if name.startswith("closure fn("):
+        params, ret, suffix = fn_type_parts(name)
+        if suffix:
+            raise TypeError(f"malformed closure type {name!r}")
+        validate_type(ret, structs)
+        for param in params:
+            validate_type(param, structs)
         return
 
     if name.startswith("fn("):
@@ -300,6 +312,17 @@ def resolve_type(name: str | None, structs: dict | None = None,
     # directs the automatic backing a declaration allocates
     if (sized := sized_array(name)) is not None:
         return resolve_type(sized[0], structs, allow_opaque)
+
+    # A closure carries its erased invocation function and environment.
+    if name.startswith("closure fn("):
+        params, ret, suffix = fn_type_parts(name)
+        if suffix:
+            raise TypeError(f"malformed closure type {name!r}")
+        validate_type(ret, structs)
+        for param in params:
+            validate_type(param, structs)
+        opaque = ir.PointerType(ir.IntType(8))
+        return ir.LiteralStructType([opaque, opaque])
 
     # a function reference type resolves to a pointer to the function's signature
     if name.startswith("fn("):

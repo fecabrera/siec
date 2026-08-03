@@ -177,6 +177,13 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         target_name = strip_const(expr.type)
         source_name = strip_const(operand_name)
 
+        if (target_name.startswith("fn(")
+                and (source_name or "").startswith("closure fn(")):
+            from siec.codegen.closures import emit_callback_adapter
+
+            return emit_callback_adapter(
+                gen, builder, source_name, target_name)
+
         # Function references are pointers to their declared signatures.
         # An explicit cast may erase or restore that signature for C APIs
         # such as GLib's GCallback; the programmer owns the ABI contract.

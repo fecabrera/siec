@@ -95,6 +95,10 @@ def type_layout(gen: CodeGenerator, name: str | None, *,
     if (sized := sized_array(name)) is not None:
         name = sized[0]
 
+    if name.startswith("closure fn("):
+        pointer = primitive_layout(gen, ir.PointerType(ir.IntType(8)))
+        return aggregate_layout([pointer, pointer])
+
     if name.startswith("fn("):
         _, _, suffix = fn_type_parts(name)
         layout = primitive_layout(gen, ir.PointerType(ir.IntType(8)))

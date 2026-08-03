@@ -1880,6 +1880,55 @@ fn main() -> i32 {
 }
 ```
 
+#### Closures and nested functions
+
+An anonymous `() => { ... }` expression is a closure: it may use variables from the surrounding lexical scope without adding them to its declared parameter list. A named function declared inside another function behaves the same way. Parameters are typed inside the parentheses, and a return type goes before the arrow: `(value: i32) -> i32 => { return value; }`.
+
+```
+fn main() -> i32 {
+    let value = 40;
+
+    fn add_two() -> i32 {
+        return value + 2;
+    }
+
+    let increment = () => { value += 1; };
+    increment();
+    return add_two() + value - 41; // 42
+}
+```
+
+A raw `fn(...)` is one ABI function pointer and cannot carry captures. A closure instead has the explicit type `closure fn(...)`, represented by erased invocation code and an environment pointer. Parameters which retain or invoke a capturing function therefore say so:
+
+```
+fn invoke(callback: closure fn()) {
+    callback();
+}
+
+let value = 42;
+invoke(() => { use(value); });
+```
+
+`callback.env` exposes the opaque environment pointer for foreign callback APIs whose `user_data` parameter carries it. An explicit cast adapts the closure to the foreign signature: that signature must end in `opaque*`, its leading parameters must begin with the closure's declared parameters, and any parameters between them are ignored by the closure. A generic macro can package the cast while leaving the ABI visible at the call site:
+
+```
+@macro G_CALLBACK<ABI>(callback) = callback as ABI as GCallback;
+
+fn Application::connect_activate(
+    &self,
+    callback: closure fn()
+) {
+    g_signal_connect(
+        self.handle,
+        "activate",
+        G_CALLBACK<fn(GtkApplication*, opaque*)>(callback),
+        callback.env
+    );
+}
+```
+
+Captured variables are borrowed from their original storage, and the environment currently has that storage's lexical lifetime. Passing `callback.env` to code which retains it beyond that lifetime is an unsafe operation: the programmer must disconnect the callback before the captured scope ends. A safe library wrapper should tie disconnection to an owned connection or use the foreign API's destroy notification to own and release a promoted environment.
+
 #### Type aliases
 
 Type aliases give an existing type expression a new name. They're declared through `@type` followed by their name, `=`, and the aliased type expression, ending in `;`:

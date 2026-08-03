@@ -14,6 +14,7 @@ from siec.ast import (
     Case,
     Cast,
     CharLiteral,
+    ClosureExpr,
     CompoundAssign,
     Continue,
     Defer,
@@ -30,6 +31,7 @@ from siec.ast import (
     IntLiteral,
     Let,
     LetTuple,
+    LocalFunction,
     Member,
     MemberAssign,
     MethodCall,
@@ -204,6 +206,13 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
     with source_location(line=getattr(stmt, "line", 0)):
         if line := getattr(stmt, "line", 0):
             gen.current_line = line
+
+        if isinstance(stmt, LocalFunction):
+            from siec.codegen.closures import check_closure
+
+            scope[stmt.name] = checked_variable(
+                check_closure(gen, stmt.value, scope))
+            return False
 
         if isinstance(stmt, Let):
             inferred = stmt.type is None
@@ -701,6 +710,15 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
     if expr is None:
         return None
 
+    if isinstance(expr, ClosureExpr):
+        from siec.codegen.closures import check_closure
+
+        actual = check_closure(gen, expr, scope)
+        if expected is not None and strip_const(expected) != actual:
+            raise TypeError(f"cannot use a {actual!r} value where "
+                            f"{expected!r} is expected")
+        return actual
+
     if isinstance(expr, Var):
         from siec.codegen.constants import constant_view, find_constant
         from siec.codegen.generics import (
@@ -764,6 +782,10 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         return result
 
     if isinstance(expr, Member):
+        base_type = strip_const(expr_sie_type(gen, expr.base, scope) or "")
+        if base_type.startswith("closure fn(") and expr.field == "env":
+            return "opaque*"
+
         from siec.codegen.resolution import fold_qualified
 
         if (folded := fold_qualified(gen, expr, scope)) is not None:
@@ -935,7 +957,12 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             expr.type = expand_alias(gen, expr.type)
             expr.expanded = True
         validate_type(expr.type, gen.structs)
-        check_expression(gen, expr.operand, scope)
+        operand_type = check_expression(gen, expr.operand, scope)
+        if ((operand_type or "").startswith("closure fn(")
+                and expr.type.startswith("fn(")):
+            from siec.codegen.closures import validate_callback_adapter
+
+            validate_callback_adapter(operand_type, expr.type)
         return expr.type
 
     if isinstance(expr, NullLiteral):
@@ -1283,7 +1310,7 @@ def check_indirect_call(gen: CodeGenerator, call: Call, scope: dict,
                         type_name: str) -> str | None:
     """Check a call through a function-typed variable or global."""
     type_name = strip_const(type_name)
-    if not type_name.startswith("fn("):
+    if not type_name.startswith(("fn(", "closure fn(")):
         raise TypeError(
             f"cannot call non-function variable {call.name!r}")
     params, ret, suffix = fn_type_parts(type_name)

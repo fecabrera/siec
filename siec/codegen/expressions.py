@@ -18,6 +18,7 @@ from siec.ast import (
     Call,
     Cast,
     CharLiteral,
+    ClosureExpr,
     Emit,
     EnumMember,
     Expr,
@@ -77,6 +78,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     """
     Emit an expression, coercing literals to expected_type when given.
     """
+    if isinstance(expr, ClosureExpr):
+        from siec.codegen.closures import emit_closure
+
+        return emit_closure(gen, builder, expr, scope)
+
     # A compound indexed assignment shares this wrapper between its getter
     # and setter. The first typed argument context evaluates it; the second
     # receives the exact same SSA value.
@@ -400,6 +406,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_slice(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, Member):
+        base_name = strip_const(expr_sie_type(gen, expr.base, scope) or "")
+        if base_name.startswith("closure fn(") and expr.field == "env":
+            closure = emit_expression(gen, builder, expr.base, None, scope)
+            return builder.extract_value(closure, 1, name="closure.env")
+
         # a pure name chain may be a module's member, spelled qualified
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_expression(gen, builder, folded, expected_type, scope)

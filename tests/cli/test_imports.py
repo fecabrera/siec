@@ -618,6 +618,30 @@ def test_types_resolve_through_module_bindings(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_qualified_struct_constructor_uses_resolved_type(tmp_path,
+                                                         monkeypatch):
+    """A qualified constructor keeps the type its module lookup resolved."""
+    (tmp_path / "shapes.sie").write_text("""
+        struct Point {
+            x: i32;
+
+            fn init(&self, x: i32) { self.x = x; }
+        }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import shapes;
+
+        fn main() -> i32 {
+            let point = shapes.Point(42);
+            return point.x;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_member_imported_types_come_into_view(tmp_path, monkeypatch):
     """
     'import { Point, Box as Crate } from shapes;' binds types unqualified,
@@ -956,6 +980,39 @@ def test_nested_generic_macro_type_arguments_keep_the_outer_view(
             let local: Local* = null;
             hidden_pointer(local);
             return (value - 42) as i32;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0
+
+
+def test_generic_macro_type_arguments_keep_the_callers_view(
+        tmp_path, monkeypatch):
+    """
+    A direct generic macro call resolves its explicit type arguments where
+    the call was written, even when the macro lives in another module.
+    """
+    (tmp_path / "types.sie").write_text("struct Widget;\n")
+    (tmp_path / "generic.sie").write_text(
+        "@macro convert<T>(value) = value as T;\n")
+    (tmp_path / "wrapper.sie").write_text("""
+        import { Widget } from types;
+        import { convert } from generic;
+
+        fn converted() -> fn(Widget*, opaque*) {
+            let callback: fn(Widget*, opaque*) = null;
+            return convert<fn(Widget*, opaque*)>(callback);
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { converted } from wrapper;
+
+        fn main() -> i32 {
+            converted();
+            return 0;
         }
     """)
 

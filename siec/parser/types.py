@@ -53,6 +53,9 @@ def parse_type(ts: TokenStream) -> str:
         ts.next()
 
         name = kind + "{" + ";".join(parts) + "}"
+    elif ts.peek().value == "closure":
+        ts.next()
+        name = f"closure {parse_fn_type(ts)}"
     elif ts.peek().value == "fn":
         name = parse_fn_type(ts)
     else:

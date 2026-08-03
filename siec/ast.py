@@ -180,6 +180,26 @@ class Cast:
 
 
 @dataclass
+class ClosureExpr:
+    """An anonymous or nested function together with its captured scope."""
+    params: list["Param"]
+    return_type: str | None
+    body: list
+    name: str | None = None
+    captures: dict = field(default_factory=dict)
+    line: int = 0
+    file: str = ""
+
+
+@dataclass
+class LocalFunction:
+    """A named closure declaration inside a function body."""
+    name: str
+    value: ClosureExpr
+    line: int = 0
+
+
+@dataclass
 class NullLiteral:
     """
     The 'null' pointer literal: an opaque* value adopting whatever pointer

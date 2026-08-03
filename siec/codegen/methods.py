@@ -723,7 +723,10 @@ def constructor_type(gen: CodeGenerator, call, symbol: str | None) -> str | None
         raise TypeError(f"generic struct {base!r} needs its type arguments "
                         f"to construct: '{base}<...>()'")
 
-    canonical = expand_alias(gen, name)
+    # ``symbol`` has already passed plain or qualified declaration lookup.
+    # Do not gate its canonical spelling a second time as though the caller
+    # had written that unqualified name.
+    canonical = expand_alias(gen, name, checked=False)
     return canonical if strip_const(canonical) in gen.structs else None
 
 

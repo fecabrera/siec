@@ -429,7 +429,9 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
         symbol = gen.resolve_symbol(call.name)
         var_type, slot = strip_const(gen.globals[symbol]), gen.module.globals[symbol]
 
-    if not var_type.startswith("fn(") or fn_type_parts(var_type)[2]:
+    closure = var_type.startswith("closure fn(")
+    if (not var_type.startswith(("fn(", "closure fn("))
+            or fn_type_parts(var_type)[2]):
         raise TypeError(f"cannot call non-function variable {call.name!r}")
 
     sie_params = fn_type_parts(var_type)[0]
@@ -438,6 +440,12 @@ def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
                         f"{len(sie_params)} arguments, got {len(call.args)}")
 
     callee = builder.load(slot, name=call.name)
+    if closure:
+        from siec.codegen.closures import emit_closure_call
+
+        return emit_closure_call(
+            gen, builder, callee, var_type, call.args, scope)
+
     args = [emit_argument(gen, builder, arg, sie_params[i], scope)
             for i, arg in enumerate(call.args)]
 

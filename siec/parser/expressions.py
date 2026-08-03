@@ -11,6 +11,7 @@ from siec.ast import (
     Call,
     Cast,
     CharLiteral,
+    ClosureExpr,
     Emit,
     EnumMember,
     Expr,
@@ -32,6 +33,7 @@ from siec.ast import (
     TypeOf,
     UnaryOp,
     Var,
+    Param,
 )
 from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
@@ -253,6 +255,14 @@ def parse_primary(ts: TokenStream) -> Expr:
 
     # '(' groups a full subexpression
     if tok.syntax == "(":
+        saved = ts.pos
+        try:
+            closure = parse_lambda_tail(ts, tok.line)
+        except SyntaxError:
+            ts.pos = saved
+        else:
+            return parse_postfix(ts, closure)
+
         expr = parse_expression(ts)
 
         # a ',' turns the grouping into a tuple literal '(a, b, ...)';
@@ -446,6 +456,52 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def parse_closure_tail(ts: TokenStream, line: int,
+                       name: str | None = None) -> ClosureExpr:
+    """Parse the signature and body after an anonymous or local ``fn``."""
+    ts.expect("sym", "(")
+    params = []
+    while ts.peek().syntax != ")":
+        if params:
+            ts.expect("sym", ",")
+        param_name = ts.expect("ident").value
+        ts.expect("sym", ":")
+        params.append(Param(param_name, parse_type(ts)))
+    ts.next()
+
+    return_type = None
+    if ts.peek().value == "->":
+        ts.next()
+        return_type = parse_type(ts)
+
+    from siec.parser.statements import parse_block
+
+    return ClosureExpr(params, return_type, parse_block(ts), name=name,
+                       line=line)
+
+
+def parse_lambda_tail(ts: TokenStream, line: int) -> ClosureExpr:
+    """Parse ``(...) [-> T] => { ... }`` after its opening parenthesis."""
+    params = []
+    while ts.peek().syntax != ")":
+        if params:
+            ts.expect("sym", ",")
+        name = ts.expect("ident").value
+        ts.expect("sym", ":")
+        params.append(Param(name, parse_type(ts)))
+    ts.next()
+
+    return_type = None
+    if ts.peek().value == "->":
+        ts.next()
+        return_type = parse_type(ts)
+    ts.expect("sym", "=>")
+
+    from siec.parser.statements import parse_block
+
+    return ClosureExpr(params, return_type, parse_block(ts), line=line)
 
 
 def parse_type_arguments(ts: TokenStream,

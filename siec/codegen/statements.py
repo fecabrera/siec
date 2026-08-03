@@ -22,6 +22,7 @@ from siec.ast import (
     IndexAssign,
     Let,
     LetTuple,
+    LocalFunction,
     Member,
     MemberAssign,
     MethodCall,
@@ -164,7 +165,15 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     """
     Emit a single statement into the builder's current block.
     """
-    if isinstance(stmt, Let):
+    if isinstance(stmt, LocalFunction):
+        from siec.codegen.closures import closure_type, emit_closure
+
+        type_name = closure_type(stmt.value)
+        value = emit_closure(gen, builder, stmt.value, scope)
+        slot = entry_alloca(builder, value.type, stmt.name)
+        builder.store(value, slot)
+        scope[stmt.name] = Variable(slot, type_name)
+    elif isinstance(stmt, Let):
         # an unannotated 'let' takes its type from its initializer
         if not getattr(stmt, "expanded", False):
             stmt.type = expand_alias(gen, stmt.type)

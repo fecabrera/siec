@@ -1,0 +1,48 @@
+==========================
+Arrow and nested closures
+==========================
+
+fn main() {
+  let value = 42;
+  let callback: closure fn() = () => {
+    use(value);
+  };
+
+  fn nested() {
+    use(value);
+  }
+}
+
+---
+
+(source_file
+  (function_declaration
+    (function_name
+      (identifier))
+    (parameters)
+    (block
+      (let_statement
+        (identifier)
+        (integer_literal))
+      (let_statement
+        (identifier)
+        (type
+          (closure_type
+            (function_type)))
+        (closure_expression
+          (closure_parameters)
+          (block
+            (expression_statement
+              (call_expression
+                (identifier)
+                (arguments
+                  (identifier)))))))
+      (local_function_declaration
+        (identifier)
+        (parameters)
+        (block
+          (expression_statement
+            (call_expression
+              (identifier)
+              (arguments
+                (identifier)))))))))
