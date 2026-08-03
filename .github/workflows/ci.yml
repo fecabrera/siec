@@ -28,8 +28,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pipenv run coverage run -m pytest -v tests
-          pipenv run coverage run --append -m pytest -v packages/*/tests
+          pipenv run coverage run -m pytest -v
           echo "# Coverage Report (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           pipenv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
