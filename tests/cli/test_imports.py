@@ -67,6 +67,31 @@ def test_qualified_macro_access(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_imported_macro_preserves_qualified_argument_view(tmp_path,
+                                                          monkeypatch):
+    """A macro resolves a qualified argument where its caller wrote it."""
+    (tmp_path / "callbacks.sie").write_text("""
+        @type Callback = fn() -> i32;
+        @macro AS_CALLBACK(value) = value as Callback;
+    """)
+    (tmp_path / "answer.sie").write_text("""
+        fn get() -> i32 { return 42; }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import callbacks;
+        import answer;
+
+        fn main() -> i32 {
+            let callback = callbacks.AS_CALLBACK(answer.get);
+            return callback();
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_member_imports_with_aliases(tmp_path, monkeypatch):
     """
     'import { f as g, C } from a.b;' binds chosen members unqualified.

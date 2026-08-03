@@ -764,7 +764,7 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         return result
 
     if isinstance(expr, Member):
-        from siec.codegen.inference import fold_qualified
+        from siec.codegen.resolution import fold_qualified
 
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return check_expression(gen, folded, scope, expected)

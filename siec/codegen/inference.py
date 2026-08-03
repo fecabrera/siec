@@ -41,6 +41,7 @@ from siec.ast import (
 )
 from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator, StructInfo
+from siec.codegen.resolution import fold_qualified
 from siec.codegen.types import (
     fn_type_parts,
     is_aliasing,
@@ -771,34 +772,6 @@ def untyped_reason(gen: CodeGenerator, expr: Expr, scope: dict) -> Exception | N
             return NameError(f"undefined variable {expr.name!r}")
 
     return None
-
-
-def fold_qualified(gen: CodeGenerator, expr: Expr, scope: dict):
-    """
-    Fold a pure 'a.b.name' member chain into the Var its dotted name
-    resolves to through the file's module bindings; None for any other
-    shape, or when no prefix is bound. A scoped variable shadows a binding.
-    """
-    names, node = [], expr
-    while isinstance(node, Member):
-        names.append(node.field)
-        node = node.base
-
-    if not isinstance(node, Var) or node.name in scope:
-        return None
-
-    names.append(node.name)
-    names.reverse()
-
-    found = gen.resolve_member(names)
-    if found is None:
-        return None
-
-    # the module the chain reached rides along, resolving WHICH module's
-    # constant the member names when several share it
-    var = Var(found[0], qualified=True)
-    var.module_file = found[1]
-    return var
 
 
 def enum_backing(gen: CodeGenerator, name: str | None) -> str | None:

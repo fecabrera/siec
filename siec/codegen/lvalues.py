@@ -8,8 +8,8 @@ from llvmlite import ir
 from siec.ast import (CachedExpr, Call, Cast, Index, Member, MethodCall,
                       UnaryOp, Var)
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
-from siec.codegen.inference import (expr_sie_type, fold_qualified, item_call,
-                                    member_field)
+from siec.codegen.inference import expr_sie_type, item_call, member_field
+from siec.codegen.resolution import fold_qualified
 from siec.codegen.types import is_const, strip_reference
 
 

@@ -8,6 +8,7 @@ from siec.ast import (Assign, Block, BlockExpr, Call, Emit, Index,
                       IndexAssign, Member, MemberAssign, Var)
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
+from siec.codegen.resolution import fold_qualified
 
 
 def _resolve_macro_name(gen: CodeGenerator, name: str) -> str | None:
@@ -102,19 +103,9 @@ def resolve_macro_use(gen: CodeGenerator, expr, scope: dict) -> MacroUse | None:
     # as part of declaration resolution so lvalue paths and value paths see
     # exactly the same macro use.
     if isinstance(expr, Member):
-        names = []
-        root = expr
-        while isinstance(root, Member):
-            names.append(root.field)
-            root = root.base
-        if not isinstance(root, Var) or root.name in scope:
+        var = fold_qualified(gen, expr, scope)
+        if var is None:
             return None
-        names.append(root.name)
-        found = gen.resolve_member(list(reversed(names)))
-        if found is None:
-            return None
-        var = Var(found[0], qualified=True)
-        var.module_file = found[1]
         return resolve_macro_use(gen, var, scope)
 
     if not isinstance(expr, Var) or expr.name in scope:

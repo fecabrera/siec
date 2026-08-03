@@ -57,7 +57,6 @@ from siec.codegen.inference import (
     check_signedness,
     enum_backing,
     expr_sie_type,
-    fold_qualified,
     hoist_member,
     is_float,
     member_field,
@@ -68,6 +67,7 @@ from siec.codegen.inference import (
     type_info,
     valueless_try,
 )
+from siec.codegen.resolution import fold_qualified
 from siec.codegen.types import (is_array_struct, is_reference, raw_array,
                                 resolve_type, strip_const, strip_reference)
 

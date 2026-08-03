@@ -403,7 +403,7 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # folds through its module binding first
     if target_name is not None and target_name.startswith("fn("):
         from siec.codegen.generics import reference_for_target
-        from siec.codegen.inference import fold_qualified
+        from siec.codegen.resolution import fold_qualified
 
         candidate = fold_qualified(gen, expr, scope) if isinstance(expr, Member) else expr
         if (isinstance(candidate, Var) and candidate.type_args is None
