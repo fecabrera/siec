@@ -1,0 +1,29 @@
+import {
+    GtkWidget,
+    GtkAlign,
+    Handler,
+    gtk_button_new_with_label,
+    gtk_widget_set_halign,
+    gtk_widget_set_valign,
+} from gtk;
+import { G_CALLBACK, g_signal_connect } from gobject;
+
+struct Button: Handler<GtkWidget> {
+    handle: GtkWidget*;
+
+    fn init(&self, label: const char[]) {
+        self.handle = gtk_button_new_with_label(label);
+    }
+
+    fn set_halign(&self, align: GtkAlign) {
+        gtk_widget_set_halign(self.handle, align);
+    }
+
+    fn set_valign(&self, align: GtkAlign) {
+        gtk_widget_set_valign(self.handle, align);
+    }
+
+    fn connect_clicked(&self, callback: closure fn()) {
+        g_signal_connect(self.handle, "clicked", G_CALLBACK<fn(GtkWidget*, opaque*)>(callback), callback.env);
+    }
+}

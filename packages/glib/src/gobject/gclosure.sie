@@ -32,4 +32,4 @@ struct GClosure;
  * 
  * Cast a function pointer to a #GCallback.
  */
-@macro G_CALLBACK(f) = f as GCallback;
+@macro G_CALLBACK<T>(cb) = cb as T as GCallback;

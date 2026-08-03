@@ -5,3 +5,8 @@
 @include("gtk/gtktypes")
 @include("gtk/gtkwidget")
 @include("gtk/gtkwindow")
+
+@include("_wrapper/application");
+@include("_wrapper/button");
+@include("_wrapper/handler");
+@include("_wrapper/window");

@@ -11,7 +11,7 @@ enum GConnectFlags {
     g_signal_connect_data(instance, detailed_signal as const gchar*, c_handler, data, null, GConnectFlags::DEFAULT);
 
 @macro g_signal_connect_swapped(instance, detailed_signal, c_handler, data) =
-    g_signal_connect_data (instance, detailed_signal as const gchar*, c_handler, data, null, GConnectFlags::SWAPPED);
+    g_signal_connect_data(instance, detailed_signal as const gchar*, c_handler, data, null, GConnectFlags::SWAPPED);
 
 @extern
 fn g_signal_connect_data(instance: gpointer,
