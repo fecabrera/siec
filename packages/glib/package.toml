@@ -8,4 +8,4 @@ keywords = ["bindings", "glib"]
 
 [library]
 sources = ["src/"]
-libs = ["glib-2.0", "gobject-2.0", "gio-2.0", "graphene-1.0", "intl"]
+libs = ["glib-2.0", "gobject-2.0", "gio-2.0", "graphene-1.0"]
