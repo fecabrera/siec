@@ -1,6 +1,21 @@
-import { G_APPLICATION, GApplicationFlags, g_application_run } from gio;
-import { GtkApplication, Handler, gtk_application_new } from gtk;
-import { G_CALLBACK, g_signal_connect, g_object_unref } from gobject;
+import {
+    G_APPLICATION,
+    GApplicationFlags,
+    g_application_run,
+} from gio;
+import {
+    GtkApplication,
+    GtkWindow,
+    Handler,
+    gtk_application_new,
+    gtk_application_add_window,
+    gtk_application_remove_window,
+} from gtk;
+import {
+    G_CALLBACK,
+    g_signal_connect,
+    g_object_unref,
+} from gobject;
 
 struct Application: Handler<GtkApplication>, Destroy {
     handle: GtkApplication*;
@@ -11,6 +26,14 @@ struct Application: Handler<GtkApplication>, Destroy {
 
     fn destroy(&self) {
         g_object_unref(self.handle);
+    }
+
+    fn add_window(&self, obj: &Handler<GtkWindow*>) {
+        gtk_application_add_window(obj.handle);
+    }
+
+    fn remove_window(&self, obj: &Handler<GtkWindow*>) {
+        gtk_application_remove_window(obj.handle);
     }
 
     fn connect_activate(&self, callback: closure fn()) {

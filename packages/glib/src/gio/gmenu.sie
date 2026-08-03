@@ -1,0 +1,60 @@
+import { GType } from gobject;
+import { gint } from glib;
+import { GMenuModel } from gmenumodel;
+
+struct GMenu;
+struct GMenuItem;
+
+@extern fn g_menu_get_type() -> GType;
+@extern fn g_menu_new() -> GMenu*;
+@extern fn g_menu_freeze(menu: GMenu*);
+@extern fn g_menu_insert_item(menu: GMenu*,
+                              position: gint,
+                              item: GMenuItem*);
+@extern fn g_menu_prepend_item(menu: GMenu*,
+                               item: GMenuItem*);
+@extern fn g_menu_append_item(menu: GMenu*,
+                              item: GMenuItem*);
+@extern fn g_menu_remove(menu: GMenu*,
+                         position: gint);
+@extern fn g_menu_remove_all(menu: GMenu*);
+@extern fn g_menu_insert(menu: GMenu*,
+                         position: gint,
+                         label: const char*,
+                         detailed_action: const char*);
+@extern fn g_menu_prepend(menu: GMenu*,
+                          label: const char*,
+                          detailed_action: const char*);
+@extern fn g_menu_append(menu: GMenu*,
+                         label: const char*,
+                         detailed_action: const char*);
+@extern fn g_menu_insert_section(menu: GMenu*,
+                                 position: gint,
+                                 label: const char*,
+                                 section: GMenuModel*);
+@extern fn g_menu_prepend_section(menu: GMenu*,
+                                  label: const char*,
+                                  section: GMenuModel*);
+@extern fn g_menu_append_section(menu: GMenu*,
+                                 label: const char*,
+                                 section: GMenuModel*);
+@extern fn g_menu_insert_submenu(menu: GMenu*,
+                                 position: gint,
+                                 label: const char*,
+                                 section: GMenuModel*);
+@extern fn g_menu_prepend_submenu(menu: GMenu*,
+                                  label: const char*,
+                                  section: GMenuModel*);
+@extern fn g_menu_append_submenu(menu: GMenu*,
+                                 label: const char*,
+                                 section: GMenuModel*);
+
+@extern fn g_menu_item_get_type() -> GType;
+@extern fn g_menu_item_new(label: const char*,
+                           detailed_action: const char*) -> GMenuItem*;
+@extern fn g_menu_item_new_from_model(model: GMenuModel*,
+                                      item_index: gint) -> GMenuItem*;
+@extern fn g_menu_item_new_submenu(label: const char*,
+                                   submenu: GMenuModel*) -> GMenuItem*;
+@extern fn g_menu_item_new_section(label: const char*,
+                                   section: GMenuModel*) -> GMenuItem*;

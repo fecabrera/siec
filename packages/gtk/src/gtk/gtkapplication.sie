@@ -1,6 +1,41 @@
-import { GApplicationFlags } from gio;
+import { GApplicationFlags, GMenuModel } from gio;
+import { guint } from glib;
+import { GtkWindow } from gtkwindow;
 
 struct GtkApplication;
 
-@extern
-fn gtk_application_new(application_id: const char*, flags: GApplicationFlags) -> GtkApplication*;
+@extern fn gtk_application_new(application_id: const char*,
+                               flags: GApplicationFlags) -> GtkApplication*;
+@extern fn gtk_application_add_window(application: GtkApplication*,
+                                      window: GtkWindow*);
+@extern fn gtk_application_remove_window(application: GtkApplication*,
+                                         window: GtkWindow*);
+
+@extern fn gtk_application_get_menubar(application: GtkApplication*) -> GMenuModel*;
+@extern fn gtk_application_set_menubar(application: GtkApplication*,
+                                       menubar: GMenuModel*);
+
+enum GtkApplicationInhibitFlags {
+    LOGOUT  = (1 << 0),
+    SWITCH  = (1 << 1),
+    SUSPEND = (1 << 2),
+    IDLE    = (1 << 3),
+}
+
+@extern fn gtk_application_inhibit(application: GtkApplication*,
+                                   window: GtkWindow*,
+                                   flags: GtkApplicationInhibitFlags,
+                                   reason: const char*) -> guint;
+@extern fn gtk_application_uninhibit(application: GtkApplication*,
+                                     cookie: guint);
+@extern fn gtk_application_get_window_by_id(application: GtkApplication*,
+                                            id: guint) -> GtkWindow*;
+@extern fn gtk_application_get_active_window(application: GtkApplication*) -> GtkWindow*;
+@extern fn gtk_application_list_action_descriptions(application: GtkApplication*) -> char**;
+@extern fn gtk_application_get_accels_for_action(application: GtkApplication*,
+                                                 detailed_action_name: const char*) -> char**;
+@extern fn gtk_application_get_actions_for_accel(application: GtkApplication*,
+                                                 accel: const char*) -> char**;
+@extern fn gtk_application_set_accels_for_action(application: GtkApplication*,
+                                                 detailed_action_name: const char*,
+                                                 accels: const char*);

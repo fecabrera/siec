@@ -1,3 +1,5 @@
 @include("gio/gapplication")
 @include("gio/gioenums")
 @include("gio/giotypes")
+@include("gio/gmenu")
+@include("gio/gmenumodel")

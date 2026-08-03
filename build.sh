@@ -1,6 +1,4 @@
 #!/bin/bash
-SIEC="${SIEC:-pipenv run python -m siec}"
-
 run_echo() {
     echo "$@"
     $@ || exit 1

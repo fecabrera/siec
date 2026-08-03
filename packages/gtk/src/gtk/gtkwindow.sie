@@ -1,5 +1,7 @@
 import { G_TYPE_CHECK_INSTANCE_CAST, GType } from gobject;
+import { gboolean } from glib;
 import { GtkWidget } from gtktypes;
+import { GtkApplication } from gtkapplication;
 
 @macro GTK_TYPE_WINDOW = gtk_window_get_type();
 @macro GTK_WINDOW(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkWindow>(obj, GTK_TYPE_WINDOW);
@@ -7,12 +9,27 @@ import { GtkWidget } from gtktypes;
 struct GtkWindow;
 
 @extern fn gtk_window_get_type() -> GType;
-@extern fn gtk_window_present(window: GtkWindow*);
-@extern fn gtk_window_set_title(window: GtkWindow*, title: const char*);
+@extern fn gtk_window_new() -> GtkWidget*;
+@extern fn gtk_window_set_title(window: GtkWindow*,
+                                title: const char*);
 @extern fn gtk_window_get_title(window: GtkWindow*) -> const char*;
+@extern fn gtk_window_set_startup_id(window: GtkWindow*,
+                                     startup_id: const char*);
 
-@extern fn gtk_window_set_child(window: GtkWindow*, child: GtkWidget*);
+@extern fn gtk_window_set_default_widget(window: GtkWindow*,
+                                         default_widget: GtkWidget*);
+@extern fn gtk_window_get_default_widget(window: GtkWindow*) -> GtkWidget*;
 
+@extern fn gtk_window_set_icon_name(window: GtkWindow*,
+                                    name: const char*);
+@extern fn gtk_window_get_icon_name(window: GtkWindow*) -> const char*;
+@extern fn gtk_window_set_default_icon_name(name: const char*);
+@extern fn gtk_window_get_default_icon_name() -> const char*;
+@extern fn gtk_window_set_modal(window: GtkWindow*,
+                                modal: gboolean);
+@extern fn gtk_window_get_modal(window: GtkWindow*) -> gboolean;
+
+@extern fn gtk_window_present(window: GtkWindow*);
 @extern fn gtk_window_minimize(window: GtkWindow*);
 @extern fn gtk_window_unminimize(window: GtkWindow*);
 @extern fn gtk_window_maximize(window: GtkWindow*);
@@ -20,6 +37,15 @@ struct GtkWindow;
 @extern fn gtk_window_fullscreen(window: GtkWindow*);
 @extern fn gtk_window_unfullscreen(window: GtkWindow*);
 @extern fn gtk_window_close(window: GtkWindow*);
-
-@extern fn gtk_window_set_default_size(window: GtkWindow*, width: i32, height: i32);
-@extern fn gtk_window_get_default_size(window: GtkWindow*, width: i32*, height: i32*);
+@extern fn gtk_window_set_default_size(window: GtkWindow*,
+                                       width: i32,
+                                       height: i32);
+@extern fn gtk_window_get_default_size(window: GtkWindow*,
+                                       width: i32*,
+                                       height: i32*);
+@extern fn gtk_window_get_application(window: GtkWindow*) -> GtkApplication*;
+@extern fn gtk_window_set_application(window: GtkWindow*,
+                                      application: GtkApplication*);
+@extern fn gtk_window_set_child(window: GtkWindow*,
+                                child: GtkWidget*);
+@extern fn gtk_window_get_child(window: GtkWindow*) -> GtkWidget*;

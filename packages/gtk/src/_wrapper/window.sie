@@ -5,15 +5,24 @@ import {
     Application,
     Handler,
     gtk_application_window_new,
+    gtk_window_new,
     gtk_window_set_title,
     gtk_window_set_default_size,
     gtk_window_set_child,
     gtk_window_present,
+    gtk_window_minimize,
+    gtk_window_unminimize,
+    gtk_window_maximize,
+    gtk_window_unmaximize,
     gtk_window_close,
 } from gtk;
 
 struct Window: Handler<GtkWidget> {
     handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = gtk_window_new();
+    }
 
     fn init(&self, app: &Application) {
         self.handle = gtk_application_window_new(app.handle);
@@ -33,6 +42,22 @@ struct Window: Handler<GtkWidget> {
 
     fn present(&self) {
         gtk_window_present(GTK_WINDOW(self.handle));
+    }
+
+    fn minimize(&self) {
+        gtk_window_minimize(GTK_WINDOW(self.handle));
+    }
+
+    fn unminimize(&self) {
+        gtk_window_unminimize(GTK_WINDOW(self.handle));
+    }
+
+    fn maximize(&self) {
+        gtk_window_maximize(GTK_WINDOW(self.handle));
+    }
+    
+    fn unmaximize(&self) {
+        gtk_window_unmaximize(GTK_WINDOW(self.handle));
     }
 
     fn close(&self) {
