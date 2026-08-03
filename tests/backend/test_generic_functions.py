@@ -295,6 +295,15 @@ def test_uninferable_arguments_ask_for_explicit_spelling(compile_source):
         """)
 
 
+def test_invalid_argument_precedes_generic_inference_failure(compile_source):
+    """An unresolved argument is not blamed on the type parameter it leaves."""
+    with pytest.raises(NameError, match="undefined variable 'missing'"):
+        compile_source("""
+        fn consume<T>(value: T) -> i32 { return 0; }
+        fn main() -> i32 { return consume(missing); }
+        """)
+
+
 def test_uninstantiated_template_costs_nothing(run):
     """
     A template no one calls declares nothing and emits nothing.

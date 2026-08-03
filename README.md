@@ -2970,4 +2970,4 @@ Nothing braced closed it, so a bare `try` takes its `;` like any other expressio
 
 ## Copyright
 
-Copyright (c) 2026, Sie. Most of the project is licensed under the [BSD 3-Clause License](LICENSE). The [GLib](packages/glib/LICENSE) and [GTK](packages/gtk/LICENSE) packages are instead licensed under the GNU LGPL v2 only.
+Most of the project is licensed under the [BSD 3-Clause License](LICENSE). The [GLib](packages/glib/LICENSE) and [GTK](packages/gtk/LICENSE) packages are instead licensed under the GNU LGPL v2 only.

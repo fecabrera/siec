@@ -520,7 +520,7 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
 
     # literal arguments default like they do in any untyped context, so
     # 'pick(3, 9)' binds T to i32 the way 'let x = 3;' would
-    from siec.codegen.inference import infer_type
+    from siec.codegen.inference import infer_type, untyped_reason
 
     bindings: dict = {}
     if expected is not None and template.return_type is not None:
@@ -530,9 +530,14 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
     # speak, the declared type wins and the argument coerces to it
     inferred: dict = {}
     for param, arg in zip(template.params, call.args):
+        concrete = infer_type(gen, arg, scope)
+        if concrete is None:
+            # An unbound parameter is only the consequence when the
+            # argument itself names nothing. Keep the primary diagnostic.
+            if (reason := untyped_reason(gen, arg, scope)) is not None:
+                raise reason
         try:
-            unify(param.type, infer_type(gen, arg, scope),
-                  template.type_params, inferred)
+            unify(param.type, concrete, template.type_params, inferred)
         except TypeError:
             if not bindings:
                 raise
