@@ -1,0 +1,6 @@
+import { GApplicationFlags } from gio;
+
+struct GtkApplication;
+
+@extern
+fn gtk_application_new(application_id: const char*, flags: GApplicationFlags) -> GtkApplication*;

@@ -77,6 +77,14 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: brew install mpdecimal
 
+      - name: Install GTK
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+
+      - name: Install GTK
+        if: matrix.os == 'macos-latest'
+        run: brew install gtk
+
       - name: Build Sie
         run: |
           pip install -e '.[lsp]'
@@ -90,7 +98,7 @@ jobs:
           name: dist-${{ matrix.os }}
           path: |
             dist/
-      
+
       - name: Upload examples
         uses: actions/upload-artifact@v4
         with:

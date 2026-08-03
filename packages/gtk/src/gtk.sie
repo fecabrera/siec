@@ -1,0 +1,7 @@
+@include("gtk/gtkapplication")
+@include("gtk/gtkapplicationwindow")
+@include("gtk/gtkbutton")
+@include("gtk/gtkenums")
+@include("gtk/gtktypes")
+@include("gtk/gtkwidget")
+@include("gtk/gtkwindow")

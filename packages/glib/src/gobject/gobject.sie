@@ -1,0 +1,3 @@
+import { gpointer } from glib;
+
+@extern fn g_object_unref(object: gpointer);

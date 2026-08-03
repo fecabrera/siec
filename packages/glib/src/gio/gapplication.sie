@@ -1,0 +1,12 @@
+import { G_TYPE_CHECK_INSTANCE_CAST, GType } from gobject;
+
+@macro G_TYPE_APPLICATION = g_application_get_type();
+@macro G_APPLICATION(instance) = G_TYPE_CHECK_INSTANCE_CAST<GApplication>(instance, G_TYPE_APPLICATION);
+
+struct GApplication;
+
+@extern
+fn g_application_get_type() -> GType;
+
+@extern
+fn g_application_run(application: GApplication*, argc: i32, argv: char**) -> i32;

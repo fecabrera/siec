@@ -1,0 +1,15 @@
+import { GtkWidget } from gtktypes;
+import { GtkAlign } from gtkenums;
+
+@extern fn gtk_widget_get_halign(widget: GtkWidget*) -> GtkAlign;
+@extern fn gtk_widget_set_halign(widget: GtkWidget*, align: GtkAlign);
+@extern fn gtk_widget_get_valign(widget: GtkWidget*) -> GtkAlign;
+@extern fn gtk_widget_set_valign(widget: GtkWidget*, align: GtkAlign);
+@extern fn gtk_widget_get_margin_start(widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_set_margin_start(widget: GtkWidget*, margin: i32);
+@extern fn gtk_widget_get_margin_end(widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_set_margin_end(widget: GtkWidget*, margin: i32);
+@extern fn gtk_widget_get_margin_top(widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_set_margin_top(widget: GtkWidget*, margin: i32);
+@extern fn gtk_widget_get_margin_bottom (widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_set_margin_bottom (widget: GtkWidget*, margin: i32);

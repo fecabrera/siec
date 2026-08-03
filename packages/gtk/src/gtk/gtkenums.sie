@@ -1,0 +1,9 @@
+enum GtkAlign {
+  FILL = 0,
+  START,
+  END,
+  CENTER,
+  BASELINE_FILL,
+  BASELINE_CENTER,
+  BASELINE = GtkAlign::BASELINE_FILL,
+}

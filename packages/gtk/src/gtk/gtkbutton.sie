@@ -1,0 +1,4 @@
+import { GtkWidget } from gtktypes;
+
+@extern fn gtk_button_new() -> GtkWidget*;
+@extern fn gtk_button_new_with_label(label: const char*) -> GtkWidget*;

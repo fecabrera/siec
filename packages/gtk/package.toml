@@ -1,0 +1,14 @@
+[package]
+name = "gtk"
+description = "Bindings for gtk"
+version = "1.0.0"
+license = "LGPL-2.0"
+license-files = ["LICENSE"]
+keywords = ["bindings", "gtk", "ui"]
+
+[library]
+sources = ["src/"]
+libs = ["gtk-4", "pangocairo-1.0", "pango-1.0", "harfbuzz", "gdk_pixbuf-2.0", "cairo-gobject", "cairo"]
+
+[dependencies]
+glib = "*"

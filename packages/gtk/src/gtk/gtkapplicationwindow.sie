@@ -1,0 +1,5 @@
+import { GtkApplication } from gtkapplication;
+import { GtkWidget } from gtktypes;
+
+@extern
+fn gtk_application_window_new(application: GtkApplication*) -> GtkWidget*;

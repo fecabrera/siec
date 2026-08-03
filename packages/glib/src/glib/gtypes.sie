@@ -1,0 +1,18 @@
+@type gchar = i8;
+@type gshort = i16;
+@type glong = i64;
+@type gint = i32;
+@type gboolean = i32;
+
+@type guchar = u8;
+@type gushort = u16;
+@type gulong = u64;
+@type guint = u32;
+
+@type gfloat = f32;
+@type gdouble = f64;
+
+@type gpointer = opaque*;
+@type gconstpointer = const opaque*;
+
+@type gsize = u64;

@@ -208,7 +208,7 @@ A package reached from two places is resolved once, against every requirement at
 sie: no installed leaf answers '~1' by app, '~2' by mid@1.0.0; installed: 1.0.0, 2.0.0
 ```
 
-Library *directories* are not the manifest's business, since they belong to the machine rather than to the package: the linker reads them from `LIBRARY_PATH`, as it does for any C build.
+Library _directories_ are not the manifest's business, since they belong to the machine rather than to the package: the linker reads them from `LIBRARY_PATH`, as it does for any C build.
 
 ```
 LIBRARY_PATH=$(brew --prefix)/lib sie build examples/helloworld
@@ -255,7 +255,7 @@ A module offers every one of its top-level declarations except its `@static` and
 
 An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
 
-Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `@sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types *inferred* across the boundary (a call's return type, say) flow without their module's name in view.
+Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `@sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types _inferred_ across the boundary (a call's return type, say) flow without their module's name in view.
 
 Imports carry across separate compilation. Under `-c`, an imported module's functions stay declarations: the unit calls them by [signature symbol](#overloading), and the module's own `-c` object defines them. Compile each module once, link the objects:
 
@@ -449,13 +449,13 @@ Each module keeps its own constants: two modules may both declare a `SEEK_SET`, 
 
 The compiler defines a set of constants describing the compilation target, taken from the target triple: the host's, or the one `--target` names. `TARGET_OS` and `TARGET_ARCH` hold the current target's families, and one constant names each family they can match:
 
-| OS | Architecture |
-|---|---|
-| `OS_DARWIN` | `ARCH_X86_64` |
-| `OS_LINUX` | `ARCH_AARCH64` |
+| OS           | Architecture   |
+| ------------ | -------------- |
+| `OS_DARWIN`  | `ARCH_X86_64`  |
+| `OS_LINUX`   | `ARCH_AARCH64` |
 | `OS_WINDOWS` | `ARCH_RISCV64` |
-| `OS_NONE` | `ARCH_UNKNOWN` |
-| `OS_UNKNOWN` | |
+| `OS_NONE`    | `ARCH_UNKNOWN` |
+| `OS_UNKNOWN` |                |
 
 `OS_NONE` marks bare-metal targets (a triple like `riscv64-unknown-none-elf`); the unknowns catch anything the compiler doesn't classify.
 
@@ -562,7 +562,7 @@ An `@include` may also sit in a branch: only the chosen arm's files load, and an
 }
 ```
 
-Because includes decide what the program *is*, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `@sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
+Because includes decide what the program _is_, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `@sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
 
 #### Error
 
@@ -1757,7 +1757,7 @@ arr[1:3]; // [2, 3]
 
 #### Raw arrays
 
-`@raw<T>[N]` is C's `T[N]`: exactly N elements of inline storage, no pointer and no runtime length. Where an `X[]` is a `{pointer, length}` pair over backing data, a raw array *is* its data, which is what C ABIs expect of fixed-size array fields:
+`@raw<T>[N]` is C's `T[N]`: exactly N elements of inline storage, no pointer and no runtime length. Where an `X[]` is a `{pointer, length}` pair over backing data, a raw array _is_ its data, which is what C ABIs expect of fixed-size array fields:
 
 ```
 struct buf {
@@ -1823,9 +1823,9 @@ fn add(a: &i32, b: i32) {
 fn main() {
     let a: i32 = 1;
     let b: i32 = 2;
-    
+
     add(a, b);
-    
+
     // now a holds the value 3
 }
 ```
@@ -2889,7 +2889,7 @@ let value = try held.results[i] ?? 0;
 
 The result binds as tightly as a name or a call does, so an operator around a `try` applies to the value it gives back rather than joining what it takes: `try res + 1` adds one to the unwrapped value.
 
-Over a result the code named, the `try` *is* the check: what continues past it took the ok path, so `res.value` reads there, and its arm stands where the tag is false, so `res.error` reads inside. A fallback hands control back too, though, and those two paths meet knowing nothing.
+Over a result the code named, the `try` _is_ the check: what continues past it took the ok path, so `res.value` reads there, and its arm stands where the tag is false, so `res.error` reads inside. A fallback hands control back too, though, and those two paths meet knowing nothing.
 
 ```
 let res = divide(10, 2);
@@ -2968,8 +2968,6 @@ fn main() -> i32 {
 
 Nothing braced closed it, so a bare `try` takes its `;` like any other expression statement.
 
-## Concepts
+## Copyright
 
-### Scopes
-
-They are the context where stuff happens.
+Copyright (c) 2026, Sie. Most of the project is licensed under the [BSD 3-Clause License](LICENSE). The [GLib](packages/glib/LICENSE) and [GTK](packages/gtk/LICENSE) packages are instead licensed under the GNU LGPL v2 only.
