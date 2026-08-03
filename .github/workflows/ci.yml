@@ -82,7 +82,7 @@ jobs:
 
       - name: Install GTK
         if: matrix.os == 'macos-latest'
-        run: brew install gtk
+        run: brew install gtk4
 
       - name: Build Sie
         run: |
