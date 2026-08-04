@@ -2,11 +2,13 @@
 @include("gtk/gtkapplicationwindow")
 @include("gtk/gtkbutton")
 @include("gtk/gtkenums")
+@include("gtk/gtkheaderbar")
 @include("gtk/gtktypes")
 @include("gtk/gtkwidget")
 @include("gtk/gtkwindow")
 
+@include("_wrapper/handler");
 @include("_wrapper/application");
 @include("_wrapper/button");
-@include("_wrapper/handler");
+@include("_wrapper/headerbar");
 @include("_wrapper/window");

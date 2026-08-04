@@ -1,0 +1,30 @@
+import { gboolean } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkWidget } from gtktypes;
+
+@macro GTK_TYPE_HEADER_BAR = gtk_header_bar_get_type();
+@macro GTK_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkHeaderBar>(obj, GTK_TYPE_HEADER_BAR);
+@macro GTK_IS_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_HEADER_BAR);
+
+struct GtkHeaderBar;
+
+@extern fn gtk_header_bar_get_type() -> GType;
+@extern fn gtk_header_bar_new() -> GtkWidget*;
+@extern fn gtk_header_bar_set_title_widget(bar: GtkHeaderBar*,
+                                           title_widget: GtkWidget*);
+@extern fn gtk_header_bar_get_title_widget(bar: GtkHeaderBar*) -> GtkWidget*;
+@extern fn gtk_header_bar_pack_start(bar: GtkHeaderBar*,
+                                     child: GtkWidget*);
+@extern fn gtk_header_bar_pack_end(bar: GtkHeaderBar*,
+                                   child: GtkWidget*);
+@extern fn gtk_header_bar_remove(bar: GtkHeaderBar*,
+                                 child: GtkWidget*);
+@extern fn gtk_header_bar_get_show_title_buttons(bar: GtkHeaderBar*) -> gboolean;
+@extern fn gtk_header_bar_set_show_title_buttons(bar: GtkHeaderBar*,
+                                                 setting: gboolean);
+@extern fn gtk_header_bar_set_decoration_layout(bar: GtkHeaderBar*,
+                                                layout: const char*);
+@extern fn gtk_header_bar_get_decoration_layout(bar: GtkHeaderBar*) -> const char*;
+@extern fn gtk_header_bar_get_use_native_controls(bar: GtkHeaderBar*) -> gboolean;
+@extern fn gtk_header_bar_set_use_native_controls(bar: GtkHeaderBar*,
+                                                  setting: gboolean);

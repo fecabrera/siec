@@ -1,12 +1,17 @@
-import { G_TYPE_CHECK_INSTANCE_CAST, GType } from gobject;
+import { G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_CLASS_CAST, GType } from gobject;
 import { gboolean } from glib;
 import { GtkWidget } from gtktypes;
 import { GtkApplication } from gtkapplication;
 
 @macro GTK_TYPE_WINDOW = gtk_window_get_type();
 @macro GTK_WINDOW(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkWindow>(obj, GTK_TYPE_WINDOW);
+@macro GTK_WINDOW_CLASS(klass) = G_TYPE_CHECK_CLASS_CAST<GtkWindowClass>(klass, GTK_TYPE_WINDOW);
 
-struct GtkWindow;
+struct GtkWindow {
+    parent_instance: GtkWidget*;
+}
+
+struct GtkWindowClass;
 
 @extern fn gtk_window_get_type() -> GType;
 @extern fn gtk_window_new() -> GtkWidget*;
@@ -15,16 +20,45 @@ struct GtkWindow;
 @extern fn gtk_window_get_title(window: GtkWindow*) -> const char*;
 @extern fn gtk_window_set_startup_id(window: GtkWindow*,
                                      startup_id: const char*);
-
+@extern fn gtk_window_set_focus(window: GtkWindow*,
+                                focus: GtkWidget*);
+@extern fn gtk_window_get_focus(window: GtkWindow*) -> GtkWidget*;
 @extern fn gtk_window_set_default_widget(window: GtkWindow*,
                                          default_widget: GtkWidget*);
 @extern fn gtk_window_get_default_widget(window: GtkWindow*) -> GtkWidget*;
+@extern fn gtk_window_set_transient_for(window: GtkWindow*,
+                                        parent: GtkWindow*);
+@extern fn gtk_window_get_transient_for(window: GtkWindow*) -> GtkWindow*;
+@extern fn gtk_window_set_destroy_with_parent(window: GtkWindow*,
+                                              setting: gboolean);
+@extern fn gtk_window_get_destroy_with_parent(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_set_hide_on_close(window: GtkWindow*,
+                                        setting: gboolean);
+@extern fn gtk_window_get_hide_on_close(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_set_mnemonics_visible(window: GtkWindow*,
+                                            setting: gboolean);
+@extern fn gtk_window_get_mnemonics_visible(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_set_focus_visible(window: GtkWindow*,
+                                        setting: gboolean);
+@extern fn gtk_window_get_focus_visible(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_set_resizable(window: GtkWindow*,
+                                    setting: gboolean);
+@extern fn gtk_window_get_resizable(window: GtkWindow*) -> gboolean;
+
+@extern fn gtk_window_is_active(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_set_decorated(window: GtkWindow*,
+                                    setting: gboolean);
+@extern fn gtk_window_get_decorated(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_set_deletable(window: GtkWindow*,
+                                    setting: gboolean);
+@extern fn gtk_window_get_deletable(window: GtkWindow*) -> gboolean;
 
 @extern fn gtk_window_set_icon_name(window: GtkWindow*,
                                     name: const char*);
 @extern fn gtk_window_get_icon_name(window: GtkWindow*) -> const char*;
 @extern fn gtk_window_set_default_icon_name(name: const char*);
 @extern fn gtk_window_get_default_icon_name() -> const char*;
+@extern fn gtk_window_set_auto_startup_notification(setting: gboolean);
 @extern fn gtk_window_set_modal(window: GtkWindow*,
                                 modal: gboolean);
 @extern fn gtk_window_get_modal(window: GtkWindow*) -> gboolean;
@@ -43,9 +77,42 @@ struct GtkWindow;
 @extern fn gtk_window_get_default_size(window: GtkWindow*,
                                        width: i32*,
                                        height: i32*);
+
 @extern fn gtk_window_get_application(window: GtkWindow*) -> GtkApplication*;
 @extern fn gtk_window_set_application(window: GtkWindow*,
                                       application: GtkApplication*);
 @extern fn gtk_window_set_child(window: GtkWindow*,
                                 child: GtkWidget*);
 @extern fn gtk_window_get_child(window: GtkWindow*) -> GtkWidget*;
+@extern fn gtk_window_set_titlebar(window: GtkWindow*,
+                                   titlebar: GtkWidget*);
+@extern fn gtk_window_get_titlebar(window: GtkWindow*) -> GtkWidget*;
+@extern fn gtk_window_is_maximized(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_is_fullscreen(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_is_suspended(window: GtkWindow*) -> gboolean;
+@extern fn gtk_window_destroy(window: GtkWindow*);
+@extern fn gtk_window_set_handle_menubar_accel(window: GtkWindow*,
+                                               handle_menubar_accel: gboolean);
+@extern fn gtk_window_get_handle_menubar_accel(window: GtkWindow*) -> gboolean;
+
+enum GtkWindowGravity {
+    TOP_LEFT = 0,
+    TOP,
+    TOP_RIGHT,
+    LEFT,
+    CENTER,
+    RIGHT,
+    BOTTOM_LEFT,
+    BOTTOM,
+    BOTTOM_RIGHT,
+    TOP_START,
+    TOP_END,
+    START,
+    END,
+    BOTTOM_START,
+    BOTTOM_END,
+}
+
+@extern fn gtk_window_get_gravity(window: GtkWindow*) -> GtkWindowGravity;
+@extern fn gtk_window_set_gravity(window: GtkWindow*,
+                                  gravity: GtkWindowGravity);

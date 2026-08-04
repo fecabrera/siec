@@ -1,5 +1,5 @@
 [package]
-name = "program"
+name = "helloworld"
 description = "A simple hello world program"
 
 [app]

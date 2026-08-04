@@ -1,0 +1,10 @@
+[package]
+name = "headerbar"
+description = "A simple program showcasing gtk.HeaderBar"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+gtk = "*"
