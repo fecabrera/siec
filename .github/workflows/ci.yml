@@ -76,9 +76,36 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: brew install mpdecimal
 
+      # Ubuntu 24.04 provides GTK 4.14, while the bindings expose APIs added
+      # in GTK 4.18. Build the oldest compatible stable release on top of the
+      # distribution's development dependencies.
       - name: Install GTK
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev meson ninja-build
+          SIE_GTK_VERSION=4.18.6
+          SIE_GTK_ARCHIVE="gtk-$SIE_GTK_VERSION.tar.xz"
+          curl -LO "https://download.gnome.org/sources/gtk/4.18/$SIE_GTK_ARCHIVE"
+          echo "e1817c650ddc3261f9a8345b3b22a26a5d80af154630dedc03cc7becefffd0fa  $SIE_GTK_ARCHIVE" | sha256sum -c
+          tar xf "$SIE_GTK_ARCHIVE"
+          meson setup gtk-build "gtk-$SIE_GTK_VERSION" \
+            --prefix=/usr/local \
+            --libdir=lib \
+            --buildtype=release \
+            -Dbuild-demos=false \
+            -Dbuild-examples=false \
+            -Dbuild-tests=false \
+            -Dbuild-testsuite=false \
+            -Dintrospection=disabled \
+            -Dmedia-gstreamer=disabled \
+            -Dprint-cups=disabled \
+            -Dvulkan=disabled \
+            -Dwayland-backend=false
+          meson compile -C gtk-build
+          sudo meson install -C gtk-build
+          sudo ldconfig
+          pkg-config --atleast-version=4.18 gtk4
 
       - name: Install GTK
         if: matrix.os == 'macos-latest'
