@@ -266,7 +266,8 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
     if head in parameters:
         return base + suffix
 
-    if checked and (bound := gen.member_bindings.get((gen.current_file, head))):
+    if checked:
+        bound = gen.resolve_type_symbol(head)
         if bound != head and names_type(gen, bound):
             return expand_alias(
                 gen,

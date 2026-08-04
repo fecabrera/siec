@@ -30,11 +30,7 @@ def imported_base(gen: CodeGenerator, base: str) -> str:
             raise TypeError(f"unknown type {base!r}")
         return resolved
 
-    bound = gen.member_bindings.get((gen.current_file, base))
-    if bound is not None:
-        return bound
-
-    return base
+    return gen.resolve_type_symbol(base)
 
 
 def generic_template(gen: CodeGenerator, base: str, arity: int):

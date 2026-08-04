@@ -196,3 +196,12 @@ def test_invalid_cross_file_permutations_keep_the_same_diagnostic(tmp_path):
         messages.add(str(info.value))
 
     assert messages == {"type 'Shared' is declared more than once"}
+
+
+def test_entry_sources_do_not_form_separate_type_namespaces(tmp_path):
+    """Multiple command-line sources remain one C-style compilation unit."""
+    first = write(tmp_path / "first.sie", "struct Shared {}")
+    second = write(tmp_path / "second.sie", "struct Shared {}")
+
+    with pytest.raises(TypeError, match="declared more than once"):
+        compile_files((first, second))

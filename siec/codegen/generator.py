@@ -367,6 +367,8 @@ class CodeGenerator:
         self.module_bindings: dict[tuple[str, str], str] = {}
         self.member_bindings: dict[tuple[str, str], str] = {}
         self.module_exports: dict[str, set] = {}
+        self.local_type_symbols: dict[tuple[str, str], str] = {}
+        self.module_type_symbols: dict[tuple[str, str], str] = {}
 
         # the unqualified names each file may use: its own, its includes',
         # its member imports', and the compilation unit's; a file the
@@ -400,8 +402,25 @@ class CodeGenerator:
         if (key := (self.current_file, name)) in self.statics:
             return self.statics[key]
 
-        name = self.member_bindings.get((self.current_file, name), name)
+        member = self.member_targets.get((self.current_file, name))
+        if member is not None:
+            target, original = member
+            name = self.module_type_symbols.get(
+                (target, original), original)
+        else:
+            name = self.local_type_symbols.get(
+                (self.current_file, name), name)
         return self.symbol_names.get(name, name)
+
+    def resolve_type_symbol(self, name: str) -> str:
+        """Resolve an unqualified type through its source module's view."""
+        member = self.member_targets.get((self.current_file, name))
+        if member is not None:
+            target, original = member
+            return self.module_type_symbols.get(
+                (target, original), original)
+
+        return self.local_type_symbols.get((self.current_file, name), name)
 
     def string_constant(self, text: str) -> ir.GlobalVariable:
         """
@@ -456,6 +475,7 @@ class CodeGenerator:
             # a '@symbol' mapping applies only when its declaration is the
             # module's own: another module's same-named binding (libc's
             # 'stderr', say) must not hijack this member
+            member = self.module_type_symbols.get((target, member), member)
             symbol = self.symbol_names.get(member, member)
             if symbol != member:
                 origin = self.symbol_files.get(member)
@@ -926,6 +946,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     gen.member_bindings = program.member_bindings
     gen.member_targets = program.member_targets
     gen.module_exports = program.module_exports
+    gen.local_type_symbols = program.local_type_symbols
+    gen.module_type_symbols = program.module_type_symbols
     gen.visible = program.visible
     gen.include_closure = program.include_closure
     gen.entry_files = program.entry_files

@@ -642,6 +642,69 @@ def test_qualified_struct_constructor_uses_resolved_type(tmp_path,
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_modules_may_export_same_struct_name(tmp_path, monkeypatch):
+    """Qualified module types retain distinct identities and method sets."""
+    (tmp_path / "first.sie").write_text("""
+        struct Application {
+            value: i32;
+            fn init(&self) { self.value = 20; }
+            fn read(const &self) -> i32 { return self.value; }
+        }
+
+        fn make() -> Application { return Application(); }
+    """)
+    (tmp_path / "second.sie").write_text("""
+        struct Application {
+            value: i32;
+            fn init(&self) { self.value = 22; }
+            fn read(const &self) -> i32 { return self.value; }
+        }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import first;
+        import second;
+
+        fn main() -> i32 {
+            let first_app = first.make();
+            let second_app = second.Application();
+            return first_app.read() + second_app.read();
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
+def test_entry_struct_and_imported_struct_may_share_name(tmp_path,
+                                                         monkeypatch):
+    """The entry unit and a qualified imported module have separate types."""
+    (tmp_path / "dependency.sie").write_text("""
+        struct Application {
+            value: i32;
+            fn init(&self) { self.value = 20; }
+        }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import dependency;
+
+        struct Application {
+            value: i32;
+            fn init(&self) { self.value = 22; }
+        }
+
+        fn main() -> i32 {
+            let local = Application();
+            let imported = dependency.Application();
+            return local.value + imported.value;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_member_imported_types_come_into_view(tmp_path, monkeypatch):
     """
     'import { Point, Box as Crate } from shapes;' binds types unqualified,

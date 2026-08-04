@@ -824,6 +824,8 @@ class Program:
     member_bindings: dict = field(default_factory=dict)  # (file, name) -> member name
     member_targets: dict = field(default_factory=dict)   # (file, name) -> (module file, member)
     module_exports: dict = field(default_factory=dict)   # module file -> set of names
+    local_type_symbols: dict = field(default_factory=dict)  # (file, name) -> identity
+    module_type_symbols: dict = field(default_factory=dict)  # (module file, name) -> identity
     visible: dict = field(default_factory=dict)          # file -> unqualified names in view
     include_closure: dict = field(default_factory=dict)  # file -> itself and its includes
     entry_files: list = field(default_factory=list)      # the command-line sources

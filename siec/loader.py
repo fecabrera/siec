@@ -1,6 +1,7 @@
 """Phase 0: source discovery, selection, parsing, and unit assembly."""
 
 import copy
+import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -225,6 +226,7 @@ def discover_program(sources: list[Path], include_paths: list[Path],
     member_names = {}     # file -> the names its member imports bind
     pending_members = []  # (file, import, target) checked once exports settle
     imported_roots = set()  # module files that start their own textual unit
+    module_paths = {}        # module root -> stable dotted import spelling
 
     def claim_binding(file: str, binding: str, target: tuple,
                       line: int) -> bool:
@@ -426,6 +428,7 @@ def discover_program(sources: list[Path], include_paths: list[Path],
             load(target)
             target = str(target.resolve())
             imported_roots.add(target)
+            module_paths.setdefault(target, imp.path)
 
             if imp.members is not None:
                 # membership is checked once every export set has settled
@@ -513,13 +516,65 @@ def discover_program(sources: list[Path], include_paths: list[Path],
     for file in visible:
         visible[file] |= member_names.get(file, set()) | entry_names
 
+    # Imported modules are separate namespaces. Most declarations can retain
+    # their public spelling internally, but two textual modules may export the
+    # same concrete struct name (gtk.Application and adwaita.Application, for
+    # example). Give only those collisions stable private identities, keeping
+    # imports and diagnostics expressed through the original module members.
+    entry_unit_files = set()
+    for source in sources:
+        resolved = str(source.resolve())
+        entry_unit_files.update(include_closure.get(resolved, {resolved}))
+
+    roots_by_file = {}
+    for root in sorted(textual_roots):
+        for file in include_closure.get(root, {root}):
+            roots_by_file.setdefault(file, []).append(root)
+
+    def declaration_root(file: str) -> str:
+        if file in entry_unit_files:
+            return "<entry>"
+        roots = roots_by_file.get(file, [])
+        if not roots:
+            return file
+        # A module root belongs to its own textual group even when another
+        # entry happens to include it; otherwise choose deterministically.
+        return file if file in roots else roots[0]
+
+    structs_by_name = {}
+    for struct in structs:
+        if struct.is_interface or struct.params is not None:
+            continue
+        structs_by_name.setdefault(struct.name, []).append(struct)
+
+    local_type_symbols = {}
+    module_type_symbols = {}
+    for name, declarations in structs_by_name.items():
+        roots = {declaration_root(decl.file) for decl in declarations}
+        if len(roots) < 2:
+            continue
+
+        identities = {}
+        for root in sorted(roots):
+            stable_root = (root if root == "<entry>"
+                           else module_paths.get(root, Path(root).stem))
+            digest = hashlib.sha256(stable_root.encode()).hexdigest()[:12]
+            identity = f"__module_{digest}_{name}"
+            identities[root] = identity
+            if root != "<entry>":
+                module_type_symbols[(root, name)] = identity
+            files = (entry_unit_files if root == "<entry>"
+                     else include_closure.get(root, {root}))
+            for file in files:
+                local_type_symbols[(file, name)] = identity
+
+        for declaration in declarations:
+            declaration.name = identities[declaration_root(declaration.file)]
+
     # the unit's own files: the command-line sources and, textually, their
     # includes; a file reached only through 'import' sits outside it, so
     # separate compilation can leave its definitions to its own unit
-    unit_files = set()
-    for source in sources:
-        resolved = str(source.resolve())
-        unit_files.update(include_closure.get(resolved, {resolved}))
+    unit_files = entry_unit_files
 
     merged = Program([], functions, structs, consts, enums, globals_, aliases, conds)
     merged.extends = extends_
@@ -529,6 +584,8 @@ def discover_program(sources: list[Path], include_paths: list[Path],
     merged.member_bindings = member_bindings
     merged.member_targets = member_targets
     merged.module_exports = module_exports
+    merged.local_type_symbols = local_type_symbols
+    merged.module_type_symbols = module_type_symbols
     merged.visible = visible
     merged.include_closure = include_closure
     merged.entry_files = [str(source.resolve()) for source in sources]
