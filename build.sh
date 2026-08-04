@@ -7,6 +7,6 @@ run_echo() {
 mkdir -p dist/
 
 # Build examples
-for dir in examples/*/*; do LIBRARY_PATH=$LIBRARY_PATH:$(brew --prefix)/lib run_echo sie build $dir; done
+for dir in examples/*/*; do run_echo sie build $dir; done
 
 run_echo pip wheel . --no-deps -w dist
