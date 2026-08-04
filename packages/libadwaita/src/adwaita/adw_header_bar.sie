@@ -1,0 +1,19 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST } from gobject;
+import { GtkWidget } from gtk;
+
+@macro ADW_TYPE_HEADER_BAR = adw_header_bar_get_type();
+@macro ADW_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwHeaderBar>(obj, ADW_TYPE_HEADER_BAR);
+
+struct AdwHeaderBar;
+
+@extern fn adw_header_bar_get_type() -> GType;
+@extern fn adw_header_bar_new() -> GtkWidget*;
+@extern fn adw_header_bar_pack_start(header_bar: AdwHeaderBar*,
+                                     child: GtkWidget*);
+@extern fn adw_header_bar_pack_end(header_bar: AdwHeaderBar*,
+                                   child: GtkWidget*);
+@extern fn adw_header_bar_remove(header_bar: AdwHeaderBar*,
+                                 child: GtkWidget*);
+@extern fn adw_header_bar_get_title_widget(header_bar: AdwHeaderBar*) -> GtkWidget*;
+@extern fn adw_header_bar_set_title_widget(header_bar: AdwHeaderBar*,
+                                           title_widget: GtkWidget*);

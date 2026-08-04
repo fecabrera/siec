@@ -1,0 +1,33 @@
+import { GtkWidget, Handler } from gtk;
+import {
+    ADW_TOOLBAR_VIEW,
+    adw_toolbar_view_new,
+    adw_toolbar_view_set_content,
+    adw_toolbar_view_add_top_bar,
+    adw_toolbar_view_add_bottom_bar,
+    adw_toolbar_view_remove,
+} from adwaita;
+
+struct ToolbarView: Handler<GtkWidget> {
+    handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_toolbar_view_new();
+    }
+
+    fn set_content(&self, obj: &Handler<GtkWidget>) {
+        adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+    }
+
+    fn add_top_bar(&self, obj: &Handler<GtkWidget>) {
+        adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+    }
+
+    fn add_bottom_bar(&self, obj: &Handler<GtkWidget>) {
+        adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+    }
+
+    fn remove(&self, obj: &Handler<GtkWidget>) {
+        adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+    }
+}

@@ -72,10 +72,6 @@ jobs:
           sudo make install
           sudo ldconfig
 
-      - name: Install libmpdec
-        if: matrix.os == 'macos-latest'
-        run: brew install mpdecimal
-
       # Ubuntu 24.04 provides GTK 4.14, while the bindings expose APIs added
       # in GTK 4.18. Build the oldest compatible stable release on top of the
       # distribution's development dependencies.
@@ -107,13 +103,14 @@ jobs:
           sudo ldconfig
           pkg-config --atleast-version=4.18 gtk4
 
-      - name: Install GTK
-        if: matrix.os == 'macos-latest'
-        run: brew install gtk4
+      - name: Install libadwaita
+        if: matrix.os == 'ubuntu-lates'
+        run: sudo apt-get install -y libadwaita-1-dev
 
-      - name: Add libraries installed through Homebrew
+      - name: Install libraries
         if: matrix.os == 'macos-latest'
         run: |
+          brew install gtk4 mpdecimal libadwaita
           echo "LIBRARY_PATH=$(brew --prefix)/lib:$(brew --prefix mpdecimal)/lib" >> "$GITHUB_ENV"
 
       - name: Build Sie

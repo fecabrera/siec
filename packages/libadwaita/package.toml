@@ -1,0 +1,14 @@
+[package]
+name = "libadwaita"
+description = "Bindings for libadwaita"
+version = "1.0.0"
+license = "LGPL-2.1-or-later"
+license-files = ["LICENSE"]
+keywords = ["bindings", "libadwaita", "adwaita", "gnome", "ui"]
+
+[library]
+sources = ["src/"]
+libs = ["adwaita-1"]
+
+[dependencies]
+gtk = "*"
