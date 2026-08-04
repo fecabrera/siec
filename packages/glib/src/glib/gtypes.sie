@@ -9,6 +9,11 @@
 @type gulong = u64;
 @type guint = u32;
 
+@type gint32 = i32;
+@type guint32 = u32;
+@type gint64 = i64;
+@type guint64 = u64;
+
 @type gfloat = f32;
 @type gdouble = f64;
 

@@ -1,1 +1,5 @@
+@include("glib/gdataset")
+@include("glib/gquark")
 @include("glib/gtypes")
+@include("glib/gvariant")
+@include("glib/gvarianttype")

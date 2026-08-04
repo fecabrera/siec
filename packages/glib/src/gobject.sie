@@ -1,4 +1,6 @@
 @include("gobject/gclosure")
-@include("gobject/gsignal")
 @include("gobject/gobject")
+@include("gobject/gparam")
+@include("gobject/gsignal")
 @include("gobject/gtype")
+@include("gobject/gvalue")

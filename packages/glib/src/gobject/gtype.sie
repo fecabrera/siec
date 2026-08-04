@@ -1,4 +1,22 @@
-import { gsize } from glib;
+import { gsize, guint, gboolean } from glib;
+
+/* Casts, checks and accessors for structured types
+ * usage of these macros is reserved to type implementations only
+ */
+/*< protected >*/
+/**
+ * G_TYPE_CHECK_INSTANCE:
+ * @instance: Location of a #GTypeInstance structure
+ * 
+ * Checks if @instance is a valid #GTypeInstance structure,
+ * otherwise issues a warning and returns %FALSE. %NULL is not a valid
+ * #GTypeInstance.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: %TRUE if @instance is valid
+ */
+@macro G_TYPE_CHECK_INSTANCE(instance) = _G_TYPE_CHI(instance as GTypeInstance*);
 
 /**
  * G_TYPE_CHECK_INSTANCE_CAST:
@@ -15,11 +33,304 @@ import { gsize } from glib;
  * This macro should only be used in type implementations.
  */
 @macro G_TYPE_CHECK_INSTANCE_CAST<CT>(instance, g_type) = _G_TYPE_CIC<CT>(instance, g_type);
-@macro _G_TYPE_CIC<CT>(ip, gt) = g_type_check_instance_cast(ip as GTypeInstance*, gt) as CT*;
 
-@extern
-fn g_type_check_instance_cast(instance: GTypeInstance*, iface_type: GType) -> GTypeInstance*;
+/**
+ * G_TYPE_CHECK_INSTANCE_TYPE:
+ * @instance: (nullable): Location of a #GTypeInstance structure.
+ * @g_type: The type to be checked
+ * 
+ * Checks if @instance is an instance of the type identified by @g_type. If
+ * @instance is %NULL, %FALSE will be returned.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: %TRUE if @instance is an instance of @g_type
+ */
+@macro G_TYPE_CHECK_INSTANCE_TYPE(instance, g_type) = _G_TYPE_CIT(instance, g_type);
+
+/**
+ * G_TYPE_CHECK_INSTANCE_FUNDAMENTAL_TYPE:
+ * @instance: (nullable): Location of a #GTypeInstance structure.
+ * @g_type: The fundamental type to be checked
+ *
+ * Checks if @instance is an instance of the fundamental type identified by @g_type.
+ * If @instance is %NULL, %FALSE will be returned.
+ *
+ * This macro should only be used in type implementations.
+ *
+ * Returns: %TRUE if @instance is an instance of @g_type
+ */
+@macro G_TYPE_CHECK_INSTANCE_FUNDAMENTAL_TYPE(instance, g_type) = _G_TYPE_CIFT(instance, g_type);
+
+/**
+ * G_TYPE_INSTANCE_GET_CLASS:
+ * @instance: Location of the #GTypeInstance structure
+ * @g_type: The #GType of the class to be returned
+ * @c_type: The C type of the class structure
+ * 
+ * Get the class structure of a given @instance, casted
+ * to a specified ancestor type @g_type of the instance.
+ * 
+ * Note that while calling a GInstanceInitFunc(), the class pointer
+ * gets modified, so it might not always return the expected pointer.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: a pointer to the class structure
+ */
+@macro G_TYPE_INSTANCE_GET_CLASS<CT>(instance, g_type) = _G_TYPE_IGC<CT>(instance, g_type);
+
+/**
+ * G_TYPE_INSTANCE_GET_INTERFACE:
+ * @instance: Location of the #GTypeInstance structure
+ * @g_type: The #GType of the interface to be returned
+ * @c_type: The C type of the interface structure
+ * 
+ * Get the interface structure for interface @g_type of a given @instance.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: a pointer to the interface structure
+ */
+@macro G_TYPE_INSTANCE_GET_INTERFACE<CT>(instance, g_type) = _G_TYPE_IGI<CT>(instance, g_type);
+
+/**
+ * G_TYPE_CHECK_CLASS_CAST:
+ * @g_class: Location of a #GTypeClass structure
+ * @g_type: The type to be returned
+ * @c_type: The corresponding C type of class structure of @g_type
+ * 
+ * Checks that @g_class is a class structure of the type identified by @g_type
+ * and issues a warning if this is not the case. Returns @g_class casted 
+ * to a pointer to @c_type. %NULL is not a valid class structure.
+ * 
+ * This macro should only be used in type implementations.
+ */
+@macro G_TYPE_CHECK_CLASS_CAST<CT>(g_class, g_type) = _G_TYPE_CCC<CT>(g_class, g_type);
+
+/**
+ * G_TYPE_CHECK_CLASS_TYPE:
+ * @g_class: (nullable): Location of a #GTypeClass structure
+ * @g_type: The type to be checked
+ * 
+ * Checks if @g_class is a class structure of the type identified by 
+ * @g_type. If @g_class is %NULL, %FALSE will be returned.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: %TRUE if @g_class is a class structure of @g_type
+ */
+@macro G_TYPE_CHECK_CLASS_TYPE(g_class, g_type) = _G_TYPE_CCT(g_class, g_type);
+
+/**
+ * G_TYPE_CHECK_VALUE:
+ * @value: a #GValue
+ * 
+ * Checks if @value has been initialized to hold values
+ * of a value type.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: %TRUE if @value is initialized
+ */
+@macro G_TYPE_CHECK_VALUE(value) = _G_TYPE_CHV(value);
+
+/**
+ * G_TYPE_CHECK_VALUE_TYPE:
+ * @value: a #GValue
+ * @g_type: The type to be checked
+ * 
+ * Checks if @value has been initialized to hold values
+ * of type @g_type. 
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: %TRUE if @value has been initialized to hold values of type @g_type
+ */
+@macro G_TYPE_CHECK_VALUE_TYPE(value, g_type) = _G_TYPE_CVH(value, g_type);
+
+/**
+ * G_TYPE_FROM_INSTANCE:
+ * @instance: Location of a valid #GTypeInstance structure
+ * 
+ * Get the type identifier from a given @instance structure. 
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: the #GType
+ */
+@macro G_TYPE_FROM_INSTANCE(instance) = G_TYPE_FROM_CLASS((instance as GTypeInstance*)->g_class);
+
+/**
+ * G_TYPE_FROM_CLASS:
+ * @g_class: Location of a valid #GTypeClass structure
+ * 
+ * Get the type identifier from a given @class structure.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: the #GType
+ */
+@macro G_TYPE_FROM_CLASS(g_class) = (g_class as GTypeClass*)->g_type;
+
+/**
+ * G_TYPE_FROM_INTERFACE:
+ * @g_iface: Location of a valid #GTypeInterface structure
+ * 
+ * Get the type identifier from a given @interface structure.
+ * 
+ * This macro should only be used in type implementations.
+ *
+ * Returns: the #GType
+ */
+@macro G_TYPE_FROM_INTERFACE(g_iface) = (g_iface as GTypeInterface*)->g_type;
+
+/**
+ * G_TYPE_INSTANCE_GET_PRIVATE:
+ * @instance: the instance of a type deriving from @private_type
+ * @g_type: the type identifying which private data to retrieve
+ * @c_type: The C type for the private structure
+ * 
+ * Gets the private structure for a particular type.
+ *
+ * The private structure must have been registered in the
+ * class_init function with g_type_class_add_private().
+ * 
+ * This macro should only be used in type implementations.
+ * 
+ * Since: 2.4
+ * Deprecated: 2.58: Use G_ADD_PRIVATE() and the generated
+ *   `your_type_get_instance_private()` function instead
+ * Returns: (not nullable): a pointer to the private data structure
+ */
+@macro G_TYPE_INSTANCE_GET_PRIVATE<CT>(instance, g_type) = g_type_instance_get_private(instance as GTypeInstance*, g_type) as CT*;
+
+/**
+ * G_TYPE_CLASS_GET_PRIVATE:
+ * @klass: the class of a type deriving from @private_type
+ * @g_type: the type identifying which private data to retrieve
+ * @c_type: The C type for the private structure
+ * 
+ * Gets the private class structure for a particular type.
+ *
+ * The private structure must have been registered in the
+ * get_type() function with g_type_add_class_private().
+ * 
+ * This macro should only be used in type implementations.
+ * 
+ * Since: 2.24
+ * Returns: (not nullable): a pointer to the private data structure
+ */
+@macro G_TYPE_CLASS_GET_PRIVATE<CT>(klass, g_type) = g_type_class_get_private (klass as GTypeClass*, g_type) as CT*;
+
+/*< private >*/
+@extern fn g_type_check_instance(instance: GTypeInstance*) -> gboolean;
+@extern fn g_type_check_instance_cast(instance: GTypeInstance*,
+                                      iface_type: GType) -> GTypeInstance*;
+@extern fn g_type_check_instance_is_a(instance: GTypeInstance*,
+                                      iface_type: GType) -> gboolean;
+@extern fn g_type_check_instance_is_fundamentally_a(instance: GTypeInstance*,
+                                                    fundamental_type: GType) -> gboolean;
+@extern fn g_type_check_class_cast(g_class: GTypeClass*,
+                                   is_a_type: GType) -> GTypeClass*;
+@extern fn g_type_check_class_is_a(g_class: GTypeClass*,
+                                   is_a_type: GType) -> gboolean;
+@extern fn g_type_check_is_value_type(type: GType) -> gboolean;
+@extern fn g_type_check_value(value: const GValue*) -> gboolean;
+@extern fn g_type_check_value_holds(value: const GValue*,
+                                    type: GType) -> gboolean;
+@extern fn g_type_test_flags(type: GType,
+                             flags: guint) -> gboolean;
+
+/* --- debugging functions --- */
+@extern fn g_type_name_from_instance(instance: GTypeInstance*) -> const char*;
+@extern fn g_type_name_from_class(g_class: GTypeClass*) -> const char*;
+
 
 @type GType = gsize;
 
-struct GTypeInstance;
+struct GValue;
+
+/**
+ * GTypeClass:
+ * 
+ * An opaque structure used as the base of all classes.
+ */
+struct GTypeClass {
+    g_type: GType;
+}
+
+/**
+ * GTypeInterface:
+ * 
+ * An opaque structure used as the base of all interface types.
+ */
+struct GTypeInterface {
+    g_type: GType;
+    g_instance_type: GType;
+}
+
+/**
+ * GTypeInstance:
+ * 
+ * An opaque structure used as the base of all type instances.
+ */
+struct GTypeInstance {
+    g_class: GTypeClass*;
+}
+
+struct GTypeInfo;
+struct GTypeFundamentalInfo;
+struct GInterfaceInfo;
+struct GTypeValueTable;
+
+/**
+ * GTypeQuery:
+ * @type: the #GType value of the type
+ * @type_name: the name of the type
+ * @class_size: the size of the class structure
+ * @instance_size: the size of the instance structure
+ * 
+ * A structure holding information for a specific type.
+ *
+ * See also: g_type_query()
+ */
+struct GTypeQuery {
+    type: GType;
+    type_name: const char*;
+    class_size: guint;
+    instance_size: guint;
+}
+
+@macro _G_TYPE_CIC<CT>(ip, gt) = g_type_check_instance_cast(ip as GTypeInstance*, gt) as CT*;
+@macro _G_TYPE_CCC<CT>(cp, gt) = g_type_check_class_cast(cp as GTypeClass*, gt) as CT*;
+
+@macro _G_TYPE_CHI(ip) = g_type_check_instance(ip as GTypeInstance*);
+@macro _G_TYPE_CHV(vl) = g_type_check_value (vl as GValue*);
+@macro _G_TYPE_IGC<CT>(ip, gt) = (ip as GTypeInstance*)->g_class as CT*;
+@macro _G_TYPE_IGI<CT>(ip, gt) = g_type_interface_peek ((ip as GTypeInstance*)->g_class, gt) as CT*;
+@macro _G_TYPE_CIFT(ip, ft) = g_type_check_instance_is_fundamentally_a (ip as GTypeInstance*, ft);
+@macro _G_TYPE_CIT(ip, gt) {
+    let __inst = ip as GTypeInstance*;
+    let __t = gt;
+    let __r: gboolean;
+    if (not __inst)
+        __r = false as gboolean;
+    else if (__inst->g_class && __inst->g_class->g_type == __t)
+        __r = true as gboolean;
+    else
+        __r = g_type_check_instance_is_a(__inst, __t);
+    emit __r;
+}
+@macro _G_TYPE_CVH(vl, gt) {
+    let __val = vl as GValue*;
+    let __t = gt;
+    let __r: gboolean;
+    if (not __val)
+        __r = false as gboolean;
+    else if (__val->g_type == __t)
+        __r = true as gboolean;
+    else
+        __r = g_type_check_value_holds(__val, __t);
+    emit __r;
+}

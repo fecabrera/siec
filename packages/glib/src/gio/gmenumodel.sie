@@ -1,1 +1,56 @@
-struct GMenuModel;
+import { GVariant, GVariantType, gboolean, gint } from glib;
+import { GObject, GType } from gobject;
+
+struct GMenuModelPrivate;
+struct GMenuModelClass;
+struct GMenuModel {
+    parent_instance: GObject;
+    priv: GMenuModelPrivate*;
+}
+
+@extern fn g_menu_model_get_type() -> GType;
+@extern fn g_menu_model_is_mutable(model: GMenuModel*) -> gboolean;
+@extern fn g_menu_model_get_n_items(model: GMenuModel*) -> gint;
+@extern fn g_menu_model_iterate_item_attributes(model: GMenuModel*,
+                                                item_index: gint) -> GMenuAttributeIter*;
+@extern fn g_menu_model_get_item_attribute_value(model: GMenuModel*,
+                                                 item_index: gint,
+                                                 attribute: const char*,
+                                                 expected_type: const GVariantType*) -> GVariant*;
+@extern fn g_menu_model_get_item_attribute(model: GMenuModel*,
+                                           item_index: gint,
+                                           attribute: const char*,
+                                           format_string: const char*,
+                                           ...) -> gboolean;
+@extern fn g_menu_model_iterate_item_links(model: GMenuModel*,
+                                           item_index: gint) -> GMenuLinkIter*;
+@extern fn g_menu_model_get_item_link(model: GMenuModel*,
+                                      item_index: gint,
+                                      link: const char*) -> GMenuModel*;
+@extern fn g_menu_model_items_changed(model: GMenuModel*,
+                                      position: gint,
+                                      removed: gint,
+                                      added: gint);
+
+struct GMenuAttributeIterPrivate;
+struct GMenuAttributeIterClass;
+struct GMenuAttributeIter {
+    parent_instance: GObject;
+    priv: GMenuAttributeIterPrivate*;
+}
+
+@extern fn g_menu_attribute_iter_get_type() -> GType;
+@extern fn g_menu_attribute_iter_get_next(iter: GMenuAttributeIter*,
+                                          out_name: const char**,
+                                          value: GVariant**) -> gboolean;
+@extern fn g_menu_attribute_iter_next(iter: GMenuAttributeIter*) -> gboolean;
+@extern fn g_menu_attribute_iter_get_name(iter: GMenuAttributeIter*) -> const char*;
+@extern fn g_menu_attribute_iter_get_value(iter: GMenuAttributeIter*) -> GVariant*;
+
+struct GMenuLinkIterPrivate;
+struct GMenuLinkIterClass;
+struct GMenuLinkIter {
+    parent_instance: GObject;
+    priv: GMenuLinkIterPrivate*;
+}
+

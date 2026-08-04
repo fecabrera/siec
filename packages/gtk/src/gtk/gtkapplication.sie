@@ -1,8 +1,12 @@
-import { GApplicationFlags, GMenuModel } from gio;
+import { GApplicationFlags, GMenuModel, GMenu } from gio;
+import { G_TYPE_CHECK_INSTANCE_CAST } from gobject;
 import { guint } from glib;
 import { GtkWindow } from gtkwindow;
 
 struct GtkApplication;
+
+@macro GTK_TYPE_APPLICATION = gtk_application_get_type();
+@macro GTK_APPLICATION(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkApplication>(obj, GTK_TYPE_APPLICATION);
 
 @extern fn gtk_application_new(application_id: const char*,
                                flags: GApplicationFlags) -> GtkApplication*;
@@ -39,3 +43,5 @@ enum GtkApplicationInhibitFlags {
 @extern fn gtk_application_set_accels_for_action(application: GtkApplication*,
                                                  detailed_action_name: const char*,
                                                  accels: const char*);
+@extern fn gtk_application_get_menu_by_id(application: GtkApplication*,
+                                          id: const char*) -> GMenu*;

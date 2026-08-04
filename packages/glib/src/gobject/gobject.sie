@@ -1,3 +1,155 @@
-import { gpointer } from glib;
+import { GData, gpointer, guint, gboolean } from glib;
+import { GType, GTypeInstance, GTypeClass } from gtype;
+import { GValue } from gvalue;
+import { GParamSpec, GParameter } from gparam;
 
-@extern fn g_object_unref(object: gpointer);
+/**
+ * GObjectGetPropertyFunc:
+ * @object: a #GObject
+ * @property_id: the numeric id under which the property was registered with
+ *  g_object_class_install_property().
+ * @value: a #GValue to return the property value in
+ * @pspec: the #GParamSpec describing the property
+ * 
+ * The type of the @get_property function of #GObjectClass. 
+ */
+@type GObjectGetPropertyFunc = fn(GObject*, guint, GValue*, GParamSpec*);
+
+/**
+ * GObjectSetPropertyFunc:
+ * @object: a #GObject
+ * @property_id: the numeric id under which the property was registered with
+ *  g_object_class_install_property().
+ * @value: the new value for the property
+ * @pspec: the #GParamSpec describing the property
+ * 
+ * The type of the @set_property function of #GObjectClass. 
+ */
+@type GObjectSetPropertyFunc = fn(GObject*, guint, const GValue*, GParamSpec*);
+
+/**
+ * GObjectFinalizeFunc:
+ * @object: the #GObject being finalized
+ * 
+ * The type of the @finalize function of #GObjectClass.
+ */
+@type GObjectFinalizeFunc = fn(GObject*);
+
+/**
+ * GWeakNotify:
+ * @data: data that was provided when the weak reference was established
+ * @where_the_object_was: the object being disposed
+ * 
+ * A #GWeakNotify function can be added to an object as a callback that gets
+ * triggered when the object is finalized.
+ *
+ * Since the object is already being disposed when the #GWeakNotify is called,
+ * there's not much you could do with the object, apart from e.g. using its
+ * address as hash-index or the like.
+ *
+ * In particular, this means it’s invalid to call g_object_ref(),
+ * g_weak_ref_init(), g_weak_ref_set(), g_object_add_toggle_ref(),
+ * g_object_weak_ref(), g_object_add_weak_pointer() or any function which calls
+ * them on the object from this callback.
+ */
+@type GWeakNotify = fn(gpointer, GObject*);
+
+struct GObject {
+    g_type_instance:    GTypeInstance;
+    /*< private >*/
+    ref_count:          guint;  /* (atomic) */
+    qdata:              GData*;
+}
+
+struct GObjectClass {
+    g_type_class: GTypeClass;
+}
+
+struct GObjectConstructParam {
+    pspec: GParamSpec*;
+    value: GValue*;
+}
+
+@extern fn g_initially_unowned_get_type() -> GType;
+@extern fn g_object_class_install_property(oclass: GObjectClass*,
+                                           property_id: guint,
+                                           pspec: GParamSpec);
+@extern fn g_object_class_find_property(oclass: GObjectClass*,
+                                        property_name: const char*) -> GParamSpec*;
+@extern fn g_object_class_list_properties(oclass: GObjectClass*,
+                                          n_properties: guint) -> GParamSpec**;
+@extern fn g_object_class_override_property(oclass: GObjectClass*,
+                                            property_id: guint,
+                                            name: const char*);
+@extern fn g_object_class_install_properties(oclass: GObjectClass*,
+                                             n_pspecs: guint,
+                                             pspecs: GParamSpec**);
+@extern fn g_object_interface_install_property(g_iface: gpointer,
+                                               pspec: GParamSpec*);
+@extern fn g_object_interface_find_property(g_iface: gpointer,
+                                            property_name: const char*) -> GParamSpec*;
+@extern fn g_object_interface_list_properties(g_iface: gpointer,
+                                              n_properties_p: guint*) -> GParamSpec**;
+@extern fn g_object_get_type() -> GType;
+@extern fn g_object_new(object_type: GType,
+                        first_property_name: const char*,
+                        ...) -> gpointer;
+@extern fn g_object_new_with_properties(object_type: GType,
+                                        n_properties: guint,
+                                        names: const char**,
+                                        values: const GValue**) -> GObject*;
+@deprecated("use g_object_new_with_properties()")
+@extern fn g_object_newv(object_type: GType,
+                         n_parameters: guint,
+                         parameters: GParameter*) -> gpointer;
+@extern fn g_object_set(object: gpointer,
+					    first_property_name: const char*,
+					    ...);
+@extern fn g_object_get(object: gpointer,
+					    first_property_name: const char*,
+					    ...);
+@extern fn g_object_connect(object: gpointer,
+					        signal_spec: const char*,
+					       ...) -> gpointer;
+@extern fn g_object_disconnect(object: gpointer,
+					           signal_spec: const char*,
+					           ...);
+@extern fn g_object_setv(object: GObject*,
+                         n_properties: guint,
+                         names: const char**,
+                         values: const GValue**);
+@extern fn g_object_getv(object: GObject*,
+                         n_properties: guint,
+                         names: const char**,
+                         values: GValue**);
+@extern fn g_object_set_property(object: GObject*,
+                                 property_name: const char*,
+                                 value: const GValue*);
+@extern fn g_object_get_property(object: GObject*,
+                                 property_name: const char*,
+                                 value: GValue*);
+@extern fn g_object_freeze_notify(object: GObject*);
+@extern fn g_object_notify(object: GObject*,
+                           property_name: const char*);
+@extern fn g_object_notify_by_pspec(object: GObject*,
+                                    pspec: GParamSpec*);
+@extern fn g_object_thaw_notify(object: GObject*);
+@extern fn g_object_is_floating(object: gpointer) -> gboolean;
+@extern fn g_object_ref_sink(object: gpointer) -> gpointer;
+@extern fn g_object_take_ref(object: gpointer) -> gpointer;
+@extern fn g_object_ref(object: gpointer) -> gpointer;
+@extern fn g_object_unref(object: gpointer);                
+@extern fn g_object_weak_ref(object: GObject*,
+                             notify: GWeakNotify,
+                             data: gpointer);
+@extern fn g_object_weak_unref(object: GObject*,
+                               notify: GWeakNotify,
+                               data: gpointer);
+@extern fn g_object_add_weak_pointer(object: GObject*,
+                                     weak_pointer_location: gpointer);
+@extern fn g_object_remove_weak_pointer(object: GObject*,
+                                        weak_pointer_location: gpointer);
+
+
+struct GInitiallyUnowned;
+struct GInitiallyUnownedClass;

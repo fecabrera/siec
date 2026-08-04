@@ -1,0 +1,8 @@
+import { guint32 } from gtypes;
+
+@type GQuark = guint32;
+
+@extern fn g_quark_try_string(string: const char*) -> GQuark;
+@extern fn g_quark_from_static_string(string: const char*) -> GQuark;
+@extern fn g_quark_from_string(string: const char*) -> GQuark;
+@extern fn g_quark_to_string(quark: GQuark) -> const char*;

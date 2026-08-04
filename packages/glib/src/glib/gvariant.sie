@@ -1,0 +1,22 @@
+struct GVariant;
+
+enum GVariantClass {
+  BOOLEAN       = 'b',
+  BYTE          = 'y',
+  INT16         = 'n',
+  UINT16        = 'q',
+  INT32         = 'i',
+  UINT32        = 'u',
+  INT64         = 'x',
+  UINT64        = 't',
+  HANDLE        = 'h',
+  DOUBLE        = 'd',
+  STRING        = 's',
+  OBJECT_PATH   = 'o',
+  SIGNATURE     = 'g',
+  VARIANT       = 'v',
+  MAYBE         = 'm',
+  ARRAY         = 'a',
+  TUPLE         = '(',
+  DICT_ENTRY    = '{',
+}

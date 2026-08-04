@@ -1,0 +1,27 @@
+import {
+    gint,
+    guint,
+    glong,
+    gulong,
+    gint64,
+    guint64,
+    gfloat,
+    gdouble,
+    gpointer,
+} from glib;
+import { GType } from gtype;
+
+struct GValue {
+    value: GType;
+    data: union {
+        v_int: gint;
+        v_uint: guint;
+        v_long: glong;
+        v_ulong: gulong;
+        v_int64: gint64;
+        v_uint64: guint64;
+        v_float: gfloat;
+        v_double: gdouble;
+        v_pointer: gpointer;
+    };
+}
