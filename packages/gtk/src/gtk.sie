@@ -3,6 +3,7 @@
 @include("gtk/gtkbutton")
 @include("gtk/gtkenums")
 @include("gtk/gtkheaderbar")
+@include("gtk/gtklabel")
 @include("gtk/gtktypes")
 @include("gtk/gtkwidget")
 @include("gtk/gtkwindow")

@@ -2,7 +2,7 @@
 name = "glib"
 description = "Bindings for glib"
 version = "1.0.0"
-license = "LGPL-2.0"
+license = "LGPL-2.1-or-later"
 license-files = ["LICENSE"]
 keywords = ["bindings", "glib"]
 

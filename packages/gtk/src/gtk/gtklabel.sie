@@ -1,0 +1,70 @@
+import { gboolean, guint } from glib;
+import { GMenuModel } from gio;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkWidget } from gtkwidget;
+
+@macro GTK_TYPE_LABEL = gtk_label_get_type();
+@macro GTK_LABEL(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkLabel>(obj, GTK_TYPE_LABEL);
+@macro GTK_IS_LABEL(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_LABEL);
+
+struct GtkLabel;
+
+@extern fn gtk_label_get_type() -> GType;
+@extern fn gtk_label_new(str: const char*);
+@extern fn gtk_label_new_with_mnemonic(str: const char*);
+@extern fn gtk_label_set_text(label: GtkLabel*,
+                              str: const char*);
+@extern fn gtk_label_get_text(label: GtkLabel*) -> const char*;
+
+@extern fn gtk_label_set_label(label: GtkLabel*,
+                               str: const char*);
+@extern fn gtk_label_get_label(label: GtkLabel*) -> const char*;
+@extern fn gtk_label_set_markup(label: GtkLabel*,
+                                str: const char*);
+@extern fn gtk_label_set_use_markup(label: GtkLabel*,
+                                    setting: gboolean);
+@extern fn gtk_label_get_use_markup(label: GtkLabel*) -> gboolean;
+@extern fn gtk_label_set_use_underline(label: GtkLabel*,
+                                       setting: gboolean);
+@extern fn gtk_label_get_use_underline(label: GtkLabel*) -> gboolean;
+@extern fn gtk_label_set_markup_with_mnemonic(label: GtkLabel*,
+                                              str: const char*);
+@extern fn gtk_label_get_mnemonic_keyval(label: GtkLabel*) -> guint;
+@extern fn gtk_label_set_mnemonic_widget(label: GtkLabel*,
+                                         widget: GtkWidget*);
+@extern fn gtk_label_get_mnemonic_widget(label: GtkLabel*) -> GtkWidget*;
+@extern fn gtk_label_set_text_with_mnemonic(label: GtkLabel*,
+                                            str: const char*);
+
+@extern fn gtk_label_set_width_chars(label: GtkLabel*,
+                                     n_chars: i32);
+@extern fn gtk_label_get_width_chars(label: GtkLabel*) -> i32;
+@extern fn gtk_label_set_max_width_chars(label: GtkLabel*,
+                                         n_chars: i32);
+@extern fn gtk_label_get_max_width_chars(label: GtkLabel*) -> i32;
+@extern fn gtk_label_set_lines(label: GtkLabel*,
+                               lines: i32);
+@extern fn gtk_label_get_lines(label: GtkLabel*) -> i32;
+
+@extern fn gtk_label_set_selectable(label: GtkLabel*,
+                                    setting: gboolean);
+@extern fn gtk_label_get_selectable(label: GtkLabel*) -> gboolean;
+@extern fn gtk_label_select_region(label: GtkLabel*,
+                                   start_offset: i32,
+                                   end_offset: i32);
+@extern fn gtk_label_get_selection_bounds(label: GtkLabel*,
+                                          x: i32*,
+                                          y: i32*);
+@extern fn gtk_label_set_single_line_mode(label: GtkLabel*,
+                                          setting: gboolean);
+@extern fn gtk_label_get_single_line_mode(label: GtkLabel*) -> gboolean;
+@extern fn gtk_label_get_current_uri(label: GtkLabel*) -> const char*;
+@extern fn gtk_label_set_xalign(label: GtkLabel*,
+                                xalign: f32);
+@extern fn gtk_label_get_xalign(label: GtkLabel*) -> f32;
+@extern fn gtk_label_set_yalign(label: GtkLabel*,
+                                yalign: f32);
+@extern fn gtk_label_get_yalign(label: GtkLabel*) -> f32;
+@extern fn gtk_label_set_extra_menu(label: GtkLabel*,
+                                    model: GMenuModel*);
+@extern fn gtk_label_get_extra_menu(label: GtkLabel*) -> GMenuModel;

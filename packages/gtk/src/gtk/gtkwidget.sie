@@ -1,15 +1,169 @@
-import { GtkWidget } from gtktypes;
+import { guint, gboolean } from glib;
+import {
+    G_TYPE_CHECK_INSTANCE_CAST,
+    G_TYPE_CHECK_CLASS_CAST,
+    G_TYPE_CHECK_INSTANCE_TYPE,
+    G_TYPE_CHECK_CLASS_TYPE,
+    G_TYPE_INSTANCE_GET_CLASS,
+    GType,
+    GInitiallyUnowned,
+} from gobject;
 import { GtkAlign } from gtkenums;
 
+@macro GTK_TYPE_WIDGET = gtk_widget_get_type();
+@macro GTK_WIDGET(widget) = G_TYPE_CHECK_INSTANCE_CAST<GtkWidget>(widget, GTK_TYPE_WIDGET);
+@macro GTK_WIDGET_CLASS(klass) = G_TYPE_CHECK_CLASS_CAST<GtkWidgetClass>(klass, GTK_TYPE_WIDGET);
+@macro GTK_IS_WIDGET(widget) = G_TYPE_CHECK_INSTANCE_TYPE(widget, GTK_TYPE_WIDGET);
+@macro GTK_IS_WIDGET_CLASS(klass) = G_TYPE_CHECK_CLASS_TYPE(klass, GTK_TYPE_WIDGET);
+@macro GTK_WIDGET_GET_CLASS(obj) = G_TYPE_INSTANCE_GET_CLASS<GtkWidgetClass>(obj, GTK_TYPE_WIDGET); 
+
+struct GtkRequisition {
+    width: i32;
+    height: i32;
+}
+
+struct GtkWidget {
+    priv: GtkWidgetPrivate*;    
+}
+
+struct GtkWidgetPrivate;
+struct GtkWidgetClass;
+struct GtkWidgetClassPrivate;
+
+@extern fn gtk_widget_get_type() -> GType;
+@extern fn gtk_widget_unparent(widget: GtkWidget*);
+@extern fn gtk_widget_show(widget: GtkWidget*);
+@extern fn gtk_widget_hide(widget: GtkWidget*);
+@extern fn gtk_widget_map(widget: GtkWidget*);
+@extern fn gtk_widget_unmap(widget: GtkWidget*);
+@extern fn gtk_widget_realize(widget: GtkWidget*);
+@extern fn gtk_widget_unrealize(widget: GtkWidget*);
+@extern fn gtk_widget_queue_draw(widget: GtkWidget*);
+@extern fn gtk_widget_queue_resize(widget: GtkWidget*);
+@extern fn gtk_widget_queue_allocate(widget: GtkWidget*);
+
+@extern fn gtk_widget_class_set_layout_manager_type(widget: GtkWidget*,
+                                                    type: GType);
+@extern fn gtk_widget_class_get_layout_manager_type(widget: GtkWidget*) -> GType;
+
+@extern fn gtk_widget_class_set_activate_signal(widget_class: GtkWidgetClass*,
+                                                signal_id: guint);
+@extern fn gtk_widget_class_set_activate_signal_from_name(widget_class: GtkWidgetClass*,
+                                                          signal_name: const char*);
+@extern fn gtk_widget_class_get_activate_signal(widget_class: GtkWidgetClass*) -> guint;
+@extern fn gtk_widget_mnemonic_activate(widget: GtkWidget*,
+                                        group_cycling: gboolean) -> gboolean;
+@extern fn gtk_widget_activate(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_can_focus(widget: GtkWidget*,
+                                    can_focus: gboolean);
+@extern fn gtk_widget_get_can_focus(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_focusable(widget: GtkWidget*,
+                                    focusable: gboolean);
+@extern fn gtk_widget_get_focusable(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_has_focus(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_is_focus(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_has_visible_focus(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_grab_focus(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_focus_on_click(widget: GtkWidget*,
+                                         focus_on_click: gboolean);
+@extern fn gtk_widget_get_focus_on_click(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_can_target(widget: GtkWidget*,
+                                     can_target: gboolean);
+@extern fn gtk_widget_get_can_target(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_has_default(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_receives_default(widget: GtkWidget*,
+                                           receives_default: gboolean);
+@extern fn gtk_widget_get_receives_default(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_name(widget: GtkWidget*,
+                               name: const char*);
+@extern fn gtk_widget_get_name(widget: GtkWidget*) -> const char*;
+
+@extern fn gtk_widget_set_sensitive(widget: GtkWidget*,
+                                    sensistive: gboolean);
+@extern fn gtk_widget_get_sensitive(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_is_sensitive(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_visible(widget: GtkWidget*,
+                                  visible: gboolean);
+@extern fn gtk_widget_get_visible(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_is_visible(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_is_drawable(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_get_realized(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_get_mapped(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_parent(widget: GtkWidget*,
+                                 parent: GtkWidget*);
+@extern fn gtk_widget_get_parent(widget: GtkWidget*) -> GtkWidget*;
+@extern fn gtk_widget_get_root(widget: GtkWidget*) -> GtkWidget*;
+
+@extern fn gtk_widget_set_child_visible(widget: GtkWidget*,
+                                        child_visible: gboolean);
+@extern fn gtk_widget_get_child_visible(widget: GtkWidget*) -> gboolean;
+@deprecated("use gtk_widget_get_width()")
+@extern fn gtk_widget_get_allocated_width(widget: GtkWidget*) -> i32;
+@deprecated("use gtk_widget_get_height()")
+@extern fn gtk_widget_get_allocated_height(widget: GtkWidget*) -> i32;
+@deprecated("use gtk_widget_get_baseline()")
+@extern fn gtk_widget_get_allocated_baseline(widget: GtkWidget*) -> i32;
+
+@extern fn gtk_widget_get_width(widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_get_height(widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_get_baseline(widget: GtkWidget*) -> i32;
+
+@extern fn gtk_widget_error_bell(widget: GtkWidget*);
+@extern fn gtk_widget_set_size_request(widget: GtkWidget*,
+                                       width: i32,
+                                       height: i32);
+@extern fn gtk_widget_get_size_request(widget: GtkWidget*,
+                                       width: i32*,
+                                       height: i32*);
+@extern fn gtk_widget_set_opacity(widget: GtkWidget*,
+                                  opacity: f64);
+@extern fn gtk_widget_get_opacity(widget: GtkWidget*) -> f64;
+
+@extern fn gtk_widget_get_scale_factor(widget: GtkWidget*) -> i32;
+
+@extern fn gtk_widget_get_hexpand(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_hexpand(widget: GtkWidget*,
+                                  expand: gboolean);
+@extern fn gtk_widget_get_hexpand_set(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_hexpand_set(widget: GtkWidget*,
+                                      set: gboolean);
+@extern fn gtk_widget_get_vexpand(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_vexpand(widget: GtkWidget*,
+                                  expand: gboolean);
+@extern fn gtk_widget_get_vexpand_set(widget: GtkWidget*) -> gboolean;
+@extern fn gtk_widget_set_vexpand_set(widget: GtkWidget*,
+                                      set: gboolean);
+
 @extern fn gtk_widget_get_halign(widget: GtkWidget*) -> GtkAlign;
-@extern fn gtk_widget_set_halign(widget: GtkWidget*, align: GtkAlign);
+@extern fn gtk_widget_set_halign(widget: GtkWidget*,
+                                 align: GtkAlign);
 @extern fn gtk_widget_get_valign(widget: GtkWidget*) -> GtkAlign;
-@extern fn gtk_widget_set_valign(widget: GtkWidget*, align: GtkAlign);
+@extern fn gtk_widget_set_valign(widget: GtkWidget*,
+                                 align: GtkAlign);
 @extern fn gtk_widget_get_margin_start(widget: GtkWidget*) -> i32;
-@extern fn gtk_widget_set_margin_start(widget: GtkWidget*, margin: i32);
+@extern fn gtk_widget_set_margin_start(widget: GtkWidget*,
+                                       margin: i32);
 @extern fn gtk_widget_get_margin_end(widget: GtkWidget*) -> i32;
-@extern fn gtk_widget_set_margin_end(widget: GtkWidget*, margin: i32);
+@extern fn gtk_widget_set_margin_end(widget: GtkWidget*,
+                                     margin: i32);
 @extern fn gtk_widget_get_margin_top(widget: GtkWidget*) -> i32;
-@extern fn gtk_widget_set_margin_top(widget: GtkWidget*, margin: i32);
-@extern fn gtk_widget_get_margin_bottom (widget: GtkWidget*) -> i32;
-@extern fn gtk_widget_set_margin_bottom (widget: GtkWidget*, margin: i32);
+@extern fn gtk_widget_set_margin_top(widget: GtkWidget*,
+                                     margin: i32);
+@extern fn gtk_widget_get_margin_bottom(widget: GtkWidget*) -> i32;
+@extern fn gtk_widget_set_margin_bottom(widget: GtkWidget*,
+                                        margin: i32);
+
+@extern fn gtk_widget_is_ancestor(widget: GtkWidget*,
+                                  ancestor: GtkWidget*) -> gboolean;
+
+@deprecated("use gtk_widget_compute_point()")
+@extern fn gtk_widget_translate_coordinates(src_widget: GtkWidget*,
+                                            dest_widget: GtkWidget*,
+                                            src_x: f64,
+                                            src_y: f64,
+                                            dest_x: f64*,
+                                            dest_y: f64*) -> gboolean;
+
+@extern fn gtk_widget_contains(widget: GtkWidget*,
+                               x: f64,
+                               y: f64) -> gboolean;
