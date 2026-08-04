@@ -29,11 +29,11 @@ struct Application: Handler<GtkApplication>, Destroy {
     }
 
     fn add_window(&self, obj: &Handler<GtkWindow*>) {
-        gtk_application_add_window(obj.handle);
+        gtk_application_add_window(self.handle, obj.handle);
     }
 
     fn remove_window(&self, obj: &Handler<GtkWindow*>) {
-        gtk_application_remove_window(obj.handle);
+        gtk_application_remove_window(self.handle, obj.handle);
     }
 
     fn connect_activate(&self, callback: closure fn()) {
