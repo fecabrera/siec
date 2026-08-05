@@ -1,0 +1,74 @@
+import { gboolean } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkWidget } from gtk;
+
+@macro ADW_TYPE_NAVIGATION_PAGE = adw_navigation_page_get_type();
+@macro ADW_NAVIGATION_PAGE(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwNavigationPage>(obj, ADW_TYPE_NAVIGATION_PAGE);
+@macro ADW_IS_NAVIGATION_PAGE(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_NAVIGATION_PAGE);
+
+struct AdwNavigationPage;
+
+@extern fn adw_navigation_page_get_type() -> GType;
+@extern fn adw_navigation_page_new(child: GtkWidget*,
+                                   title: const char*) -> AdwNavigationPage*;
+@extern fn adw_navigation_page_new_with_tag(child: GtkWidget*,
+                                            title: const char*,
+                                            tag: const char*) -> AdwNavigationPage*;
+@extern fn adw_navigation_page_get_child(page: AdwNavigationPage*) -> GtkWidget*;
+@extern fn adw_navigation_page_set_child(page: AdwNavigationPage*,
+                                         child: GtkWidget*);
+@extern fn adw_navigation_page_get_tag(page: AdwNavigationPage*) -> const char*;
+@extern fn adw_navigation_page_set_tag(page: AdwNavigationPage*,
+                                       tag: const char*);
+@extern fn adw_navigation_page_get_title(page: AdwNavigationPage*) -> const char*;
+@extern fn adw_navigation_page_set_title(page: AdwNavigationPage*,
+                                         title: const char*);
+@extern fn adw_navigation_page_get_can_pop(page: AdwNavigationPage*) -> gboolean;
+@extern fn adw_navigation_page_set_can_pop(page: AdwNavigationPage*,
+                                           can_pop: gboolean);
+
+@macro ADW_TYPE_NAVIGATION_VIEW = adw_navigation_view_get_type();
+@macro ADW_NAVIGATION_VIEW(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwNavigationView>(obj, ADW_TYPE_NAVIGATION_VIEW);
+@macro ADW_IS_NAVIGATION_VIEW(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_NAVIGATION_VIEW);
+
+struct AdwNavigationView;
+
+@extern fn adw_navigation_view_get_type() -> GType;
+@extern fn adw_navigation_view_new() -> GtkWidget*;
+@extern fn adw_navigation_view_add(view: AdwNavigationView*,
+                                   page: AdwNavigationPage*);
+@extern fn adw_navigation_view_remove(view: AdwNavigationView*,
+                                      page: AdwNavigationPage*);
+@extern fn adw_navigation_view_find_page(view: AdwNavigationView*,
+                                         tag: const char*) -> AdwNavigationPage*;
+@extern fn adw_navigation_view_push(view: AdwNavigationView*,
+                                    page: AdwNavigationPage*);
+@extern fn adw_navigation_view_push_by_tag(view: AdwNavigationView*,
+                                           tag: const char*);
+@extern fn adw_navigation_view_pop(view: AdwNavigationView*) -> gboolean;
+@extern fn adw_navigation_view_pop_to_page(view: AdwNavigationView*,
+                                           page: AdwNavigationPage*) -> gboolean;
+@extern fn adw_navigation_view_pop_to_tag(view: AdwNavigationView*,
+                                          tag: const char*) -> gboolean;
+@extern fn adw_navigation_view_replace(view: AdwNavigationView*,
+                                       pages: AdwNavigationPage**,
+                                       n_pages: i32);
+@extern fn adw_navigation_view_replace_with_tags(view: AdwNavigationView*,
+                                                 tags: const char**,
+                                                 n_tags: i32);
+@extern fn adw_navigation_view_get_visible_page(view: AdwNavigationView*) -> AdwNavigationPage*;
+@extern fn adw_navigation_view_get_visible_page_tag(view: AdwNavigationView*) -> const char*;
+@extern fn adw_navigation_view_get_previous_page(view: AdwNavigationView*,
+                                                 page: AdwNavigationPage*) -> AdwNavigationPage*;
+@extern fn adw_navigation_view_get_hhomogeneous(view: AdwNavigationView*) -> gboolean;
+@extern fn adw_navigation_view_set_hhomogeneous(view: AdwNavigationView*,
+                                                hhomogeneous: gboolean);
+@extern fn adw_navigation_view_get_vhomogeneous(view: AdwNavigationView*) -> gboolean;
+@extern fn adw_navigation_view_set_vhomogeneous(view: AdwNavigationView*,
+                                                vhomogeneous: gboolean);
+@extern fn adw_navigation_view_get_animate_transitions(view: AdwNavigationView*) -> gboolean;
+@extern fn adw_navigation_view_set_animate_transitions(view: AdwNavigationView*,
+                                                       animate_transitions: gboolean);
+@extern fn adw_navigation_view_get_pop_on_escape(view: AdwNavigationView*) -> gboolean;
+@extern fn adw_navigation_view_set_pop_on_escape(view: AdwNavigationView*,
+                                                 pop_on_escape: gboolean);

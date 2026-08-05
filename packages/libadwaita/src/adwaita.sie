@@ -1,6 +1,12 @@
 @include("adwaita/adw_application")
 @include("adwaita/adw_application_window")
 @include("adwaita/adw_header_bar")
+@include("adwaita/adw_length_unit")
+@include("adwaita/adw_navigation_split_view")
+@include("adwaita/adw_navigation_view")
+@include("adwaita/adw_sidebar_item")
+@include("adwaita/adw_sidebar_section")
+@include("adwaita/adw_sidebar")
 @include("adwaita/adw_toolbar_view")
 @include("adwaita/adw_window")
 

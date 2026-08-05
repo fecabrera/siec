@@ -1,0 +1,5 @@
+enum AdwLengthUnit {
+    PX = 0,
+    PT,
+    SP,
+}
