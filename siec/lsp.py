@@ -11,6 +11,7 @@ Helix setups that connect it to '.sie' files.
 """
 
 import asyncio
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -203,6 +204,29 @@ class Symbol:
     name: str
     kind: str
     line: int
+
+
+@dataclass(frozen=True)
+class Completion:
+    """One editor completion candidate, independent of the LSP transport."""
+    label: str
+    kind: str
+    detail: str | None = None
+
+
+KEYWORD_COMPLETIONS = (
+    "and", "as", "bool", "break", "case", "char", "const", "continue",
+    "defer", "else", "emit", "enum", "false", "f32", "f64", "fn",
+    "for", "foreach", "i8", "i16", "i32", "i64", "if", "import",
+    "interface", "let", "not", "opaque", "or", "raw", "return",
+    "struct", "true", "u8", "u16", "u32", "u64", "union", "when",
+    "while",
+)
+
+TYPE_KEYWORD_COMPLETIONS = frozenset((
+    "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64",
+    "opaque", "raw", "u8", "u16", "u32", "u64",
+))
 
 
 def inactive_semantic_tokens(analysis: Analysis, text: str) -> list[int]:
@@ -870,6 +894,203 @@ def declaration_sites(program: Program):
     return index
 
 
+def complete(analysis: Analysis, text: str, line: int,
+             col: int) -> list[Completion]:
+    """
+    Complete names at a 0-based source position.
+
+    A trailing dotted receiver first checks the loader's resolved module
+    bindings. Thus ``import util; util.`` offers exactly ``util``'s public
+    exports, including declarations supplied by that module's includes.
+    Everywhere else, locals, names visible to this file, imported module
+    bindings, compiler builtins, and language keywords are offered.
+    """
+    if analysis.program is None or analysis.gen is None:
+        return []
+
+    lines = text.splitlines()
+    if line < 0 or line >= len(lines):
+        return []
+
+    before = lines[line][:col]
+    access = re.search(
+        r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\."
+        r"([A-Za-z_][A-Za-z0-9_]*)?$", before)
+
+    gen = analysis.gen
+    gen.current_file = analysis.path
+    sites = declaration_sites(analysis.program)
+
+    if access is not None:
+        receiver, partial = access.group(1), access.group(2) or ""
+        target = gen.module_bindings.get((analysis.path, receiver))
+        if target is not None:
+            files = gen.include_closure.get(target, {target})
+            return [
+                completion_for_name(
+                    analysis, sites, name, files=files, module=target)
+                for name in sorted(gen.module_exports.get(target, ()))
+                if name.isidentifier() and name.startswith(partial)
+            ]
+
+        return complete_value_members(
+            analysis, sites, receiver, partial, line, col)
+
+    partial_match = re.search(r"[A-Za-z_][A-Za-z0-9_]*$", before)
+    partial = partial_match.group() if partial_match is not None else ""
+    candidates: dict[str, Completion] = {}
+
+    fn = enclosing_function(analysis.program, analysis.path, line + 1, col)
+    if fn is not None:
+        scope, local_lines = local_scope(gen, fn, line + 1, col)
+        for name in local_lines:
+            type_ = scope[name].type if name in scope else None
+            detail = f"{name}: {type_}" if type_ is not None else None
+            candidates[name] = Completion(name, "variable", detail)
+        for name in (*(fn.type_params or ()), *(fn.receiver_params or ())):
+            candidates[name] = Completion(name, "type", name)
+
+    visible = gen.visible.get(analysis.path)
+    names = sites if visible is None else visible
+    for name in names:
+        if not name.isidentifier() or name.startswith("__"):
+            continue
+        candidates.setdefault(
+            name, completion_for_name(analysis, sites, name))
+
+    for name in gen.builtin_names:
+        if not name.startswith("__"):
+            candidates.setdefault(
+                name, completion_for_name(analysis, sites, name))
+
+    for (file, binding), _target in gen.module_bindings.items():
+        if file == analysis.path:
+            candidates[binding] = Completion(binding, "module",
+                                               f"import {binding};")
+
+    for keyword in KEYWORD_COMPLETIONS:
+        candidates.setdefault(keyword, Completion(keyword, "keyword"))
+
+    start = partial_match.start() if partial_match is not None else len(before)
+    leader = before[:start].rstrip()
+    if (leader.endswith(":") or leader.endswith("->")
+            or leader.endswith(" as")):
+        candidates = {
+            name: item for name, item in candidates.items()
+            if item.kind in ("struct", "interface", "enum", "type")
+            or name in TYPE_KEYWORD_COMPLETIONS
+        }
+
+    return [candidates[name] for name in sorted(candidates)
+            if name.startswith(partial)]
+
+
+def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
+                           partial: str, line: int,
+                           col: int) -> list[Completion]:
+    """Complete the fields and eligible methods of a typed expression."""
+    from siec.codegen.generics import split_generic
+    from siec.parser.expressions import parse_expression
+    from siec.parser.stream import TokenStream
+
+    gen = analysis.gen
+    fn = enclosing_function(analysis.program, analysis.path, line + 1, col)
+    scope = local_scope(gen, fn, line + 1, col)[0] if fn is not None else {}
+
+    try:
+        expr = parse_expression(TokenStream(lex(receiver)))
+        receiver_type = hover_expr_type(gen, expr, scope)
+    except (TypeError, NameError, SyntaxError, KeyError, IndexError):
+        return []
+
+    if receiver_type is None:
+        return []
+
+    base = strip_const(strip_reference(strip_const(receiver_type)))
+    candidates: dict[str, Completion] = {}
+
+    info = gen.structs.get(base)
+    if info is None and (parts := split_generic(base)) is not None:
+        info = gen.generic_structs.get(parts[0])
+
+    fields = info.fields if info is not None and info.fields else ()
+    for field_ in fields:
+        if field_.name.startswith(partial):
+            finding = field_finding(analysis, sites, base, field_.name)
+            detail = finding.text if finding is not None else \
+                f"{field_.name}: {field_.type}"
+            candidates[field_.name] = Completion(
+                field_.name, "field", detail)
+
+    method_names = set(gen.generic_receiver_methods)
+    method_names.update(method for _receiver, method in gen.generic_methods)
+    for declared in sites:
+        if "::" in declared:
+            method_names.add(declared.rpartition("::")[2])
+
+    for name in method_names:
+        if not name.startswith(partial):
+            continue
+        finding = method_finding(analysis, sites, base, name)
+        if finding is not None:
+            candidates.setdefault(
+                name, Completion(name, "method", finding.text))
+
+    return [candidates[name] for name in sorted(candidates)]
+
+
+def completion_for_name(analysis: Analysis, sites: dict, name: str,
+                        files=None, module: str | None = None) -> Completion:
+    """Classify a compiler-visible name and provide a concise declaration."""
+    gen = analysis.gen
+    lookup = name
+    if module is not None:
+        lookup = gen.module_type_symbols.get((module, name), name)
+    else:
+        member = gen.member_targets.get((analysis.path, name))
+        if member is not None:
+            target, original = member
+            lookup = gen.module_type_symbols.get((target, original), original)
+        else:
+            lookup = gen.local_type_symbols.get((analysis.path, name), name)
+
+    found = [(kind, decl) for kind, decl in sites.get(lookup, ())
+             if files is None or decl.file in files]
+    if not found:
+        return Completion(name, "text")
+
+    kind, decl = found[0]
+    if kind == "function":
+        details = []
+        for _, fn in found:
+            if (shown := signature(fn)) not in details:
+                details.append(shown)
+        detail = details[0]
+        if len(details) > 1:
+            detail += f" (+{len(details) - 1} overloads)"
+        return Completion(name, "function", detail)
+
+    if kind == "struct":
+        item_kind = "interface" if decl.is_interface else "struct"
+        return Completion(name, item_kind, struct_text(decl))
+
+    if kind == "enum":
+        return Completion(name, "enum", enum_text(decl))
+
+    if kind == "constant":
+        item_kind = "function" if decl.is_macro else "constant"
+        return Completion(name, item_kind,
+                          source_line(analysis, decl.file, decl.line))
+
+    if kind == "variable":
+        return Completion(name, "variable", f"{name}: {decl.type}")
+
+    if kind == "alias":
+        return Completion(name, "type", f"{name} = {decl.type}")
+
+    return Completion(name, "text")
+
+
 def inspect(analysis: Analysis, text: str, line: int, col: int) -> Finding | None:
     """
     Resolve the name at a 0-based position of the unit's root buffer:
@@ -1345,7 +1566,8 @@ def create_server():
     """
     Build the pygls server: diagnostics published on open, change (a
     beat after the last keystroke), and save; document symbols from the
-    outline; hover and go-to-definition from the last good analysis.
+    outline; hover, completion, and go-to-definition from the last good
+    analysis.
     Initialization options may carry {"includePaths": [...]}.
     """
     from lsprotocol import types
@@ -1365,6 +1587,21 @@ def create_server():
              "macro": types.SymbolKind.Function,
              "variable": types.SymbolKind.Variable,
              "alias": types.SymbolKind.Class}
+
+    completion_kinds = {
+        "text": types.CompletionItemKind.Text,
+        "keyword": types.CompletionItemKind.Keyword,
+        "module": types.CompletionItemKind.Module,
+        "function": types.CompletionItemKind.Function,
+        "method": types.CompletionItemKind.Method,
+        "field": types.CompletionItemKind.Field,
+        "struct": types.CompletionItemKind.Struct,
+        "interface": types.CompletionItemKind.Interface,
+        "enum": types.CompletionItemKind.Enum,
+        "constant": types.CompletionItemKind.Constant,
+        "variable": types.CompletionItemKind.Variable,
+        "type": types.CompletionItemKind.Class,
+    }
 
     workspace = {"root": None, "extra": []}
     outlines: dict[str, list[Symbol]] = {}
@@ -1504,6 +1741,24 @@ def create_server():
         content = types.MarkupContent(kind=types.MarkupKind.Markdown,
                                       value=f"```sie\n{finding.text}\n```")
         return types.Hover(contents=content)
+
+    @server.feature(
+        types.TEXT_DOCUMENT_COMPLETION,
+        types.CompletionOptions(trigger_characters=["."]))
+    def completion(params: types.CompletionParams) -> list:
+        uri = params.text_document.uri
+        analysis = analyses.get(uri)
+        if analysis is None:
+            return []
+
+        doc = server.workspace.get_text_document(uri)
+        items = complete(analysis, doc.source, params.position.line,
+                         params.position.character)
+        return [types.CompletionItem(
+            label=item.label,
+            kind=completion_kinds[item.kind],
+            detail=item.detail,
+        ) for item in items]
 
     @server.feature(
         types.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL,

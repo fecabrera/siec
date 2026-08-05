@@ -3,7 +3,8 @@
 import asyncio
 
 from siec.lsp import (Report, SearchPathCache, UnitAnalysisCache, analyze,
-                      compile_unit, dependent_uris, outline, search_paths)
+                      compile_unit, complete, dependent_uris, outline,
+                      search_paths)
 
 
 def write(path, text):
@@ -1045,6 +1046,140 @@ fn main() -> i32 {
     finding = probe(analysis, src, 3, 16)
     assert finding.text == "fn add(x: i32, y: i32) -> i32"
     assert finding.targets == [(str((tmp_path / "util.sie").resolve()), 1)]
+
+
+def test_complete_lists_an_imported_modules_public_members(tmp_path):
+    """A trailing module dot offers its exported declarations by kind."""
+    write(tmp_path / "util.sie", """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+@const ANSWER: i32 = 42;
+struct Box { value: i32; }
+@private fn hidden() -> i32 { return 0; }
+""")
+
+    analysis, _ = unit(tmp_path, """\
+import util;
+
+fn main() -> i32 {
+    return util.add(40, 2);
+}
+""")
+    edited = """\
+import util;
+
+fn main() -> i32 {
+    util.
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 3, 9)}
+    assert set(items) == {"ANSWER", "Box", "add"}
+    assert items["ANSWER"].kind == "constant"
+    assert items["Box"].kind == "struct"
+    assert items["add"].kind == "function"
+    assert items["add"].detail == "fn add(x: i32, y: i32) -> i32"
+
+
+def test_complete_filters_a_module_member_prefix(tmp_path):
+    """The unfinished name after a module dot narrows its exports."""
+    write(tmp_path / "util.sie", """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+fn subtract(x: i32, y: i32) -> i32 { return x - y; }
+""")
+    analysis, _ = unit(tmp_path, """\
+import util;
+fn main() -> i32 { return util.add(40, 2); }
+""")
+    edited = """\
+import util;
+fn main() -> i32 { util.ad }
+"""
+
+    items = complete(analysis, edited, 1, 26)
+    assert [item.label for item in items] == ["add"]
+
+
+def test_complete_lists_locals_visible_names_and_modules(tmp_path):
+    """Lexical completion combines compiler scope and module bindings."""
+    write(tmp_path / "util.sie", "fn answer() -> i32 { return 42; }")
+    analysis, _ = unit(tmp_path, """\
+import util;
+fn helper() -> i32 { return 1; }
+fn main() -> i32 {
+    let count: i32 = 42;
+    return count;
+}
+""")
+    edited = """\
+import util;
+fn helper() -> i32 { return 1; }
+fn main() -> i32 {
+    let count: i32 = 42;
+    cou
+    return count;
+}
+"""
+
+    locals_ = complete(analysis, edited, 4, 7)
+    assert [(item.label, item.kind, item.detail) for item in locals_] == [
+        ("count", "variable", "count: i32")]
+
+    names = {item.label: item for item in complete(analysis, edited, 4, 4)}
+    assert names["helper"].kind == "function"
+    assert names["util"].kind == "module"
+    assert names["Integer"].kind == "interface"
+    assert names["return"].kind == "keyword"
+
+
+def test_complete_lists_value_fields_and_methods(tmp_path):
+    """A typed value's dot completion includes its fields and methods."""
+    analysis, _ = unit(tmp_path, """\
+struct Box { value: i32; }
+fn Box::answer(const &self) -> i32 { return self.value; }
+
+fn main() -> i32 {
+    let box: Box = { 42 };
+    return box.answer();
+}
+""")
+    edited = """\
+struct Box { value: i32; }
+fn Box::answer(const &self) -> i32 { return self.value; }
+
+fn main() -> i32 {
+    let box: Box = { 42 };
+    box.
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 5, 8)}
+    assert items["value"].kind == "field"
+    assert items["value"].detail == "value: i32"
+    assert items["answer"].kind == "method"
+    assert items["answer"].detail == \
+        "fn Box::answer(const &Box) -> i32"
+
+
+def test_complete_type_context_excludes_value_names(tmp_path):
+    """A type annotation offers types without unrelated value declarations."""
+    analysis, _ = unit(tmp_path, """\
+struct Box { value: i32; }
+fn helper() -> i32 { return 1; }
+fn main() -> i32 { let box: Box; return box.value; }
+""")
+    edited = """\
+struct Box { value: i32; }
+fn helper() -> i32 { return 1; }
+fn main() -> i32 { let other:  }
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 2, 31)}
+    assert items["Box"].kind == "struct"
+    assert items["Integer"].kind == "interface"
+    assert items["i32"].kind == "keyword"
+    assert "helper" not in items
 
 
 def test_inspect_resolves_an_imported_module(tmp_path):

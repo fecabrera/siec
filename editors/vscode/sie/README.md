@@ -7,9 +7,11 @@ and `SetItem`), strings with escapes, numbers, enum members, methods, and
 `@asm` bodies.
 
 With the `sie-lsp` language server it also serves diagnostics as you
-type, the document outline, hover, and go-to-definition, compiled and
-typed by the real compiler front end. Branches rejected by compile-time
-`@if` conditions are dimmed through semantic highlighting.
+type, completion, the document outline, hover, and go-to-definition,
+compiled and typed by the real compiler front end. Completion includes
+locals, visible declarations, builtins, keywords, imported modules, and a
+module's public exports after a dot (`import util; util.`). Branches rejected
+by compile-time `@if` conditions are dimmed through semantic highlighting.
 
 ## Install
 
