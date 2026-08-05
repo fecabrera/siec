@@ -301,3 +301,47 @@ def test_mutual_generic_alias_cycle_is_rejected_at_declaration(compile_source):
         @type B<T> = A<T>;
         fn main() -> i32 { return 0; }
         """)
+
+
+def test_private_fields_work_with_generic_structs(run, compile_source):
+    """Generic struct methods may access private fields of their family."""
+    source = """
+    struct Box<T> {
+        @private handle: opaque*;
+        value: T;
+    }
+
+    fn Box<T>::make(value: T) -> Box<T> {
+        let box: Box<T>;
+        box.handle = null;
+        box.value = value;
+        return box;
+    }
+
+    fn Box<T>::read(const &self) -> T {
+        return self.value;
+    }
+
+    fn main() -> i32 {
+        let box = Box<i32>::make(42);
+        return box.read();
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="field 'handle' is private"):
+        compile_source("""
+        struct Box<T> {
+            @private handle: opaque*;
+            value: T;
+        }
+
+        fn peek<T>(box: const Box<T>) -> const opaque* {
+            return box.handle;
+        }
+
+        fn main() -> i32 {
+            let box: Box<i32>;
+            return peek(box) as i32;
+        }
+        """)

@@ -113,6 +113,18 @@ def test_private_forward_declaration(ts):
     assert struct.is_private
 
 
+def test_private_field(ts):
+    """'@private' on a field marks it reachable only from the struct's methods."""
+    struct = parse_struct(ts("""
+        struct S {
+            @private handle: opaque*;
+            value: i32;
+        }
+    """))
+    assert struct.fields[0] == Field("handle", "opaque*", is_private=True)
+    assert struct.fields[1] == Field("value", "i32")
+
+
 def test_forward_declaration_consumes_its_semicolon(ts):
     """
     A forward declaration consumes its ';', leaving following tokens untouched.

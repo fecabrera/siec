@@ -360,6 +360,14 @@ def write_private_module(tmp_path):
             return self.value;
         }
 
+        struct Handle {
+            @private value: i32;
+        }
+
+        fn Handle::read(const &self) -> i32 {
+            return self.value;
+        }
+
         struct Box<T> {
             value: T;
         }
@@ -472,6 +480,54 @@ def test_private_generic_methods_are_not_reached_through_imported_types(
     monkeypatch.chdir(tmp_path)
     assert run_cli(monkeypatch, src, "--run") == 1
     assert "undefined function 'value.read'" in capsys.readouterr().err
+
+
+def test_private_fields_are_not_reached_through_imported_types(
+        tmp_path, monkeypatch, capsys):
+    """
+    Importing a public struct does not expose its private fields.
+    """
+    write_private_module(tmp_path)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import private_api;
+
+        fn main() -> i32 {
+            let handle: private_api.Handle = { value = 1 };
+            return handle.read();
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "field 'value' is private" in capsys.readouterr().err
+
+
+def test_private_generic_fields_are_not_reached_through_imported_types(
+        tmp_path, monkeypatch, capsys):
+    """
+    Instantiating a public generic struct does not expose private fields.
+    """
+    write_private_module(tmp_path)
+    (tmp_path / "private_api.sie").write_text(
+        (tmp_path / "private_api.sie").read_text().replace(
+            "struct Box<T> {\n            value: T;\n        }",
+            "struct Box<T> {\n            @private value: T;\n        }",
+        )
+    )
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import private_api;
+
+        fn main() -> i32 {
+            let value: private_api.Box<i32> = { 42 };
+            return value.value;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+    assert "field 'value' is private" in capsys.readouterr().err
 
 
 def test_include_can_access_private_declarations(tmp_path, monkeypatch):

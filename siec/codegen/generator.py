@@ -525,6 +525,60 @@ class CodeGenerator:
         return (not origins
                 or any(self.sees_private_from(file) for file in origins))
 
+    def method_struct_type(self) -> str | None:
+        """
+        The struct type whose methods may access its private fields, or
+        None when not checking a method body.
+        """
+        fn = self.checking_function
+        if fn is None:
+            return None
+
+        if fn.receiver is not None:
+            if fn.receiver_params:
+                return f"{fn.receiver}<{','.join(fn.receiver_params)}>"
+            return fn.receiver
+
+        if "::" in fn.name:
+            return fn.name.partition("::")[0]
+
+        return None
+
+    def can_access_private_field(self, struct_type: str) -> bool:
+        """
+        Whether the current checking context may read or write a private
+        field of the given struct type.
+        """
+        from siec.codegen.aliases import expand_alias
+        from siec.codegen.generics import split_generic
+        from siec.codegen.types import strip_const, strip_reference
+
+        method_type = self.method_struct_type()
+        if method_type is None:
+            return False
+
+        struct_type = strip_const(strip_reference(expand_alias(self, struct_type)))
+        method_type = strip_const(strip_reference(expand_alias(self, method_type)))
+
+        if struct_type == method_type:
+            return True
+
+        struct_parts = split_generic(struct_type)
+        method_parts = split_generic(method_type)
+        if (struct_parts and method_parts
+                and struct_parts[0] == method_parts[0]
+                and len(struct_parts[1]) == len(method_parts[1])):
+            return True
+
+        fn = self.checking_function
+        if fn is not None and fn.receiver is not None and fn.receiver_params:
+            if struct_parts and struct_parts[0] == fn.receiver:
+                return len(struct_parts[1]) == len(fn.receiver_params)
+            if struct_type == fn.receiver:
+                return True
+
+        return False
+
     def resolve_callee(self, name: str) -> str | None:
         """
         Resolve a call's name to its module symbol: dotted names through

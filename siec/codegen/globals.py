@@ -16,6 +16,7 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.enums import evaluate, evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
+from siec.codegen.inference import check_field_access
 from siec.codegen.types import (
     is_const,
     is_reference,
@@ -120,6 +121,7 @@ def validate_constant_value(gen: CodeGenerator, expr: Expr,
                 pairs.append((fields[name], value))
 
         for field, value in pairs:
+            check_field_access(gen, target, field)
             validate_constant_value(gen, value, field.type)
         return
 
@@ -289,6 +291,7 @@ def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
             pairs.append((index_of[name], element))
 
     for index, element in pairs:
+        check_field_access(gen, sie_type, fields[index])
         values[index] = constant_value(gen, element, type_.elements[index],
                                        fields[index].type)
 

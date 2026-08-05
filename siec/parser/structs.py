@@ -101,7 +101,11 @@ def parse_struct(ts: TokenStream) -> Struct:
         # An interface declares required actions; a struct or union declares
         # ordinary methods. In either case the enclosing declaration supplies
         # the receiver, so the method name itself stays unqualified.
-        if ts.peek().value == "fn" or ts.peek().value == "@":
+        if (ts.peek().value == "fn"
+                or (ts.peek().value == "@"
+                    and not (ts.peek(1).value == "private"
+                             and ts.peek(2).kind == "ident"
+                             and ts.peek(3).value == ":"))):
             # deferred import: functions and structs are mutually recursive
             from siec.parser.functions import (
                 merge_constraints,
@@ -129,6 +133,17 @@ def parse_struct(ts: TokenStream) -> Struct:
             ts.expect("sym", ";")
             continue
 
+        field_private = False
+        while ts.peek().value == "@":
+            at_line = ts.peek().line
+            ts.next()
+            decorator = ts.expect("ident").value
+            if decorator == "private":
+                field_private = True
+            else:
+                raise SyntaxError(f"line {at_line}: unknown field decorator "
+                                  f"'@{decorator}'")
+
         named = ts.expect("ident")
         field_name = named.value
         ts.expect("sym", ":")
@@ -141,7 +156,8 @@ def parse_struct(ts: TokenStream) -> Struct:
             ts.next()
             default = parse_expression(ts)
 
-        fields.append(Field(field_name, field_type, default, line=named.line))
+        fields.append(Field(field_name, field_type, default,
+                            is_private=field_private, line=named.line))
         ts.expect("sym", ";")
 
     ts.expect("sym", "}")

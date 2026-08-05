@@ -652,6 +652,7 @@ class Field:
     name: str
     type: str
     default: object | None = None
+    is_private: bool = False  # '@private': reachable only from the struct's methods
     line: int = _line()
 
 

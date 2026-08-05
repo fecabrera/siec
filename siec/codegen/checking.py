@@ -55,10 +55,13 @@ from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import error_call_trace, source_location
 from siec.codegen.generator import CodeGenerator, Variable
 from siec.codegen.inference import (
+    check_field_access,
     expr_sie_type,
+    hoist_member,
     infer_type,
     member_field,
     try_arms,
+    type_info,
     untyped_reason,
 )
 from siec.codegen.types import (
@@ -73,6 +76,22 @@ from siec.codegen.types import (
 )
 
 NO_EMIT = object()
+
+
+def check_member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, str]:
+    """Resolve a member access and enforce private-field visibility."""
+    hoist_member(gen, expr, scope)
+    base_type = expr_sie_type(gen, expr.base, scope)
+    info = type_info(gen, base_type)
+    if info is None:
+        if base_type is None and (reason := untyped_reason(gen, expr.base, scope)):
+            raise reason
+        raise TypeError(f"cannot access field {expr.field!r} on non-struct "
+                        f"type {base_type or '?'}")
+
+    index, field_type = info.field(expr.field)
+    check_field_access(gen, base_type, info.fields[index])
+    return index, field_type
 
 
 def checked_variable(type_name: str, *, moved: bool = False) -> Variable:
@@ -562,7 +581,7 @@ def lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str:
         raise NameError(f"undefined variable {expr.name!r}")
 
     if isinstance(expr, Member):
-        return member_field(gen, expr, scope)[1]
+        return check_member_field(gen, expr, scope)[1]
 
     if not (isinstance(expr, (Index, Call, MethodCall))
             or isinstance(expr, UnaryOp) and expr.op == "*"):
@@ -612,7 +631,7 @@ def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str:
         raise NameError(f"undefined variable {expr.name!r}")
 
     if isinstance(expr, Member):
-        declared = member_field(gen, expr, scope)[1]
+        declared = check_member_field(gen, expr, scope)[1]
         if is_const(declared):
             raise TypeError(f"cannot assign to const field {expr.field!r}")
         reject_const_base(gen, scope, expr.base)
@@ -791,6 +810,20 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return check_expression(gen, folded, scope, expected)
 
+        from siec.codegen.types import raw_array
+
+        if raw_array(base_type) is not None and expr.field == "length":
+            if expected is not None:
+                require_fit(gen, expr, "u64", expected)
+            return expected or "u64"
+
+        if base_type.startswith("Tuple<") and expr.field == "length":
+            if expected is not None:
+                require_fit(gen, expr, "u64", expected)
+            return expected or "u64"
+
+        check_member_field(gen, expr, scope)
+
     if isinstance(expr, Call):
         return check_call(gen, expr, scope, expected)
 
@@ -901,6 +934,7 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                         pairs.append((value, fields_by_name[name]))
 
                 for value, field in pairs:
+                    check_field_access(gen, expected, field)
                     field_type = field.type
                     if (is_const(expected)
                             and is_aliasing(field_type)

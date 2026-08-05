@@ -1,5 +1,7 @@
 """Feature tests for structs: fields, nesting, passing, and initialization."""
 
+import pytest
+
 
 def test_field_write_and_read(run):
     """
@@ -171,3 +173,63 @@ def test_struct_with_trailing_semicolon(run):
     }
     """
     assert run(source).returncode == 9
+
+
+def test_private_field_accessible_from_methods(run, compile_source):
+    """
+    A private field is reachable inside the struct's methods but not
+    from free functions.
+    """
+    source = """
+    struct S {
+        @private handle: opaque*;
+        value: i32;
+    }
+
+    fn S::make(handle: opaque*, value: i32) -> S {
+        let s: S;
+        s.handle = handle;
+        s.value = value;
+        return s;
+    }
+
+    fn S::value(const &self) -> i32 {
+        return self.value;
+    }
+
+    fn S::handle(const &self) -> const opaque* {
+        return self.handle;
+    }
+
+    fn main() -> i32 {
+        let s = S::make(null, 42);
+        if (s.value() != 42) { return 1; }
+        if (s.handle() != null) { return 2; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+    with pytest.raises(TypeError, match="field 'handle' is private"):
+        compile_source(source + """
+    fn peek(s: const S) -> const opaque* {
+        return s.handle;
+    }
+""")
+
+
+def test_private_field_rejects_aggregate_literal_outside_methods(compile_source):
+    """Aggregate literals cannot initialize private fields outside methods."""
+    source = """
+    struct S {
+        @private handle: opaque*;
+        value: i32;
+    }
+
+    fn main() -> i32 {
+        let s: S = { handle = null, value = 1 };
+        return s.value;
+    }
+    """
+    with pytest.raises(TypeError, match="field 'handle' is private"):
+        compile_source(source)

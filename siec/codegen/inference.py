@@ -449,7 +449,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if info is None:
             return None
 
-        field_type = info.field(expr.field)[1]
+        _, field_type = member_field(gen, expr, scope)
         if is_const(base_name) and is_aliasing(field_type) and not is_const(field_type):
             return f"const {field_type}"
 
@@ -938,6 +938,12 @@ def hoist_member(gen: CodeGenerator, expr: Member, scope: dict) -> None:
         expr.base = Member(expr.base, hop)
 
 
+def check_field_access(gen: CodeGenerator, struct_type: str, field) -> None:
+    """Reject direct access to a private field outside its struct's methods."""
+    if field.is_private and not gen.can_access_private_field(struct_type):
+        raise TypeError(f"field {field.name!r} is private")
+
+
 def member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, str]:
     """
     Resolve a member access to its field index and Sie type, checking the base has fields.
@@ -955,4 +961,6 @@ def member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, st
         raise TypeError(f"cannot access field {expr.field!r} on non-struct "
                         f"type {base_type or '?'}")
 
-    return info.field(expr.field)
+    index, field_type = info.field(expr.field)
+
+    return index, field_type
