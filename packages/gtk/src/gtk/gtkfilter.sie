@@ -1,0 +1,28 @@
+import { GType } from gobject;
+import { gboolean, gpointer } from glib;
+
+enum GtkFilterMatch {
+    SOME = 0,
+    NONE,
+    ALL,
+}
+
+enum GtkFilterChange {
+    DIFFERENT = 0,
+    LESS_STRICT,
+    MORE_STRICT,
+    DIFFERENT_REWATCH,
+    LESS_STRICT_REWATCH,
+    MORE_STRICT_REWATCH,
+}
+
+@macro GTK_TYPE_FILTER = gtk_filter_get_type();
+
+struct GtkFilter;
+
+@extern fn gtk_filter_get_type() -> GType;
+@extern fn gtk_filter_match(filter: GtkFilter*,
+                            item: gpointer) -> gboolean;
+@extern fn gtk_filter_get_strictness(filter: GtkFilter*) -> GtkFilterMatch;
+@extern fn gtk_filter_changed(filter: GtkFilter*,
+                              change: GtkFilterChange);

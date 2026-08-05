@@ -1,0 +1,7 @@
+import { GType } from gobject;
+
+@macro GTK_TYPE_FILTER_LIST_MODEL = gtk_filter_list_model_get_type();
+
+struct GtkFilterListModel;
+
+@extern fn gtk_filter_list_model_get_type() -> GType;
