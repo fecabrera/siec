@@ -44,8 +44,10 @@ declarations with their `S::method` receivers, and the literal forms
 including hexadecimal, escapes, and char literals.
 
 **Filetype settings** give `gc` comment toggling (`//`, with `/* */` for
-blocks), four-space indentation, and C-style auto-indent. `@` counts as a
-word character, so `*`, `K`, and `gd` take `@sizeof` whole.
+blocks), four-space indentation, and Sie-aware C-style auto-indent. In
+particular, consecutive `name: Type;` struct fields stay aligned instead of
+being mistaken for C labels. `@` counts as a word character, so `*`, `K`, and
+`gd` take `@sizeof` whole.
 
 **Quickfix**: `:compiler sie` then `:make` fills the quickfix list with
 what the build reported, warnings marked as warnings.
