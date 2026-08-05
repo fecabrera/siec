@@ -15,6 +15,7 @@ from siec.codegen.generator import CodeGenerator
 from siec.codegen.generics import (split_generic, substitute,
                                    substitute_constraint, unify)
 from siec.codegen.types import (
+    INTEGER_TYPES,
     SCALAR_TYPES,
     is_const,
     strip_const,
@@ -294,9 +295,10 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                 raise TypeError(f"{base!r} is {kind} an interface: "
                                 f"{name!r} cannot implement it")
 
-            if base == "Scalar":
-                raise TypeError("'Scalar' is a sealed builtin interface: "
-                                "only primitive scalar types implement it")
+            if base in ("Scalar", "Integer"):
+                raise TypeError(f"{base!r} is a sealed builtin interface: "
+                                "only compiler-defined primitive types "
+                                "implement it")
 
             declared = len(iface.params or ())
             if declared != len(args):
@@ -622,6 +624,8 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
 
     if required == "Scalar":
         found.extend(name for name in SCALAR_TYPES if name not in found)
+    if required == "Integer":
+        found.extend(name for name in INTEGER_TYPES if name not in found)
 
     for param, claim, constraints, file in gen.array_claims:
         bindings: dict = {}
@@ -705,6 +709,8 @@ def claimed_interfaces(gen: CodeGenerator, concrete: str,
 
     if concrete in SCALAR_TYPES and relevant("Scalar"):
         claims.add("Scalar")
+    if concrete in INTEGER_TYPES and relevant("Integer"):
+        claims.add("Integer")
 
     if concrete.endswith("[]"):
         element = concrete[:-2]
@@ -740,6 +746,8 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     # blanket claim guarded by Scalar from consulting itself recursively.
     if required == "Scalar":
         return strip_const(concrete) in SCALAR_TYPES
+    if required == "Integer":
+        return strip_const(concrete) in INTEGER_TYPES
 
     # Blanket claims may depend on other blanket claims. A cycle supplies
     # no evidence of conformance, so fail that path closed while allowing
@@ -968,9 +976,10 @@ def resolve_type_family_extend(gen: CodeGenerator, ext) -> None:
             raise TypeError(f"{base!r} is {kind} an interface: "
                             f"{ext.name!r} cannot implement it")
 
-        if base == "Scalar":
-            raise TypeError("'Scalar' is a sealed builtin interface: "
-                            "only primitive scalar types implement it")
+        if base in ("Scalar", "Integer"):
+            raise TypeError(f"{base!r} is a sealed builtin interface: "
+                            "only compiler-defined primitive types "
+                            "implement it")
 
         declared = len(iface.params or ())
         if declared != len(args):
@@ -1074,9 +1083,10 @@ def resolve_array_extend(gen: CodeGenerator, ext) -> None:
             raise TypeError(f"{base!r} is {kind} an interface: "
                             f"{ext.name!r} cannot implement it")
 
-        if base == "Scalar":
-            raise TypeError("'Scalar' is a sealed builtin interface: "
-                            "only primitive scalar types implement it")
+        if base in ("Scalar", "Integer"):
+            raise TypeError(f"{base!r} is a sealed builtin interface: "
+                            "only compiler-defined primitive types "
+                            "implement it")
 
         declared = len(iface.params or ())
         if declared != len(args):

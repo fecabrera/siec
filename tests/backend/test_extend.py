@@ -465,6 +465,39 @@ def test_scalar_is_a_sealed_builtin_bound(run, compile_source):
         """)
 
 
+def test_integer_is_a_sealed_builtin_bound(run, compile_source):
+    """Only the eight signed and unsigned integer primitives satisfy Integer."""
+    source = """
+    fn identity<T: Integer>(value: T) -> T { return value; }
+
+    fn main() -> i32 {
+        let a: i8 = identity(0 as i8);
+        let b: i16 = identity(0 as i16);
+        let c: i32 = identity(42 as i32);
+        let d: i64 = identity(0 as i64);
+        let e: u8 = identity(0 as u8);
+        let f: u16 = identity(0 as u16);
+        let g: u32 = identity(0 as u32);
+        let h: u64 = identity(0 as u64);
+        return c;
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError, match="does not implement interface 'Integer'"):
+        compile_source("""
+        fn only_integer<T: Integer>(value: T) {}
+        fn main() -> i32 { only_integer(1.0); return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="'Integer' is a sealed builtin "
+                                        "interface"):
+        compile_source("""
+        struct Pretender: Integer {}
+        fn main() -> i32 { return 0; }
+        """)
+
+
 def test_array_operators_desugar_through_methods(run):
     """
     '==' and '!=' on array operands reach the 'T[]::eq' method.

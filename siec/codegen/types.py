@@ -20,6 +20,7 @@ SCALAR_TYPES = {
 
 SIGNED_TYPES = {"i8", "i16", "i32", "i64"}
 UNSIGNED_TYPES = {"u8", "u16", "u32", "u64"}
+INTEGER_TYPES = SIGNED_TYPES | UNSIGNED_TYPES
 
 
 def is_const(name: str | None) -> bool:
