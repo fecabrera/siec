@@ -432,7 +432,7 @@ def test_static_assert_weighs_the_whole_program(compile_source):
     """
     source = """
     @static_assert(@sizeof(Header) == 16, "Header must stay two words");
-    @static_assert(Mode::Both == 3, "Both must follow Read and Write");
+    @static_assert(Mode::Both == 2, "Both must follow Read and Write");
 
     struct Header { a: u64; b: u64; }
     enum Mode { Read, Write, Both }

@@ -3,22 +3,22 @@
 import pytest
 
 
-def test_automatic_values_start_at_one(run):
+def test_automatic_values_start_at_zero(run):
     """
-    Members count from 1; an explicit value resets the counter.
+    Members count from 0; an explicit value resets the counter.
     """
     source = """
     enum E {
-        A,      // = 1
+        A,      // = 0
         B = 5,
         C,      // = 6
     }
 
     fn main() -> i32 {
-        return (E::A + E::B + E::C) as i32; // 12
+        return (E::A + E::B + E::C) as i32; // 11
     }
     """
-    assert run(source).returncode == 12
+    assert run(source).returncode == 11
 
 
 def test_member_values_may_reference_members(run):
@@ -117,10 +117,10 @@ def test_enum_struct_field(run):
     fn main() -> i32 {
         let p: Pixel = {Color::BLUE};
         p.color = Color::GREEN;
-        return p.color as i32; // 2
+        return p.color as i32; // 1
     }
     """
-    assert run(source).returncode == 2
+    assert run(source).returncode == 1
 
 
 def test_constants_hold_enum_members(run):

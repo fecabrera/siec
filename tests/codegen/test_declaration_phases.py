@@ -148,7 +148,7 @@ def test_resolution_consumes_frozen_collected_inventories():
     assert gen.declaration_inventory_complete
     assert gen.callable_inventory_complete
     assert gen.aliases["Word"] == "i32"
-    assert gen.enums["Choice"].members == {"yes": 1}
+    assert gen.enums["Choice"].members == {"yes": 0}
     assert gen.implements["Item"] == {"Marker"}
     assert "read(i32)" in gen.resolved_functions
     assert not gen.module.globals

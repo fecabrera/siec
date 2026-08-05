@@ -57,7 +57,7 @@ def test_static_global_initializers(compile_source):
     assert "internal global double" in module
     assert "internal global i1 1" in module
     assert 'bitcast' in module and '".str.0"' in module
-    assert "internal global i32 2" in module
+    assert "internal global i32 1" in module
 
 
 def test_static_and_runtime_strings_share_the_module_pool(compile_source):

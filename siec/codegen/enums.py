@@ -74,7 +74,7 @@ def resolve_enums(gen: CodeGenerator) -> None:
     """
     Resolve every collected enum backing type and member dependency.
 
-    Automatic values start at 1; an explicit value resets the counter, and
+    Automatic values start at 0; an explicit value resets the counter, and
     following members keep counting from there. All backing types resolve
     before any member expression so dependencies are declaration-order
     independent.
@@ -137,7 +137,7 @@ def resolve_enums(gen: CodeGenerator) -> None:
                 if member.value is not None:
                     value = evaluate(gen, member.value, resolve_member)
                 elif index == 0:
-                    value = 1
+                    value = 0
                 else:
                     previous = enum.members[index - 1]
                     value = resolve_key((enum.name, previous.name)) + 1

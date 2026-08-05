@@ -2149,11 +2149,11 @@ enum name {
 
 Every enum and member name is collected before those values resolve, so an expression may also reference a member or enum declared later. A cycle between member values is rejected with the chain that forms it.
 
-Members are assigned values automatically, starting at 1 and increasing by 1 for each subsequent member. Setting a specific value for a member changes the counter for the following ones, which then keep increasing from there.
+Members are assigned values automatically, starting at 0 and increasing by 1 for each subsequent member. Setting a specific value for a member changes the counter for the following ones, which then keep increasing from there.
 
 ```
 enum name {
-    ABC, // = 1
+    ABC, // = 0
     DEF = 5,
     GHI, // = 6
 }
