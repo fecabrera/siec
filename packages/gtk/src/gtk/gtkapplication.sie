@@ -1,5 +1,5 @@
 import { GApplicationFlags, GMenuModel, GMenu } from gio;
-import { GType, G_TYPE_CHECK_INSTANCE_CAST } from gobject;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
 import { guint } from glib;
 import { GtkWindow } from gtkwindow;
 
@@ -7,6 +7,7 @@ struct GtkApplication;
 
 @macro GTK_TYPE_APPLICATION = gtk_application_get_type();
 @macro GTK_APPLICATION(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkApplication>(obj, GTK_TYPE_APPLICATION);
+@macro GTK_IS_APPLICATION(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_APPLICATION);
 
 @extern fn gtk_application_get_type() -> GType;
 @extern fn gtk_application_new(application_id: const char*,

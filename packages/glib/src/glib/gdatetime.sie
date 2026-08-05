@@ -1,0 +1,98 @@
+import { gint64, gint, guint, gboolean, gdouble, gconstpointer } from gtypes;
+import { GTimeZone } from gtimezone;
+
+@type GTimeSpan = gint64;
+
+struct GDateTime;
+
+@extern fn g_date_time_unref(datetime: GDateTime*);
+@extern fn g_date_time_ref(datetime: GDateTime*) -> GDateTime*;
+@extern fn g_date_time_new_now(tz: GTimeZone*) -> GDateTime*;
+@extern fn g_date_time_new_now_local() -> GDateTime*;
+@extern fn g_date_time_new_now_utc() -> GDateTime*;
+@extern fn g_date_time_new_from_unix_local(t: gint64) -> GDateTime*;
+@extern fn g_date_time_new_from_unix_utc(t: gint64) -> GDateTime*;
+@extern fn g_date_time_new_from_unix_local_usec(usecs: gint64) -> GDateTime*;
+@extern fn g_date_time_new_from_unix_utc_usec(usecs: gint64) -> GDateTime*;
+
+@extern fn g_date_time_new_from_iso8601(text: const char*,
+                                        default_tz: GTimeZone*) -> GDateTime*;
+@extern fn g_date_time_new(tz: GTimeZone*,
+                           year: gint,
+                           month: gint,
+                           day: gint,
+                           hour: gint,
+                           minutes: gint,
+                           seconds: gint) -> GDateTime*;
+@extern fn g_date_time_new_local(year: gint,
+                                 month: gint,
+                                 day: gint,
+                                 hour: gint,
+                                 minutes: gint,
+                                 seconds: gint) -> GDateTime*;
+@extern fn g_date_time_new_utc(year: gint,
+                               month: gint,
+                               day: gint,
+                               hour: gint,
+                               minutes: gint,
+                               seconds: gint) -> GDateTime*;
+@extern fn g_date_time_add(datetime: GDateTime*,
+                           timespan: GTimeSpan) -> GDateTime*;
+@extern fn g_date_time_add_years(datetime: GDateTime*,
+                                 years: gint) -> GDateTime*;
+@extern fn g_date_time_add_months(datetime: GDateTime*,
+                                  months: gint) -> GDateTime*;
+@extern fn g_date_time_add_weeks(datetime: GDateTime*,
+                                 weeks: gint) -> GDateTime*;
+@extern fn g_date_time_add_days(datetime: GDateTime*,
+                                days: gint) -> GDateTime*;
+@extern fn g_date_time_add_hours(datetime: GDateTime*,
+                                 hours: gint) -> GDateTime*;
+@extern fn g_date_time_add_minutes(datetime: GDateTime*,
+                                   minutes: gint) -> GDateTime*;
+@extern fn g_date_time_add_seconds(datetime: GDateTime*,
+                                   seconds: gint) -> GDateTime*;
+@extern fn g_date_time_add_full(datetime: GDateTime*,
+                                year: gint,
+                                month: gint,
+                                day: gint,
+                                hour: gint,
+                                minutes: gint,
+                                seconds: gint) -> GDateTime*;
+@extern fn g_date_time_compare(dt1: gconstpointer,
+                               dt2: gconstpointer) -> gint;
+@extern fn g_date_time_difference(end: GDateTime*,
+                                  begin: GDateTime*) -> GTimeSpan;
+@extern fn g_date_time_hash(datetime: gconstpointer) -> guint;
+@extern fn g_date_time_equal(dt1: gconstpointer,
+                             dt2: gconstpointer) -> gboolean;
+@extern fn g_date_time_get_ymd(datetime: GDateTime*,
+                               year: gint*,
+                               month: gint*,
+                               day: gint*);
+@extern fn g_date_time_get_year(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_month(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_day_of_month(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_week_numbering_year(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_week_of_year(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_day_of_week(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_day_of_year(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_hour(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_minute(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_second(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_microsecond(datetime: GDateTime*) -> gint;
+@extern fn g_date_time_get_seconds(datetime: GDateTime*) -> gdouble;
+@extern fn g_date_time_to_unix(datetime: GDateTime*) -> gint64;
+@extern fn g_date_time_to_unix_usec(datetime: GDateTime*) -> gint64;
+
+@extern fn g_date_time_get_utc_offset(datetime: GDateTime*) -> GTimeSpan;
+@extern fn g_date_time_get_timezone(datetime: GDateTime*) -> GTimeZone*;
+@extern fn g_date_time_get_timezone_abbreviation(datetime: GDateTime*) -> const char*;
+@extern fn g_date_time_is_daylight_savings(datetime: GDateTime*) -> gboolean;
+@extern fn g_date_time_to_timezone(datetime: GDateTime*,
+                                   tz: GTimeZone*) -> GDateTime*;
+@extern fn g_date_time_to_local(datetime: GDateTime*) -> GDateTime*;
+@extern fn g_date_time_to_utc(datetime: GDateTime*) -> GDateTime*;
+@extern fn g_date_time_format(datetime: GDateTime*,
+                              format: const char*) -> char*;
+@extern fn g_date_time_format_iso8601(datetime: GDateTime*) -> char*;

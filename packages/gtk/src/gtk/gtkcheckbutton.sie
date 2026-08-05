@@ -1,0 +1,33 @@
+import { GtkWidget } from gtkwidget;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { gboolean } from glib;
+
+@macro GTK_TYPE_CHECK_BUTTON = gtk_check_button_get_type();
+@macro GTK_CHECK_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkCheckButton>(obj, GTK_TYPE_CHECK_BUTTON);
+@macro GTK_IS_CHECK_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_CHECK_BUTTON);
+
+struct GtkCheckButton {
+    parent_instance: GtkWidget*;
+}
+
+@extern fn gtk_check_button_get_type() -> GType;
+@extern fn gtk_check_button_new() -> GtkWidget*;
+@extern fn gtk_check_button_new_with_label(label: const char*) -> GtkWidget*;
+@extern fn gtk_check_button_new_with_mnemonic(label: const char*) -> GtkWidget*;
+@extern fn gtk_check_button_set_inconsistent(check_button: GtkCheckButton*,
+                                     inconsistent: gboolean);
+@extern fn gtk_check_button_get_inconsistent(check_button: GtkCheckButton*) -> gboolean;
+@extern fn gtk_check_button_get_active(check_button: GtkCheckButton*,
+                               setting: gboolean);
+@extern fn gtk_check_button_set_active(check_button: GtkCheckButton*) -> gboolean;
+@extern fn gtk_check_button_get_label(check_button: GtkCheckButton*) -> const char*;
+@extern fn gtk_check_button_set_label(check_button: GtkCheckButton*,
+                              label: const char*);
+@extern fn gtk_check_button_set_group(check_button: GtkCheckButton*,
+                                      group: GtkCheckButton*);
+@extern fn gtk_check_button_get_use_underline(check_button: GtkCheckButton*) -> gboolean;
+@extern fn gtk_check_button_set_use_underline(check_button: GtkCheckButton*,
+                                              use_underline: gboolean);
+@extern fn gtk_check_button_get_child(check_button: GtkCheckButton*) -> GtkWidget*;
+@extern fn gtk_check_button_set_child(check_button: GtkCheckButton*,
+                                      child: GtkWidget*);

@@ -1,4 +1,35 @@
 import { GtkWidget } from gtkwidget;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { gboolean } from glib;
 
+@macro GTK_TYPE_BUTTON = gtk_button_get_type();
+@macro GTK_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkButton>(obj, GTK_TYPE_BUTTON);
+@macro GTK_IS_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_BUTTON);
+
+struct GtkButton {
+    parent_instance: GtkWidget;
+}
+
+@extern fn gtk_button_get_type() -> GType;
 @extern fn gtk_button_new() -> GtkWidget*;
 @extern fn gtk_button_new_with_label(label: const char*) -> GtkWidget*;
+@extern fn gtk_button_new_from_icon_name(icon_name: const char*) -> GtkWidget*;
+@extern fn gtk_button_new_with_mnemonic(label: const char*) -> GtkWidget*;
+@extern fn gtk_button_set_has_frame(button: GtkButton*,
+                                    has_frame: gboolean);
+@extern fn gtk_button_get_has_frame(button: GtkButton*) -> gboolean;
+@extern fn gtk_button_set_label(button: GtkButton*,
+                                label: const char*);
+@extern fn gtk_button_get_label(button: GtkButton*) -> const char*;
+@extern fn gtk_button_set_use_underline(button: GtkButton*,
+                                        use_underline: gboolean);
+@extern fn gtk_button_get_use_underline(button: GtkButton*) -> gboolean;
+@extern fn gtk_button_set_icon_name(button: GtkButton*,
+                                    icon_name: const char*);
+@extern fn gtk_button_get_icon_name(button: GtkButton*) -> const char*;
+@extern fn gtk_button_set_child(button: GtkButton*,
+                                child: GtkWidget*);
+@extern fn gtk_button_get_child(button: GtkButton*) -> GtkWidget*;
+@extern fn gtk_button_set_can_shrink(button: GtkButton*,
+                                     can_shrink: gboolean);
+@extern fn gtk_button_get_can_shrink(button: GtkButton*) -> gboolean;

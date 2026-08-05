@@ -1,0 +1,30 @@
+import { gint, gint64, gint32, gboolean } from gtypes;
+struct GTimeZone;
+
+enum GTimeType {
+    STANDARD,
+    DAYLIGHT,
+    UNIVERSAL,
+}
+
+@deprecated("use g_time_zone_new_identifier()")
+@extern fn g_time_zone_new(identifier: const char*) -> GTimeZone*;
+@extern fn g_time_zone_new_identifier(identifier: const char*) -> GTimeZone*;
+@extern fn g_time_zone_new_utc() -> GTimeZone*;
+@extern fn g_time_zone_new_local() -> GTimeZone*;
+@extern fn g_time_zone_new_offset(seconds: gint32) -> GTimeZone*;
+@extern fn g_time_zone_ref(tz: GTimeZone*) -> GTimeZone*;
+@extern fn g_time_zone_unref(tz: GTimeZone*);
+@extern fn g_time_zone_find_interval(tz: GTimeZone*,
+                                     type: GTimeType,
+                                     time_: gint64) -> gint;
+@extern fn g_time_zone_adjust_time(tz: GTimeZone*,
+                                   type: GTimeType,
+                                   time_: gint64) -> gint;
+@extern fn g_time_zone_get_abbreviation(tz: GTimeZone*,
+                                        interval: gint) -> const char*;
+@extern fn g_time_zone_get_offset(tz: GTimeZone*,
+                                  interval: gint) -> gint32;
+@extern fn g_time_zone_is_dst(tz: GTimeZone*,
+                              interval: gint) -> gboolean;
+@extern fn g_time_zone_get_identifier(tz: GTimeZone*) -> const char*;

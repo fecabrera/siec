@@ -1,0 +1,121 @@
+import { gint32, guint32, guint16, guint8,gint, guint, gboolean } from gtypes;
+
+@type GTime = gint32;
+@type GDateYear = guint16;
+@type GDateDay = guint8;   /* day of the month */
+
+struct GDate;
+
+/* enum used to specify order of appearance in parsed date strings */
+enum GDateDMY {
+    DAY   = 0,
+    MONTH = 1,
+    YEAR  = 2,
+}
+
+enum GDateWeekday {
+    BAD_WEEKDAY  = 0,
+    MONDAY       = 1,
+    TUESDAY      = 2,
+    WEDNESDAY    = 3,
+    THURSDAY     = 4,
+    FRIDAY       = 5,
+    SATURDAY     = 6,
+    SUNDAY       = 7,
+}
+
+enum GDateMonth {
+    BAD_MONTH = 0,
+    JANUARY   = 1,
+    FEBRUARY  = 2,
+    MARCH     = 3,
+    APRIL     = 4,
+    MAY       = 5,
+    JUNE      = 6,
+    JULY      = 7,
+    AUGUST    = 8,
+    SEPTEMBER = 9,
+    OCTOBER   = 10,
+    NOVEMBER  = 11,
+    DECEMBER  = 12,
+}
+
+@macro G_DATE_BAD_JULIAN   = 0;
+@macro G_DATE_BAD_DAY      = 0;
+@macro G_DATE_BAD_YEAR     = 0;
+
+@extern fn g_date_new() -> GDate*;
+@extern fn g_date_new_dmy(day: GDateDay,
+                          month: GDateMonth,
+                          year: GDateYear) -> GDate*;
+@extern fn g_date_new_julian(julian: guint32) -> GDate*;
+@extern fn g_date_free(date: GDate*);
+@extern fn g_date_copy(date: const GDate*) -> GDate*;
+@extern fn g_date_valid(date: const GDate*) -> gboolean;
+@extern fn g_date_valid_day(day: GDateDay) -> gboolean;
+@extern fn g_date_valid_month(month: GDateMonth) -> gboolean;
+@extern fn g_date_valid_year(year: GDateYear) -> gboolean;
+@extern fn g_date_valid_weekday(week: GDateWeekday) -> gboolean;
+@extern fn g_date_valid_julian(julian_date: guint32) -> gboolean;
+@extern fn g_date_valid_dmy(day: GDateDay,
+                            month: GDateMonth,
+                            year: GDateYear) -> gboolean;
+@extern fn g_date_get_weekday(date: const GDate*) -> GDateWeekday;
+@extern fn g_date_get_month(date: const GDate*) -> GDateMonth;
+@extern fn g_date_get_year(date: const GDate*) -> GDateYear;
+@extern fn g_date_get_day(date: const GDate*) -> GDateDay;
+@extern fn g_date_get_julian(date: const GDate*) -> guint32;
+@extern fn g_date_get_day_of_year(date: const GDate*) -> guint;
+@extern fn g_date_get_monday_week_of_year(date: const GDate*) -> guint;
+@extern fn g_date_get_sunday_week_of_year(date: const GDate*) -> guint;
+@extern fn g_date_get_week_of_year(date: const GDate*,
+                                   first_day_of_week: GDateWeekday) -> guint;
+@extern fn g_date_get_iso8601_week_of_year(date: const GDate*) -> guint;
+@extern fn g_date_clear(date: GDate*,
+                        n_dates: guint);
+@extern fn g_date_set_parse(date: GDate*,
+                            str: const char*);
+
+@extern fn g_date_set_month(date: GDate*,
+                            month: GDateMonth);
+@extern fn g_date_set_day(date: GDate*,
+                          day: GDateDay);
+@extern fn g_date_set_year(date: GDate*,
+                           year: GDateYear);
+@extern fn g_date_set_dmy(date: GDate*,
+                          day: GDateDay,
+                          month: GDateMonth,
+                          year: GDateYear);
+@extern fn g_date_set_julian(date: GDate*,
+                             julian: guint);
+@extern fn g_date_is_first_of_month(date: const GDate*) -> gboolean;
+@extern fn g_date_is_last_of_month(date: const GDate*) -> gboolean;
+@extern fn g_date_add_days(date: GDate*,
+                           n_days: guint);
+@extern fn g_date_subtract_days(date: GDate*,
+                                n_days: guint);
+@extern fn g_date_add_months(date: GDate*,
+                             n_months: guint);
+@extern fn g_date_subtract_months(date: GDate*,
+                                  n_months: guint);
+@extern fn g_date_add_years(date: GDate*,
+                            n_years: guint);
+@extern fn g_date_subtract_years(date: GDate*,
+                                 n_years: guint);
+@extern fn g_date_is_leap_year(date: GDateYear) -> gboolean;
+@extern fn g_date_get_days_in_month(month: GDateMonth,
+                                    year: GDateYear) -> guint8;
+@extern fn g_date_get_monday_weeks_in_year(year: GDateYear) -> guint8;
+@extern fn g_date_get_sunday_weeks_in_year(year: GDateYear) -> guint8;
+@extern fn g_date_get_weeks_in_year(year: GDateYear,
+                                    first_day_of_week: GDateWeekday) -> guint8;
+@extern fn g_date_days_between(date1: const GDate*,
+                               date2: const GDate*) -> gint;
+@extern fn g_date_compare(lhs: const GDate*,
+                          rhs: const GDate*) -> gint;
+
+@extern fn g_date_clamp(date: const GDate*,
+                        min_date: const GDate*,
+                        max_date: const GDate*);
+@extern fn g_date_order(date1: GDate*,
+                        date2: GDate*);

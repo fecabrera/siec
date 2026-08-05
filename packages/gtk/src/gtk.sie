@@ -2,6 +2,7 @@
 @include("gtk/gtkapplication")
 @include("gtk/gtkapplicationwindow")
 @include("gtk/gtkbutton")
+@include("gtk/gtkcheckbutton")
 @include("gtk/gtkenums")
 @include("gtk/gtkfilter")
 @include("gtk/gtkheaderbar")
