@@ -1366,10 +1366,11 @@ Functions can be decorated with `@static` to make them local to their file: no o
 
 Decorators stack, so `@static @inline fn` is both, except for `@extern`, whose function has no body for the others to act on; only `@noreturn`, which describes the signature rather than the body, rides along with it.
 
-`@static let` declares a file-local global variable the same way: one storage location shared by every call, visible only to its own file. Its initializer, when given, must be a compile-time constant; without one it starts at zero, C-style.
+`@static let` declares a file-local global variable the same way: one storage location shared by every call, visible only to its own file. Its initializer, when given, must be a compile-time constant. As with a local `let`, an initializer can supply an omitted type; without an initializer the type remains required and the storage starts at zero, C-style. An `@extern let` always keeps its explicit ABI type.
 
 ```
 @static let count: i32 = 0;
+@static let ready = false;
 
 fn bump() -> i32 {
     count += 1;

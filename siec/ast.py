@@ -689,7 +689,7 @@ class Global:
     storage here, with an optional constant initializer.
     """
     name: str
-    type: str
+    type: str | None
     is_static: bool = False
     value: Expr | None = None
     symbol: str | None = None  # '@symbol("...")' module-symbol override

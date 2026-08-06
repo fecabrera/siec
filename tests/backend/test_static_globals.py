@@ -60,6 +60,22 @@ def test_static_global_initializers(compile_source):
     assert "internal global i32 1" in module
 
 
+def test_static_globals_infer_bool_literals(run):
+    """Untyped static lets infer true and false as bool storage."""
+    source = """
+    @static let enabled = true;
+    @static let disabled = false;
+
+    fn main() -> i32 {
+        if (enabled and not disabled) {
+            return 42;
+        }
+        return 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_static_and_runtime_strings_share_the_module_pool(compile_source):
     """
     Global initializers and function literals reuse one copy of equal text.

@@ -562,8 +562,14 @@ def parse_global(ts: TokenStream) -> Global:
     ts.expect("kw", "let")
 
     name = ts.expect("ident").value
-    ts.expect("sym", ":")
-    var_type = parse_type(ts)
+    var_type = None
+    if ts.peek().syntax == ":":
+        ts.next()
+        var_type = parse_type(ts)
+
+    if kind == "extern" and var_type is None:
+        raise SyntaxError(f"line {line}: extern global {name!r} requires "
+                          "an explicit type")
 
     value = None
     if ts.peek().syntax == "=":
@@ -573,6 +579,10 @@ def parse_global(ts: TokenStream) -> Global:
 
         ts.next()
         value = parse_expression(ts)
+
+    if var_type is None and value is None:
+        raise SyntaxError(f"line {line}: static global {name!r} needs a type "
+                          "or an initializer")
 
     ts.expect("sym", ";")
     return Global(name, var_type, kind == "static", value, symbol, line=line)

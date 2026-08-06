@@ -2,7 +2,7 @@
 
 import pytest
 
-from siec.ast import Global, Include, IntLiteral, Param, Program, Return
+from siec.ast import BoolLiteral, Global, Include, IntLiteral, Param, Program, Return
 from siec.lexer import lex
 from siec.parser import parse
 from siec.parser.functions import parse_function, parse_global, parse_program
@@ -97,12 +97,30 @@ def test_static_let_initializer_is_optional(ts):
         "count", "i32", True, None)
 
 
+def test_static_let_may_infer_its_type(ts):
+    """A static with an initializer may omit its type like a local let."""
+    assert parse_global(ts("@static let ready = true;")) == Global(
+        "ready", None, True, BoolLiteral(True))
+
+
+def test_untyped_static_let_requires_an_initializer(ts):
+    """Without a type or value there is nothing from which to infer."""
+    with pytest.raises(SyntaxError, match="needs a type or an initializer"):
+        parse_global(ts("@static let ready;"))
+
+
 def test_extern_let_rejects_an_initializer(ts):
     """
     An extern global's storage lives elsewhere; '= v' is an error.
     """
     with pytest.raises(SyntaxError, match="cannot have an initializer"):
         parse_global(ts("@extern let x: i64 = 5;"))
+
+
+def test_extern_let_requires_an_explicit_type(ts):
+    """External storage keeps an explicit ABI type and cannot infer one."""
+    with pytest.raises(SyntaxError, match="requires an explicit type"):
+        parse_global(ts("@extern let x;"))
 
 
 def test_program_collects_globals(ts):
