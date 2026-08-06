@@ -2347,7 +2347,14 @@ u.f = 1.0;
 u.bits; // 1.0's raw IEEE bits
 ```
 
-A union's size and alignment are its largest field's, inside enclosing structs too. Since the fields overlap, a union takes no aggregate literal: initialize it by assigning one of its fields. `@align(N)` and `@volatile` apply like a struct's; `@packed` has no field layout to act on and is refused.
+A named literal initializes exactly one union field:
+
+```
+union U { a: u64; b: f64; }
+let u: U = { a = 100 };
+```
+
+The field name is required because the fields overlap; empty, positional and multiple-field union literals are refused. Bytes outside the selected field begin at zero. A union's size and alignment are its largest field's, inside enclosing structs too. `@align(N)` and `@volatile` apply like a struct's; `@packed` has no field layout to act on and is refused.
 
 #### Unnamed structs and unions
 

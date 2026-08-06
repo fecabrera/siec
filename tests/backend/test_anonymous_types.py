@@ -120,14 +120,12 @@ def test_unnamed_members_hoist_their_fields(run):
     assert result.returncode == 0
 
 
-def test_anonymous_union_literal_is_rejected(compile_source):
-    """
-    An unnamed union refuses aggregate literals like a named one.
-    """
-    with pytest.raises(TypeError, match="no aggregate literal"):
-        compile_source("""
-            fn main() -> i32 {
-                let u: union { i: i64; f: f64; } = { i = 1 };
-                return 0;
-            }
-        """)
+def test_anonymous_union_literal_selects_one_field(run):
+    """Unnamed unions use the same single-field named literal syntax."""
+    result = run("""
+        fn main() -> i32 {
+            let u: union { i: i64; f: f64; } = { i = 42 };
+            return u.i as i32;
+        }
+    """)
+    assert result.returncode == 42

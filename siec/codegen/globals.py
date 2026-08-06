@@ -108,8 +108,12 @@ def validate_constant_value(gen: CodeGenerator, expr: Expr,
                 f"aggregate initializer needs a struct type, not "
                 f"{sie_type!r}")
         if info.is_union:
-            raise TypeError("a union takes no aggregate literal; assign one "
-                            "of its fields instead")
+            from siec.codegen.unions import literal_field
+
+            _, field, value = literal_field(info, expr, target)
+            check_field_access(gen, target, field)
+            validate_constant_value(gen, value, field.type)
+            return
 
         if expr.names is None:
             if len(expr.elements) != len(info.fields):
@@ -277,8 +281,55 @@ def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
         raise TypeError(f"aggregate initializer needs a struct type, not {sie_type!r}")
 
     if info.is_union:
-        raise TypeError("a union takes no aggregate literal; assign one "
-                        "of its fields instead")
+        from siec.codegen.unions import literal_field
+
+        _, field, element = literal_field(info, literal, strip_const(sie_type))
+        check_field_access(gen, sie_type, field)
+        field_type = resolve_type(field.type, gen.structs)
+        selected = constant_value(
+            gen, element, field_type, field.type)
+        storage = type_.elements[0]
+
+        if selected.type == storage:
+            selected_storage = selected
+        elif (isinstance(selected.type, ir.IntType)
+              and isinstance(storage, ir.IntType)
+              and selected.type.width < storage.width):
+            selected_storage = selected.zext(storage)
+        elif (not isinstance(selected.type, (ir.ArrayType,
+                                             ir.LiteralStructType,
+                                             ir.IdentifiedStructType))
+              and not isinstance(storage, (ir.ArrayType,
+                                           ir.LiteralStructType,
+                                           ir.IdentifiedStructType))):
+            from siec.codegen.sizes import target_data
+
+            data = target_data(gen.target)
+            selected_size = selected.type.get_abi_size(
+                data, context=gen.module.context)
+            storage_size = storage.get_abi_size(
+                data, context=gen.module.context)
+            if selected_size != storage_size:
+                raise TypeError(
+                    f"union field {field.name!r} cannot initialize static "
+                    "union storage of a different size")
+            if (isinstance(selected.type, ir.PointerType)
+                    and isinstance(storage, ir.IntType)):
+                selected_storage = selected.ptrtoint(storage)
+            elif (isinstance(selected.type, ir.IntType)
+                  and isinstance(storage, ir.PointerType)):
+                selected_storage = selected.inttoptr(storage)
+            else:
+                selected_storage = selected.bitcast(storage)
+        else:
+            raise TypeError(
+                f"union field {field.name!r} cannot initialize this static "
+                "union storage")
+
+        values = [selected_storage]
+        values.extend(ir.Constant(element_type, None)
+                      for element_type in type_.elements[1:])
+        return ir.Constant(type_, values)
 
     fields = info.fields
     values = [ir.Constant(field_type, None) for field_type in type_.elements]

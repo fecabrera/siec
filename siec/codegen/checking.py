@@ -906,10 +906,13 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             info = type_info(gen, expected)
             if info is not None and info.fields is not None:
                 if info.is_union:
-                    raise TypeError(f"union {strip_const(expected)!r} has no "
-                                    "aggregate literal: initialize a field")
+                    from siec.codegen.unions import literal_field
 
-                if expr.names is None:
+                    _, field, value = literal_field(
+                        info, expr, strip_const(expected))
+                    pairs = [(value, field)]
+                    seen = {field.name}
+                elif expr.names is None:
                     if len(expr.elements) != len(info.fields):
                         raise TypeError(
                             f"aggregate literal has {len(expr.elements)} "
@@ -941,7 +944,7 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                             and not is_const(field_type)):
                         field_type = f"const {field_type}"
                     check_expression(gen, value, scope, field_type)
-                if expr.names is not None:
+                if expr.names is not None and not info.is_union:
                     for field in info.fields:
                         if field.name not in seen:
                             check_field_default(gen, field)

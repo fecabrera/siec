@@ -366,10 +366,6 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # an aggregate literal coerces each element to its field's type instead
     if isinstance(expr, AggregateLiteral):
         info = type_info(gen, target_name)
-        if info is not None and info.is_union:
-            raise TypeError("a union takes no aggregate literal; assign one "
-                            "of its fields instead")
-
         # a const target views its aliasing fields as const, the same way
         # member access does, so a const pointer can fill a const array
         field_names = (
@@ -380,6 +376,12 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             if info is not None
             else None
         )
+        if info is not None and info.is_union:
+            from siec.codegen.expressions import emit_union_aggregate
+
+            return emit_union_aggregate(
+                gen, builder, expr, target_type, scope, info,
+                field_names, target_name)
         return emit_aggregate(gen, builder, expr, target_type, scope, field_names)
 
     # a block expression coerces each emitted value to the target instead

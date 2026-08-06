@@ -937,6 +937,25 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
     return value
 
 
+def emit_union_aggregate(gen: CodeGenerator, builder: ir.IRBuilder,
+                         expr: AggregateLiteral, expected_type: ir.Type,
+                         scope: dict, info, field_names: list | None,
+                         union_name: str):
+    """Initialize a union's zeroed storage through one selected field."""
+    from siec.codegen.unions import literal_field
+
+    index, field, element = literal_field(info, expr, union_name)
+    field_name = field_names[index] if field_names is not None else field.type
+    value = emit_coerced(gen, builder, element, field_name, scope)
+
+    storage = entry_alloca(builder, expected_type, "union.literal")
+    builder.store(ir.Constant(expected_type, None), storage)
+    address = builder.bitcast(
+        storage, ir.PointerType(value.type), name=f"union.{field.name}")
+    builder.store(value, address)
+    return builder.load(storage, name="union.value")
+
+
 def aggregate_fields(gen: CodeGenerator, type_: ir.Type) -> list[str] | None:
     """
     The field names of an aggregate LLVM type, in order: a registered

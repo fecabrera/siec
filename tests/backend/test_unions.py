@@ -121,18 +121,49 @@ def test_narrow_field_reads_the_low_bytes(run):
     assert result.returncode == 0x42
 
 
-def test_aggregate_literals_are_rejected(compile_source):
-    """
-    A union's fields share storage; no literal fills them field by field.
-    """
-    with pytest.raises(TypeError, match="no aggregate literal"):
-        compile_source("""
-            union pun { f: f64; bits: u64; }
+def test_named_literal_initializes_one_union_field(run):
+    """A named literal writes its selected member into shared storage."""
+    result = run("""
+        union pun { bits: u64; f: f64; }
 
-            fn main() -> i32 {
-                let u: pun = { f = 1.0 };
-                return 0;
-            }
+        fn main() -> i32 {
+            let integer: pun = { bits = 42 };
+            let floating: pun = { f = 1.0 };
+            if (floating.bits != 0x3FF0000000000000) { return 1; }
+            return integer.bits as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
+def test_static_union_literal_initializes_selected_field(run):
+    """A compile-time union literal supplies static shared storage."""
+    result = run("""
+        union U { bits: u64; f: f64; }
+        @static let integer: U = { bits = 42 };
+        @static let floating: U = { f = 1.0 };
+
+        fn main() -> i32 {
+            if (floating.bits != 0x3FF0000000000000) { return 1; }
+            return integer.bits as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
+@pytest.mark.parametrize("literal, message", [
+    ("{}", "exactly one field"),
+    ("{ 1 }", "requires a named literal"),
+    ("{ a = 1, b = 2 }", "exactly one field"),
+    ("{ missing = 1 }", "unknown field 'missing'"),
+])
+def test_union_literal_requires_one_known_named_field(
+        compile_source, literal, message):
+    """Empty, positional, multiple, and unknown member literals are errors."""
+    with pytest.raises(TypeError, match=message):
+        compile_source(f"""
+            union U {{ a: u64; b: u64; }}
+            fn main() -> i32 {{ let u: U = {literal}; return 0; }}
         """)
 
 
