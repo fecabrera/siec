@@ -1,0 +1,7 @@
+import std.io;
+import { random } from std.random;
+
+fn main() -> i32 {
+    std.io.println("{}", random());
+    return 0;
+}

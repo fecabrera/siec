@@ -1,0 +1,16 @@
+@include("_random/_seed")
+@include("_random/_random64")
+
+@static let _random: Random64;
+@static let _initialized = false;
+
+/**
+ * Generates a pseudorandom number
+ */
+fn random() -> u64 {
+    if (not _initialized) {
+        _random = Random64();
+        _initialized = true;
+    }
+    return _random.xorshiftstar();
+}

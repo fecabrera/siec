@@ -1,0 +1,56 @@
+import { splitmix64 } from std.hashing;
+import { random_seed } from _seed;
+
+/**
+ * Pseudorandom number generator
+ */
+struct Random64 {
+    @private state: u64;
+
+    /**
+     * Initializes the generator using /dev/urandom for the seed
+     */
+    fn init(&self) {
+        let buf: u8[@sizeof(u64)];
+        random_seed(buf);
+        self.init(*(buf.data as u64*));
+    }
+
+    /**
+     * Initializes the generator
+     *
+     * @param seed The seed to initialize the generator with
+     */
+    fn init(&self, seed: u64) {
+        self.state = splitmix64(seed);
+    }
+
+    /**
+     * Generates a pseudorandom number using xorshift
+     *
+     * @return A pseudorandom number
+     */
+    fn xorshift(&self) -> u64 {
+        let x = self.state;
+        x ^= x << 17;
+        x ^= x >> 21;
+        x ^= x << 5;
+        self.state = x;
+        return x;
+    }
+
+    /**
+     * Generates a pseudorandom number using xorshift*
+     *
+     * @return A pseudorandom number
+     */
+    fn xorshiftstar(&self) -> u64 {
+        let x = self.state;
+        x ^= x >> 13;
+        x ^= x << 29;
+        x ^= x >> 27;
+        x *= 0x2545F4914F6CDD1D;
+        self.state = x;
+        return x;
+    }
+}
