@@ -49,8 +49,8 @@ struct Decimal
       Eq<Decimal>,
       Ord<Decimal>,
       Formattable {
-    ctx: mpdecimal.mpd_context*;
-    mpd: mpdecimal.mpd*;
+    @private ctx: mpdecimal.mpd_context*;
+    @private mpd: mpdecimal.mpd*;
 }
 
 /**

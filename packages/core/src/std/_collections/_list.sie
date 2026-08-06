@@ -16,9 +16,9 @@ struct List<T>
       Eq<List<T>>,
       Eq<T[]>,
       Formattable {
-    data: Slot<T>* = null;
-    length: u64;
-    capacity: u64;
+    @private data: Slot<T>* = null;
+    @private length: u64;
+    @private capacity: u64;
 }
 
 // A List can clone only when copying one of its elements is defined. Scalars
@@ -63,6 +63,14 @@ fn List<T>::destroy(&self) {
     self.data = null;
     self.length = 0;
     self.capacity = 0;
+}
+
+fn List<T>::get_length(const &self) -> u64 {
+    return self.length;
+}
+
+fn List<T>::get_capacity(const &self) -> u64 {
+    return self.capacity;
 }
 
 /**
@@ -112,6 +120,30 @@ fn List<T>::reset(&self) {
 fn List<T>::assign_from(&self, str: const &Iterable<T>) {
     self.reset();
     self.append(str);
+}
+
+/**
+ * Get the first element.
+ *
+ * @return The first element.
+ */
+fn List<T>::first() -> &T {
+    if (not self.length)
+        panic("List is empty");
+
+    return self.data[0].get_mut();
+}
+
+/**
+ * Get the last element.
+ *
+ * @return The last element.
+ */
+fn List<T>::last() -> &T {
+    if (not self.length)
+        panic("List is empty");
+
+    return self.data[self.length].get_mut();
 }
 
 /**

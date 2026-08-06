@@ -2,9 +2,9 @@ import { malloc, free } from stdlib;
 import { panic } from std;
 
 struct Stack<T>: Destroy, Clone {
-    data: Slot<T>*;
-    top: u64;
-    capacity: u64;
+    @private data: Slot<T>*;
+    @private top: u64;
+    @private capacity: u64;
 }
 
 /**

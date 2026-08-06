@@ -108,14 +108,14 @@ fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
         }
     }
     
-    if (padding > buf.length) {
-        for(let i = buf.length; i < padding; i += 1) {
+    if (padding > buf.get_length()) {
+        for(let i = buf.get_length(); i < padding; i += 1) {
             str.push(zero ? '0' : ' ');
         }
     }
 
-    for(let i: u64 = 0; i < buf.length; i += 1) {
-        str.push(buf[buf.length - i - 1]);
+    for(let i: u64 = 0; i < buf.get_length(); i += 1) {
+        str.push(buf[buf.get_length() - i - 1]);
     }
 
     return str;

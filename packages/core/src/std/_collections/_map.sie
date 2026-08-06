@@ -41,9 +41,9 @@ struct Map<K: Hashable, V>
     : Destroy,
       Iterable<KeyValuePair<K, V>>,
       Formattable {
-    entries: MapEntry<K, V>*;
-    size: u64;
-    capacity: u64;
+    @private entries: MapEntry<K, V>*;
+    @private size: u64;
+    @private capacity: u64;
 }
 
 struct MapIterator<K, V>: Iterator<KeyValuePair<K, V>> {

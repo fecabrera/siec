@@ -60,10 +60,10 @@ enum SeekOrigin {
 }
 
 struct File: IOReadable, IOWritable {
-    fd: i32 = -1;
-    mode: FileMode = FileMode::None;
-    path: const char[];
-    open: bool = false;
+    @private fd: i32 = -1;
+    @private mode: FileMode = FileMode::None;
+    @private path: const char[];
+    @private open: bool = false;
 }
 
 /**

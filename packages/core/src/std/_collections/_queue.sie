@@ -8,7 +8,12 @@ struct QueueNode<T> {
 }
 
 struct QueueIterator<T>: Iterator<T> {
-    current: QueueNode<T>*; // next node to yield
+    @private current: QueueNode<T>*; // next node to yield
+
+    @private
+    fn init(&self, current: QueueNode<T>*) {
+        self.current = current;
+    }
 
     /**
      * Check if the QueueIterator has a next element.
@@ -40,7 +45,12 @@ struct ConstQueueCursor<T> {
 }
 
 struct ConstQueueIterator<T>: ConstIterator<T> {
-    cursor: ConstQueueCursor<T>; // replaced whole as the iterator advances
+    @private cursor: ConstQueueCursor<T>; // replaced whole as the iterator advances
+
+    @private
+    fn init(&self, current: const QueueNode<T>*) {
+        self.cursor = { current };
+    }
 
     /**
      * Check if the ConstQueueIterator has a next element.
@@ -72,8 +82,8 @@ struct Queue<T>
     : Clone,
       Destroy,
       Iterable<T> {
-    head: QueueNode<T>*;   // front: next to dequeue (oldest)
-    tail: QueueNode<T>*;   // back: last enqueued (newest)
+    @private head: QueueNode<T>*;   // front: next to dequeue (oldest)
+    @private tail: QueueNode<T>*;   // back: last enqueued (newest)
 }
 
 /**
@@ -195,7 +205,7 @@ fn Queue<T>::is_empty(const &self) -> bool {
  * @return The iterator for the Queue.
  */
 fn Queue<T>::iterator(&self) -> QueueIterator<T> {
-    return { self.head };
+    return QueueIterator<T>(self.head);
 }
 
 /**
@@ -204,5 +214,5 @@ fn Queue<T>::iterator(&self) -> QueueIterator<T> {
  * @return The const iterator for the Queue.
  */
 fn Queue<T>::const_iterator(const &self) -> ConstQueueIterator<T> {
-    return { { self.head } };
+    return ConstQueueIterator<T>(self.head);
 }
