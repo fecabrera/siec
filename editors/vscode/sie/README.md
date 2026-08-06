@@ -6,6 +6,11 @@ Syntax highlighting for the Sie programming language: keywords, decorators
 and `SetItem`), strings with escapes, numbers, enum members, methods, and
 `@asm` bodies.
 
+Indentation follows brace bodies and aligns multiline parenthesized or
+bracketed lists under their opening delimiter. After a continued function
+declaration ends in `);`, the next line returns to the declaration's
+indentation.
+
 With the `sie-lsp` language server it also serves diagnostics as you
 type, completion, the document outline, hover, and go-to-definition,
 compiled and typed by the real compiler front end. Completion includes

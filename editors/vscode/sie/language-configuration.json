@@ -23,8 +23,15 @@
         ["\"", "\""],
         ["'", "'"]
     ],
+    "onEnterRules": [
+        {
+            "previousLineText": "^.*(?:\\(|,)\\s*(?://.*)?$",
+            "beforeText": "^\\s+.*\\)\\s*(?:->\\s*[^;]+)?;\\s*(?://.*)?$",
+            "action": { "indent": "outdent" }
+        }
+    ],
     "indentationRules": {
-        "increaseIndentPattern": "^.*\\{[^}\"']*$",
+        "increaseIndentPattern": "^.*(?:\\{[^}\"']*|\\([^\\)\"']*|\\[[^\\]\"']*)$",
         "decreaseIndentPattern": "^\\s*\\}"
     }
 }

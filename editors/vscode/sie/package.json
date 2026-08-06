@@ -48,7 +48,20 @@
                     "description": "Extra include directories for analysis, like the compiler's -I."
                 }
             }
-        }
+        },
+        "commands": [
+            {
+                "command": "sie.insertLineBreak",
+                "title": "Sie: Insert Line Break"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "sie.insertLineBreak",
+                "key": "enter",
+                "when": "editorTextFocus && editorLangId == sie && !suggestWidgetVisible"
+            }
+        ]
     },
     "main": "./extension.js",
     "activationEvents": [
