@@ -921,6 +921,26 @@ def complete(analysis: Analysis, text: str, line: int,
     gen.current_file = analysis.path
     sites = declaration_sites(analysis.program)
 
+    member_import = member_import_context(text, line, col)
+    if member_import is not None:
+        module, partial, selected = member_import
+        if partial is None:
+            return []
+        target = gen.import_targets.get((analysis.path, module))
+        if target is None:
+            target = gen.module_bindings.get((analysis.path, module))
+        if target is None:
+            return []
+
+        files = gen.include_closure.get(target, {target})
+        return [
+            completion_for_name(
+                analysis, sites, name, files=files, module=target)
+            for name in sorted(gen.module_exports.get(target, ()))
+            if name.isidentifier() and name.startswith(partial)
+            and name not in selected
+        ]
+
     if access is not None:
         receiver, partial = access.group(1), access.group(2) or ""
         target = gen.module_bindings.get((analysis.path, receiver))
@@ -983,6 +1003,55 @@ def complete(analysis: Analysis, text: str, line: int,
 
     return [candidates[name] for name in sorted(candidates)
             if name.startswith(partial)]
+
+
+def member_import_context(text: str, line: int,
+                          col: int) -> tuple | None:
+    """
+    Return ``(module, partial, selected)`` when the cursor is naming a
+    member inside ``import { ... } from module;``.
+
+    The module follows the cursor, so ordinary prefix-only completion cannot
+    identify it.  Reading the complete declaration also lets completion work
+    in multiline import lists without asking the parser to accept the partial
+    member currently being typed.
+    """
+    lines = text.splitlines(keepends=True)
+    if line < 0 or line >= len(lines):
+        return None
+
+    offset = sum(len(source_line) for source_line in lines[:line])
+    offset += min(col, len(lines[line].rstrip("\r\n")))
+    pattern = re.compile(
+        r"\bimport\s*\{(?P<members>.*?)\}\s*from\s+"
+        r"(?P<module>[A-Za-z_][A-Za-z0-9_]*"
+        r"(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*;",
+        re.DOTALL,
+    )
+
+    for match in pattern.finditer(text):
+        start, end = match.span("members")
+        if not start <= offset <= end:
+            continue
+
+        before = text[start:offset]
+        parts = before.split(",")
+        current = parts[-1]
+        partial_match = re.fullmatch(
+            r"\s*([A-Za-z_][A-Za-z0-9_]*)?\s*", current)
+        if partial_match is None:
+            return (match.group("module"), None, frozenset())
+
+        selected = frozenset(
+            selected.group(1)
+            for part in parts[:-1]
+            if (selected := re.match(
+                r"\s*([A-Za-z_][A-Za-z0-9_]*)", part)) is not None
+        )
+        return (match.group("module"),
+                partial_match.group(1) or "", selected)
+
+    return None
 
 
 def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
@@ -1744,7 +1813,7 @@ def create_server():
 
     @server.feature(
         types.TEXT_DOCUMENT_COMPLETION,
-        types.CompletionOptions(trigger_characters=["."]))
+        types.CompletionOptions(trigger_characters=[".", "{", ","]))
     def completion(params: types.CompletionParams) -> list:
         uri = params.text_document.uri
         analysis = analyses.get(uri)
@@ -1752,6 +1821,13 @@ def create_server():
             return []
 
         doc = server.workspace.get_text_document(uri)
+        context = params.context
+        trigger = context.trigger_character if context is not None else None
+        if trigger in ("{", ",") and member_import_context(
+                doc.source, params.position.line,
+                params.position.character) is None:
+            return []
+
         items = complete(analysis, doc.source, params.position.line,
                          params.position.character)
         return [types.CompletionItem(

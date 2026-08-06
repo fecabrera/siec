@@ -70,7 +70,7 @@ The compiler test suite treats declaration order as part of this contract. Its p
 
 ### Editor support
 
-`sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, hover, and go-to-definition. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.
+`sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, completion, hover, and go-to-definition. Completion covers lexical names, members after a module or value dot, and a module's public exports inside `import { ... } from module;`. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.
 
 The server installs next to the compiler:
 

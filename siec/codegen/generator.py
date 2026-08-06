@@ -367,6 +367,7 @@ class CodeGenerator:
         self.module_bindings: dict[tuple[str, str], str] = {}
         self.member_bindings: dict[tuple[str, str], str] = {}
         self.module_exports: dict[str, set] = {}
+        self.import_targets: dict[tuple[str, str], str] = {}
         self.local_type_symbols: dict[tuple[str, str], str] = {}
         self.module_type_symbols: dict[tuple[str, str], str] = {}
 
@@ -1003,6 +1004,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     gen.module_bindings = program.module_bindings
     gen.member_bindings = program.member_bindings
     gen.member_targets = program.member_targets
+    gen.import_targets = program.import_targets
     gen.module_exports = program.module_exports
     gen.local_type_symbols = program.local_type_symbols
     gen.module_type_symbols = program.module_type_symbols

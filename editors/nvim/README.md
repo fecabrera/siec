@@ -74,9 +74,9 @@ A `[library]` is installed rather than built, so `:make` inside one says
 so; compile a file of it with `siec` and its `-I` directories instead,
 or lean on the language server, which analyzes it as you type.
 
-**The language server** gives diagnostics as you type, hover (`K`),
-go-to-definition (`grd`), and the document outline. It ships with the
-compiler:
+**The language server** gives diagnostics as you type, completion—including a
+module's public exports inside `import { ... } from module;`—hover (`K`),
+go-to-definition (`grd`), and the document outline. It ships with the compiler:
 
 ```
 pip install -e '.[lsp]'

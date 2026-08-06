@@ -218,6 +218,7 @@ def discover_program(sources: list[Path], include_paths: list[Path],
     module_bindings = {}
     member_bindings = {}
     member_targets = {}   # (file, binding) -> (module file, member name)
+    import_targets = {}   # (file, dotted path) -> resolved module root
     binding_sites = {}    # (file, import form, binding) -> (target, first line)
     exported = {}         # file -> its own exportable names
     declared_names = {}   # file -> every name it declares, statics included
@@ -429,6 +430,7 @@ def discover_program(sources: list[Path], include_paths: list[Path],
             target = str(target.resolve())
             imported_roots.add(target)
             module_paths.setdefault(target, imp.path)
+            import_targets[(str(file), imp.path)] = target
 
             if imp.members is not None:
                 # membership is checked once every export set has settled
@@ -583,6 +585,7 @@ def discover_program(sources: list[Path], include_paths: list[Path],
     merged.module_bindings = module_bindings
     merged.member_bindings = member_bindings
     merged.member_targets = member_targets
+    merged.import_targets = import_targets
     merged.module_exports = module_exports
     merged.local_type_symbols = local_type_symbols
     merged.module_type_symbols = module_type_symbols

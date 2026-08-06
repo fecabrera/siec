@@ -1100,6 +1100,66 @@ fn main() -> i32 { util.ad }
     assert [item.label for item in items] == ["add"]
 
 
+def test_complete_lists_public_members_inside_a_member_import(tmp_path):
+    """An import list completes the named module's public export surface."""
+    write(tmp_path / "math" / "util.sie", """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+@const ANSWER: i32 = 42;
+struct Box { value: i32; }
+@private fn hidden() -> i32 { return 0; }
+""")
+    source = "import {} from math.util;\nfn main() -> i32 { return 0; }\n"
+    analysis, _ = unit(tmp_path, source)
+
+    items = {
+        item.label: item
+        for item in complete(analysis, source, 0, len("import {"))
+    }
+
+    assert set(items) == {"ANSWER", "Box", "add"}
+    assert items["ANSWER"].kind == "constant"
+    assert items["Box"].kind == "struct"
+    assert items["add"].kind == "function"
+    assert items["add"].detail == "fn add(x: i32, y: i32) -> i32"
+
+
+def test_complete_filters_and_deduplicates_multiline_member_imports(tmp_path):
+    """A partial import member is filtered and chosen names are not repeated."""
+    write(tmp_path / "util.sie", """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+struct Box { value: i32; }
+""")
+    source = "import {} from util;\nfn main() -> i32 { return 0; }\n"
+    analysis, _ = unit(tmp_path, source)
+    edited = """\
+import {
+    add,
+    Bo
+} from util;
+fn main() -> i32 { return 0; }
+"""
+
+    items = complete(analysis, edited, 2, len("    Bo"))
+    assert [item.label for item in items] == ["Box"]
+
+    after_comma = "import { add,  } from util;"
+    items = complete(analysis, after_comma, 0, len("import { add,  "))
+    assert [item.label for item in items] == ["Box"]
+
+
+def test_server_triggers_completion_for_member_import_lists():
+    """Opening an import list and adding a member ask for fresh suggestions."""
+    from lsprotocol import types
+
+    from siec.lsp import create_server
+
+    server = create_server()
+    options = server.protocol.fm.feature_options[
+        types.TEXT_DOCUMENT_COMPLETION]
+    assert options == types.CompletionOptions(
+        trigger_characters=[".", "{", ","])
+
+
 def test_complete_lists_locals_visible_names_and_modules(tmp_path):
     """Lexical completion combines compiler scope and module bindings."""
     write(tmp_path / "util.sie", "fn answer() -> i32 { return 42; }")

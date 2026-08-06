@@ -824,6 +824,7 @@ class Program:
     module_bindings: dict = field(default_factory=dict)  # (file, prefix) -> module file
     member_bindings: dict = field(default_factory=dict)  # (file, name) -> member name
     member_targets: dict = field(default_factory=dict)   # (file, name) -> (module file, member)
+    import_targets: dict = field(default_factory=dict)   # (file, path) -> module file
     module_exports: dict = field(default_factory=dict)   # module file -> set of names
     local_type_symbols: dict = field(default_factory=dict)  # (file, name) -> identity
     module_type_symbols: dict = field(default_factory=dict)  # (module file, name) -> identity
