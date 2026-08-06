@@ -64,6 +64,7 @@ from siec.codegen.inference import (
     numeric_class,
     operator_call,
     result_arms,
+    sized_member_array,
     try_arms,
     type_info,
     valueless_try,
@@ -365,7 +366,8 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
         # a raw array's elements read through the base's address, or a
         # stack spill when it has none (a call's result, say)
-        if is_raw(gen, expr.base, scope):
+        if is_raw(gen, expr.base, scope) or sized_member_array(
+                gen, expr.base, scope) is not None:
             index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
             try:
                 base = emit_lvalue(gen, builder, expr.base, scope)
@@ -442,6 +444,23 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         info = type_info(gen, expr_sie_type(gen, expr.base, scope))
         if info is not None and info.is_union:
             return emit_union_member(gen, builder, expr, info, scope)
+
+        # A sized field owns inline backing. Reading it produces the same
+        # pointer-and-length view as a sized local declaration.
+        if (sized := sized_member_array(gen, expr, scope)) is not None:
+            address = emit_lvalue(gen, builder, expr, scope)
+            zero = ir.Constant(ir.IntType(32), 0)
+            data = builder.gep(address, [zero, zero], name=f"{expr.field}.data")
+            type_ = resolve_type(sized[0], gen.structs)
+            value = ir.Constant(type_, ir.Undefined)
+            value = builder.insert_value(value, data, 0)
+            from siec.codegen.enums import evaluate_size
+
+            return builder.insert_value(
+                value,
+                ir.Constant(ir.IntType(64), evaluate_size(gen, sized[1])),
+                1,
+            )
 
         # read a struct or array field: extract it from the base value by index
         index = member_field(gen, expr, scope)[0]
@@ -646,7 +665,8 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
                                name=f"tuple.{index}")
 
         # a raw array's elements sit inline: index into the base's address
-        if is_raw(gen, expr.base, scope):
+        if is_raw(gen, expr.base, scope) or sized_member_array(
+                gen, expr.base, scope) is not None:
             base = emit_lvalue(gen, builder, expr.base, scope)
             index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
             return builder.gep(base, [ir.Constant(ir.IntType(32), 0), index])

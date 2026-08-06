@@ -162,6 +162,43 @@ def test_sized_array_rejects_an_initializer(compile_source):
         compile_source(source)
 
 
+def test_sized_struct_field_owns_inline_backing(run):
+    """A sized field indexes inline storage and reads as an array view."""
+    source = """
+    fn sum(values: const &u64[]) -> u64 {
+        let total: u64 = 0;
+        for (let i: u64 = 0; i < values.length; i += 1) {
+            total += values[i];
+        }
+        return total;
+    }
+
+    struct Buffer {
+        data: u64[4];
+
+        fn fill(&self) {
+            for (let i: u64 = 0; i < 4; i += 1) {
+                self.data[i] = i + 9;
+            }
+        }
+
+        fn total(const &self) -> u64 {
+            return sum(self.data);
+        }
+    }
+
+    fn main() -> i32 {
+        let buffer: Buffer;
+        buffer.fill();
+        if (@sizeof(Buffer) != 32 or buffer.data.length != 4) {
+            return 0;
+        }
+        return buffer.total() as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_char_array_casts_adjust_the_length(run):
     """
     'char[] as u8[]' includes the null in the length; casting back excludes it.

@@ -450,6 +450,8 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             return None
 
         _, field_type = member_field(gen, expr, scope)
+        if (sized := sized_array(strip_const(field_type))) is not None:
+            field_type = sized[0]
         if is_const(base_name) and is_aliasing(field_type) and not is_const(field_type):
             return f"const {field_type}"
 
@@ -964,3 +966,12 @@ def member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, st
     index, field_type = info.field(expr.field)
 
     return index, field_type
+
+
+def sized_member_array(gen: CodeGenerator, expr: Expr,
+                       scope: dict) -> tuple[str, str] | None:
+    """Return a member's inline sized-array shape, when it has one."""
+    if not isinstance(expr, Member):
+        return None
+
+    return sized_array(strip_const(member_field(gen, expr, scope)[1]))

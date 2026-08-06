@@ -142,10 +142,20 @@ def type_layout(gen: CodeGenerator, name: str | None, *,
     if base in active:
         raise TypeError(f"recursive struct type {base!r} needs indirection")
 
-    fields = [
-        type_layout(gen, field.type, active=active | {base})
-        for field in info.fields
-    ]
+    fields = []
+    for field in info.fields:
+        if (sized := sized_array(strip_const(field.type))) is not None:
+            from siec.codegen.enums import evaluate_size
+
+            element = type_layout(
+                gen, sized[0][:-2], active=active | {base})
+            fields.append(TypeLayout(
+                element.size * evaluate_size(gen, sized[1]),
+                element.align,
+            ))
+        else:
+            fields.append(type_layout(
+                gen, field.type, active=active | {base}))
     if info.is_union:
         if not fields:
             return TypeLayout(0, 1)

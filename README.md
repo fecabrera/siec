@@ -1707,6 +1707,18 @@ let buf: u8[64];              // buf.data -> 64 stack bytes, buf.length == 64
 let body: u8[64 - HEADER];    // sized by a constant expression
 ```
 
+A sized struct field owns the same fixed backing inline in its containing
+struct, so moving the struct cannot leave an internal pointer behind. Reading
+the field still produces the ordinary `X[]` view, with `data` pointing at that
+inline backing and `length` equal to `N`; indexing reads or writes the backing
+directly.
+
+```
+struct State {
+    words: u64[4];
+}
+```
+
 An array can be indexed directly, reading or writing the `i`th element through its backing data:
 
 ```

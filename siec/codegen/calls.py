@@ -365,9 +365,23 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
                             f"{param_name!r} parameter")
 
     from siec.ast import Cast, Index, Member, MethodCall, UnaryOp
-    from siec.codegen.inference import enum_backing, numeric_class, type_info
+    from siec.codegen.inference import (enum_backing, numeric_class,
+                                        sized_member_array, type_info)
     from siec.codegen.ownership import (TemporaryDrop, destroyable,
                                        expression_returns_reference)
+
+    # A sized field owns inline backing rather than a stored slice descriptor.
+    # A const reference may borrow a temporary descriptor whose data still
+    # points at that backing; a mutable reference could rebind only the
+    # temporary descriptor, so it is deliberately rejected.
+    if sized_member_array(gen, arg, scope) is not None:
+        if not is_const(referenced):
+            raise TypeError("a sized array field can only bind to a const "
+                            "array reference")
+        value = emit_expression(gen, builder, arg, None, scope)
+        slot = entry_alloca(builder, value.type, "sized.ref")
+        builder.store(value, slot)
+        return slot
 
     # A represented aggregate cast may deliberately reinterpret an existing
     # place (for example a layout-compatible view returned by reference).

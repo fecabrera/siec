@@ -7,7 +7,8 @@ from siec.codegen.aliases import expand_alias, type_identity
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.sizes import target_data
-from siec.codegen.types import is_reference, resolve_type, validate_type
+from siec.codegen.types import (is_reference, resolve_type, sized_array,
+                                strip_const, validate_type)
 
 
 def register_structs(gen: CodeGenerator, program: Program) -> None:
@@ -144,15 +145,27 @@ def define_structs(gen: CodeGenerator, program: Program) -> None:
 def lower_structs(gen: CodeGenerator) -> None:
     """Materialize the checked struct inventory in the LLVM context."""
     materialize_struct_types(
-        gen.structs,
+        gen,
         gen.module.context,
         gen.target,
     )
 
 
-def materialize_struct_types(structs: dict, context: ir.Context,
+def field_storage_type(gen: CodeGenerator, name: str) -> ir.Type:
+    """Resolve a field, keeping a sized array's backing inline."""
+    if (sized := sized_array(strip_const(name))) is None:
+        return resolve_type(name, gen.structs)
+
+    from siec.codegen.enums import evaluate_size
+
+    element = resolve_type(sized[0][:-2], gen.structs)
+    return ir.ArrayType(element, evaluate_size(gen, sized[1]))
+
+
+def materialize_struct_types(gen: CodeGenerator, context: ir.Context,
                              target: str) -> None:
     """Populate one struct registry with LLVM types in the given context."""
+    structs = gen.structs
     for name, info in structs.items():
         if info.type is None and info.backing is not None:
             info.type = resolve_type(info.backing, structs)
@@ -178,7 +191,7 @@ def materialize_struct_types(structs: dict, context: ir.Context,
         progress = False
         for info in list(bodies):
             try:
-                resolved = [resolve_type(field.type, structs)
+                resolved = [field_storage_type(gen, field.type)
                             for field in info.fields]
             except TypeError:
                 continue
@@ -197,7 +210,7 @@ def materialize_struct_types(structs: dict, context: ir.Context,
 
         for info in list(pending):
             try:
-                resolved = [resolve_type(field.type, structs)
+                resolved = [field_storage_type(gen, field.type)
                             for field in info.fields or ()]
             except TypeError:
                 continue

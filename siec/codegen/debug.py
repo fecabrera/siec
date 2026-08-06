@@ -16,6 +16,7 @@ from siec.codegen.types import (
     is_reference,
     raw_array,
     resolve_type,
+    sized_array,
     strip_const,
     strip_reference,
 )
@@ -276,7 +277,16 @@ class DebugInfo:
 
         members = []
         for index, field in enumerate(info.fields):
-            base = self.di_type(field.type)
+            if (sized := sized_array(strip_const(field.type))) is not None:
+                from siec.codegen.enums import evaluate_size
+
+                base = self.raw_array_type(
+                    field.type,
+                    sized[0][:-2],
+                    evaluate_size(self.gen, sized[1]),
+                )
+            else:
+                base = self.di_type(field.type)
             if info.is_union:
                 field_type = resolve_type(strip_const(field.type), self.gen.structs)
                 field_size = field_type.get_abi_size(data, context=context) * 8
