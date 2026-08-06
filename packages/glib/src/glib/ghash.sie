@@ -1,0 +1,110 @@
+import {
+    GHFunc,
+    GHashFunc,
+    GEqualFunc,
+    GDestroyNotify,
+    gboolean,
+    gpointer,
+    gconstpointer,
+    guint,
+    gint,
+} from gtypes;
+import { GPtrArray } from garray;
+import { GList } from glist;
+
+struct GHashTable;
+
+@type GHRFunc = fn(gpointer, gpointer, gpointer) -> gboolean;
+
+struct GHashTableIter {
+    /*< private >*/
+    dummy1: gpointer;
+    dummy2: gpointer;
+    dummy3: gpointer;
+    dummy4: gint;
+    dummy5: gboolean;
+    dummy6: gpointer;
+}
+
+@extern fn g_hash_table_new(hash_func: GHashFunc,
+                            key_equal_func: GEqualFunc) -> GHashTable*;
+@extern fn g_hash_table_new_full(hash_func: GHashFunc,
+                                 key_equal_func: GEqualFunc,
+                                 key_destroy_func: GDestroyNotify,
+                                 value_destroy_func: GDestroyNotify) -> GHashTable*;
+@extern fn g_hash_table_new_similar(other_hash_table: GHashTable*) -> GHashTable*;
+@extern fn g_hash_table_destroy(hash_table: GHashTable*);
+@extern fn g_hash_table_insert(hash_table: GHashTable*,
+                               key: gpointer,
+                               value: gpointer) -> gboolean;
+@extern fn g_hash_table_replace(hash_table: GHashTable*,
+                                key: gpointer,
+                                value: gpointer) -> gboolean;
+@extern fn g_hash_table_add(hash_table: GHashTable*,
+                            key: gpointer) -> gboolean;
+@extern fn g_hash_table_remove(hash_table: GHashTable*,
+                               key: gconstpointer) -> gboolean;
+@extern fn g_hash_table_remove_all(hash_table: GHashTable*);
+@extern fn g_hash_table_steal(hash_table: GHashTable*,
+                              key: gconstpointer) -> gboolean;
+@extern fn g_hash_table_steal_extended(hash_table: GHashTable*,
+                                       lookup_key: gconstpointer,
+                                       stolen_key: gpointer*,
+                                       stolen_value: gpointer*) -> gboolean;
+@extern fn g_hash_table_steal_all(hash_table: GHashTable*);
+@extern fn g_hash_table_steal_all_keys(hash_table: GHashTable*) -> GPtrArray*;
+@extern fn g_hash_table_steal_all_values(hash_table: GHashTable*) -> GPtrArray*;
+@extern fn g_hash_table_lookup(hash_table: GHashTable*,
+                               key: gconstpointer) -> gpointer;
+@extern fn g_hash_table_contains(hash_table: GHashTable*,
+                                 key: gconstpointer) -> gboolean;
+@extern fn g_hash_table_lookup_extended(hash_table: GHashTable*,
+                                        lookup_key: gconstpointer,
+                                        orig_key: gpointer*,
+                                        value: gpointer*) -> gpointer;
+@extern fn g_hash_table_foreach(hash_table: GHashTable*,
+                                predicate: GHFunc,
+                                user_data: gpointer);
+@extern fn g_hash_table_find(hash_table: GHashTable*,
+                             predicate: GHRFunc,
+                             user_data: gpointer) -> gpointer;
+@extern fn g_hash_table_foreach_remove(hash_table: GHashTable*,
+                                       func: GHRFunc,
+                                       user_data: gpointer) -> gpointer;
+@extern fn g_hash_table_foreach_steal(hash_table: GHashTable*,
+                                      func: GHRFunc,
+                                      user_data: gpointer) -> gpointer;
+@extern fn g_hash_table_size(hash_table: GHashTable*) -> guint;
+@extern fn g_hash_table_get_keys(hash_table: GHashTable*) -> GList*;
+@extern fn g_hash_table_get_values(hash_table: GHashTable*) -> GList*;
+@extern fn g_hash_table_get_keys_as_array(hash_table: GHashTable*,
+                                          length: guint*) -> gpointer*;
+@extern fn g_hash_table_get_keys_as_ptr_array(hash_table: GHashTable*) -> GPtrArray*;
+@extern fn g_hash_table_get_values_as_ptr_array(hash_table: GHashTable*) -> GPtrArray*;
+@extern fn g_hash_table_iter_init(iter: GHashTableIter*,
+                                  hash_table: GHashTable*);
+@extern fn g_hash_table_iter_next(iter: GHashTableIter*,
+                                  key: gpointer,
+                                  value: gpointer*) -> gboolean;
+@extern fn g_hash_table_iter_get_hash_table(iter: GHashTableIter*) -> GHashTable*;
+@extern fn g_hash_table_iter_remove(iter: GHashTableIter*);
+@extern fn g_hash_table_iter_replace(iter: GHashTableIter*,
+                                     value: gpointer);
+@extern fn g_hash_table_iter_steal(iter: GHashTableIter*);
+@extern fn g_hash_table_ref(hash_table: GHashTable*) -> GHashTable*;
+@extern fn g_hash_table_unref(hash_table: GHashTable*);
+@extern fn g_str_equal(v1: gconstpointer,
+                       v2: gconstpointer) -> gboolean;
+@extern fn g_str_hash(v: gconstpointer) -> guint;
+@extern fn g_int_equal(v1: gconstpointer,
+                       v2: gconstpointer) -> gboolean;
+@extern fn g_int_hash(v: gconstpointer) -> guint;
+@extern fn g_int64_equal(v1: gconstpointer,
+                         v2: gconstpointer) -> gboolean;
+@extern fn g_int64_hash(v: gconstpointer) -> guint;
+@extern fn g_double_equal(v1: gconstpointer,
+                          v2: gconstpointer) -> gboolean;
+@extern fn g_double_hash(v: gconstpointer) -> guint;
+@extern fn g_direct_hash(v: gconstpointer) -> guint;
+@extern fn g_direct_equal(v1: gconstpointer,
+                          v2: gconstpointer) -> gboolean;

@@ -1,0 +1,24 @@
+import { guchar, gchar, gint, gsize, gboolean } from gtypes;
+
+@extern fn g_base64_encode_step(in: const guchar*,
+                                len: gsize,
+                                break_lines: gboolean,
+                                out: gchar*,
+                                state: gint*,
+                                save: gint*) -> gsize;
+@extern fn g_base64_encode_close(break_lines: gboolean,
+                                 out: gchar*,
+                                 state: gint*,
+                                 save: gint*) -> gsize;
+@extern fn g_base64_encode(data: const guchar*,
+                           len: gsize) -> gchar*;
+@extern fn g_base64_decode_step(data: const guchar*,
+                           len: gsize,
+                           break_lines: gboolean,
+                           out: gchar*,
+                           state: gint*,
+                           save: gint*) -> gsize;
+@extern fn g_base64_decode(text: const gchar*,
+                           out_len: gsize*) -> guchar*;
+@extern fn g_base64_decode_inplace(text: gchar*,
+                                   out_len: gsize*) -> guchar*;

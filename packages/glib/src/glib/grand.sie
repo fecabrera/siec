@@ -1,0 +1,36 @@
+import { gint32, guint32, guint, gdouble } from gtypes;
+
+struct GRand;
+
+@extern fn g_rand_new_with_seed(seed: guint32) -> GRand*;
+@extern fn g_rand_new_with_seed_array(seed: const guint32*,
+                                      seed_length: guint) -> GRand*;
+@extern fn g_rand_new();
+@extern fn g_rand_free(rand_: GRand*);
+@extern fn g_rand_copy(rand_: GRand*) -> GRand*;
+@extern fn g_rand_set_seed(rand_: GRand*,
+                           seed: guint32);
+@extern fn g_rand_set_seed_array(rand_: GRand*,
+                                 seed: const guint32*,
+                                 seed_length: guint);
+
+@macro g_rand_boolean(rand_) = ((g_rand_int(rand_) & (1 << 15)) != 0);
+
+@extern fn g_rand_int(rand_: GRand*) -> guint32;
+@extern fn g_rand_int_range(rand_: GRand*,
+                            begin: gint32,
+                            end: gint32) -> gint32;
+@extern fn g_rand_double(rand_: GRand*) -> gdouble;
+@extern fn g_rand_double_range(rand_: GRand*,
+                               begin: gdouble,
+			                   end: gdouble) -> gdouble;
+@extern fn g_random_set_seed(seed: guint32);
+
+@macro g_random_boolean() = ((g_random_int () & (1 << 15)) != 0);
+
+@extern fn g_random_int() -> guint32;
+@extern fn g_random_int_range(begin: gint32,
+                              end: gint32) -> gint32;
+@extern fn g_random_double() -> gdouble;
+@extern fn g_random_double_range(begin: gdouble,
+                                 end: gdouble) -> gdouble;

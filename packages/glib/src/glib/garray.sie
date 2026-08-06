@@ -1,0 +1,18 @@
+import { gchar, guchar, guint, gpointer } from gtypes;
+
+struct GBytes;
+
+struct GArray {
+    data: gchar*;
+    len: guint;
+}
+
+struct GByteArray {
+    data: guchar*;
+    len: guint;
+}
+
+struct GPtrArray {
+    data: gpointer*;
+    len: guint;
+}
