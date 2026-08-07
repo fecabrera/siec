@@ -1189,6 +1189,8 @@ fn main() -> i32 {
     assert names["helper"].kind == "function"
     assert names["util"].kind == "module"
     assert names["Integer"].kind == "interface"
+    assert names["SignedInteger"].kind == "interface"
+    assert names["UnsignedInteger"].kind == "interface"
     assert names["i128"].kind == "keyword"
     assert names["u128"].kind == "keyword"
     assert names["return"].kind == "keyword"
@@ -1240,6 +1242,8 @@ fn main() -> i32 { let other:  }
     items = {item.label: item for item in complete(analysis, edited, 2, 31)}
     assert items["Box"].kind == "struct"
     assert items["Integer"].kind == "interface"
+    assert items["SignedInteger"].kind == "interface"
+    assert items["UnsignedInteger"].kind == "interface"
     assert items["i32"].kind == "keyword"
     assert "helper" not in items
 

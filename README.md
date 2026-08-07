@@ -1249,6 +1249,8 @@ An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...
 
 `Scalar` is a sealed builtin interface for the primitive value types: the signed and unsigned integers, `f32`, `f64`, `bool`, and `char`. It is useful when an implementation needs the builtin scalar representation while accepting every width. Structs, enums, pointers, and arrays do not satisfy it, and user declarations cannot claim it.
 
+`Integer` is the same kind of sealed marker for every integer primitive (`i8`…`i128` and `u8`…`u128`). `SignedInteger` and `UnsignedInteger` narrow that further to one signedness each. Like `Scalar`, only the compiler's primitives satisfy them, and user declarations cannot claim them.
+
 A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments (`identity(n)` on an `i32` compiles `identity<i32>`) by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
 
 In a typed context (a declared return type, an annotated `let`, an argument's parameter) the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:

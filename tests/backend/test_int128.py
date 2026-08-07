@@ -79,10 +79,12 @@ def test_u128_enum_and_integer_bound(run):
         enum Wide: u128 { LOW = 1, HIGH = 1 << 100 }
 
         fn identity<T: Integer>(value: T) -> T { return value; }
+        fn signed_only<T: SignedInteger>(value: T) -> T { return value; }
+        fn unsigned_only<T: UnsignedInteger>(value: T) -> T { return value; }
 
         fn main() -> i32 {
-            let signed: i128 = identity(40 as i128);
-            let unsigned: u128 = identity(2 as u128);
+            let signed: i128 = signed_only(identity(40 as i128));
+            let unsigned: u128 = unsigned_only(identity(2 as u128));
             if (Wide::HIGH >> 100 != 1) { return 1; }
             return (signed + unsigned as i128) as i32;
         }

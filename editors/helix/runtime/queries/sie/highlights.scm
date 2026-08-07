@@ -134,7 +134,8 @@
 ; the prelude's own declarations
 ((identifier) @type.builtin
  (#any-of? @type.builtin
-  "Any" "Result" "Tuple" "Scalar" "Iterator" "ConstIterator" "Iterable"
+  "Any" "Result" "Tuple" "Scalar" "Integer" "SignedInteger" "UnsignedInteger"
+  "Iterator" "ConstIterator" "Iterable"
   "ArrayIterator" "ConstArrayIterator" "Enumerated" "EnumerateIterator"
   "Add" "Sub" "Mul" "Div" "Rem"
   "AddAssign" "SubAssign" "MulAssign" "DivAssign" "RemAssign"

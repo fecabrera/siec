@@ -500,6 +500,68 @@ def test_integer_is_a_sealed_builtin_bound(run, compile_source):
         """)
 
 
+def test_signed_integer_is_a_sealed_builtin_bound(run, compile_source):
+    """Only the signed integer primitives satisfy SignedInteger."""
+    source = """
+    fn identity<T: SignedInteger>(value: T) -> T { return value; }
+
+    fn main() -> i32 {
+        let a: i8 = identity(0 as i8);
+        let b: i16 = identity(0 as i16);
+        let c: i32 = identity(42 as i32);
+        let d: i64 = identity(0 as i64);
+        let e: i128 = identity(0 as i128);
+        return c;
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError,
+                       match="does not implement interface 'SignedInteger'"):
+        compile_source("""
+        fn only_signed<T: SignedInteger>(value: T) {}
+        fn main() -> i32 { only_signed(1 as u32); return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="'SignedInteger' is a sealed builtin "
+                                        "interface"):
+        compile_source("""
+        struct Pretender: SignedInteger {}
+        fn main() -> i32 { return 0; }
+        """)
+
+
+def test_unsigned_integer_is_a_sealed_builtin_bound(run, compile_source):
+    """Only the unsigned integer primitives satisfy UnsignedInteger."""
+    source = """
+    fn identity<T: UnsignedInteger>(value: T) -> T { return value; }
+
+    fn main() -> i32 {
+        let a: u8 = identity(0 as u8);
+        let b: u16 = identity(0 as u16);
+        let c: u32 = identity(40 as u32);
+        let d: u64 = identity(0 as u64);
+        let e: u128 = identity(0 as u128);
+        return c as i32 + 2;
+    }
+    """
+    assert run(source).returncode == 42
+
+    with pytest.raises(TypeError,
+                       match="does not implement interface 'UnsignedInteger'"):
+        compile_source("""
+        fn only_unsigned<T: UnsignedInteger>(value: T) {}
+        fn main() -> i32 { only_unsigned(1 as i32); return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="'UnsignedInteger' is a sealed builtin "
+                                        "interface"):
+        compile_source("""
+        struct Pretender: UnsignedInteger {}
+        fn main() -> i32 { return 0; }
+        """)
+
+
 def test_array_operators_desugar_through_methods(run):
     """
     '==' and '!=' on array operands reach the 'T[]::eq' method.

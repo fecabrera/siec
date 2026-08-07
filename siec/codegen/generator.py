@@ -628,6 +628,11 @@ interface Scalar;
 // unlike an ordinary interface, user declarations cannot claim it
 interface Integer;
 
+// sealed markers for the signed and unsigned integer primitives;
+// unlike an ordinary interface, user declarations cannot claim them
+interface SignedInteger;
+interface UnsignedInteger;
+
 // Clone constructs a new value from a borrowed value of the same concrete
 // type. Assignment uses it only when no specialized AssignFrom<Self> exists.
 interface Clone;
@@ -1023,7 +1028,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(struct.name for struct in prelude.structs)
-    gen.builtin_names.update(("Result", "Ok", "Error", "Scalar", "Integer", "Clone",
+    gen.builtin_names.update(("Result", "Ok", "Error", "Scalar", "Integer",
+                              "SignedInteger", "UnsignedInteger", "Clone",
                               "AssignFrom", "Assign", "Destroy",
                               "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",

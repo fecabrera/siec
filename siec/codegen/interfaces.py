@@ -17,12 +17,20 @@ from siec.codegen.generics import (split_generic, substitute,
 from siec.codegen.types import (
     INTEGER_TYPES,
     SCALAR_TYPES,
+    SIGNED_TYPES,
+    UNSIGNED_TYPES,
     is_const,
     strip_const,
     strip_reference,
 )
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+# sealed markers the compiler owns for primitive categories; user code
+# cannot claim them, and conformance is structural membership
+SEALED_BUILTIN_INTERFACES = (
+    "Scalar", "Integer", "SignedInteger", "UnsignedInteger",
+)
 
 
 @contextmanager
@@ -295,7 +303,7 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                 raise TypeError(f"{base!r} is {kind} an interface: "
                                 f"{name!r} cannot implement it")
 
-            if base in ("Scalar", "Integer"):
+            if base in SEALED_BUILTIN_INTERFACES:
                 raise TypeError(f"{base!r} is a sealed builtin interface: "
                                 "only compiler-defined primitive types "
                                 "implement it")
@@ -626,6 +634,10 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
         found.extend(name for name in SCALAR_TYPES if name not in found)
     if required == "Integer":
         found.extend(name for name in INTEGER_TYPES if name not in found)
+    if required == "SignedInteger":
+        found.extend(name for name in SIGNED_TYPES if name not in found)
+    if required == "UnsignedInteger":
+        found.extend(name for name in UNSIGNED_TYPES if name not in found)
 
     for param, claim, constraints, file in gen.array_claims:
         bindings: dict = {}
@@ -711,6 +723,10 @@ def claimed_interfaces(gen: CodeGenerator, concrete: str,
         claims.add("Scalar")
     if concrete in INTEGER_TYPES and relevant("Integer"):
         claims.add("Integer")
+    if concrete in SIGNED_TYPES and relevant("SignedInteger"):
+        claims.add("SignedInteger")
+    if concrete in UNSIGNED_TYPES and relevant("UnsignedInteger"):
+        claims.add("UnsignedInteger")
 
     if concrete.endswith("[]"):
         element = concrete[:-2]
@@ -742,12 +758,17 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     element substituted in. A free placeholder in the requirement -
     'Iterable<T>' with no T bound - matches any claim that spells it.
     """
-    # Scalar is sealed and structural: answering it directly also keeps a
-    # blanket claim guarded by Scalar from consulting itself recursively.
+    # Sealed builtins are structural: answering them directly also keeps a
+    # blanket claim guarded by the same marker from consulting itself
+    # recursively.
     if required == "Scalar":
         return strip_const(concrete) in SCALAR_TYPES
     if required == "Integer":
         return strip_const(concrete) in INTEGER_TYPES
+    if required == "SignedInteger":
+        return strip_const(concrete) in SIGNED_TYPES
+    if required == "UnsignedInteger":
+        return strip_const(concrete) in UNSIGNED_TYPES
 
     # Blanket claims may depend on other blanket claims. A cycle supplies
     # no evidence of conformance, so fail that path closed while allowing
@@ -976,7 +997,7 @@ def resolve_type_family_extend(gen: CodeGenerator, ext) -> None:
             raise TypeError(f"{base!r} is {kind} an interface: "
                             f"{ext.name!r} cannot implement it")
 
-        if base in ("Scalar", "Integer"):
+        if base in SEALED_BUILTIN_INTERFACES:
             raise TypeError(f"{base!r} is a sealed builtin interface: "
                             "only compiler-defined primitive types "
                             "implement it")
@@ -1083,7 +1104,7 @@ def resolve_array_extend(gen: CodeGenerator, ext) -> None:
             raise TypeError(f"{base!r} is {kind} an interface: "
                             f"{ext.name!r} cannot implement it")
 
-        if base in ("Scalar", "Integer"):
+        if base in SEALED_BUILTIN_INTERFACES:
             raise TypeError(f"{base!r} is a sealed builtin interface: "
                             "only compiler-defined primitive types "
                             "implement it")
