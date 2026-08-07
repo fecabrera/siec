@@ -1,16 +1,46 @@
 @include("_random/_seed")
 @include("_random/_random64")
+@include("_random/_random256")
 
-@static let _random: Random64;
+@static let _random: Random256;
 @static let _initialized = false;
 
 /**
  * Generates a pseudorandom number
+ *
+ * @return The generated number
  */
 fn random() -> u64 {
     if (not _initialized) {
-        _random = Random64();
+        _random = Random256();
         _initialized = true;
     }
-    return _random.xorshiftstar();
+    return _random.xoshiro256ss();
+}
+
+/**
+ * Generates a pseudorandom number in a certain range
+ *
+ * @param b Minimum number
+ * @param t Maximum number
+ * @return The generated number
+ */
+@inline
+fn random_between(b: u64, t: u64) -> u64 {
+    return (random() % (t - b)) + b;
+}
+
+/**
+ * Generates a pseudorandom boolean
+ *
+ * @return The generated boolean
+ */
+@inline
+fn random_bool() -> bool {
+    return random() % 2 == 1;
+}
+
+@inline
+fn random_probability() -> f64 {
+    return random_between(0, 1000000000) as f64 / 1000000000; 
 }

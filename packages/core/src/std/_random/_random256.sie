@@ -1,0 +1,55 @@
+import std;
+import { splitmix64 } from std.hashing;
+import { random_seed } from _seed;
+
+@static fn rol64(x: u64, k: u64) -> u64 {
+    return (x << k) | (x >> (64 - k));
+}
+
+struct Random256 {
+    @private state: u64[4];
+
+    fn init(&self) {
+        let buf: u8[4 * @sizeof(u64)];
+        random_seed(buf);
+        self.init({buf.data as u64*, 4});
+    }
+
+    fn init(&self, seed: const &u64[]) {
+        std.assert(seed.length == 4, "Seed must be 256 bits");
+
+        for (let i: u64 = 0; i < 4; i += 1) {
+            self.state[i] = splitmix64(seed[i]);
+        }
+    }
+
+    fn xoshiro256pp(&self) -> u64 {
+        let result = rol64(self.state[0] * self.state[3], 23) + self.state[0];
+        let t = self.state[1] << 17;
+        
+        self.state[2] ^= self.state[0];
+        self.state[3] ^= self.state[1];
+        self.state[1] ^= self.state[2];
+        self.state[0] ^= self.state[3];
+        
+        self.state[2] ^= t;
+        self.state[3] = rol64(self.state[3], 45);
+
+        return result;
+    }
+
+    fn xoshiro256ss(&self) -> u64 {
+        let result = rol64(self.state[1] * 5, 7) * 9;
+        let t = self.state[1] << 17;
+        
+        self.state[2] ^= self.state[0];
+        self.state[3] ^= self.state[1];
+        self.state[1] ^= self.state[2];
+        self.state[0] ^= self.state[3];
+        
+        self.state[2] ^= t;
+        self.state[3] = rol64(self.state[3], 45);
+
+        return result;
+    }
+}

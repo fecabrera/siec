@@ -33,7 +33,7 @@ struct Random64 {
     fn xorshift(&self) -> u64 {
         let x = self.state;
         x ^= x << 17;
-        x ^= x >> 21;
+        x ^= x >> 23;
         x ^= x << 5;
         self.state = x;
         return x;
@@ -48,7 +48,7 @@ struct Random64 {
         let x = self.state;
         x ^= x >> 13;
         x ^= x << 29;
-        x ^= x >> 27;
+        x ^= x >> 17;
         x *= 0x2545F4914F6CDD1D;
         self.state = x;
         return x;
