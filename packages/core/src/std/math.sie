@@ -1,0 +1,66 @@
+import std.io;
+
+@inline fn i8::to_unsigned(const &self) -> u8 {
+    return self as u8;
+}
+
+@inline fn i16::to_unsigned(const &self) -> u16 {
+    return self as u16;
+}
+
+@inline fn i32::to_unsigned(const &self) -> u32 {
+    return self as u32;
+}
+
+@inline fn i64::to_unsigned(const &self) -> u64 {
+    return self as u64;
+}
+
+@inline fn i128::to_unsigned(const &self) -> u128 {
+    return self as u128;
+}
+
+@inline fn u8::to_signed(const &self) -> i8 {
+    return self as i8;
+}
+
+@inline fn u16::to_signed(const &self) -> i16 {
+    return self as i16;
+}
+
+@inline fn u32::to_signed(const &self) -> i32 {
+    return self as i32;
+}
+
+@inline fn u64::to_signed(const &self) -> i64 {
+    return self as i64;
+}
+
+@inline fn u128::to_signed(const &self) -> i128 {
+    return self as i128;
+}
+
+@template <T: UnsignedInteger>
+fn T::abs(const &self) -> T {
+    return self;
+}
+
+@template <T: SignedInteger>
+fn T::abs(const &self) -> T {
+    if (self >= 0)
+        return self;
+    let num = self.to_unsigned();
+    num = (~num) + 1;
+    return num.to_signed();
+}
+
+@template <T: Integer>
+fn T::digits(const &self, base: u8 = 10) -> u64 {
+    let num = self.abs();
+    let n: u64 = 0;
+    while (num) {
+        num /= base as T;
+        n += 1;
+    }
+    return n;
+}
