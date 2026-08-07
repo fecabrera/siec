@@ -230,23 +230,41 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
                                 "has no matching declaration to override")
 
             if same and not fn.is_override:
-                exact = [
+                same_sig = [
                     template for template in same
                     if (not template.is_override
-                        and method_family_identity(template)
-                        == method_family_identity(fn))
+                        and normalized_method_signature(template)
+                        == normalized_method_signature(fn))
                 ]
+                exact = [
+                    template for template in same_sig
+                    if method_family_identity(template)
+                    == method_family_identity(fn)
+                ]
+
+                # A nested declaration may carry the struct's receiver
+                # bounds while an out-of-line body omits them (or the
+                # reverse order). Same parameter list with only one side
+                # defining still pairs; distinct bounds with two bodies
+                # remain overloads.
+                fn_defines = fn.body is not None or fn.asm is not None
+                if not exact:
+                    exact = [
+                        template for template in same_sig
+                        if ((template.body is not None or template.asm is not None)
+                            != fn_defines)
+                    ]
+
                 if exact:
-                    defines = fn.body is not None or fn.asm is not None
                     definitions = [
                         template for template in exact
                         if template.body is not None or template.asm is not None
                     ]
-                    if defines and definitions:
+                    if fn_defines and definitions:
                         raise TypeError(f"method '{shown_signature(fn)}' "
                                         "is declared more than once")
 
-                    if defines:
+                    if fn_defines:
                         # A body may live outside the struct after its nested
                         # declaration. Keep the body as the family template and
                         # carry across receiver bounds supplied by the struct.
