@@ -6,8 +6,7 @@ from siec.codegen.aliases import expand_alias, type_identity
 from siec.codegen.errors import source_location
 from siec.codegen.sizes import size_of
 from siec.codegen.generator import CodeGenerator, EnumInfo, StructInfo
-
-INTEGER_TYPES = {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64"}
+from siec.codegen.types import INTEGER_TYPES
 
 BINARY_OPS = {
     "+": lambda a, b: a + b,

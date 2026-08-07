@@ -1220,6 +1220,37 @@ def test_symbol_bindings_stay_in_their_module(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 0
 
 
+def test_qualified_module_member_binds_as_reference_argument(
+        tmp_path, monkeypatch):
+    """
+    A dotted module member passed to a '&T' parameter is the exported
+    binding, not a struct field access (sized-array probing must not
+    misread 'mod.name' as a field).
+    """
+    (tmp_path / "streams.sie").write_text("""
+        struct Stream {}
+
+        @static let __out: Stream;
+        @macro out = __out;
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import streams;
+
+        fn use(stream: &Stream) -> i32 {
+            return 1;
+        }
+
+        fn main() -> i32 {
+            return use(streams.out);
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 1
+
+
 def test_imported_names_are_not_reexported(tmp_path, monkeypatch, capsys):
     """
     A module offers only its own declarations: what it imports stays the

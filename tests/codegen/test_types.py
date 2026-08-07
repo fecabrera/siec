@@ -13,8 +13,10 @@ def test_none_resolves_to_void():
     assert isinstance(resolve_type(None), ir.VoidType)
 
 
-@pytest.mark.parametrize("name,width", [("i8", 8), ("i16", 16), ("i32", 32), ("i64", 64),
-                                        ("u8", 8), ("u16", 16), ("u32", 32), ("u64", 64)])
+@pytest.mark.parametrize("name,width", [
+    ("i8", 8), ("i16", 16), ("i32", 32), ("i64", 64), ("i128", 128),
+    ("u8", 8), ("u16", 16), ("u32", 32), ("u64", 64), ("u128", 128),
+])
 def test_integer_types(name, width):
     """
     Signed and unsigned integer names resolve to LLVM ints of their width.
@@ -136,5 +138,6 @@ def test_scalar_table_covers_the_documented_builtins():
     """
     Every builtin type from the README is present in the scalar table.
     """
-    assert {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
+    assert {"i8", "i16", "i32", "i64", "i128",
+            "u8", "u16", "u32", "u64", "u128",
             "f32", "f64", "bool", "char"} <= set(SCALAR_TYPES)

@@ -217,15 +217,15 @@ class Completion:
 KEYWORD_COMPLETIONS = (
     "and", "as", "bool", "break", "case", "char", "const", "continue",
     "defer", "else", "emit", "enum", "false", "f32", "f64", "fn",
-    "for", "foreach", "i8", "i16", "i32", "i64", "if", "import",
+    "for", "foreach", "i8", "i16", "i32", "i64", "i128", "if", "import",
     "interface", "let", "not", "opaque", "or", "raw", "return",
-    "struct", "true", "u8", "u16", "u32", "u64", "union", "when",
+    "struct", "true", "u8", "u16", "u32", "u64", "u128", "union", "when",
     "while",
 )
 
 TYPE_KEYWORD_COMPLETIONS = frozenset((
-    "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64",
-    "opaque", "raw", "u8", "u16", "u32", "u64",
+    "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64", "i128",
+    "opaque", "raw", "u8", "u16", "u32", "u64", "u128",
 ))
 
 

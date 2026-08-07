@@ -1189,6 +1189,8 @@ fn main() -> i32 {
     assert names["helper"].kind == "function"
     assert names["util"].kind == "module"
     assert names["Integer"].kind == "interface"
+    assert names["i128"].kind == "keyword"
+    assert names["u128"].kind == "keyword"
     assert names["return"].kind == "keyword"
 
 

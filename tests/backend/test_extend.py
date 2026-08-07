@@ -466,7 +466,7 @@ def test_scalar_is_a_sealed_builtin_bound(run, compile_source):
 
 
 def test_integer_is_a_sealed_builtin_bound(run, compile_source):
-    """Only the eight signed and unsigned integer primitives satisfy Integer."""
+    """Only the signed and unsigned integer primitives satisfy Integer."""
     source = """
     fn identity<T: Integer>(value: T) -> T { return value; }
 
@@ -479,6 +479,8 @@ def test_integer_is_a_sealed_builtin_bound(run, compile_source):
         let f: u16 = identity(0 as u16);
         let g: u32 = identity(0 as u32);
         let h: u64 = identity(0 as u64);
+        let i: i128 = identity(0 as i128);
+        let j: u128 = identity(0 as u128);
         return c;
     }
     """

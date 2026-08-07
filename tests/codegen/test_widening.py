@@ -10,8 +10,8 @@ from siec.codegen.generator import Variable
 
 
 @pytest.mark.parametrize("name,expected", [
-    ("i8", ("i", 8)), ("i64", ("i", 64)),
-    ("u8", ("u", 8)), ("u32", ("u", 32)),
+    ("i8", ("i", 8)), ("i64", ("i", 64)), ("i128", ("i", 128)),
+    ("u8", ("u", 8)), ("u32", ("u", 32)), ("u128", ("u", 128)),
     ("f32", ("f", 32)), ("f64", ("f", 64)),
     ("char", None), ("bool", None), ("i32*", None), ("i32[]", None), ("Point", None),
 ])

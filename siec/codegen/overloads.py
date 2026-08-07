@@ -3,8 +3,8 @@
 A name's overloads live under mangled sibling symbols, and a call picks
 among them by its argument types, ranked exact match over implicit
 conversion; no fit, or a tie between conversions, is a compile-time error.
-An argument ranks at its declared Sie type, a literal at its default -
-an integer literal's 'i32', or 'i64' when it doesn't fit one.
+An argument ranks at its declared Sie type, a literal at its smallest default
+signed type: 'i32', 'i64', or 'i128'.
 """
 
 from siec.ast import (
@@ -23,6 +23,7 @@ from siec.codegen.inference import (
     enum_backing,
     expr_sie_type,
     infer_type,
+    integer_literal_type,
     numeric_class,
     type_info,
 )
@@ -308,14 +309,14 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
 def rank_type(gen: CodeGenerator, arg, scope: dict) -> str | None:
     """
     The type an argument ranks at: its declared Sie type, or a literal's
-    default - an integer literal ranks as the 'i32' it emits as, or as
-    'i64' when its value doesn't fit one.
+    default - an integer literal ranks as i32, i64, or i128 according to
+    the first width it fits.
     """
     declared = expr_sie_type(gen, arg, scope)
     if declared is not None:
         return declared
 
-    if isinstance(arg, IntLiteral) and not -2**31 <= arg.value < 2**31:
-        return "i64"
+    if isinstance(arg, IntLiteral):
+        return integer_literal_type(arg.value)
 
     return infer_type(gen, arg, scope)

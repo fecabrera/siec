@@ -72,6 +72,15 @@ OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem",
                     "<": "cmp", ">": "cmp", "<=": "cmp", ">=": "cmp"}
 
 
+def integer_literal_type(value: int) -> str:
+    """The signed builtin type an untyped integer literal defaults to."""
+    if -2**31 <= value < 2**31:
+        return "i32"
+    if -2**63 <= value < 2**63:
+        return "i64"
+    return "i128"
+
+
 def result_arms(name: str | None) -> tuple[str | None, str] | None:
     """
     The value and error types a 'Result' spelling carries, or None for
@@ -632,7 +641,7 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     # literals default like they do in any untyped context
     if isinstance(expr, IntLiteral):
-        return "i32"
+        return integer_literal_type(expr.value)
 
     if isinstance(expr, FloatLiteral):
         return "f64"
@@ -972,6 +981,10 @@ def sized_member_array(gen: CodeGenerator, expr: Expr,
                        scope: dict) -> tuple[str, str] | None:
     """Return a member's inline sized-array shape, when it has one."""
     if not isinstance(expr, Member):
+        return None
+
+    # a pure name chain may be a module's member, not a struct field
+    if fold_qualified(gen, expr, scope) is not None:
         return None
 
     return sized_array(strip_const(member_field(gen, expr, scope)[1]))

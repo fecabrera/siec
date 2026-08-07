@@ -1100,7 +1100,8 @@ fn Decimal::add(&self, f: f64) -> Decimal { ... }
 
 Each call picks the overload its argument types select. An exact match wins. Otherwise the arguments must reach exactly one candidate through the implicit conversions calls already apply: widening, array decay, `opaque*`, `null`. No reachable candidate, or a tie between two, is a compile-time error.
 
-An untyped literal counts as its default type: `i32` for an integer literal, or `i64` when the value doesn't fit one. From there it converts like any other value:
+An untyped integer literal counts as its first fitting signed type: `i32`,
+`i64`, then `i128`. From there it converts like any other value:
 
 ```
 dec.add(5);            // an i32, widened into the i64 overload
@@ -1516,8 +1517,8 @@ let masked: i32 = @asm @clobbers("x0", "memory") (x, y) -> i32 {
 
 #### Builtin types
 
-- Signed integers: `i8`, `i16`, `i32`, `i64`.
-- Unsigned integers: `u8`, `u16`, `u32`, `u64`.
+- Signed integers: `i8`, `i16`, `i32`, `i64`, `i128`.
+- Unsigned integers: `u8`, `u16`, `u32`, `u64`, `u128`.
 - Floats: `f32`, `f64`.
 - Booleans: `bool`.
 - Characters: `char`.
@@ -1527,6 +1528,9 @@ Integer literals may also be written in hexadecimal with the `0x` prefix:
 ```
 let mask: u32 = 0xFF00;
 ```
+
+Without a type context, an integer literal defaults to the first signed type
+it fits: `i32`, then `i64`, then `i128`.
 
 Float literals are written with a `.` between their digits, adopting the float type of their context like integer literals do:
 

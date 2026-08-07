@@ -55,6 +55,19 @@ def test_untyped_literal_ranks_at_its_default(run):
     assert run(source).returncode == 12
 
 
+def test_large_untyped_literal_ranks_as_i128(run):
+    """A value beyond i64 selects an i128 overload exactly."""
+    source = """
+    fn pick(n: i64) -> i32 { return 1; }
+    fn pick(n: i128) -> i32 { return 42; }
+
+    fn main() -> i32 {
+        return pick(0x10000000000000000);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_literal_widens_when_no_exact_overload_exists(run):
     """
     'dec.add(5)': with no i32 candidate, the literal's i32 widens to i64,

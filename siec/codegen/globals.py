@@ -19,6 +19,7 @@ from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import check_field_access
 from siec.codegen.types import (
     is_const,
+    INTEGER_TYPES,
     is_reference,
     resolve_type,
     sized_array,
@@ -148,8 +149,7 @@ def validate_constant_value(gen: CodeGenerator, expr: Expr,
         return
 
     if isinstance(expr, BoolLiteral):
-        if target not in ("bool", "i8", "i16", "i32", "i64",
-                          "u8", "u16", "u32", "u64"):
+        if target != "bool" and target not in INTEGER_TYPES:
             raise TypeError(
                 f"cannot initialize a {sie_type!r} value with a bool")
         return

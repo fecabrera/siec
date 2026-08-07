@@ -7,10 +7,12 @@ SCALAR_TYPES = {
     "i16": ir.IntType(16),
     "i32": ir.IntType(32),
     "i64": ir.IntType(64),
+    "i128": ir.IntType(128),
     "u8": ir.IntType(8),
     "u16": ir.IntType(16),
     "u32": ir.IntType(32),
     "u64": ir.IntType(64),
+    "u128": ir.IntType(128),
     "f32": ir.FloatType(),
     "f64": ir.DoubleType(),
     "bool": ir.IntType(1),
@@ -18,8 +20,8 @@ SCALAR_TYPES = {
 }
 
 
-SIGNED_TYPES = {"i8", "i16", "i32", "i64"}
-UNSIGNED_TYPES = {"u8", "u16", "u32", "u64"}
+SIGNED_TYPES = {"i8", "i16", "i32", "i64", "i128"}
+UNSIGNED_TYPES = {"u8", "u16", "u32", "u64", "u128"}
 INTEGER_TYPES = SIGNED_TYPES | UNSIGNED_TYPES
 
 
