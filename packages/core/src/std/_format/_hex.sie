@@ -1,0 +1,2 @@
+@const _hex: char[] = "0123456789abcdef";
+@const _hexu: char[] = "0123456789ABCDEF";

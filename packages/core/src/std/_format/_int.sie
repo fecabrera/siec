@@ -1,23 +1,81 @@
 import { String } from std.collections;
 
+@include("_hex");
+
 enum IntFormatterState {
     PADDING = 0,
     LENGTH = 1,
     FORMAT = 2,
 }
 
-@static let _hex: char[] = "0123456789abcdef";
-@static let _hexu: char[] = "0123456789ABCDEF";
+struct IntFormat {
+    base: u8 = 10;
+    pointer: bool = false;
+    mayus: bool = false;
+    zero: bool = false;
+    padding: u32 = 0;
+
+    /**
+     * Initialize IntFormat from modifiers
+     *
+     * @param modifiers The modifiers to parse
+     */
+    fn init(&self, modifiers: const &char[]) {
+        let state = IntFormatterState::PADDING;
+    
+        let i: u64 = 0;
+        while (i < modifiers.length) {
+            let c = modifiers[i];
+            case (state) {
+            when IntFormatterState::PADDING:
+                if (c == '0') {
+                    self.zero = true;
+                } else if (c > '0' and c <= '9') {
+                    state = IntFormatterState::LENGTH;
+                    continue;
+                } else {
+                    state = IntFormatterState::FORMAT;
+                    continue;
+                }
+            when IntFormatterState::LENGTH:
+                if (c >= '0' and c <= '9') {
+                    self.padding *= 10;
+                    self.padding += (c - '0') as u32;
+                } else {
+                    state = IntFormatterState::FORMAT;
+                    continue;
+                }
+            when IntFormatterState::FORMAT:
+                if (c == 'p') {
+                    self.pointer = true;
+                    self.base = 16;
+                } else if (c == 'b') {
+                    self.base = 2;
+                } else if (c == 'x') {
+                    self.base = 16;
+                } else if (c == 'X') {
+                    self.base = 16;
+                    self.mayus = true;
+                }
+                break;
+            }
+            i += 1;
+        }
+    }
+}
 
 /**
- * Macro to format the given integer.
+ * Format the given integer.
  *
  * @param value The integer to format.
  * @param modifiers The modifiers to format the integer with.
  * @param neg Whether the integer is negative.
  * @return The formatted integer.
  */
-@macro format_int(value, modifiers, neg) = _format_int(value, modifiers, neg);
+@inline
+fn format_int<T: UnsignedInteger>(value: T, modifiers: const &char[], neg: bool) -> String {
+    return _format_int(value, IntFormat(modifiers), neg);
+}
 
 /**
  * Format the given integer.
@@ -28,65 +86,20 @@ enum IntFormatterState {
  * @return The formatted integer.
  */
 @static
-fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
-    let str = String();
-    let base: u64 = 10;
-    let pointer = false;
-    let mayus = false;
-    let zero = false;
-    let padding: u32 = 0;
-    let state = IntFormatterState::PADDING;
-
-    let i: u64 = 0;
-    while (i < modifiers.length) {
-        let c = modifiers[i];
-        case (state) {
-        when IntFormatterState::PADDING:
-            if (c == '0') {
-                zero = true;
-            } else if (c > '0' and c <= '9') {
-                state = IntFormatterState::LENGTH;
-                continue;
-            } else {
-                state = IntFormatterState::FORMAT;
-                continue;
-            }
-        when IntFormatterState::LENGTH:
-            if (c >= '0' and c <= '9') {
-                padding *= 10;
-                padding += (c - '0') as u32;
-            } else {
-                state = IntFormatterState::FORMAT;
-                continue;
-            }
-        when IntFormatterState::FORMAT:
-            if (c == 'p') {
-                pointer = true;
-                base = 16;
-            } else if (c == 'b') {
-                base = 2;
-            } else if (c == 'x') {
-                base = 16;
-            } else if (c == 'X') {
-                base = 16;
-                mayus = true;
-            }
-            break;
-        }
-        i += 1;
-    }
-    
+@inline
+fn _format_int<T: UnsignedInteger>(value: T, fmt: const &IntFormat, neg: bool) -> String {
     let buf = String();
     let num = value;
     while (true) {
-        buf.push(mayus ? _hexu[num % base] : _hex[num % base]);
-        num = num / base;
+        buf.push(fmt.mayus ? _hexu[num % fmt.base] : _hex[num % fmt.base]);
+        num = num / fmt.base;
         if (num == 0) break;
     }
-
+    
+    let str = String();
     if (neg) {
-        if (pointer) {
-            if (zero) {
+        if (fmt.pointer) {
+            if (fmt.zero) {
                 str.push('-');
                 str.append("0x");
             } else {
@@ -94,23 +107,23 @@ fn _format_int(value: u64, modifiers: const &char[], neg: bool) -> String {
                 buf.push('-');
             }
         } else {
-            if (zero) {
+            if (fmt.zero) {
                 str.push('-');
             } else {
                 buf.push('-');
             }
         }
-    } else if (pointer) {
-        if (zero) {
+    } else if (fmt.pointer) {
+        if (fmt.zero) {
             str.append("0x");
         } else {
             buf.append("x0");
         }
     }
     
-    if (padding > buf.get_length()) {
-        for(let i = buf.get_length(); i < padding; i += 1) {
-            str.push(zero ? '0' : ' ');
+    if (fmt.padding > buf.get_length()) {
+        for(let i = buf.get_length(); i < fmt.padding; i += 1) {
+            str.push(fmt.zero ? '0' : ' ');
         }
     }
 
