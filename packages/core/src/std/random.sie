@@ -40,7 +40,12 @@ fn random_bool() -> bool {
     return random() % 2 == 1;
 }
 
+/**
+ * Generates a pseudorandom f64
+ *
+ * @return The generated f64
+ */
 @inline
 fn random_probability() -> f64 {
-    return random_between(0, 1000000000) as f64 / 1000000000; 
+    return random_between(0, 1000) as f64 / 1000; 
 }

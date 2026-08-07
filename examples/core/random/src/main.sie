@@ -1,6 +1,5 @@
 import std.io;
 import { random, random_between, random_bool, random_probability } from std.random;
-import { destructure_float } from std.format;
 
 fn main() -> i32 {
     std.io.println("Random numbers:");
@@ -17,8 +16,6 @@ fn main() -> i32 {
     
     std.io.println("Random probability:");
     for (let i: u64 = 0; i < 10; i += 1) {
-        let value = random_probability();
-        let data = destructure_float(value);
         std.io.println("  {}", random_probability());
     }
 
