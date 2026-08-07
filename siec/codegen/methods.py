@@ -45,6 +45,29 @@ def normalized_method_signature(fn) -> tuple:
     return method_signature(fn, mapping)
 
 
+def method_family_identity(fn) -> tuple:
+    """
+    A receiver template's signature and bounds. Bounds distinguish
+    otherwise identical families: 'T: SignedInteger' and 'T: UnsignedInteger'.
+    """
+    from siec.codegen.generics import constraint_bounds
+
+    mapping = {
+        param: f"#R{index}"
+        for index, param in enumerate(fn.receiver_params or ())
+    }
+    mapping.update({
+        param: f"#T{index}"
+        for index, param in enumerate(fn.type_params or ())
+    })
+    constraints = tuple(
+        (mapping.get(param, param), substitute(bound, mapping))
+        for param, value in sorted((fn.receiver_constraints or {}).items())
+        for bound in constraint_bounds(value)
+    )
+    return method_signature(fn, mapping), constraints
+
+
 def inherit_receiver_constraints(target, source) -> None:
     """Merge bounds carried by another declaration of one method family."""
     inherited = source.receiver_constraints or {}
@@ -97,7 +120,16 @@ def select_method_overrides(gen: CodeGenerator, base: str, method: str,
             entry for entry in candidates if entry[0].is_override
         ]
         if not overrides:
-            selected.extend(candidates)
+            # Ordinary templates with identical concrete signatures after
+            # substitution cannot all stamp: keep the most specific bound,
+            # and declaration order on a remaining tie.
+            rank = max(constraint_count(template.receiver_constraints)
+                       for template, _ in candidates)
+            winners = [
+                entry for entry in candidates
+                if constraint_count(entry[0].receiver_constraints) == rank
+            ]
+            selected.append(winners[0])
             continue
 
         rank = max(constraint_count(template.receiver_constraints)
@@ -201,38 +233,46 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
                 exact = [
                     template for template in same
                     if (not template.is_override
-                        and normalized_method_signature(template)
-                        == normalized_method_signature(fn))
+                        and method_family_identity(template)
+                        == method_family_identity(fn))
                 ]
-                if not exact:
+                if exact:
+                    defines = fn.body is not None or fn.asm is not None
+                    definitions = [
+                        template for template in exact
+                        if template.body is not None or template.asm is not None
+                    ]
+                    if defines and definitions:
+                        raise TypeError(f"method '{shown_signature(fn)}' "
+                                        "is declared more than once")
+
+                    if defines:
+                        # A body may live outside the struct after its nested
+                        # declaration. Keep the body as the family template and
+                        # carry across receiver bounds supplied by the struct.
+                        for declaration in exact:
+                            inherit_receiver_constraints(fn, declaration)
+                        first = templates.index(exact[0])
+                        templates[first] = fn
+                        for declaration in exact[1:]:
+                            templates.remove(declaration)
+                    else:
+                        # Definition collection is order-independent: a nested
+                        # declaration seen after its out-of-line body still lends
+                        # the struct's bounds to the retained template.
+                        inherit_receiver_constraints(exact[0], fn)
+                    return
+
+                # Same parameter list with a different return type conflicts;
+                # the same return with different receiver bounds is an
+                # overload, like 'f<T>' versus 'f<T: I>'.
+                if any(
+                        not template.is_override
+                        and normalized_method_signature(template)
+                        != normalized_method_signature(fn)
+                        for template in same):
                     raise TypeError(f"conflicting declarations for method "
                                     f"'{shown_signature(fn)}'")
-
-                defines = fn.body is not None or fn.asm is not None
-                definitions = [
-                    template for template in exact
-                    if template.body is not None or template.asm is not None
-                ]
-                if defines and definitions:
-                    raise TypeError(f"method '{shown_signature(fn)}' "
-                                    "is declared more than once")
-
-                if defines:
-                    # A body may live outside the struct after its nested
-                    # declaration. Keep the body as the family template and
-                    # carry across receiver bounds supplied by the struct.
-                    for declaration in exact:
-                        inherit_receiver_constraints(fn, declaration)
-                    first = templates.index(exact[0])
-                    templates[first] = fn
-                    for declaration in exact[1:]:
-                        templates.remove(declaration)
-                else:
-                    # Definition collection is order-independent: a nested
-                    # declaration seen after its out-of-line body still lends
-                    # the struct's bounds to the retained template.
-                    inherit_receiver_constraints(exact[0], fn)
-                return
 
             if same:
 

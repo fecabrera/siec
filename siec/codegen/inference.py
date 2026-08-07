@@ -526,6 +526,13 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, UnaryOp) and expr.op == "*":
         return expr_sie_type(gen, Index(expr.operand, IntLiteral(0)), scope)
 
+    # 'not' yields a bool; '-' and '~' keep their operand's type
+    if isinstance(expr, UnaryOp):
+        if expr.op == "not":
+            return "bool"
+        if expr.op in ("-", "~"):
+            return expr_sie_type(gen, expr.operand, scope)
+
     # 'A::member' carries its enum's type name, dotted spellings
     # resolving to the registered one; an 'S::m' whose base is no enum
     # types as a reference to the method
@@ -819,8 +826,12 @@ def signedness(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     # named values take the signedness of their declared Sie type; an
     # enum-typed value takes its backing type's
-    if isinstance(expr, (Var, Call, Member, Index, EnumMember)):
+    if isinstance(expr, (Var, Call, Member, Index, EnumMember, MethodCall)):
         return type_signedness(enum_backing(gen, expr_sie_type(gen, expr, scope)))
+
+    # a cast names its target type's signedness directly
+    if isinstance(expr, Cast):
+        return type_signedness(enum_backing(gen, expr.type))
 
     # a dereference reads a stored element: its declared type's signedness
     if isinstance(expr, UnaryOp) and expr.op == "*":

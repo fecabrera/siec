@@ -215,6 +215,32 @@ def test_a_bounded_overload_beats_an_unbounded_one(run):
     assert run(source).returncode == 42
 
 
+def test_bounded_receiver_methods_overload_by_constraints(run):
+    """
+    Bare 'T::m' families may repeat a signature under different receiver
+    bounds, like free-function templates distinguished by constraints.
+    """
+    source = """
+    interface Left;
+    interface Right;
+    struct L: Left {}
+    struct R: Right {}
+
+    @template<T: Left>
+    fn T::tag(const &self) -> i32 { return 40; }
+
+    @template<T: Right>
+    fn T::tag(const &self) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let left: L = {};
+        let right: R = {};
+        return left.tag() + right.tag();
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_generic_functions_recurse_and_call_each_other(run):
     """
     An instance may call itself, and one generic may instantiate another.

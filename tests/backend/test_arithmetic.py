@@ -58,3 +58,29 @@ def test_unary_minus(run):
     }
     """
     assert run(source).returncode == 10
+
+
+def test_method_call_on_negated_receiver(run):
+    """A parenthesized unary minus keeps its operand's type for method lookup."""
+    source = """
+    fn i64::to_unsigned(const &self) -> u64 { return self as u64; }
+
+    fn main() -> i32 {
+        let e2: i64 = -3;
+        return (-e2).to_unsigned() as i32;
+    }
+    """
+    assert run(source).returncode == 3
+
+
+def test_cast_signedness_rejects_mixed_power(compile_source):
+    """A cast's signedness is visible to '**', so mixed operands are rejected."""
+    with pytest.raises(TypeError, match="cannot apply '\\*\\*' to signed "
+                                        "and unsigned operands"):
+        compile_source("""
+        fn main() -> i32 {
+            let exp: u64 = 3;
+            let value = (5 as i128) ** exp;
+            return value as i32;
+        }
+        """)
