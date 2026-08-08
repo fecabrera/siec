@@ -583,6 +583,14 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if (rewritten := operator_call(gen, expr, scope)) is not None:
             return expr_sie_type(gen, rewritten, scope)
 
+        if expr.op in ("and", "or") or expr.op in COMPARISONS:
+            return "bool"
+
+        # arithmetic, bitwise, and power keep an operand's declared type
+        if expr.op in ARITHMETIC or expr.op == "**":
+            return (expr_sie_type(gen, expr.left, scope)
+                    or expr_sie_type(gen, expr.right, scope))
+
     return None
 
 

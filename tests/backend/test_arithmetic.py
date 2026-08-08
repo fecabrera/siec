@@ -73,6 +73,22 @@ def test_method_call_on_negated_receiver(run):
     assert run(source).returncode == 3
 
 
+def test_method_call_on_arithmetic_receiver(run):
+    """An arithmetic expression keeps an operand's type for method lookup."""
+    source = """
+    fn i64::abs(const &self) -> i64 {
+        return self < 0 ? -self : self;
+    }
+
+    fn main() -> i32 {
+        let e: i64 = -3;
+        let n: i64 = 5;
+        return (e + n - 1).abs() as i32;
+    }
+    """
+    assert run(source).returncode == 1
+
+
 def test_cast_signedness_rejects_mixed_power(compile_source):
     """A cast's signedness is visible to '**', so mixed operands are rejected."""
     with pytest.raises(TypeError, match="cannot apply '\\*\\*' to signed "
