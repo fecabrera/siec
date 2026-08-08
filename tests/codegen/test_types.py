@@ -111,6 +111,17 @@ def test_fn_type_parts_keeps_nested_fn_types_whole():
     assert fn_type_parts("fn(fn()->i32,i8)->fn()") == (["fn()->i32", "i8"], "fn()", "")
 
 
+def test_fn_type_parts_keeps_generic_arguments_whole():
+    """
+    Commas inside 'Tuple<...>' / 'Map<...>' arguments are not parameter
+    separators.
+    """
+    assert fn_type_parts("fn(Tuple<i32,i32>)->i32") == (
+        ["Tuple<i32,i32>"], "i32", "")
+    assert fn_type_parts("closure fn(Map<i32,i32>,i32)->i32") == (
+        ["Map<i32,i32>", "i32"], "i32", "")
+
+
 def test_fn_type_resolves_to_a_function_pointer():
     """
     A function reference type lowers to a pointer to the LLVM signature.

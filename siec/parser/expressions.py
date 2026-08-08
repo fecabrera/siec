@@ -458,6 +458,24 @@ def parse_primary(ts: TokenStream) -> Expr:
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
 
 
+def parse_typed_param(ts: TokenStream, index: int) -> Param:
+    """
+    Parse one 'name: Type' or '(a, b): Tuple<...>' parameter without a
+    default: the form shared by closures and lambdas.
+    """
+    from siec.parser.statements import parse_pattern
+
+    pattern = None
+    if ts.peek().syntax == "(":
+        pattern = parse_pattern(ts)
+        name = f"#{index}"
+    else:
+        name = ts.expect("ident").value
+
+    ts.expect("sym", ":")
+    return Param(name, parse_type(ts), pattern=pattern)
+
+
 def parse_closure_tail(ts: TokenStream, line: int,
                        name: str | None = None) -> ClosureExpr:
     """Parse the signature and body after an anonymous or local ``fn``."""
@@ -466,9 +484,7 @@ def parse_closure_tail(ts: TokenStream, line: int,
     while ts.peek().syntax != ")":
         if params:
             ts.expect("sym", ",")
-        param_name = ts.expect("ident").value
-        ts.expect("sym", ":")
-        params.append(Param(param_name, parse_type(ts)))
+        params.append(parse_typed_param(ts, len(params)))
     ts.next()
 
     return_type = None
@@ -488,9 +504,7 @@ def parse_lambda_tail(ts: TokenStream, line: int) -> ClosureExpr:
     while ts.peek().syntax != ")":
         if params:
             ts.expect("sym", ",")
-        name = ts.expect("ident").value
-        ts.expect("sym", ":")
-        params.append(Param(name, parse_type(ts)))
+        params.append(parse_typed_param(ts, len(params)))
     ts.next()
 
     return_type = None

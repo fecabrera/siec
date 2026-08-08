@@ -134,3 +134,77 @@ def test_tuple_name_is_reserved(compile_source):
         struct Tuple<A, B> { a: A; b: B; }
         fn main() -> i32 { return 0; }
         """)
+
+
+def test_destructured_tuple_parameter(run):
+    """
+    'fn f((a, b): Tuple<...>)' takes one tuple argument and binds the
+    pattern names inside the body, for both literals and named values.
+    """
+    source = """
+    fn sum((a, b, c): Tuple<i32, u32, i32>) -> i32 {
+        return a + b as i32 + c;
+    }
+
+    fn nested(((a, b), c): Tuple<Tuple<i32, i32>, i32>) -> i32 {
+        return a + b + c;
+    }
+
+    fn Box::total(&self, (x, y): Tuple<i32, i32>) -> i32 {
+        return self.value + x + y;
+    }
+
+    struct Box { value: i32; }
+
+    fn main() -> i32 {
+        if (sum((10, 20 as u32, 12)) != 42) { return 1; }
+
+        let t: Tuple<i32, u32, i32> = (1, 2 as u32, 3);
+        if (sum(t) != 6) { return 2; }
+
+        if (nested(((10, 20), 12)) != 42) { return 3; }
+
+        let box: Box = { 20 };
+        return box.total((10, 12));
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_destructured_tuple_parameter_default_and_closure(run):
+    """Defaults and closures accept the same patterned parameter form."""
+    source = """
+    fn offset((a, b): Tuple<i32, i32> = (40, 2)) -> i32 {
+        return a + b;
+    }
+
+    fn main() -> i32 {
+        let add = ((x, y): Tuple<i32, i32>) -> i32 => {
+            return x + y;
+        };
+        if (offset() != 42) { return 1; }
+        return add((20, 22));
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_destructured_tuple_parameter_errors(compile_source):
+    """Patterned params require a by-value Tuple of matching arity."""
+    with pytest.raises(TypeError, match="cannot destructure a 'i32'"):
+        compile_source("""
+        fn f((a, b): i32) {}
+        fn main() -> i32 { return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="the pattern binds 3 names"):
+        compile_source("""
+        fn f((a, b, c): Tuple<i32, i32>) {}
+        fn main() -> i32 { return 0; }
+        """)
+
+    with pytest.raises(TypeError, match="take the argument by value"):
+        compile_source("""
+        fn f((a, b): const &Tuple<i32, i32>) {}
+        fn main() -> i32 { return 0; }
+        """)

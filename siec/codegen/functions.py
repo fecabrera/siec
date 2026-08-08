@@ -381,12 +381,23 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                 if gen.volatile_struct(arg.type):
                     make_volatile(store)
 
+                if param.pattern is not None:
+                    from siec.codegen.statements import bind_tuple_value
+
+                    bind_tuple_value(
+                        gen, builder, param.pattern, arg, param.type, scope,
+                        line=fn.line)
+
         # describe each parameter's slot to the debugger; a '&T' reference
         # arrives as a raw pointer argument, which dbg.declare cannot
         # describe, so a debug-only spill gives it addressable storage,
-        # typed as the reference it is
+        # typed as the reference it is. Patterned params declare their
+        # element bindings instead of the synthetic tuple name.
         if gen.debug is not None:
             for position, param in enumerate(fn.params, 1):
+                if param.pattern is not None:
+                    continue
+
                 slot = scope[param.name].slot
                 if is_reference(param.type):
                     shadow = builder.alloca(slot.type, name=f"{param.name}.ref")

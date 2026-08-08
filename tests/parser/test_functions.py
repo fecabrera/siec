@@ -142,6 +142,25 @@ def test_function_without_params_or_return_type(ts):
     assert not fn.var_arg
 
 
+def test_function_with_destructured_tuple_param(ts):
+    """
+    '(a, b): Tuple<...>' parses to a Param carrying the pattern and a
+    synthetic name for the spilled tuple.
+    """
+    fn = parse_function(ts(
+        "fn f((a, b): Tuple<i32, u32>, rest: i32) {}"))
+    assert fn.params[0] == Param(
+        "#0", "Tuple<i32,u32>", pattern=["a", "b"])
+    assert fn.params[1] == Param("rest", "i32")
+
+    nested = parse_function(ts(
+        "fn g(((a, b), c): Tuple<Tuple<i32, i32>, i32>) {}"))
+    assert nested.params[0].pattern == [["a", "b"], "c"]
+
+    with pytest.raises(SyntaxError, match="cannot be variadic"):
+        parse_function(ts("fn h((a, b)... ) {}"))
+
+
 def test_function_with_params(ts):
     """
     Parameters parse as named, typed Params in order.

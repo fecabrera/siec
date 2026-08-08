@@ -34,9 +34,13 @@ def check_closure(gen, expr, scope: dict) -> str:
         for name, variable in scope.items()
         if name != expr.name and not name.startswith(".")
     }
+    from siec.codegen.checking import bind_param_pattern
+
     inner = dict(scope)
-    inner.update({param.name: checked_variable(param.type)
-                  for param in expr.params})
+    for param in expr.params:
+        inner[param.name] = checked_variable(param.type)
+        if param.pattern is not None:
+            bind_param_pattern(gen, param, inner)
     synthetic = Function(
         expr.name or "<closure>", expr.params, expr.return_type,
         expr.body, line=expr.line, file=expr.file)
@@ -154,6 +158,12 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
             slot = inner_builder.alloca(arg.type, name=f"{param.name}.addr")
             inner_builder.store(arg, slot)
             inner_scope[param.name] = Variable(slot, param.type)
+            if param.pattern is not None:
+                from siec.codegen.statements import bind_tuple_value
+
+                bind_tuple_value(
+                    gen, inner_builder, param.pattern, arg, param.type,
+                    inner_scope, line=expr.line)
 
     from siec.codegen.statements import emit_block
 

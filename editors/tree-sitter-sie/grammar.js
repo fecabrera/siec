@@ -49,6 +49,9 @@ module.exports = grammar({
     // Parentheses begin both grouped expressions and arrow parameters;
     // the following '=>' selects the closure reading.
     [$.closure_expression, $.parenthesized_expression],
+    // '(a, b)' is both a tuple expression and a parameter pattern; the
+    // ':' that follows a patterned parameter selects the pattern reading.
+    [$.tuple_pattern, $._expression],
   ],
 
   rules: {
@@ -352,7 +355,10 @@ module.exports = grammar({
 
     parameter: ($) =>
       seq(
-        field("name", $.identifier),
+        choice(
+          field("name", $.identifier),
+          field("pattern", $.tuple_pattern),
+        ),
         ":",
         field("type", $.type),
         optional(seq("=", field("default", $._expression))),

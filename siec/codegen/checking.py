@@ -118,11 +118,16 @@ def check_function(gen: CodeGenerator, fn: Function) -> None:
             gen.checked_functions.add(symbol)
             return
 
-        scope = {
-            param.name: checked_variable(param.type)
+        scope = {}
+        for param in fn.params:
+            scope[param.name] = checked_variable(param.type)
+            if param.pattern is not None:
+                bind_param_pattern(gen, param, scope)
+
+        params = {
+            param.name: scope[param.name]
             for param in fn.params
         }
-        params = dict(scope)
         from siec.codegen.ownership import assign_adopts_parameter
 
         for position, param in enumerate(fn.params):
@@ -678,6 +683,19 @@ def bind_tuple_pattern(gen: CodeGenerator, pattern: list,
             bind_tuple_pattern(gen, name, arg, scope)
         else:
             scope[name] = checked_variable(arg)
+
+
+def bind_param_pattern(gen: CodeGenerator, param, scope: dict) -> None:
+    """
+    Bind a destructured by-value tuple parameter's pattern names into
+    scope. The synthetic param.name remains for ownership of the tuple.
+    """
+    if is_reference(param.type):
+        raise TypeError(
+            f"cannot destructure a {param.type!r} parameter: "
+            "tuple patterns take the argument by value")
+
+    bind_tuple_pattern(gen, param.pattern, param.type, scope)
 
 
 def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,

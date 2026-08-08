@@ -1901,12 +1901,25 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "FIELD",
-          "name": "name",
-          "content": {
-            "type": "SYMBOL",
-            "name": "identifier"
-          }
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "name",
+              "content": {
+                "type": "SYMBOL",
+                "name": "identifier"
+              }
+            },
+            {
+              "type": "FIELD",
+              "name": "pattern",
+              "content": {
+                "type": "SYMBOL",
+                "name": "tuple_pattern"
+              }
+            }
+          ]
         },
         {
           "type": "STRING",
@@ -5456,6 +5469,10 @@
     [
       "closure_expression",
       "parenthesized_expression"
+    ],
+    [
+      "tuple_pattern",
+      "_expression"
     ]
   ],
   "precedences": [],

@@ -197,14 +197,19 @@ def fn_type_parts(name: str) -> tuple[list[str], str | None, str]:
     if rest.startswith("->"):
         ret, rest = rest[2:], ""
 
-    # split the parameter list on top-level commas, leaving nested fn types whole
-    params, depth, start = [], 0, 0
+    # split the parameter list on top-level commas, leaving nested fn
+    # and generic argument lists whole ('fn(Tuple<i32,i32>)', 'fn(fn(A)->B)')
+    params, depth, angles, start = [], 0, 0, 0
     for i, ch in enumerate(inner):
-        if ch == "(":
+        if ch == "<":
+            angles += 1
+        elif ch == ">":
+            angles -= 1
+        elif ch == "(":
             depth += 1
         elif ch == ")":
             depth -= 1
-        elif ch == "," and depth == 0:
+        elif ch == "," and depth == 0 and angles == 0:
             params.append(inner[start:i])
             start = i + 1
     if inner:

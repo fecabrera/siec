@@ -18,7 +18,7 @@ from siec.parser.constants import parse_const, parse_macro
 from siec.parser.enums import parse_enum
 from siec.parser.expressions import parse_clobbers, parse_expression
 from siec.parser.includes import parse_include
-from siec.parser.statements import parse_block
+from siec.parser.statements import parse_block, parse_pattern
 from siec.parser.stream import TokenStream
 from siec.parser.structs import parse_struct
 from siec.parser.types import parse_type, parse_type_params
@@ -761,19 +761,32 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
             continue
 
         param_line = ts.peek().line
-        param_name = ts.expect("ident").value
 
-        # 'name...' is sugar for a trailing 'name: const Any[]': extra call
-        # arguments pack into this borrowed view, each wrapped as an Any
-        if ts.peek().value == "...":
-            if is_extern:
-                raise SyntaxError(f"line {param_line}: an '@extern' function "
-                                  "takes C varargs: a bare '...'")
+        # '(a, b): Tuple<...>' destructures one by-value tuple parameter
+        # into named element locals inside the body
+        pattern = None
+        if ts.peek().syntax == "(":
+            pattern = parse_pattern(ts)
+            param_name = f"#{len(params)}"
+            if ts.peek().value == "...":
+                raise SyntaxError(f"line {param_line}: a destructured "
+                                  "parameter cannot be variadic")
+        else:
+            param_name = ts.expect("ident").value
 
-            ts.next()
-            params.append(Param(param_name, "const Any[]"))
-            variadic = True
-            break
+            # 'name...' is sugar for a trailing 'name: const Any[]': extra
+            # call arguments pack into this borrowed view, each wrapped
+            # as an Any
+            if ts.peek().value == "...":
+                if is_extern:
+                    raise SyntaxError(
+                        f"line {param_line}: an '@extern' function "
+                        "takes C varargs: a bare '...'")
+
+                ts.next()
+                params.append(Param(param_name, "const Any[]"))
+                variadic = True
+                break
 
         ts.expect("sym", ":")
         param_type = parse_type(ts)
@@ -785,11 +798,12 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         elif params and params[-1].default is not None:
             # defaults fill a call's omitted trailing arguments, so
             # only the last parameters can carry them
-            raise SyntaxError(f"line {param_line}: parameter "
-                              f"{param_name!r} needs a default: it "
-                              "follows a defaulted parameter")
+            shown = ("destructured parameter" if pattern is not None
+                     else f"parameter {param_name!r}")
+            raise SyntaxError(f"line {param_line}: {shown} needs a "
+                              "default: it follows a defaulted parameter")
 
-        params.append(Param(param_name, param_type, default))
+        params.append(Param(param_name, param_type, default, pattern=pattern))
 
     ts.expect("sym", ")")
 

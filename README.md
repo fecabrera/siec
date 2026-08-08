@@ -974,7 +974,7 @@ fn function(a: A, b: B, c: C) {
 }
 ```
 
-where `A`, `B` and `C` are concrete types.
+where `A`, `B` and `C` are concrete types. A by-value `Tuple` parameter may also use a parenthesized pattern (`(a, b): Tuple<A, B>`); see [Tuples](#tuples).
 
 They can also return values. The return type `T` is annotated through `-> T`, while the value to return follows the keyword `return`.
 
@@ -2329,6 +2329,18 @@ A `let` over a parenthesized pattern destructures: each name binds the matching 
 let (lo, hi) = minmax(9, 3);
 let ((a, b), c) = ((10, 20), 30);
 let (only,) = (42,);
+```
+
+A function (or closure) parameter may use the same pattern. The call still passes one by-value `Tuple<...>`; the annotation is required and must match the pattern's arity. Inside the body the names are ordinary locals:
+
+```
+fn sum((a, b, c): Tuple<i32, u32, f32>) -> f32 {
+    return a as f32 + b as f32 + c;
+}
+
+sum((1, 2 as u32, 3.0));
+let t: Tuple<i32, u32, f32> = (1, 2 as u32, 3.0);
+sum(t);
 ```
 
 ### Unions

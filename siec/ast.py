@@ -603,10 +603,16 @@ class Param:
     """
     A function parameter with its name, type annotation, and optional
     default value, taken when a call omits its argument.
+
+    With 'pattern', the parameter is still one by-value tuple at the
+    ABI, but the body binds each pattern name to the matching element
+    ('fn f((a, b): Tuple<i32, i32>)'). 'name' is then a synthetic
+    placeholder (e.g. '#0') used only for the spilled tuple slot.
     """
     name: str
     type: str
     default: object | None = None
+    pattern: list | None = None
 
 
 @dataclass
