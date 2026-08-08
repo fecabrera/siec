@@ -14,14 +14,18 @@ fn main() -> i32 {
     std.io.println("u32:        {} {8x} {08x}", 1 as u32, 0x7f as u16, 0x7f as u16);
     std.io.println("u64:        {} {8x} {08x}", 1 as u64, 0x7f as u8, 0x7f as u8);
 
+    std.io.println("f64:        {}", 100000000000000000000000.0 as f64);
+    std.io.println("f64:        {}", 102030000000000000000000.0 as f64);
+    std.io.println("f64:        {}", 1000000000000000000.0 as f64);
     std.io.println("f64:        {}", 1.0 as f64);
-    std.io.println("f64:        {}", 0.1 as f64);
-    std.io.println("f64:        {}", 0.01 as f64);
     std.io.println("f64:        {}", 0.001 as f64);
+    std.io.println("f64:        {}", 0.123 as f64);
+    std.io.println("f64:        {}", -100000000000000000000000.0 as f64);
+    std.io.println("f64:        {}", -102030000000000000000000.0 as f64);
+    std.io.println("f64:        {}", -1000000000000000000.0 as f64);
     std.io.println("f64:        {}", -1.0 as f64);
-    std.io.println("f64:        {}", -0.1 as f64);
-    std.io.println("f64:        {}", -0.01 as f64);
     std.io.println("f64:        {}", -0.001 as f64);
+    std.io.println("f64:        {}", -0.123 as f64);
 
     std.io.println("char*:      {}", "hello" as char*);
     std.io.println("char[]:     {} {10} {-10}", "hello" as char[], "hello" as char[], "hello" as char[]);

@@ -47,6 +47,7 @@ fn _float_to_decimal(value: f64, p: i64 = 6) -> Decimal64 {
     let mf: u64;
     let ef: i64;
 
+    // step 1: decode the floating point number
     if (ieee.e == 0) {
         mf = ieee.m;
         ef = 1 - DOUBLE_BIAS - DOUBLE_MANTISSA_BITS;
@@ -55,25 +56,30 @@ fn _float_to_decimal(value: f64, p: i64 = 6) -> Decimal64 {
         ef = ieee.e - DOUBLE_BIAS - DOUBLE_MANTISSA_BITS;
     }
 
+    // step 2: determine the interval of information-preserving outputs.
     let e2 = ef - 2;
     let v = 4 * mf;
     let u = v - ((mf == 0 and ef > 1) ? 1 : 2);
     let w = v + 2;
     
     if (e2 < 0) {
-        let e10 = (-e2).to_unsigned();
-        let e = (5 as u128) ** e10;
-        
+        let e10 = e2.abs().to_unsigned();
+        // convert to decimal power base
         let (um, ue) = _mul5div10(u, e10);
         let (wm, we) = _mul5div10(w, e10);
-        e10 -= we;
-
+        // find shortest decimal representation
         let (d0, e0) = _compute_shortest(um, wm);
-        return { d0, e0 - e10.to_signed() };
+        let e = e0 + e2 + we.to_signed() + d0.digits().to_signed() - 1;
+        return { d0, e };
     } else {
+        // convert to decimal power base
+        let (um, ue) = _mul2div10(u, e2 as u64);
+        let (wm, we) = _mul2div10(w, e2 as u64);
+        // find shortest decimal representation
+        let (d0, e0) = _compute_shortest(um, wm);
+        let e = e0 + we.to_signed();
+        return { d0, e };
     }
-
-    return { 0, 0 };
 }
 
 @static
@@ -82,7 +88,24 @@ fn _mul5div10(m: u128, e: u64) -> Tuple<u64, u64> {
     for (let i: u64 = 0; i < e; i += 1) {
         m *= 5;
         if (i % 3) {
+            let s: u128 = m % 10 > 5 ? 1 : 0;
             m /= 10;
+            m += s;
+            n += 1;
+        }
+    }
+    return (m as u64, n);
+}
+
+@static
+fn _mul2div10(m: u128, e: u64) -> Tuple<u64, u64> {
+    let n: u64 = 0;
+    for (let i: u64 = 0; i < e; i += 1) {
+        m *= 2;
+        if ((i % 5) % 2) {
+            let s: u128 = m % 10 > 5 ? 1 : 0;
+            m /= 10;
+            m += s;
             n += 1;
         }
     }
@@ -127,7 +150,9 @@ fn format_float(value: f64, modifiers: const &char[]) -> String {
     }
 
     if (dec.e < 0) {
-        for (let i: i64 = 0; i < dec.e.abs(); i += 1) {
+        let e = dec.e.abs();
+        for (let i: i64 = 0; i < e; i += 1) {
+            if (i == (e - 1)) tmp.push('.');
             tmp.push('0');
         }
     }
@@ -135,7 +160,6 @@ fn format_float(value: f64, modifiers: const &char[]) -> String {
     let str = String();
     if (value < 0) str.push('-');
     for(let i: u64 = 0; i < tmp.get_length(); i += 1) {
-        if (i == 1) str.push('.');
         str.push(tmp[tmp.get_length() - i - 1]);
     }
     
