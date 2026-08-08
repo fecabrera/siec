@@ -25,6 +25,24 @@ def test_block_scopes_its_declarations(run):
     assert run(source).returncode == 42
 
 
+def test_let_initializer_reads_the_shadowed_binding(run):
+    """
+    'let a = a + n' evaluates the initializer against the outer 'a', then
+    the new binding is what later uses see.
+    """
+    source = """
+    fn main() -> i32 {
+        let a: i32 = 10;
+        let a = a + 30;
+        {
+            let a = a + 2;
+            return a;
+        }
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_block_declaration_is_gone_after_the_block(compile_source):
     """
     Using a block-local variable after the block is an error.

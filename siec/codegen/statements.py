@@ -198,17 +198,31 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             emit_sized_array_let(gen, builder, stmt, sized, scope)
             return
 
-        # reserve a stack slot for the variable and initialize it if a value was given,
-        # widening the initializer to the declared type when allowed
+        # Emit the initializer against the surrounding scope first so a
+        # shadowing 'let a = a + 1' still reads the outer 'a'. Only then
+        # reserve the new slot and install the binding.
+        from siec.codegen.ownership import (DropCleanup, begin_temporary_frame,
+                                           consume_temporary, destroyable,
+                                           disarm_expression,
+                                           finish_temporary_frame,
+                                           new_drop_flag, set_drop_flag)
+
+        initial = None
+        owns = False
+        if stmt.value is not None:
+            owns = begin_temporary_frame(gen)
+            initial = emit_coerced(
+                gen, builder, stmt.value, type_name, scope)
+            if not is_const(type_name):
+                consume_temporary(gen, stmt.value)
+                disarm_expression(gen, builder, stmt.value, scope)
+
         var_type = resolve_type(type_name, gen.structs)
         slot = entry_alloca(builder, var_type, stmt.name)
 
         # an '@align(N)' struct's slot honors the declared alignment
         if (align := gen.struct_align(type_name)) is not None:
             slot.align = align
-
-        from siec.codegen.ownership import (DropCleanup, destroyable,
-                                           new_drop_flag, set_drop_flag)
 
         owned = destroyable(gen, type_name)
         drop_flag = new_drop_flag(builder, stmt.name) if owned else None
@@ -221,20 +235,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if gen.debug is not None:
             gen.debug.declare_variable(builder, slot, stmt.name, type_name, stmt.line)
 
-        if stmt.value is not None:
-            from siec.codegen.ownership import (begin_temporary_frame,
-                                               consume_temporary,
-                                               finish_temporary_frame)
-
-            owns = begin_temporary_frame(gen)
-            volatile_store(gen, builder.store(
-                emit_coerced(gen, builder, stmt.value, type_name, scope), slot))
-            if not is_const(type_name):
-                consume_temporary(gen, stmt.value)
-            from siec.codegen.ownership import disarm_expression
-
-            if not is_const(type_name):
-                disarm_expression(gen, builder, stmt.value, scope)
+        if initial is not None:
+            volatile_store(gen, builder.store(initial, slot))
             set_drop_flag(builder, scope[stmt.name], True)
             finish_temporary_frame(gen, builder, owns)
         else:
