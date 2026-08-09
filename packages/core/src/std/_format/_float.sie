@@ -67,9 +67,10 @@ fn _float_to_decimal(value: f64, p: i64 = 6) -> Decimal64 {
         // convert to decimal power base
         let (um, ue) = _mul5div10(u, e10);
         let (wm, we) = _mul5div10(w, e10);
-        // find shortest decimal representation
+        // find shortest decimal representation; e is the scale
+        // exponent so the value is d0 * 10^e (same as the e2 >= 0 path)
         let (d0, e0) = _compute_shortest(um, wm);
-        let e = e0 + e2 + we.to_signed() + d0.digits().to_signed() - 1;
+        let e = e0 + e2 + we.to_signed();
         return { d0, e };
     } else {
         // convert to decimal power base
@@ -160,7 +161,7 @@ fn _format_big((m, e, neg): Tuple<u64, i64, bool>, modifiers: const &char[]) -> 
     let tmp = String();
     let str = String();
     
-    // if e > 0 we add zeroes before the magnitude
+    // for e >= 0 we add zeroes after the magnitude
     // since the number is formatted right to left we add them first
     for (let i: i64 = 0; i < e; i += 1) {
         tmp.push('0');
@@ -187,9 +188,11 @@ fn _format_big((m, e, neg): Tuple<u64, i64, bool>, modifiers: const &char[]) -> 
 
 @static
 fn _format_small((m, e, neg): Tuple<u64, i64, bool>, modifiers: const &char[]) -> String {
+    // value = m * 10^e with e < 0: place a decimal point so there are
+    // |e| digits after it ('123' / -2 -> '1.23', '1' / -3 -> '0.001')
+    let digits = String();
     let tmp = String();
-    let str = String();
-    
+
     // format the magnitude from right to left
     let num = m;
     while (true) {
@@ -198,29 +201,44 @@ fn _format_small((m, e, neg): Tuple<u64, i64, bool>, modifiers: const &char[]) -
         if (num == 0) break;
     }
 
-    // if e < 0 we add zeroes after the comma and before the magnitude
-    // since the number is formatted right to left we add them last
-    e = e.abs();
-    for (let i: i64 = 0; i < e; i += 1) {
-        tmp.push('0');
+    // invert the formatted string
+    for (let i: u64 = 0; i < tmp.get_length(); i += 1) {
+        digits.push(tmp[tmp.get_length() - i - 1]);
     }
+
+    let str = String();
 
     // if the number is negative we prepend the sign character
     if (neg) str.push('-');
-    
-    // invert the formatted string
-    for(let i: u64 = 0; i < tmp.get_length(); i += 1) {
-        if (i == 1) str.push('.');
-        str.push(tmp[tmp.get_length() - i - 1]);
+
+    // for e < 0 we add zeroes before the magnitude
+    let frac = e.abs();
+    let int_digits = digits.get_length().to_signed() - frac;
+    if (int_digits <= 0) {
+        str.push('0');
+        str.push('.');
+        for (let i: i64 = 0; i < -int_digits; i += 1) {
+            str.push('0');
+        }
+        for (let i: u64 = 0; i < digits.get_length(); i += 1) {
+            str.push(digits[i]);
+        }
+    } else {
+        for (let i: i64 = 0; i < int_digits; i += 1) {
+            str.push(digits[i as u64]);
+        }
+        str.push('.');
+        for (let i: i64 = int_digits; i < digits.get_length().to_signed(); i += 1) {
+            str.push(digits[i as u64]);
+        }
     }
-    
+
     return str;
 }
 
 fn format_float(value: f64, modifiers: const &char[]) -> String {
     let dec = _float_to_decimal(value);
     let neg = value < 0;
-    std.io.println("{}x10^{}", dec.m, dec.e);
     if (dec.e < 0) return _format_small((dec.m, dec.e, neg), modifiers);
     return _format_big((dec.m, dec.e, neg), modifiers);
 }
