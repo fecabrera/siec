@@ -20,12 +20,13 @@ fn main() -> i32 {
     std.io.println("f64:        {}", 1.0 as f64);
     std.io.println("f64:        {}", 0.001 as f64);
     std.io.println("f64:        {}", 0.123 as f64);
+    std.io.println("f64:        {}", 1.23 as f64);
     std.io.println("f64:        {}", -100000000000000000000000.0 as f64);
     std.io.println("f64:        {}", -102030000000000000000000.0 as f64);
     std.io.println("f64:        {}", -1000000000000000000.0 as f64);
-    std.io.println("f64:        {}", -1.0 as f64);
     std.io.println("f64:        {}", -0.001 as f64);
     std.io.println("f64:        {}", -0.123 as f64);
+    std.io.println("f64:        {}", -1.23 as f64);
 
     std.io.println("char*:      {}", "hello" as char*);
     std.io.println("char[]:     {} {10} {-10}", "hello" as char[], "hello" as char[], "hello" as char[]);
