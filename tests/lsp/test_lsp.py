@@ -712,6 +712,29 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 1), (str(src.resolve()), 2)]
 
 
+def test_inspect_shows_destructured_tuple_parameters(tmp_path):
+    """
+    Hover keeps the source pattern for a tuple parameter, not the
+    synthetic '#N' spill name, and types the bound names in the body.
+    """
+    analysis, src = unit(tmp_path, """\
+fn split((a, b): Tuple<i32, u32>) -> i32 {
+    return a + b as i32;
+}
+
+fn main() -> i32 {
+    return split((1, 2 as u32));
+}
+""")
+
+    finding = probe(analysis, src, 5, 11)
+    assert finding.text == (
+        "fn split((a, b): Tuple<i32,u32>) -> i32")
+
+    bound = probe(analysis, src, 1, 11)
+    assert bound.text == "a: i32"
+
+
 def test_inspect_resolves_a_method_through_its_receiver(tmp_path):
     """
     Hovering a method call resolves the receiver's inferred type and

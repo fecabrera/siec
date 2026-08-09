@@ -685,9 +685,18 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
     scope: dict[str, Variable] = {}
     lines: dict[str, int] = {}
 
+    from siec.codegen.checking import bind_tuple_pattern
+
     for param in fn.params:
         scope[param.name] = Variable(None, param.type)
         lines[param.name] = fn.line
+        # Destructured tuple params bind their pattern names for hover;
+        # the synthetic '#N' slot is not a usable source name.
+        if param.pattern is not None:
+            before = set(scope)
+            bind_tuple_pattern(gen, param.pattern, param.type, scope)
+            for name in scope.keys() - before:
+                lines[name] = fn.line
 
     def declare(node: Let) -> None:
         type_ = node.type
@@ -757,13 +766,23 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
     return scope, lines
 
 
+def pattern_text(pattern: list) -> str:
+    """Render a tuple parameter pattern as Sie source, e.g. '(m, e, neg)'."""
+    parts = [
+        pattern_text(item) if isinstance(item, list) else item
+        for item in pattern
+    ]
+    return f"({', '.join(parts)})"
+
+
 def signature(fn: Function) -> str:
     """
     A function's declaration in Sie syntax, its generic parameters kept.
 
     An interface-typed parameter became a synthetic constrained type
     parameter at registration; it renders back as the interface it was
-    declared with.
+    declared with. A destructured tuple parameter keeps its pattern
+    rather than the synthetic '#N' spill name.
     """
     from siec.codegen.generics import substitute
 
@@ -798,10 +817,16 @@ def signature(fn: Function) -> str:
         )
         name += f"<{shown}>"
 
-    params = ", ".join(
-        p.type if p.name == "self" and is_reference(strip_const(p.type))
-        else f"{p.name}: {substitute(p.type, mapping)}"
-        for p in fn.params)
+    def param_text(p) -> str:
+        if p.name == "self" and is_reference(strip_const(p.type)):
+            return p.type
+
+        type_name = substitute(p.type, mapping)
+        if p.pattern is not None:
+            return f"{pattern_text(p.pattern)}: {type_name}"
+        return f"{p.name}: {type_name}"
+
+    params = ", ".join(param_text(p) for p in fn.params)
     ret = f" -> {fn.return_type}" if fn.return_type else ""
     return f"fn {name}({params}){ret}"
 
