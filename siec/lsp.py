@@ -929,6 +929,7 @@ def complete(analysis: Analysis, text: str, line: int,
     A trailing dotted receiver first checks the loader's resolved module
     bindings. Thus ``import util; util.`` offers exactly ``util``'s public
     exports, including declarations supplied by that module's includes.
+    A trailing ``Type::`` offers that type's enum members or methods.
     Everywhere else, locals, names visible to this file, imported module
     bindings, compiler builtins, and language keywords are offered.
     """
@@ -940,9 +941,12 @@ def complete(analysis: Analysis, text: str, line: int,
         return []
 
     before = lines[line][:col]
+    path_prefix = (
+        r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)")
+    scoped = re.search(
+        path_prefix + r"::([A-Za-z_][A-Za-z0-9_]*)?$", before)
     access = re.search(
-        r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\."
-        r"([A-Za-z_][A-Za-z0-9_]*)?$", before)
+        path_prefix + r"\.([A-Za-z_][A-Za-z0-9_]*)?$", before)
 
     gen = analysis.gen
     gen.current_file = analysis.path
@@ -967,6 +971,10 @@ def complete(analysis: Analysis, text: str, line: int,
             if name.isidentifier() and name.startswith(partial)
             and name not in selected
         ]
+
+    if scoped is not None:
+        return complete_scoped_members(
+            analysis, sites, scoped.group(1), scoped.group(2) or "")
 
     if access is not None:
         receiver, partial = access.group(1), access.group(2) or ""
@@ -1079,6 +1087,40 @@ def member_import_context(text: str, line: int,
                 partial_match.group(1) or "", selected)
 
     return None
+
+
+def complete_scoped_members(analysis: Analysis, sites: dict, base: str,
+                            partial: str) -> list[Completion]:
+    """Complete enum members or type methods after ``Type::``."""
+    from siec.codegen.aliases import expand_alias
+
+    gen = analysis.gen
+    type_name = base.rsplit(".", 1)[-1] if "." in base else base
+    type_name = strip_const(expand_alias(gen, type_name))
+    candidates: dict[str, Completion] = {}
+
+    if (info := gen.enums.get(type_name)) is not None:
+        for name, value in info.members.items():
+            if name.startswith(partial):
+                candidates[name] = Completion(
+                    name, "enumMember", f"{type_name}::{name} = {value}")
+        return [candidates[name] for name in sorted(candidates)]
+
+    method_names = set(gen.generic_receiver_methods)
+    method_names.update(method for _receiver, method in gen.generic_methods)
+    for declared in sites:
+        if "::" in declared:
+            method_names.add(declared.rpartition("::")[2])
+
+    for name in method_names:
+        if not name.startswith(partial):
+            continue
+        finding = method_finding(analysis, sites, type_name, name)
+        if finding is not None:
+            candidates.setdefault(
+                name, Completion(name, "method", finding.text))
+
+    return [candidates[name] for name in sorted(candidates)]
 
 
 def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
@@ -1696,6 +1738,7 @@ def create_server():
         "struct": types.CompletionItemKind.Struct,
         "interface": types.CompletionItemKind.Interface,
         "enum": types.CompletionItemKind.Enum,
+        "enumMember": types.CompletionItemKind.EnumMember,
         "constant": types.CompletionItemKind.Constant,
         "variable": types.CompletionItemKind.Variable,
         "type": types.CompletionItemKind.Class,
@@ -1842,7 +1885,7 @@ def create_server():
 
     @server.feature(
         types.TEXT_DOCUMENT_COMPLETION,
-        types.CompletionOptions(trigger_characters=[".", "{", ","]))
+        types.CompletionOptions(trigger_characters=[".", ":", "{", ","]))
     def completion(params: types.CompletionParams) -> list:
         uri = params.text_document.uri
         analysis = analyses.get(uri)

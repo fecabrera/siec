@@ -1205,7 +1205,7 @@ def test_server_triggers_completion_for_member_import_lists():
     options = server.protocol.fm.feature_options[
         types.TEXT_DOCUMENT_COMPLETION]
     assert options == types.CompletionOptions(
-        trigger_characters=[".", "{", ","])
+        trigger_characters=[".", ":", "{", ","])
 
 
 def test_complete_lists_locals_visible_names_and_modules(tmp_path):
@@ -1269,6 +1269,70 @@ fn main() -> i32 {
     items = {item.label: item for item in complete(analysis, edited, 5, 8)}
     assert items["value"].kind == "field"
     assert items["value"].detail == "value: i32"
+    assert items["answer"].kind == "method"
+    assert items["answer"].detail == \
+        "fn Box::answer(const &Box) -> i32"
+
+
+def test_complete_lists_enum_members(tmp_path):
+    """Scoped completion after Type:: offers that enum's members."""
+    analysis, _ = unit(tmp_path, """\
+enum Color {
+    RED,
+    BLUE = 7,
+}
+
+fn main() -> i32 {
+    return Color::BLUE as i32;
+}
+""")
+    edited = """\
+enum Color {
+    RED,
+    BLUE = 7,
+}
+
+fn main() -> i32 {
+    Color::
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 6, 11)}
+    assert set(items) == {"BLUE", "RED"}
+    assert items["BLUE"].kind == "enumMember"
+    assert items["BLUE"].detail == "Color::BLUE = 7"
+    assert items["RED"].kind == "enumMember"
+    assert items["RED"].detail == "Color::RED = 0"
+    assert "UnsignedInteger" not in items
+
+    filtered = complete(analysis, edited.replace("Color::", "Color::B"), 6, 12)
+    assert [item.label for item in filtered] == ["BLUE"]
+
+
+def test_complete_lists_type_methods_after_scope(tmp_path):
+    """Scoped completion after Struct:: offers that type's methods."""
+    analysis, _ = unit(tmp_path, """\
+struct Box { value: i32; }
+fn Box::answer(const &self) -> i32 { return self.value; }
+
+fn main() -> i32 {
+    let box: Box = { 42 };
+    return box.answer();
+}
+""")
+    edited = """\
+struct Box { value: i32; }
+fn Box::answer(const &self) -> i32 { return self.value; }
+
+fn main() -> i32 {
+    let box: Box = { 42 };
+    Box::
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 5, 9)}
     assert items["answer"].kind == "method"
     assert items["answer"].detail == \
         "fn Box::answer(const &Box) -> i32"
