@@ -3,6 +3,7 @@
 @include("_float")
 
 import { String } from std.collections;
+import { Decimal64 } from _float;
 
 interface Formattable {
     fn format(const &self, modifiers: const &char[]) -> String;
@@ -17,7 +18,7 @@ interface Formattable {
  */
 @extend f64: Formattable {
     fn format(const &self, modifiers: const &char[]) -> String {
-        return format_float(self, modifiers);
+        return Decimal64(self).format(modifiers);
     }
 }
 

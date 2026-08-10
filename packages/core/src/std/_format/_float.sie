@@ -42,7 +42,6 @@ struct IEEEDouble {
     }
 }
 
-@private
 struct Decimal64 {
     m: u64;
     e: i64;
@@ -295,16 +294,4 @@ fn _compute_shortest(a: u64, c: u64) -> Tuple<u64, i64> {
         }
     }
     return (c as u64, i);
-}
-
-/**
- * Format a floating point number
- *
- * @param value The floating point number to format
- * @param modifiers The modifiers to format the number with
- * @return The formatted string
- */
-@inline
-fn format_float(value: f64, modifiers: const &char[]) -> String {
-    return Decimal64(value).format(modifiers);
 }
