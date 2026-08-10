@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from siec.codegen.constants import target_arch, target_os
+from siec.codegen.constants import target_arch, target_env, target_os
 
 # what the compiler should report for the machine running the tests
 HOST_OS = {"darwin": 1, "linux": 2, "win32": 3}.get(sys.platform, 0)
@@ -27,15 +27,19 @@ def test_target_constants_match_the_host(run):
 
 def test_family_constants_are_defined(run):
     """
-    Every OS and architecture family is a distinct named constant.
+    Every OS, architecture, and environment family is a distinct named
+    constant.
     """
     result = run("""
         fn main() -> i32 {
             return OS_UNKNOWN + OS_DARWIN + OS_LINUX + OS_WINDOWS + OS_NONE
-                 + ARCH_UNKNOWN + ARCH_X86_64 + ARCH_AARCH64 + ARCH_RISCV64;
+                 + ARCH_UNKNOWN + ARCH_X86_64 + ARCH_AARCH64 + ARCH_RISCV64
+                 + ENV_UNKNOWN + ENV_GNU + ENV_MUSL + ENV_MSVC
+                 + ENV_ANDROID + ENV_ELF;
         }
     """)
-    assert result.returncode == (0 + 1 + 2 + 3 + 4) + (0 + 1 + 2 + 3)
+    assert result.returncode == (
+        (0 + 1 + 2 + 3 + 4) + (0 + 1 + 2 + 3) + (0 + 1 + 2 + 3 + 4 + 5))
 
 
 def test_target_constants_work_in_constant_contexts(run):
@@ -99,3 +103,19 @@ def test_triple_arch_classification(triple, arch):
     The architecture comes from the triple's first component.
     """
     assert target_arch(triple) == arch
+
+
+@pytest.mark.parametrize("triple,env", [
+    ("x86_64-unknown-linux-gnu", "ENV_GNU"),
+    ("aarch64-unknown-linux-musl", "ENV_MUSL"),
+    ("x86_64-pc-windows-msvc", "ENV_MSVC"),
+    ("aarch64-unknown-linux-android", "ENV_ANDROID"),
+    ("riscv64-unknown-none-elf", "ENV_ELF"),
+    ("arm64-apple-darwin27.0.0", "ENV_UNKNOWN"),
+    ("x86_64-unknown-linux-gnueabihf", "ENV_GNU"),
+])
+def test_triple_env_classification(triple, env):
+    """
+    The environment comes from the triple's optional fourth component.
+    """
+    assert target_env(triple) == env

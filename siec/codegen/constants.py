@@ -27,8 +27,9 @@ from siec.codegen.generator import CodeGenerator
 LITERALS = (IntLiteral, FloatLiteral, StrLiteral, BoolLiteral, CharLiteral,
             NullLiteral)
 
-# the OS and architecture families a target triple classifies into,
-# defined as '@const's in every program; 0 marks the unknowns
+# the OS, architecture, and environment families a target triple
+# classifies into, defined as '@const's in every program; 0 marks
+# the unknowns
 TARGET_CONSTANTS = {
     "OS_UNKNOWN": 0,
     "OS_DARWIN": 1,
@@ -39,9 +40,17 @@ TARGET_CONSTANTS = {
     "ARCH_X86_64": 1,
     "ARCH_AARCH64": 2,
     "ARCH_RISCV64": 3,
+    "ENV_UNKNOWN": 0,
+    "ENV_GNU": 1,
+    "ENV_MUSL": 2,
+    "ENV_MSVC": 3,
+    "ENV_ANDROID": 4,
+    "ENV_ELF": 5,
 }
 
-BUILTIN_CONSTANTS = set(TARGET_CONSTANTS) | {"TARGET_OS", "TARGET_ARCH"}
+BUILTIN_CONSTANTS = set(TARGET_CONSTANTS) | {
+    "TARGET_OS", "TARGET_ARCH", "TARGET_ENV",
+}
 
 
 def target_os(triple: str) -> str:
@@ -82,14 +91,44 @@ def target_arch(triple: str) -> str:
     return "ARCH_UNKNOWN"
 
 
+def target_env(triple: str) -> str:
+    """
+    Classify a target triple's environment (ABI / libc) component.
+    """
+    parts = triple.lower().split("-")
+    # arch-vendor-os[-env]: the environment is the optional fourth field
+    if len(parts) < 4:
+        return "ENV_UNKNOWN"
+
+    env = parts[-1]
+    if env.startswith("android"):
+        return "ENV_ANDROID"
+
+    if env.startswith("musl"):
+        return "ENV_MUSL"
+
+    if env.startswith("gnu") or env == "cygnus":
+        return "ENV_GNU"
+
+    if env == "msvc":
+        return "ENV_MSVC"
+
+    if env.startswith("elf"):
+        return "ENV_ELF"
+
+    return "ENV_UNKNOWN"
+
+
 def register_builtin_constants(gen: CodeGenerator) -> None:
     """
-    Define the target constants: every OS and architecture family, plus
-    'TARGET_OS' and 'TARGET_ARCH' matching the compilation target.
+    Define the target constants: every OS, architecture, and environment
+    family, plus 'TARGET_OS', 'TARGET_ARCH', and 'TARGET_ENV' matching
+    the compilation target.
     """
     values = dict(TARGET_CONSTANTS)
     values["TARGET_OS"] = values[target_os(gen.target)]
     values["TARGET_ARCH"] = values[target_arch(gen.target)]
+    values["TARGET_ENV"] = values[target_env(gen.target)]
 
     for name, value in values.items():
         gen.constants[name] = [Const(name, None, IntLiteral(value), file=None)]

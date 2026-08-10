@@ -300,18 +300,20 @@ def discover_program(sources: list[Path], include_paths: list[Path],
 
     def target_constant(name: str) -> int | None:
         # the target constants, computed on first use exactly as codegen
-        # defines them: the OS and architecture families plus 'TARGET_OS'
-        # and 'TARGET_ARCH' matching the compilation target
+        # defines them: the OS, architecture, and environment families
+        # plus 'TARGET_OS', 'TARGET_ARCH', and 'TARGET_ENV' matching the
+        # compilation target
         if not builtin_values:
             from llvmlite import binding
 
             from siec.codegen.constants import (TARGET_CONSTANTS, target_arch,
-                                                target_os)
+                                                target_env, target_os)
 
             triple = target or binding.get_default_triple()
             builtin_values.update(TARGET_CONSTANTS)
             builtin_values["TARGET_OS"] = builtin_values[target_os(triple)]
             builtin_values["TARGET_ARCH"] = builtin_values[target_arch(triple)]
+            builtin_values["TARGET_ENV"] = builtin_values[target_env(triple)]
 
         return builtin_values.get(name)
 

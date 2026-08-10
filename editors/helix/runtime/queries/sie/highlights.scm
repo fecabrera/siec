@@ -144,9 +144,10 @@
 ; and the constants it defines for every target
 ((identifier) @constant.builtin
  (#any-of? @constant.builtin
-  "TARGET_OS" "TARGET_ARCH"
+  "TARGET_OS" "TARGET_ARCH" "TARGET_ENV"
   "OS_DARWIN" "OS_LINUX" "OS_WINDOWS" "OS_NONE" "OS_UNKNOWN"
-  "ARCH_X86_64" "ARCH_AARCH64" "ARCH_RISCV64" "ARCH_UNKNOWN"))
+  "ARCH_X86_64" "ARCH_AARCH64" "ARCH_RISCV64" "ARCH_UNKNOWN"
+  "ENV_GNU" "ENV_MUSL" "ENV_MSVC" "ENV_ANDROID" "ENV_ELF" "ENV_UNKNOWN"))
 
 ; --------------------------------------------------------------- functions
 (function_name name: (identifier) @function)

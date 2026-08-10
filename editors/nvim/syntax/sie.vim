@@ -42,9 +42,10 @@ syn match sieBuiltinFunc "\<\(Ok\|Error\|enumerate\)\>\ze\s*[(<]"
 syn match sieDirective "@\h\w*"
 
 " the target constants the compiler defines in every program
-syn keyword sieBuiltinConst TARGET_OS TARGET_ARCH
+syn keyword sieBuiltinConst TARGET_OS TARGET_ARCH TARGET_ENV
 syn keyword sieBuiltinConst OS_DARWIN OS_LINUX OS_WINDOWS OS_NONE OS_UNKNOWN
 syn keyword sieBuiltinConst ARCH_X86_64 ARCH_AARCH64 ARCH_RISCV64 ARCH_UNKNOWN
+syn keyword sieBuiltinConst ENV_GNU ENV_MUSL ENV_MSVC ENV_ANDROID ENV_ELF ENV_UNKNOWN
 
 " a name right after 'fn' is the function being declared, its receiver
 " ('S::method') highlighted as the type it acts on

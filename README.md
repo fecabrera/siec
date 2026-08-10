@@ -369,17 +369,18 @@ Each module keeps its own constants: two modules may both declare a `SEEK_SET`, 
 
 #### Target constants
 
-The compiler defines a set of constants describing the compilation target, taken from the target triple: the host's, or the one `--target` names. `TARGET_OS` and `TARGET_ARCH` hold the current target's families, and one constant names each family they can match:
+The compiler defines constants for the compilation target, taken from the target triple (the host's, or the one `--target` names). `TARGET_OS`, `TARGET_ARCH`, and `TARGET_ENV` hold the current target's families; one constant names each family they can match:
 
-| OS           | Architecture   |
-| ------------ | -------------- |
-| `OS_DARWIN`  | `ARCH_X86_64`  |
-| `OS_LINUX`   | `ARCH_AARCH64` |
-| `OS_WINDOWS` | `ARCH_RISCV64` |
-| `OS_NONE`    | `ARCH_UNKNOWN` |
-| `OS_UNKNOWN` |                |
+| OS           | Architecture   | Environment  |
+| ------------ | -------------- | ------------ |
+| `OS_DARWIN`  | `ARCH_X86_64`  | `ENV_GNU`    |
+| `OS_LINUX`   | `ARCH_AARCH64` | `ENV_MUSL`   |
+| `OS_WINDOWS` | `ARCH_RISCV64` | `ENV_MSVC`   |
+| `OS_NONE`    | `ARCH_UNKNOWN` | `ENV_ANDROID`|
+| `OS_UNKNOWN` |                | `ENV_ELF`    |
+|              |                | `ENV_UNKNOWN`|
 
-`OS_NONE` marks bare-metal targets (a triple like `riscv64-unknown-none-elf`); the unknowns catch anything the compiler doesn't classify.
+`OS_NONE` marks bare-metal targets (a triple like `riscv64-unknown-none-elf`). `TARGET_ENV` is the optional fourth field of the triple (`gnu`, `musl`, `msvc`, `android`, `elf`, …); triples without one leave it `ENV_UNKNOWN`. The unknowns catch anything else the compiler doesn't classify.
 
 ```
 case (TARGET_OS) {
@@ -390,6 +391,7 @@ case (TARGET_OS) {
 }
 
 @const PAGE_ALIGNED = TARGET_ARCH == ARCH_AARCH64;
+@const USE_MUSL = TARGET_ENV == ENV_MUSL;
 ```
 
 They behave like any other `@const` (usable in constant expressions, case arms, and array sizes), except that redeclaring one is an error.
