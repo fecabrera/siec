@@ -1,0 +1,11 @@
+import stdlib;
+
+@inline
+fn alloc<T>(n: u64 = 1) -> T* {
+    return stdlib.malloc(n * @sizeof(T)) as T*;
+}
+
+@inline
+fn free(ptr: opaque*) {
+    stdlib.free(ptr);
+}

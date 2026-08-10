@@ -2,7 +2,7 @@ import { panic } from std;
 import { format } from std.format;
 import { Hashable } from std.hashing;
 import { String } from std.collections;
-import { malloc, free } from stdlib;
+import { alloc, free } from std.alloc;
 
 @private
 enum MapEntryState {
@@ -144,7 +144,7 @@ struct ConstMapIterator<K, V>: ConstIterator<KeyValuePair<K, V>> {
  * @param capacity The initial capacity of the map.
  */
 fn Map<K, V>::init(&self, capacity: u64 = 0) {
-    self.entries = malloc(capacity * @sizeof(MapEntry<K, V>)) as MapEntry<K, V>*;
+    self.entries = alloc<MapEntry<K, V>>(capacity);
     self.size = 0;
     self.capacity = capacity;
 
@@ -334,7 +334,7 @@ fn Map<K, V>::grow(&self) {
     let old_entries = self.entries;
 
     self.capacity = self.capacity ? 2 * self.capacity : 5;
-    self.entries = malloc(self.capacity * @sizeof(MapEntry<K, V>)) as MapEntry<K, V>*;
+    self.entries = alloc<MapEntry<K, V>>(self.capacity);
 
     for (let i: u64 = 0; i < self.capacity; i += 1)
         self.entries[i].state = MapEntryState::Empty;

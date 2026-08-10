@@ -1,4 +1,4 @@
-import { malloc, free } from stdlib;
+import { alloc, free } from std.alloc;
 import { panic } from std;
 
 @private
@@ -109,6 +109,11 @@ fn Queue<T>::destroy(&self) {
     self.tail = null;
 }
 
+/**
+ * Clone the Queue.
+ *
+ * @return The cloned Queue.
+ */
 fn Queue<T>::clone(const &self) -> Queue<T> {
     let q = Queue<T>();
     foreach (v : self) {
@@ -123,7 +128,7 @@ fn Queue<T>::clone(const &self) -> Queue<T> {
  * @param value The value to push to the Queue.
  */
 fn Queue<T>::push(&self, value: T) {
-    let node = malloc(@sizeof(QueueNode<T>)) as QueueNode<T>*;
+    let node = alloc<QueueNode<T>>();
     node->next = null;
     node->value.write(move value);
     
@@ -144,7 +149,7 @@ fn Queue<T>::push(&self, value: T) {
  * @param value The borrowed value to copy to the Queue.
  */
 fn Queue<T>::push_from(&self, value: const &T) {
-    let node = malloc(@sizeof(QueueNode<T>)) as QueueNode<T>*;
+    let node = alloc<QueueNode<T>>();
     node->next = null;
     node->value.write_from(value);
 

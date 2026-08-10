@@ -1,4 +1,4 @@
-import { malloc, free } from stdlib;
+import { alloc, free } from std.alloc;
 import { panic } from std;
 import { FNV1a } from std.hashing;
 import { Formattable } from std.format;
@@ -35,7 +35,7 @@ struct List<T>
  * @param capacity The capacity of the List.
  */
 fn List<T>::init(&self, capacity: u64 = 0) {
-    self.data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
+    self.data = alloc<Slot<T>>(capacity);
     self.length = 0;
     self.capacity = capacity;
 }
@@ -65,10 +65,20 @@ fn List<T>::destroy(&self) {
     self.capacity = 0;
 }
 
+/**
+ * Get the length of the list
+ *
+ * @return The length of the list
+ */
 fn List<T>::get_length(const &self) -> u64 {
     return self.length;
 }
 
+/**
+ * Get the capacity of the list
+ *
+ * @return The capacity of the list
+ */
 fn List<T>::get_capacity(const &self) -> u64 {
     return self.capacity;
 }
@@ -368,7 +378,7 @@ fn List<T>::format(const &self, modifiers: const &char[]) -> String {
 @private
 fn List<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : 1;
-    let data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
+    let data = alloc<Slot<T>>(capacity);
 
     for (let i: u64 = 0; i < self.length; i += 1)
         data[i].write(self.data[i].take());

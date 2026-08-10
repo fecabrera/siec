@@ -1,4 +1,4 @@
-import { malloc, free } from stdlib;
+import { alloc, free } from std.alloc;
 import { panic } from std;
 
 struct Stack<T>: Destroy, Clone {
@@ -13,7 +13,7 @@ struct Stack<T>: Destroy, Clone {
  * @param capacity The capacity of the Stack.
  */
 fn Stack<T>::init(&self, capacity: u64 = 0) {
-    self.data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
+    self.data = alloc<Slot<T>>(capacity);
     self.top = 0;
     self.capacity = capacity;
 }
@@ -114,7 +114,7 @@ fn Stack<T>::is_empty(const &self) -> bool {
 @private
 fn Stack<T>::grow(&self) {
     let capacity = self.capacity ? self.capacity * 2 : 1;
-    let data = malloc(capacity * @sizeof(Slot<T>)) as Slot<T>*;
+    let data = alloc<Slot<T>>(capacity);
 
     for (let i: u64 = 0; i < self.top; i += 1)
         data[i].write(self.data[i].take());
