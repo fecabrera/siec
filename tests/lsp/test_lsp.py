@@ -805,6 +805,31 @@ fn main() -> i32 {
     assert "Box<i32>::get" not in analysis.gen.instantiated_functions
 
 
+def test_hover_in_generic_body_does_not_reopen_instantiation(tmp_path):
+    """
+    Hovering inside an unstamped generic method must not crash when a
+    local's initializer would stamp a still-free type after lowering.
+    """
+    analysis, src = unit(tmp_path, """\
+struct Node<T> { next: Node<T>*; }
+
+fn Node<T>::push(&self) {
+    let node = null as Node<T>*;
+    self.next = node;
+}
+
+fn main() -> i32 {
+    return 0;
+}
+""")
+
+    assert analysis.report is None
+    finding = probe(analysis, src, 4, 16)
+    assert finding is not None
+    assert "node" in finding.text
+    assert finding.targets == [(str(src.resolve()), 4)]
+
+
 def test_inspect_renders_intersection_bounds(tmp_path):
     """Hover preserves explicit intersections in generic signatures."""
     analysis, src = unit(tmp_path, """\

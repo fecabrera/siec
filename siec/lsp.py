@@ -703,7 +703,9 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
         if type_ is None and node.value is not None:
             try:
                 type_ = infer_type(gen, node.value, dict(scope))
-            except (TypeError, NameError):
+            except (TypeError, NameError, RuntimeError):
+                # After compilation, inferring a still-free generic (or a
+                # cast that would stamp one) must not reopen LLVM lowering.
                 type_ = None
 
         if type_ is not None:
@@ -1094,7 +1096,8 @@ def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
     try:
         expr = parse_expression(TokenStream(lex(receiver)))
         receiver_type = hover_expr_type(gen, expr, scope)
-    except (TypeError, NameError, SyntaxError, KeyError, IndexError):
+    except (TypeError, NameError, SyntaxError, KeyError, IndexError,
+            RuntimeError):
         return []
 
     if receiver_type is None:
@@ -1218,7 +1221,8 @@ def inspect(analysis: Analysis, text: str, line: int, col: int) -> Finding | Non
     try:
         return resolve_chain(analysis, sites, scope, lines, parts, seps,
                              following)
-    except (TypeError, NameError, SyntaxError, KeyError, IndexError):
+    except (TypeError, NameError, SyntaxError, KeyError, IndexError,
+            RuntimeError):
         return None
 
 
@@ -1457,7 +1461,7 @@ def hover_expr_type(gen: CodeGenerator, expr, scope: dict) -> str | None:
     try:
         if (found := expr_sie_type(gen, expr, scope)) is not None:
             return found
-    except (TypeError, NameError):
+    except (TypeError, NameError, RuntimeError):
         pass
 
     if receiver_type is None or method is None:
