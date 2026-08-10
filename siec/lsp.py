@@ -929,6 +929,8 @@ def complete(analysis: Analysis, text: str, line: int,
     A trailing dotted receiver first checks the loader's resolved module
     bindings. Thus ``import util; util.`` offers exactly ``util``'s public
     exports, including declarations supplied by that module's includes.
+    A trailing ``p->`` offers that pointer's pointee fields and methods,
+    matching the parser's ``(*p).field`` desugaring.
     A trailing ``Type::`` offers that type's enum members or methods.
     Everywhere else, locals, names visible to this file, imported module
     bindings, compiler builtins, and language keywords are offered.
@@ -945,6 +947,8 @@ def complete(analysis: Analysis, text: str, line: int,
         r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)")
     scoped = re.search(
         path_prefix + r"::([A-Za-z_][A-Za-z0-9_]*)?$", before)
+    arrow = re.search(
+        path_prefix + r"->([A-Za-z_][A-Za-z0-9_]*)?$", before)
     access = re.search(
         path_prefix + r"\.([A-Za-z_][A-Za-z0-9_]*)?$", before)
 
@@ -975,6 +979,11 @@ def complete(analysis: Analysis, text: str, line: int,
     if scoped is not None:
         return complete_scoped_members(
             analysis, sites, scoped.group(1), scoped.group(2) or "")
+
+    if arrow is not None:
+        return complete_value_members(
+            analysis, sites, arrow.group(1), arrow.group(2) or "",
+            line, col, through_pointer=True)
 
     if access is not None:
         receiver, partial = access.group(1), access.group(2) or ""
@@ -1125,8 +1134,10 @@ def complete_scoped_members(analysis: Analysis, sites: dict, base: str,
 
 def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
                            partial: str, line: int,
-                           col: int) -> list[Completion]:
+                           col: int, through_pointer: bool = False
+                           ) -> list[Completion]:
     """Complete the fields and eligible methods of a typed expression."""
+    from siec.ast import UnaryOp
     from siec.codegen.generics import split_generic
     from siec.parser.expressions import parse_expression
     from siec.parser.stream import TokenStream
@@ -1137,6 +1148,9 @@ def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
 
     try:
         expr = parse_expression(TokenStream(lex(receiver)))
+        # 'p->' reaches through a pointer the same way the parser does
+        if through_pointer:
+            expr = UnaryOp("*", expr)
         receiver_type = hover_expr_type(gen, expr, scope)
     except (TypeError, NameError, SyntaxError, KeyError, IndexError,
             RuntimeError):
@@ -1885,7 +1899,7 @@ def create_server():
 
     @server.feature(
         types.TEXT_DOCUMENT_COMPLETION,
-        types.CompletionOptions(trigger_characters=[".", ":", "{", ","]))
+        types.CompletionOptions(trigger_characters=[".", ":", ">", "{", ","]))
     def completion(params: types.CompletionParams) -> list:
         uri = params.text_document.uri
         analysis = analyses.get(uri)

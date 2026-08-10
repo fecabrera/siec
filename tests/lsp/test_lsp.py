@@ -1205,7 +1205,7 @@ def test_server_triggers_completion_for_member_import_lists():
     options = server.protocol.fm.feature_options[
         types.TEXT_DOCUMENT_COMPLETION]
     assert options == types.CompletionOptions(
-        trigger_characters=[".", ":", "{", ","])
+        trigger_characters=[".", ":", ">", "{", ","])
 
 
 def test_complete_lists_locals_visible_names_and_modules(tmp_path):
@@ -1272,6 +1272,41 @@ fn main() -> i32 {
     assert items["answer"].kind == "method"
     assert items["answer"].detail == \
         "fn Box::answer(const &Box) -> i32"
+
+
+def test_complete_lists_pointer_fields_and_methods(tmp_path):
+    """Arrow completion after p-> offers the pointee's fields and methods."""
+    analysis, _ = unit(tmp_path, """\
+struct Box { value: i32; }
+fn Box::answer(const &self) -> i32 { return self.value; }
+
+fn main() -> i32 {
+    let box: Box = { 42 };
+    let ptr: Box* = &box;
+    return ptr->answer();
+}
+""")
+    edited = """\
+struct Box { value: i32; }
+fn Box::answer(const &self) -> i32 { return self.value; }
+
+fn main() -> i32 {
+    let box: Box = { 42 };
+    let ptr: Box* = &box;
+    ptr->
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 6, 9)}
+    assert items["value"].kind == "field"
+    assert items["value"].detail == "value: i32"
+    assert items["answer"].kind == "method"
+    assert items["answer"].detail == \
+        "fn Box::answer(const &Box) -> i32"
+
+    filtered = complete(analysis, edited.replace("ptr->", "ptr->va"), 6, 11)
+    assert [item.label for item in filtered] == ["value"]
 
 
 def test_complete_lists_enum_members(tmp_path):
