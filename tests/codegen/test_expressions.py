@@ -296,6 +296,63 @@ def test_bool_coercion_compares_pointers_against_null(env):
     assert "null" in str(value)
 
 
+def pointer_scope(builder, name="p", pointee=None, sie_type="opaque*"):
+    """A scope holding a pointer variable of the given pointee / Sie type."""
+    pointee = pointee or ir.IntType(8)
+    slot = builder.alloca(ir.PointerType(pointee), name=name)
+    return {name: Variable(slot, sie_type)}
+
+
+def test_pointer_plus_integer_emits_gep(env):
+    """'p + n' offsets the pointer with getelementptr."""
+    gen, builder = env
+    scope = pointer_scope(builder)
+    value = emit_expression(
+        gen, builder, BinaryOp("+", Var("p"), IntLiteral(4)), None, scope)
+    assert value.type == ir.PointerType(ir.IntType(8))
+    assert value.opname == "getelementptr"
+
+
+def test_integer_plus_pointer_emits_gep(env):
+    """'n + p' is the same offset with the operands swapped."""
+    gen, builder = env
+    scope = pointer_scope(builder, sie_type="i32*", pointee=ir.IntType(32))
+    value = emit_expression(
+        gen, builder, BinaryOp("+", IntLiteral(2), Var("p")), None, scope)
+    assert value.type == ir.PointerType(ir.IntType(32))
+    assert value.opname == "getelementptr"
+
+
+def test_pointer_minus_integer_emits_gep(env):
+    """'p - n' negates the index before getelementptr."""
+    gen, builder = env
+    scope = pointer_scope(builder)
+    value = emit_expression(
+        gen, builder, BinaryOp("-", Var("p"), IntLiteral(3)), None, scope)
+    assert value.type == ir.PointerType(ir.IntType(8))
+    assert value.opname == "getelementptr"
+
+
+def test_pointer_times_integer_is_rejected(env):
+    """Scaling a pointer is not pointer arithmetic."""
+    gen, builder = env
+    scope = pointer_scope(builder)
+    with pytest.raises(TypeError, match="pointer operands"):
+        emit_expression(
+            gen, builder, BinaryOp("*", Var("p"), IntLiteral(2)), None, scope)
+
+
+def test_pointer_minus_pointer_is_rejected(env):
+    """Pointer difference is not supported."""
+    gen, builder = env
+    scope = pointer_scope(builder)
+    scope["q"] = Variable(
+        builder.alloca(ir.PointerType(ir.IntType(8)), name="q"), "opaque*")
+    with pytest.raises(TypeError, match="two pointer operands"):
+        emit_expression(
+            gen, builder, BinaryOp("-", Var("p"), Var("q")), None, scope)
+
+
 def test_bool_coercion_keeps_booleans(env):
     """
     An i1 value passes through the coercion untouched.

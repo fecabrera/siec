@@ -589,10 +589,37 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if expr.op in ("and", "or") or expr.op in COMPARISONS:
             return "bool"
 
+        # 'p ± n' keeps the pointer's type, even when the integer is on the left
+        if (pointer := pointer_arithmetic_type(gen, expr, scope)) is not None:
+            return pointer
+
         # arithmetic, bitwise, and power keep an operand's declared type
         if expr.op in ARITHMETIC or expr.op == "**":
             return (expr_sie_type(gen, expr.left, scope)
                     or expr_sie_type(gen, expr.right, scope))
+
+    return None
+
+
+def pointer_arithmetic_type(gen: CodeGenerator, expr: BinaryOp,
+                            scope: dict) -> str | None:
+    """
+    The pointer type of a ``p + n``, ``n + p``, or ``p - n`` expression,
+    or None when the operator is not a pointer offset.
+    """
+    if expr.op not in ("+", "-"):
+        return None
+
+    left = expr_sie_type(gen, expr.left, scope)
+    right = expr_sie_type(gen, expr.right, scope)
+    left_ptr = strip_const(left or "").endswith("*")
+    right_ptr = strip_const(right or "").endswith("*")
+
+    if left_ptr and not right_ptr:
+        return left
+
+    if expr.op == "+" and right_ptr and not left_ptr:
+        return right
 
     return None
 
@@ -687,6 +714,9 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     if isinstance(expr, BinaryOp):
         if expr.op in ("and", "or") or expr.op in COMPARISONS:
             return "bool"
+
+        if (pointer := pointer_arithmetic_type(gen, expr, scope)) is not None:
+            return pointer
 
         # arithmetic keeps its operands' type; a declared operand wins, so a
         # literal beside it adapts as in any typed context

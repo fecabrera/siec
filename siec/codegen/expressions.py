@@ -544,6 +544,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         unsigned = check_signedness(gen, expr, scope) == "unsigned"
 
         if expr.op in ARITHMETIC:
+            # 'p + n' / 'n + p' / 'p - n' offset the pointer, C-style
+            if (offset := pointer_offset_parts(gen, expr, scope)) is not None:
+                return emit_pointer_offset(gen, builder, offset, scope)
+
+            left_name = strip_const(expr_sie_type(gen, expr.left, scope) or "")
+            right_name = strip_const(expr_sie_type(gen, expr.right, scope) or "")
+            if left_name.endswith("*") or right_name.endswith("*"):
+                raise TypeError(f"cannot apply {expr.op!r} to pointer operands")
+
             # arithmetic and bitwise: both sides share the context type; the result keeps it
             left = emit_expression(gen, builder, expr.left, expected_type, scope)
             right = emit_expression(gen, builder, expr.right, left.type, scope)
@@ -748,6 +757,57 @@ def emit_union_member(gen: CodeGenerator, builder: ir.IRBuilder, expr: Member,
         make_volatile(load)
 
     return load
+
+
+def pointer_offset_parts(gen: CodeGenerator, expr: BinaryOp,
+                         scope: dict) -> tuple[Expr, Expr, bool] | None:
+    """
+    Split a pointer offset expression into ``(pointer, index, subtract)``.
+
+    Recognizes ``p + n``, ``n + p``, and ``p - n``. Two pointers, or
+    subtracting a pointer from a value, are errors; other shapes return
+    None so ordinary arithmetic can run.
+    """
+    if expr.op not in ("+", "-"):
+        return None
+
+    left_name = strip_const(expr_sie_type(gen, expr.left, scope) or "")
+    right_name = strip_const(expr_sie_type(gen, expr.right, scope) or "")
+    left_ptr = left_name.endswith("*")
+    right_ptr = right_name.endswith("*")
+    if not left_ptr and not right_ptr:
+        return None
+
+    if left_ptr and right_ptr:
+        raise TypeError(f"cannot apply {expr.op!r} to two pointer operands")
+
+    if expr.op == "-":
+        if right_ptr:
+            raise TypeError("cannot subtract a pointer from a value")
+        return expr.left, expr.right, True
+
+    if left_ptr:
+        return expr.left, expr.right, False
+
+    return expr.right, expr.left, False
+
+
+def emit_pointer_offset(gen: CodeGenerator, builder: ir.IRBuilder,
+                        offset: tuple[Expr, Expr, bool], scope: dict):
+    """Emit ``p ± n`` as a getelementptr of the pointer by the index."""
+    ptr_expr, index_expr, subtract = offset
+    ptr = emit_expression(gen, builder, ptr_expr, None, scope)
+    if not isinstance(ptr.type, ir.PointerType):
+        raise TypeError("pointer arithmetic requires a pointer operand")
+
+    index = emit_expression(gen, builder, index_expr, ir.IntType(64), scope)
+    if not isinstance(index.type, ir.IntType):
+        raise TypeError("pointer arithmetic requires an integer offset")
+
+    if subtract:
+        index = builder.neg(index)
+
+    return builder.gep(ptr, [index])
 
 
 def match_widths(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
