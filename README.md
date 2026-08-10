@@ -46,39 +46,25 @@ siec main.sie --run arg1 arg2
 
 ### Compilation phases
 
-Compilation is declaration-order independent. A source file, an include, or an imported module cannot change meaning merely by moving a type or extension before or after the code that uses it. The loader first establishes the compilation unit, then the compiler keeps that guarantee through four semantic phases:
+Compilation is declaration-order independent: moving a type or extension before or after the code that uses it does not change meaning. The loader builds the unit, then the compiler runs four phases:
 
-0. **Discover and select.** Starting from the requested source files, recursively discover imports and includes. Files are parsed as they are discovered so their dependency directives are visible. A condition guarding an include selects its branch using only the [loader-safe constant environment](#conditional-compilation). The result is the complete selected source graph.
-1. **Parse.** At the phase-0 handoff, every selected source has a syntax tree and every syntax error has been reported before the compiler asks what any type means.
-2. **Collect.** Collect definitions, type and interface identities, raw callable declarations, generic templates, and interface claims—including bounded `@extend` families—across the whole unit.
-3. **Resolve.** Resolve aliases, fields, callable signatures, generic arguments, and bounds against that complete inventory.
-4. **Check.** Check assertions, required extension methods, interface conformance, and function bodies only after resolution has made every relevant declaration available.
+0. **Discover and select.** Recursively find imports and includes from the requested sources. A condition guarding an include uses only the [loader-safe constant environment](#conditional-compilation).
+1. **Parse.** Every selected file has a syntax tree before types are asked about.
+2. **Collect.** Gather definitions, types, callables, generics, and interface claims across the whole unit.
+3. **Resolve.** Resolve aliases, fields, signatures, generic arguments, and bounds against that inventory.
+4. **Check.** Check bodies, conformance, and assertions once resolution is done.
 
-This ordering is a compiler invariant, not a source-order rule. For example, `@template<T: Scalar> @extend T[]: Hashable` makes `char[]` available to a `Map<K: Hashable, V>` field even when the extension is declared later or arrives through another module. Compiler changes should preserve the phase boundary: no dependent field or signature may resolve, and no bound may be rejected, while the claim inventory is incomplete.
-
-Callable collection records written declarations only. Receiver canonicalization, interface-parameter adaptation, overload and override identities, signatures, and bounds wait until the active callable inventory is complete; a callable selected by a type-dependent conditional joins that inventory before it is frozen and resolved.
-
-Aliases, enums, globals, and extensions follow the same boundary. Collection records alias targets, enum and member identities, and raw extension syntax without expanding a type or publishing interface evidence. Resolution canonicalizes alias targets, resolves enum backing types and member dependencies, resolves globals, and turns extensions into claim facts before bounded fields are checked. A bounded generic-struct extension retains its own template environment: `@template<T: Scalar> @extend List<T>: Hashable` publishes the claim for `List<i32>`, but not for `List<char[]>`. Only the check phase validates that receiver families provide every required interface method. The semantic boundary rejects any alias, enum, or extension that has not completed its required lifecycle.
-
-Resolution covers declarations whether or not executable code reaches them. Generic and interface headers retain their lexical type parameters while every surrounding type, nested generic base, argument count, and bound is validated. Constants likewise follow their complete dependency graph and resolve enum members, annotations, casts, `@sizeof`, and `@typeid` targets before checking begins. Laziness applies only to generic bodies and concrete instances, never to declaration validity.
-
-Reachable generic instances follow the same ordering through a fixed-point worklist. A call first requests an instance; the compiler substitutes and resolves its header and bounds, then queues its body for checking. That body may request more instances or instantiate types carrying new interface claims, so the compiler repeats resolution and checking until no work remains. Conformance checks only inspect methods specialized during resolution—they never specialize a receiver family themselves.
-
-LLVM emission begins only after phase 0, all four semantic phases, and that fixed point succeed. Until then, structs, globals, callable signatures, and checked bodies live in backend-neutral compiler records; the output module has no LLVM types or values in it. `@sizeof` consults the selected target's layout through those semantic type records without lowering them. The backend then consumes the closed, checked program in one direction—types, globals, callable declarations, and finally bodies—and cannot discover a new generic instance while doing so.
-
-The compiler test suite treats declaration order as part of this contract. Its permutation matrices cover every declaration family, type-namespace collisions, direct and selected conditional declarations, source-file order, includes, and imports. New declaration forms should join those matrices so order independence remains an enforced property rather than an incidental one.
+So an extension declared later, or imported from another module, still applies where its bound holds. Generic instances follow the same order on a worklist until nothing new remains; LLVM emission starts only after that fixed point, and cannot invent further instances while lowering.
 
 ### Editor support
 
-`sie-lsp` is a language server built on the compiler's own front end. It recompiles the open buffers as they change, each file as its own unit the way `-c` compiles, and serves what the compiler knows: errors as diagnostics on their lines, the document outline, completion, hover, and go-to-definition. Completion covers lexical names, members after a module or value dot, and a module's public exports inside `import { ... } from module;`. Hover answers with the compiler's inference: a local's inferred type, a field's declared one, a method resolved through its receiver's type, every overload's signature. Go-to-definition jumps to the declaration, into imported modules and generic templates alike.
-
-The server installs next to the compiler:
+`sie-lsp` is a language server on the compiler's front end. It recompiles open buffers as they change and serves diagnostics, outline, completion, hover, and go-to-definition from what the compiler knows.
 
 ```
 pip install -e '.[lsp]'
 ```
 
-The `editors/` directory connects it to editors: `editors/vscode/sie` is a VSCode extension holding the syntax highlighting and the client (see its README), `editors/nvim` is a Neovim plugin carrying the same highlighting plus `:make` integration and the client (see its README), `editors/helix/languages.toml` is a block to merge into a Helix configuration, and `editors/tree-sitter-sie` is the tree-sitter grammar the last two read for structural highlighting, folds, and textobjects. Any editor that speaks LSP works the same way: run `sie-lsp` over stdio for `.sie` files. The include path comes from the project's `package.toml`: the nearest one above the edited file and the workspace root's, reread on each edit. Each contributes its `[package] include` entries and, where it declares an [`[app]` or `[library]`](#the-package-manager) of its own, that package's sources and the sources of every dependency resolved from what is installed, the way `sie build` assembles them. Configured `include` entries come first, so a checkout pointing at its own packages wins over the copies a dependency resolves to. Editor-side extras pass through the initialization options as `includePaths`, like the compiler's `-I`.
+`editors/` holds the clients: `editors/vscode/sie` for VS Code, `editors/nvim` for Neovim, `editors/helix/languages.toml` for Helix, and `editors/tree-sitter-sie` for the grammar. Any LSP editor can run `sie-lsp` over stdio for `.sie` files. Include paths come from the nearest `package.toml` and the workspace root's, the way `sie build` resolves them; extras pass as `includePaths` in the initialization options.
 
 ## The package manager
 
@@ -125,24 +111,14 @@ Naming a file instead of a directory reads that file as the manifest.
 
 ### Installing
 
-`sie install` pulls a **library** from a path, reading its `package.toml`, and copies it into the install root where a build can find it. The path defaults to the working directory, so a package installs itself:
+`sie install` copies a **library** into the install root (`$SIE_PATH/lib`, or `~/.sie/lib` when unset), under `<name>@<version>` from its manifest. The path defaults to the working directory:
 
 ```
 sie install packages/openssl   # the package in that directory
 sie install                    # the package here
 ```
 
-The install root is `$SIE_PATH/lib`, `~/.sie/lib` when `SIE_PATH` is unset. A package lands in a directory named for the `name` and `version` its manifest declares, `<name>@<version>`, whatever the directory it was pulled from is called, so two versions of one package sit side by side. A manifest missing either is an error: there would be nowhere to put it.
-
-What is copied is what the manifest declares, and nothing else:
-
-- `package.toml` itself,
-- the file `readme` names, and the files `license-files` names; `license` is the SPDX identifier of the licence, not a path, so it names nothing to copy,
-- every entry of the `[library]`'s `sources`, a file as a file and a directory whole, each keeping the place it holds inside the package.
-
-An `examples/` directory beside the sources is not part of the package unless `sources` says it is. A file the manifest names but the package does not have is passed over with a warning, as is a `[library]` that declares no `sources` at all, which is usually a misspelt key. Pointing `install` at an `[app]` is an error: it is built, not installed. Every entry is named relative to the package, and nothing may reach outside it: an entry that is absolute or climbs through `..` is an error.
-
-Installing over an existing install replaces it. The copy is staged first and only takes the old one's place once it is complete, so an install that fails halfway leaves what was there untouched.
+It copies the manifest, the `[library]`'s `sources`, and any `readme` or `license-files` the manifest names. An `[app]` cannot be installed: it is built, not installed. Installing again replaces what was there.
 
 ### Uninstalling
 
@@ -220,7 +196,7 @@ LIBRARY_PATH=$(brew --prefix)/lib sie build examples/helloworld
 
 ### Imports
 
-Modules are pulled from the code being compiled through the `import` keyword followed by the module's dotted path. Their members are accessed through their qualified name:
+`import` pulls in a module by its dotted path. Members are reached through that path:
 
 ```
 import std.io;
@@ -231,85 +207,40 @@ fn main() -> i32 {
 }
 ```
 
-Optionally, you can pick specific members of a module through `{}` and `from`, which brings them into scope unqualified; a multi-line list may close with a trailing comma:
+Specific members can be brought in unqualified with `{}` and `from`, and either a member or the module itself can be renamed with `as`:
 
 ```
-import { f } from module.submodule;
-
-import {
-    f,
-    g,
-} from module.submodule;
-```
-
-Both members and modules can be aliased through `as`:
-
-```
-import { f as g } from module.submodule;
+import { f, g as h } from module.submodule;
 import module.submodule as sub;
 ```
 
-Every file is a module: `import a.b` names the file `a/b.sie`, searched for in the importing file's directory first, then the working directory, and finally the include path. Each file loads once however many times it's imported, so import cycles are fine.
+Every file is a module: `import a.b` loads `a/b.sie`, searched in the importing file's directory, then the working directory, then the include path. A file loads once no matter how often it is imported, so cycles are fine.
 
-A module offers every one of its top-level declarations except its `@static` and `@private` ones; importing a name it doesn't offer is an error. A private declaration remains available through `@include`, whose composition is textual, but it is not added to the including module's export surface. What a module imports is not re-offered either: when `b` imports `a`, `b.func` does not name `a`'s function, and `import { func } from b` fails the same way. Because imports are resolved before compilation evaluates anything, an `import` cannot sit inside an `@if` block.
+A module exports its top-level declarations except `@static` and `@private` ones. Imports are not re-exported: if `b` imports `a`, `b.func` does not name `a`'s function. Types follow the same rules (`shapes.Box<i32>`, or `Box` after `import { Box } from shapes`), so two modules may share a short name without sharing an identity. An `import` cannot sit inside an `@if`.
 
-An imported module's members stay inside its namespace: they're reachable only through their qualified spelling (or a member import), never unqualified. A file's unqualified view holds its own declarations, its member imports, whatever it pulled in with `@include`, and the compilation unit's: the source files given together on the command line share their names, C-style.
-
-Types scope the same way: a module's structs, enums, and aliases are reachable through their qualified spelling in any type position (`let pkg: package.Package;`, `shapes.Box<i32>`, casts and `@sizeof` included) or unqualified through a member import (`import { Point, Box as Crate } from shapes;`). Separate modules may export the same short struct name without sharing an identity, so `gtk.Application` and `adwaita.Application` coexist while two source files passed together still form one namespace. Enum members follow their enum: `shapes.Color::RED` qualified, or `Color::RED` once `Color` is member-imported. A type's name written without either is an error; only types _inferred_ across the boundary (a call's return type, say) flow without their module's name in view.
-
-Imports carry across separate compilation. Under `-c`, an imported module's functions stay declarations: the unit calls them by [signature symbol](#overloading), and the module's own `-c` object defines them. Compile each module once, link the objects:
-
-```
-siec -c math/util.sie -o util.o
-siec -c main.sie -o main.o
-cc util.o main.o -o main
-```
-
-Three kinds of definition still land in every unit that uses them, because they must: a generic's instances stamp where their calls are, `@inline` bodies follow their callers, and an imported module's `@static`s stay per-unit, like C statics. The first two link as mergeable definitions, so the units' duplicates collapse into one at link. A whole-program build (no `-c`) is one unit: imports compile in, as ever.
+Under `-c`, an imported module's functions stay declarations in the caller and are defined in the module's own object; link the objects together. Generics, `@inline`, and imported `@static`s still instantiate per unit, like C.
 
 #### Include
 
-`@include("path")` pulls a specific `.sie` file directly into the current file, searching the include path:
+`@include("path")` splices a `.sie` file into the current one, like C's `#include`:
 
 ```
 @include("libc/stdio")
 ```
 
-The path resolves against, in order: the including file's own directory, any `-I` directories, the `lib/` directory beside each source, the working directory, and the `lib/` directory under it. The last two let a project compile from its root wherever its sources sit.
-
-Unlike `import`, an include copies the file's declarations as if they were written in place, without any namespacing. That makes it C's `#include`: whatever the file holds compiles as part of the including unit, so under `-c` a file included by two units defines twice, colliding at link. Files meant for inclusion should hold declarations; definitions belong in modules.
-
-A trailing `;` after the directive is fine, and an include may sit inside an `@if` to vary by platform ([conditional includes](#conditional-compilation)).
+The path is searched in the including file's directory, then `-I` directories, then `lib/` beside each source, the working directory, and `lib/` under it. There is no namespace: the file's declarations compile as part of this unit, so under `-c` a definition included twice collides at link. Prefer declarations in included files and definitions in modules. An include may sit inside an `@if` ([conditional includes](#conditional-compilation)).
 
 ### Variables
 
-Variables are values in memory that can be declared through the `let` keyword:
+Variables are declared with `let`, optionally typed and initialized:
 
 ```
-let v: T;   // a scalar
-let v: T*;  // a pointer
-let s: T[]; // an array
+let v: T;
+let v: T = <expr>;
+let a = f();   // type inferred from the initializer
 ```
 
-They can be initialized by adding `= <expr>` after their declaration.
-
-```
-let v: T = <expr>; // v is a scalar that holds the value <expr>
-```
-
-When an initializer is given, the type annotation can be omitted and the variable adopts the initializer's type:
-
-```
-fn f() -> T;
-
-let a = f(); // a has an implicit `: T`
-```
-
-Inference follows the value: variables, calls, casts, fields, and elements carry their declared types; comparisons yield a `bool`; and bare literals take their usual defaults (`i32`, `f64`, `char*`). An initializer with no fixed type of its own, like an array literal, still needs the annotation.
-
-A declaration with neither a type nor an initializer has nothing to size the variable by and is rejected.
-
-Their value can be assigned at runtime through the operator `=`:
+A bare `let v;` with neither type nor initializer is rejected. Values are updated with `=`:
 
 ```
 v = <expr>;
@@ -359,7 +290,7 @@ Claims enforce those exact ownership signatures: `AssignFrom<T>` requires `const
 
 #### Destruction and RAII
 
-The builtin `Destroy` interface gives an owned value deterministic cleanup:
+Types that claim the builtin `Destroy` interface get deterministic cleanup:
 
 ```
 interface Destroy {
@@ -367,9 +298,9 @@ interface Destroy {
 }
 ```
 
-Its receiver is mutable because releasing a resource normally invalidates the value. A `const &self` implementation does not satisfy the interface. Conformance is nominal: a method merely named `destroy` is not enough; the type must claim `Destroy` explicitly.
+The receiver is mutable; a `const &self` method does not count. Conformance is nominal: the type must claim `Destroy`, not merely define a method named `destroy`.
 
-Every initialized local or by-value parameter whose concrete type implements `Destroy` owns one cleanup responsibility. The compiler calls `destroy` when that value leaves its lexical scope, including through `return`, `break`, `continue`, and `emit`. Cleanups share the scope's `defer` stack and therefore run in strict reverse registration order:
+An initialized local or by-value parameter that implements `Destroy` is destroyed when it leaves scope (`return`, `break`, `continue`, `emit` included), sharing the scope's `defer` stack in reverse order:
 
 ```
 let first = Resource();
@@ -378,21 +309,9 @@ let second = Resource();
 // second.destroy(), log(), first.destroy()
 ```
 
-A `const T` value is a read-only, non-owning view when `T` implements `Destroy`. Const by-value parameters borrow their arguments rather than taking cleanup responsibility, and const by-value accessors may return a container element without moving it. A temporary passed to such a parameter remains owned by the caller and is destroyed after the complete call. Storing a const view into owning storage is still a copy of an owned resource and therefore requires an explicit cloning or assignment contract.
+Moving, returning, or passing the value by ownership transfers that cleanup; reading it afterward is an error. Fields and indexed elements cannot be moved on their own. `const T` is a non-owning view: const by-value parameters borrow rather than take ownership. Temporaries are destroyed at the end of the call or expression that uses them. Borrowed assignment of a destructible value needs `AssignFrom<T>` or `Clone`; a raw copy is rejected.
 
-Runtime ownership flags cover conditional initialization and moves, so only the path that still owns a value destroys it. A whole local passed to an owned parameter, returned, emitted, or used to initialize another destructible binding transfers its cleanup responsibility and cannot be read again. Fields and indexed elements cannot be moved independently; partial moves would require per-field ownership state.
-
-A destructible temporary borrowed by a `const &T` parameter lives through the complete containing call expression and is then destroyed. A temporary passed by value transfers into the parameter instead, which is destroyed when the callee returns unless ownership moves onward. A discarded temporary is destroyed at the end of its expression statement.
-
-Move assignment transfers the responsibility explicitly:
-
-```
-target = move source;
-```
-
-When `Assign<T>` is implemented, `target.assign(source)` owns the entire replacement policy and its source parameter is contractually adopted rather than automatically destroyed on return. Without `Assign<T>`, same-type move assignment computes the replacement, destroys the old target if initialized, stores the value, and disarms the source. Borrowed assignment of a destructible value requires `AssignFrom<T>` or `Clone`; a raw value copy is rejected because it would create two owners of one resource.
-
-`Destroy::destroy` owns the complete cleanup of its type, including any destructible fields. The compiler does not recursively destroy fields behind the method: that would double-drop custom containers. Tagged unions in particular must inspect their tag and manually destroy only the active member:
+`destroy` is responsible for the whole value, including owned fields; the compiler does not destroy fields for you. Tagged unions destroy only the active member, typically with `drop`:
 
 ```
 fn TOMLObject::destroy(&self) {
@@ -401,38 +320,41 @@ fn TOMLObject::destroy(&self) {
         drop self.str;
     when TOMLObjectType::Array:
         drop self.arr;
-    // ...
     }
 }
 ```
 
-`drop place;` performs the same operation explicitly on a mutable local, reference, field, or native indexed place. This is primarily how a custom container destroys owned members; a tagged union selects only its active field. Dropping a whole local consumes its cleanup responsibility and makes subsequent use an error until direct assignment reinitializes it. Calling `value.destroy()` directly has the same whole-local behavior. Consequently, an existing `defer value.destroy()` remains exactly-once after the type starts implementing `Destroy`: the explicit defer runs first and disarms the later automatic cleanup.
+`drop place;` and `value.destroy()` do the same for a mutable place or whole local and disarm automatic cleanup, so a `defer value.destroy()` stays exactly-once once the type implements `Destroy`.
 
 #### Raw storage slots
 
-`Slot<T>` is the builtin raw-storage form of `T`: it has exactly `T`'s size and alignment, but a slot does not automatically contain, copy, move, or destroy a live `T`. Its methods make each lifetime transition explicit:
+`Slot<T>` has `T`'s size and alignment but no automatic lifetime: you mark each transition yourself. It does not implement `Destroy`.
 
-```sie
+```
 let slot: Slot<Resource>;
 
-slot.write(Resource());       // uninitialized -> initialized; takes ownership
-inspect(slot.get());          // borrows as const &Resource
-slot.replace(Resource());     // destroys the old value, then takes the new one
-let value = slot.take();      // initialized -> uninitialized; returns ownership
-
-slot.write_from(value);       // copies a plain T, or clones an owned T
-slot.get_mut().update();      // mutable borrow of an initialized value
-slot.assign_to(target);       // assigns its borrowed value into an existing T
-slot.drop();                  // destroys the value and leaves no live T
+slot.write(Resource());     // uninitialized -> owned value
+slot.write_from(value);     // copy, or clone if T: Destroy
+inspect(slot.get());        // const &T
+slot.get_mut().update();    // &T
+slot.assign_to(target);     // borrow into an existing T
+slot.replace(Resource());   // destroy old, write new
+let value = slot.take();    // move out, leave uninitialized
+slot.drop();                // destroy in place
 ```
 
-`write`, `write_from`, `take`, `get`, `get_mut`, `assign_to`, `replace`, and `drop` are compiler-backed ordinary methods. `write` and `write_from` require an uninitialized slot. The other operations require an initialized slot: `take` and `drop` end that lifetime, while `replace` preserves it. `write_from` copies a non-owning value directly, but an owned `T: Destroy` must also implement `Clone`; a shallow borrowed copy is rejected. `assign_to` follows ordinary borrowed-assignment policy for an existing target, preferring `AssignFrom<T>` and otherwise cloning an owned value. `Slot<T>` itself does not implement `Destroy`, because it carries no runtime initialized flag and therefore cannot decide whether a value is live.
+- `write(value: T)`: move into an uninitialized slot.
+- `write_from(value: const &T)`: copy into an uninitialized slot; owned `T` must also implement `Clone`.
+- `get() -> const &T`: borrow an initialized value.
+- `get_mut() -> &T`: mutably borrow an initialized value.
+- `assign_to(target: &T)`: assign from the slot into an existing `T` (`AssignFrom` / `Clone`).
+- `replace(value: T)`: destroy the current value and move a replacement in.
+- `take() -> T`: move the value out and leave the slot uninitialized.
+- `drop()`: destroy the value and leave the slot uninitialized.
 
-These operations are deliberately not gated by an `unsafe` keyword or block. Sie permits direct low-level memory manipulation, and a programmer using a slot is responsible for meeting its initialization preconditions. The standard containers provide the safe API boundary: `List<T>` and `Stack<T>` use their lengths to identify initialized slot ranges, `Queue<T>` gives each linked node one live value slot, and `Map<K, V>` initializes bucket metadata and treats key/value slots as live only for occupied buckets. Their callers continue to work with `T`, references to `T`, and ordinary moves without handling slots themselves.
+`write` and `write_from` need an empty slot; the rest need a live value. There is no `unsafe`: the caller meets those preconditions. Standard containers (`List`, `Stack`, `Queue`, `Map`) track which slots are live so their users work with `T` directly.
 
-Core collection APIs that require an existing element panic when the container is empty. Indexed `List<T>` access likewise panics when the index is outside its initialized range. APIs that explicitly represent absence, such as `Map<K, V>::get`, retain their `Result` contract instead.
-
-Automatic destruction covers structured control flow. Process termination, foreign exceptions, signals, and aborting `panic` paths do not unwind Sie scopes. Global and static values have program lifetime and are not automatically destroyed at process exit.
+Automatic destruction follows structured control flow only. Process exit, signals, foreign exceptions, and aborting `panic` do not unwind Sie scopes; globals and statics are not destroyed at exit.
 
 ### Constants
 
@@ -1234,7 +1156,7 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
 
 A type parameter is lexical: inside its function, method, receiver family, struct, interface, or alias, it wins over a same-named type or interface declared outside the template. The rule follows the placeholder through derived and nested forms such as `T[]`, `Box<T>`, and `fn(T) -> T`; outside the template, the global declaration keeps its ordinary meaning.
 
-A parameter may carry a bound after `:`. An interface bound accepts any type that implements it; any other type-like bound—an intrinsic, alias, or struct—accepts that canonical type exactly. Bounds may refer to the other parameters, and apply whether the call infers its arguments or spells them:
+A parameter may carry a bound after `:`. An interface bound accepts any type that implements it; any other type-like bound (an intrinsic, alias, or struct) accepts that canonical type exactly. Bounds may refer to the other parameters, and apply whether the call infers its arguments or spells them:
 
 ```
 fn hash<K: Hashable>(key: K) -> u64;
@@ -1243,7 +1165,7 @@ fn word<T: u64>(value: T) -> T;
 fn ordered<T: Hashable & Comparable<T>>(value: T) -> T;
 ```
 
-`&` forms an explicit intersection: the argument must satisfy every listed type-like bound. Intersections work wherever bounds do, including generic functions, structs, aliases, interfaces, receiver methods, extensions, and `@template` environments. They are unordered—`I1 & I2` and `I2 & I1` describe the same bound—and each additional member makes an otherwise matching overload or override more specific.
+`&` forms an explicit intersection: the argument must satisfy every listed type-like bound. Intersections work wherever bounds do, including generic functions, structs, aliases, interfaces, receiver methods, extensions, and `@template` environments. They are unordered (`I1 & I2` and `I2 & I1` describe the same bound), and each additional member makes an otherwise matching overload or override more specific.
 
 An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the third declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
 
