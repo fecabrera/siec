@@ -55,6 +55,25 @@ def test_untyped_literal_ranks_at_its_default(run):
     assert run(source).returncode == 12
 
 
+def test_unannotated_const_ranks_like_its_literal(run):
+    """
+    An adapting '@const' ranks like the literal it stands for, so it can
+    pick among overloads the same way a written literal would.
+    """
+    source = """
+    @const N = 5;
+    @const BIG = 5000000000;
+
+    fn pick(n: i32) -> i32 { return 1; }
+    fn pick(n: i64) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        return pick(N) * 10 + pick(BIG); // 12
+    }
+    """
+    assert run(source).returncode == 12
+
+
 def test_large_untyped_literal_ranks_as_i128(run):
     """A value beyond i64 selects an i128 overload exactly."""
     source = """

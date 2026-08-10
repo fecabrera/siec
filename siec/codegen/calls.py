@@ -71,6 +71,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # through the file's module bindings; a scoped receiver shadows any
     # module prefix
     receiver = None
+    module = None
     if "::" in call.name:
         # 'S::method(s)' passes its receiver explicitly, and a static's
         # arguments pass as-is; the type name resolves like any written
@@ -93,7 +94,8 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
                 symbol, receiver = found
 
         if symbol is None:
-            symbol = gen.resolve_qualified(call.name.split("."))
+            if (found := gen.resolve_member(call.name.split("."))) is not None:
+                symbol, module = found
 
         if symbol is None and (found := method_call(gen, call, scope)) is not None:
             symbol, receiver = found
@@ -124,7 +126,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
         # a variable or global holding a function reference is called through
         # its value; the current file's statics resolve first, other files' never
-        symbol = gen.resolve_symbol(call.name)
+        symbol, module = gen.resolve_call_target(call.name)
         if call.name in scope or symbol in gen.globals:
             return emit_indirect_call(gen, builder, call, scope)
 
@@ -140,11 +142,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     # an overloaded name resolves to the candidate its arguments pick; a
     # fit bypasses a generic template sharing the name, while a call no
-    # concrete candidate takes falls through to it
+    # concrete candidate takes falls through to it. A module-qualified
+    # call only considers that module's candidates, so 'stdlib.free'
+    # stays the '@extern' when another module also defines 'free'.
     picked = False
     if symbol in gen.overloads:
         try:
-            symbol = pick_overload(gen, symbol, call.args, scope)
+            symbol = pick_overload(
+                gen, symbol, call.args, scope, module=module)
             picked = True
         except TypeError:
             if gen.generic_functions.get(symbol) is None:

@@ -400,18 +400,31 @@ class CodeGenerator:
         when it has one, its member imports next, an '@symbol' mapping
         after, the public name otherwise.
         """
+        return self.resolve_call_target(name)[0]
+
+    def resolve_call_target(self, name: str) -> tuple[str, str | None]:
+        """
+        Resolve a call name to '(symbol, module file)'. The module is set
+        for a member import or qualified 'module.f', so overload picking
+        stays inside that module.
+        """
         if (key := (self.current_file, name)) in self.statics:
-            return self.statics[key]
+            return self.statics[key], self.current_file
 
         member = self.member_targets.get((self.current_file, name))
         if member is not None:
             target, original = member
-            name = self.module_type_symbols.get(
+            original = self.module_type_symbols.get(
                 (target, original), original)
-        else:
-            name = self.local_type_symbols.get(
-                (self.current_file, name), name)
-        return self.symbol_names.get(name, name)
+            symbol = self.symbol_names.get(original, original)
+            if symbol != original:
+                origin = self.symbol_files.get(original)
+                if origin not in self.include_closure.get(target, {target}):
+                    symbol = original
+            return symbol, target
+
+        name = self.local_type_symbols.get((self.current_file, name), name)
+        return self.symbol_names.get(name, name), None
 
     def resolve_type_symbol(self, name: str) -> str:
         """Resolve an unqualified type through its source module's view."""
@@ -580,15 +593,16 @@ class CodeGenerator:
 
         return False
 
-    def resolve_callee(self, name: str) -> str | None:
+    def resolve_callee(self, name: str) -> tuple[str | None, str | None]:
         """
-        Resolve a call's name to its module symbol: dotted names through
-        the module bindings, plain ones like any other symbol.
+        Resolve a call's name to '(symbol, module file)': dotted names
+        through the module bindings, plain ones like any other symbol.
         """
         if "." in name:
-            return self.resolve_qualified(name.split("."))
+            found = self.resolve_member(name.split("."))
+            return (None, None) if found is None else found
 
-        return self.resolve_symbol(name)
+        return self.resolve_call_target(name)
 
     def struct_align(self, type_name: str | None) -> int | None:
         """

@@ -126,18 +126,47 @@ def declare_overload(gen: CodeGenerator, fn: Function, symbol: str) -> str:
     return sibling
 
 
+def overload_entries(gen: CodeGenerator, symbol: str,
+                     module: str | None = None) -> list | None:
+    """
+    Overload candidates for a name, optionally restricted to one module.
+
+    A qualified or member-imported call names a specific module's 'free';
+    another module's mangled 'free(opaque*)' must not steal it.
+    """
+    entry = gen.overloads.get(symbol)
+    if entry is None:
+        return None
+    if module is None:
+        return entry
+
+    closure = gen.include_closure.get(module, {module})
+    return [
+        (key, sibling) for key, sibling in entry
+        if (fn := gen.resolved_functions.get(sibling)) is not None
+        and fn.file in closure
+    ]
+
+
 def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
-                  receiver: str | None = None) -> str:
+                  receiver: str | None = None,
+                  module: str | None = None) -> str:
     """
     Pick the overload a call's arguments select: a candidate every
     argument matches exactly beats one reached through conversions; no
     viable candidate, or a tie between converted ones, is an error.
 
     A constructor passes its instance's type as 'receiver', standing in
-    for the receiver argument it has yet to build.
+    for the receiver argument it has yet to build. 'module' limits the
+    set to that module's declarations, so 'stdlib.free' stays the
+    '@extern' when 'std.alloc' also defines a 'free'.
     """
-    entry = gen.overloads.get(symbol)
+    entry = overload_entries(gen, symbol, module)
     if entry is None:
+        return symbol
+    if not entry:
+        # This module has no mangled sibling; keep the base symbol
+        # ('@extern free' beside another module's 'free(opaque*)').
         return symbol
 
     # a lone candidate resolves as ever, unless a generic template shares
@@ -154,6 +183,10 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
             from siec.codegen.checking import check_expression
 
             check_expression(gen, arg, scope)
+
+    # adapting '@const' names become their values for fit checks, so a
+    # literal's 'adopt' into a wider parameter still applies
+    args = [adapting_value(gen, arg, scope) for arg in args]
 
     if receiver is not None:
         args = [None, *args]
@@ -322,12 +355,36 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     return None
 
 
+def adapting_value(gen: CodeGenerator, arg, scope: dict):
+    """
+    The value an unannotated '@const' stands for at this use, or the
+    argument itself. Matching and ranking then see a literal written in
+    place, including adopting into a wider numeric parameter.
+    """
+    if not isinstance(arg, Var) or arg.name in scope:
+        return arg
+
+    if not getattr(arg, "qualified", False) and not gen.sees(arg.name):
+        return arg
+
+    from siec.codegen.constants import find_constant
+
+    const = find_constant(gen, arg.name, getattr(arg, "module_file", None))
+    if const is None or const.type is not None:
+        return arg
+
+    return const.value
+
+
 def rank_type(gen: CodeGenerator, arg, scope: dict) -> str | None:
     """
     The type an argument ranks at: its declared Sie type, or a literal's
     default - an integer literal ranks as i32, i64, or i128 according to
-    the first width it fits.
+    the first width it fits. An unannotated '@const' ranks like its value
+    written in place, so 'pick(N)' with '@const N = 5' matches as 'pick(5)'.
     """
+    arg = adapting_value(gen, arg, scope)
+
     declared = expr_sie_type(gen, arg, scope)
     if declared is not None:
         return declared

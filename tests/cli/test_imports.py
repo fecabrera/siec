@@ -999,6 +999,45 @@ def test_separately_compiled_units_link_and_run(tmp_path, monkeypatch):
     assert subprocess.run(["./app"]).returncode == 42
 
 
+def test_modules_keep_their_own_functions(tmp_path, monkeypatch):
+    """
+    Two modules may each declare the same function name - an '@extern'
+    'free' beside a Sie 'free' that calls it - without the mangled
+    sibling stealing the qualified or member-imported libc symbol.
+    """
+    (tmp_path / "stdlib.sie").write_text("""
+        @extern fn free(ptr: opaque*);
+        @extern fn malloc(n: u64) -> opaque*;
+    """)
+    (tmp_path / "alloc.sie").write_text("""
+        import stdlib;
+
+        fn free(ptr: opaque*) {
+            stdlib.free(ptr);
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import stdlib;
+        import alloc;
+        import { free } from alloc;
+
+        fn main() -> i32 {
+            let p = stdlib.malloc(8);
+            free(p);            // alloc.free -> stdlib.free
+            let q = stdlib.malloc(8);
+            alloc.free(q);
+            let r = stdlib.malloc(8);
+            stdlib.free(r);     // must stay the '@extern', not recurse
+            return 0;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 0
+
+
 def test_modules_keep_their_own_constants(tmp_path, monkeypatch):
     """
     Two modules may each declare the same '@const' name - stdio and

@@ -1227,10 +1227,12 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
     symbol = resolved
     receiver = None
+    module = None
     if symbol is None and "::" in call.name:
         symbol = qualified_method(gen, call.name)
     elif symbol is None and "." in call.name:
-        symbol = gen.resolve_qualified(call.name.split("."))
+        if (found := gen.resolve_member(call.name.split("."))) is not None:
+            symbol, module = found
         if symbol is None and (found := method_call(gen, call, scope)):
             symbol, receiver = found
         if symbol is not None and receiver is None and symbol in gen.globals:
@@ -1248,7 +1250,7 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
     elif symbol is None:
         if "<" not in call.name and not gen.sees(call.name):
             raise NameError(f"undefined function {call.name!r}")
-        symbol = gen.resolve_symbol(call.name)
+        symbol, module = gen.resolve_call_target(call.name)
 
     if receiver is not None:
         call = Call(call.name, [receiver, *call.args], call.type_args)
@@ -1260,7 +1262,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
     picked = False
     if symbol in gen.overloads:
         try:
-            symbol = pick_overload(gen, symbol, call.args, scope)
+            symbol = pick_overload(
+                gen, symbol, call.args, scope, module=module)
             picked = True
         except TypeError:
             if gen.generic_functions.get(symbol) is None:

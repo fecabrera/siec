@@ -327,6 +327,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                 return expr_sie_type(gen, rewritten, scope)
 
         call = expr
+        module = None
         if "::" in expr.name:
             # 'S::m(s)' names a method through its receiver type
             from siec.codegen.methods import qualified_method
@@ -339,7 +340,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
                     and not gen.sees(expr.name)):
                 return None
 
-            symbol = gen.resolve_callee(expr.name)
+            symbol, module = gen.resolve_callee(expr.name)
             if symbol in gen.globals and strip_const(gen.globals[symbol]).startswith("fn("):
                 return strip_reference(fn_type_parts(strip_const(gen.globals[symbol]))[1])
 
@@ -351,6 +352,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
                 if "." in expr.name and (found := method_call(gen, expr, scope)):
                     symbol, receiver = found
+                    module = None
                     if receiver is not None:
                         call = Call(expr.name, [receiver, *expr.args],
                                     expr.type_args)
@@ -364,7 +366,8 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             from siec.codegen.overloads import pick_overload
 
             try:
-                symbol = pick_overload(gen, symbol, call.args, scope)
+                symbol = pick_overload(
+                    gen, symbol, call.args, scope, module=module)
                 picked = True
             except TypeError:
                 if gen.generic_functions.get(symbol) is None:
