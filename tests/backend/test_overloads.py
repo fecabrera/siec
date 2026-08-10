@@ -187,6 +187,25 @@ def test_no_matching_overload_is_an_error(compile_source):
         """)
 
 
+def test_undefined_argument_is_not_an_overload_ambiguity(compile_source):
+    """
+    An unknown name must not match every candidate as an implicit
+    conversion and report an ambiguity.
+    """
+    with pytest.raises(NameError, match="undefined variable 'missing'"):
+        compile_source("""
+        struct Box {
+            fn init(&self, n: i64) {}
+            fn init(&self, f: f64) {}
+        }
+
+        fn main() -> i32 {
+            let box = Box(missing);
+            return 0;
+        }
+        """)
+
+
 def test_same_signature_twice_is_still_a_conflict(compile_source):
     """
     Overloading needs distinct parameter lists; repeating one is the same

@@ -17,6 +17,7 @@ from siec.ast import (
     SizeOf,
     StrLiteral,
     TypeId,
+    Var,
 )
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.inference import (
@@ -145,6 +146,15 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
         return entry[0][1]
 
     arg_types = [rank_type(gen, arg, scope) for arg in args]
+    # Surface an undefined name before ranking: without a type it used
+    # to match every candidate as an implicit conversion and report an
+    # ambiguity instead of the missing binding.
+    for arg, arg_type in zip(args, arg_types):
+        if arg_type is None and isinstance(arg, Var):
+            from siec.codegen.checking import check_expression
+
+            check_expression(gen, arg, scope)
+
     if receiver is not None:
         args = [None, *args]
         arg_types = [receiver, *arg_types]
@@ -159,7 +169,8 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
     name = display_name(symbol)
 
     if not pool:
-        shown = ", ".join(t or "?" for t in arg_types)
+        shown_types = arg_types[1:] if receiver is not None else arg_types
+        shown = ", ".join(t or "?" for t in shown_types)
         raise TypeError(f"no overload of {name!r} takes ({shown})")
 
     if len(pool) > 1:
@@ -247,7 +258,9 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
 
     # an untypeable argument adapts to what its shape can fill: an
     # aggregate literal a struct or array parameter with as many fields,
-    # an array literal an array or a pointer, anything else any parameter
+    # an array literal an array or a pointer. A bare name with no type is
+    # not a wildcard - matching every candidate as 'implicit' turns an
+    # undefined variable into an ambiguity among overloads.
     if arg_type is None:
         if isinstance(arg, AggregateLiteral):
             info = type_info(gen, target)
@@ -262,6 +275,9 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
         if isinstance(arg, ArrayLiteral):
             return ("implicit" if target.endswith("[]") or target.endswith("*")
                     else None)
+
+        if isinstance(arg, Var):
+            return None
 
         return "implicit"
 
