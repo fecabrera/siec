@@ -518,6 +518,15 @@ def parse_lambda_tail(ts: TokenStream, line: int) -> ClosureExpr:
     return ClosureExpr(params, return_type, parse_block(ts), line=line)
 
 
+def _simple_type_path(name: str) -> bool:
+    """
+    Whether a type spelling is only a bare or dotted name - the same
+    shape as a call target in 'a < foo(x)' or 'i < buf.get_length()'.
+    """
+    parts = name.split(".")
+    return bool(parts) and all(part.isidentifier() for part in parts)
+
+
 def parse_type_arguments(ts: TokenStream,
                          followers: tuple = ("(",)) -> list[str] | None:
     """
@@ -526,12 +535,19 @@ def parse_type_arguments(ts: TokenStream,
     '(', or an expression terminator for a bare 'f<i32>' reference.
     Anything else - a '<' that reads as a comparison - rewinds the
     stream untouched and returns None.
+
+    A '(' after types that are already committed as type arguments -
+    more than one argument, or a spelling that is not a bare/dotted
+    call path ('Slot<T>', 'fn(i32) -> i32', 'i32*') - is a missing '>'
+    before the call. A single simple path before '(' rewinds so
+    comparisons like 'i < buf.get_length()' keep working.
     """
     from siec.parser.types import close_angle, parse_type
 
     saved = ts.pos
     outer = getattr(ts, "angle_journal", None)
     ts.angle_journal = journal = []
+    missing_angle = None
 
     try:
         ts.next()  # the '<'
@@ -539,12 +555,24 @@ def parse_type_arguments(ts: TokenStream,
         while ts.peek().syntax == ",":
             ts.next()
             args.append(parse_type(ts))
+        if (ts.peek().syntax == "("
+                and (len(args) > 1 or not _simple_type_path(args[0]))):
+            missing_angle = SyntaxError(
+                f"line {ts.peek().line}: expected '>' before '(' "
+                f"in type argument list")
+            raise missing_angle
         close_angle(ts)
         ok = ts.peek().syntax in followers
     except SyntaxError:
         ok = False
     finally:
         ts.angle_journal = outer
+
+    if missing_angle is not None:
+        ts.pos = saved
+        for tok, value in reversed(journal):
+            tok.value = value
+        raise missing_angle
 
     if not ok:
         ts.pos = saved
