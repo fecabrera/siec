@@ -258,8 +258,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             if const.type is not None:
                 return const.type
 
-            with constant_view(gen, const):
-                return expr_sie_type(gen, const.value, scope)
+            return None
 
         # a global carries its declared type
         symbol = gen.resolve_symbol(expr.name)
@@ -593,10 +592,9 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if (pointer := pointer_arithmetic_type(gen, expr, scope)) is not None:
             return pointer
 
-        # arithmetic, bitwise, and power keep an operand's declared type
+        # arithmetic, bitwise, and power widen to the larger operand type
         if expr.op in ARITHMETIC or expr.op == "**":
-            return (expr_sie_type(gen, expr.left, scope)
-                    or expr_sie_type(gen, expr.right, scope))
+            return arithmetic_type(gen, expr.left, expr.right, scope)
 
     return None
 
@@ -718,12 +716,8 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         if (pointer := pointer_arithmetic_type(gen, expr, scope)) is not None:
             return pointer
 
-        # arithmetic keeps its operands' type; a declared operand wins, so a
-        # literal beside it adapts as in any typed context
-        return (expr_sie_type(gen, expr.left, scope)
-                or expr_sie_type(gen, expr.right, scope)
-                or infer_type(gen, expr.left, scope)
-                or infer_type(gen, expr.right, scope))
+        # arithmetic widens to the larger operand type
+        return arithmetic_type(gen, expr.left, expr.right, scope)
 
     # a ternary takes its arms' type, a declared arm winning over a literal
     if isinstance(expr, Ternary):
@@ -915,6 +909,82 @@ def numeric_class(type_name: str | None) -> tuple[str, int] | None:
         return type_name[0], int(type_name[1:])
 
     return None
+
+
+def operand_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
+    """
+    The Sie type name of an expression for arithmetic promotion.
+
+    Literals and unannotated constants have no fixed width here; they adopt
+    their partner's type during promotion, like they do at each use site.
+    """
+    declared = expr_sie_type(gen, expr, scope)
+    if declared is not None:
+        return declared
+
+    if isinstance(expr, Var):
+        from siec.codegen.constants import constant_view, find_constant
+
+        const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
+        if const is not None and const.type is None:
+            with constant_view(gen, const):
+                return operand_type(gen, const.value, scope)
+
+    if isinstance(expr, (IntLiteral, FloatLiteral)):
+        return None
+
+    if isinstance(expr, (SizeOf, TypeId)):
+        return infer_type(gen, expr, scope)
+
+    return infer_type(gen, expr, scope)
+
+
+def adapts_in_arithmetic(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
+    """
+    Whether an operand has no fixed numeric type during promotion and
+    adopts its partner's type, like a literal or unannotated constant.
+    """
+    if isinstance(expr, (IntLiteral, FloatLiteral, SizeOf, TypeId)):
+        return True
+
+    if isinstance(expr, Var):
+        from siec.codegen.constants import find_constant
+
+        const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
+        if const is not None and const.type is None:
+            return True
+
+    return False
+
+
+def arithmetic_type(gen: CodeGenerator, left: Expr, right: Expr,
+                    scope: dict) -> str | None:
+    """
+    The Sie type of an arithmetic or bitwise binary result: the wider of
+    the operands' numeric types when they share a prefix.
+    """
+    left_name = operand_type(gen, left, scope)
+    right_name = operand_type(gen, right, scope)
+    left_class = numeric_class(enum_backing(gen, left_name))
+    right_class = numeric_class(enum_backing(gen, right_name))
+    if left_class and right_class:
+        if left_class[0] == right_class[0]:
+            prefix, width = left_class[0], max(left_class[1], right_class[1])
+            return f"{prefix}{width}"
+
+        if isinstance(left, SizeOf):
+            return right_name
+
+        if isinstance(right, SizeOf):
+            return left_name
+
+        if adapts_in_arithmetic(gen, left, scope) and right_name:
+            return right_name
+
+        if adapts_in_arithmetic(gen, right, scope) and left_name:
+            return left_name
+
+    return left_name or right_name
 
 
 def value_class(gen: CodeGenerator, value: ir.Value, expr: Expr,
