@@ -1,0 +1,15 @@
+import { Allocator, ReleaseError } from _allocator;
+import stdlib;
+
+struct StdlibAllocator: Allocator {
+    @inline
+    fn acquire(&self, size: u64) -> opaque* {
+        return stdlib.malloc(size);
+    }
+
+    @inline
+    fn release(&self, ptr: opaque*) -> Result<ReleaseError> {
+        stdlib.free(ptr);
+        return Ok();
+    }
+}

@@ -1,0 +1,128 @@
+import std.io;
+import { mmap, munmap, PROT_READ, PROT_WRITE, MAP_PRIVATE, MAP_ANONYMOUS } from sys.mman;
+import { Allocator, ReleaseError } from _allocator;
+
+@const HeaderSize = @sizeof(HeapBlockHeader);
+
+struct HeapBlockHeader {
+    next: HeapBlockHeader*;
+    size: u64;
+    free: bool;
+}
+
+struct HeapAllocator: Allocator, Destroy {
+    @private size: u64;
+    @private min_blk_size: u64;
+    @private head: HeapBlockHeader*;
+
+    fn init(&self, size: u64, min_blk_size: u64 = 16) {
+        self.size = size;
+        self.head = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) as HeapBlockHeader*;
+        *self.head = {
+            next = null,
+            size = size - HeaderSize,
+            free = true,
+        };
+    }
+
+    fn destroy(&self) {
+        munmap(self.head, self.size);
+
+        self.head = null;
+        self.size = 0;
+        self.min_blk_size = 0;
+    }
+
+    @private
+    fn merge_free_blocks(&self) {
+        let current = self.head;
+        while (current and current->next) {
+            if (current->free and current->next->free) {
+                current->size = current->size + current->next->size + HeaderSize;
+                current->next = current->next->next;
+            } else {
+                current = current->next;
+            }
+        }
+    }
+
+    /**
+     * Allocate memory
+     *
+     * @param size The size in bytes to allocate
+     * @return A pointer to the memory allocated
+     */
+    fn acquire(&self, size: u64) -> opaque* {
+        if (size == 0) return null;
+        
+        // Align size to 8 bytes
+	    size = (size + 7) & (~7 as u64);
+
+        let current = self.head;
+        while (current) {
+            if (current->free and current->size >= size) {
+                let block_ptr = current as opaque*;
+
+                // Split block if remainder is large enough to be useful
+                if (current->size >= size + self.min_blk_size + HeaderSize) {
+                    let new_block = (block_ptr + size + HeaderSize) as HeapBlockHeader*;
+    
+                    new_block->size = current->size - size - HeaderSize;
+                    new_block->free = true;
+                    new_block->next = current->next;
+    
+                    current->size = size;
+                    current->next = new_block;
+                }
+    
+                current->free = false;
+                
+                let ptr = current as opaque* + HeaderSize;
+                if (ptr as opaque* >= self.head as opaque* + self.size)
+                    break;
+
+                return ptr;
+            }
+
+            current = current->next;
+        }
+
+        // out of memory, should grow
+        let head = self.head;
+        while (head) {
+            std.io.println("block at {p}: size={} B {}",
+                   (head + HeaderSize) as u64, head->size,
+                   head->free ? "FREE" : "USED");
+    
+            head = head->next;
+        }
+
+        return null;
+    }
+
+    /**
+     * Free allocated memory
+     *
+     * @param ptr A pointer to the memory allocated
+     * @return The result of the operation
+     */
+    fn release(&self, ptr: opaque*) -> Result<ReleaseError> {
+        if (ptr == null) return Error(ReleaseError::DoubleFree);
+
+        let header = (ptr - HeaderSize) as HeapBlockHeader*;
+    
+        // ptr should be inside heap
+        if (header >= (self.head + self.size) or header < self.head) {
+            return Error(ReleaseError::OutOfBounds);
+        }
+    
+        // check if it's already been freed
+        if (header->free) return Error(ReleaseError::DoubleFree);
+    
+        // mark as free
+        header->free = true;
+        self.merge_free_blocks();
+            
+        return Ok();
+    }
+}

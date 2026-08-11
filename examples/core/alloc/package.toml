@@ -1,0 +1,9 @@
+[package]
+name = "alloc"
+description = "A simple example program"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"

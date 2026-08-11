@@ -1,5 +1,9 @@
 import stdlib;
 
+@include("_alloc/_allocator");
+@include("_alloc/_stdlib");
+@include("_alloc/_heap");
+
 @inline
 fn alloc<T>(n: u64 = 1) -> T* {
     return stdlib.malloc(n * @sizeof(T)) as T*;

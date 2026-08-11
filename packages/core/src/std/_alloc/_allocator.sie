@@ -1,0 +1,11 @@
+enum ReleaseError {
+    SystemError,
+    NullPointer,
+    DoubleFree,
+    OutOfBounds,
+}
+
+interface Allocator {
+    fn acquire(&self, n: u64) -> opaque*;
+    fn release(&self, ptr: opaque*) -> Result<ReleaseError>;
+}

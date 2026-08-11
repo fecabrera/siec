@@ -1,0 +1,18 @@
+import std.io;
+import { HeapAllocator } from std.alloc;
+
+fn main() -> i32 {
+    let heap = HeapAllocator(4096);
+    
+    let a = heap.acquire(16) as u8*;
+    defer heap.release(a);
+    
+    std.io.println("a: {p}", a as u64);
+
+    let b = heap.acquire(16) as u8*;
+    defer heap.release(b);
+
+    std.io.println("b: {p}", b as u64);
+
+    return 0;
+}
