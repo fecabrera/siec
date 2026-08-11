@@ -953,6 +953,43 @@ def test_parse_error_is_reported_without_a_traceback(tmp_path, monkeypatch, caps
     assert "Traceback" not in err
 
 
+def test_excessive_source_nesting_is_reported_without_a_traceback(
+        tmp_path, monkeypatch, capsys):
+    """Parser recursion exhaustion becomes a stable source diagnostic."""
+    src = tmp_path / "deep.sie"
+    src.write_text("fn main() { let value = " + "(" * 1200 + "1"
+                   + ")" * 1200 + "; }")
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 1
+    err = capsys.readouterr().err
+    assert "source nesting exceeds the compiler's parser limit" in err
+    assert "Traceback" not in err
+
+
+def test_oversized_integer_is_reported_without_a_traceback(
+        tmp_path, monkeypatch, capsys):
+    """Python's decimal conversion limit never escapes the parser boundary."""
+    src = tmp_path / "large.sie"
+    src.write_text("fn main() { let value = " + "9" * 5000 + "; }")
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 1
+    err = capsys.readouterr().err
+    assert "integer literal exceeds 4096 digits" in err
+    assert "Traceback" not in err
+
+
+def test_constant_operation_error_is_reported_without_a_traceback(
+        tmp_path, monkeypatch, capsys):
+    """Known evaluator failures cross the CLI as ordinary diagnostics."""
+    src = tmp_path / "constant.sie"
+    src.write_text("enum Broken { VALUE = 1 / 0 } fn main() {}")
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 1
+    err = capsys.readouterr().err
+    assert "division by zero in constant expression" in err
+    assert "Traceback" not in err
+
+
 def test_error_in_an_included_file_names_that_file(tmp_path, monkeypatch, capsys):
     """
     A compile error inside an included file reports that file, not the includer.

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from siec.codegen.errors import display_path
+from siec.diagnostics import PackageInputError
 
 MANIFEST = "package.toml"
 
@@ -410,6 +411,19 @@ def manifest_paths(manifest: Path, section: str, key: str,
     return tuple(dict.fromkeys(normalized))
 
 
+def manifest_libraries(manifest: Path, section: str,
+                       value: object) -> tuple[str, ...]:
+    """Library names safe to pass through the compiler to native tooling."""
+    libraries = manifest_list(manifest, section, "libs", value)
+    for library in libraries:
+        if any(ord(char) < 32 or ord(char) == 127 for char in library):
+            raise PackageInputError(
+                f"{display_path(str(manifest))}: [{section}] 'libs' entries "
+                "must not contain NUL or control characters")
+
+    return libraries
+
+
 def validate_manifest(manifest: Path, data: dict) -> PackageManifest:
     """Validate raw TOML once and return its normalized package model."""
     package = manifest_table(manifest, data, "package")
@@ -450,8 +464,8 @@ def validate_manifest(manifest: Path, data: dict) -> PackageManifest:
         package.get("license-files"))
     includes = manifest_paths(
         manifest, "package", "include", package.get("include"))
-    libraries = manifest_list(
-        manifest, kind or "package", "libs", made_of.get("libs"))
+    libraries = manifest_libraries(
+        manifest, kind or "package", made_of.get("libs"))
 
     dependencies = manifest_table(manifest, data, "dependencies")
     requirements = {}

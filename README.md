@@ -392,6 +392,12 @@ The expansion is type-checked. Names in the body resolve where the macro was wri
 
 The condition is a constant expression: literals, `@const` names, enum members, `@sizeof`, arithmetic, comparisons, and `and`/`or`/`not`. The unchosen branch is skipped entirely, never parsed into the program, so its declarations may collide with the chosen one's:
 
+Constant integer arithmetic follows runtime signed division and remainder:
+division truncates toward zero, and a remainder has the dividend's sign.
+`and` and `or` short-circuit here exactly as they do at runtime. Division by
+zero, negative or out-of-range shifts, and results wider than every Sie integer
+type are compile-time errors rather than Python or backend failures.
+
 ```
 @if (TARGET_OS == OS_DARWIN) {
     @extern fn errno_location() -> i32*;
@@ -1347,6 +1353,9 @@ Integer literals may also be written in hexadecimal with the `0x` prefix:
 let mask: u32 = 0xFF00;
 ```
 
+One integer token may contain at most 4096 digits. This parser boundary keeps
+malformed or generated source from exhausting the host integer converter.
+
 Without a type context, an integer literal defaults to the first signed type
 it fits: `i32`, then `i64`, then `i128`.
 
@@ -1990,6 +1999,10 @@ enum name {
 Every enum and member name is collected before those values resolve, so an expression may also reference a member or enum declared later. A cycle between member values is rejected with the chain that forms it.
 
 Members are assigned values automatically, starting at 0 and increasing by 1 for each subsequent member. Setting a specific value for a member changes the counter for the following ones, which then keep increasing from there.
+
+Both explicit values and automatic increments must fit the enum's backing type.
+They never silently wrap; an overflow or a shift count outside the backing
+width is reported at that member.
 
 ```
 enum name {

@@ -33,7 +33,8 @@ def parse_struct(ts: TokenStream) -> Struct:
             is_private = True
         elif decorator == "align":
             ts.expect("sym", "(")
-            align = int_value(ts.expect("int").value)
+            literal = ts.expect("int")
+            align = int_value(literal.value, literal.line)
             ts.expect("sym", ")")
 
             if align == 0 or align & (align - 1):

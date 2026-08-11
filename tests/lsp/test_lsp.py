@@ -36,6 +36,24 @@ def test_analyze_reports_the_error_with_its_line(tmp_path):
                             "cannot implicitly convert char[] to i32")
 
 
+def test_analyze_sanitizes_parser_and_constant_input_failures(tmp_path):
+    """Known resource and evaluator failures become ordinary LSP reports."""
+    cases = (
+        ("fn main() { let value = " + "(" * 1200 + "1"
+         + ")" * 1200 + "; }", "source nesting exceeds"),
+        ("fn main() { let value = " + "9" * 5000 + "; }",
+         "integer literal exceeds 4096 digits"),
+        ("enum Broken { VALUE = 1 / 0 } fn main() {}",
+         "division by zero in constant expression"),
+    )
+
+    for index, (source, message) in enumerate(cases):
+        src = write(tmp_path / f"case{index}.sie", source)
+        report = analyze(src, [])
+        assert report is not None
+        assert message in report.message
+
+
 def test_analyze_preserves_generic_call_trace(tmp_path):
     """
     LSP diagnostics retain the same source-level generic call chain as CLI

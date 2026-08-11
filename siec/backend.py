@@ -10,12 +10,14 @@ from pathlib import Path
 
 from llvmlite import binding, ir
 
+from siec.diagnostics import InputFormatError
+
 
 class TargetError(Exception):
     """An LLVM target triple that the compiler cannot use."""
 
 
-class ObjectFormatError(OSError):
+class ObjectFormatError(InputFormatError):
     """An object file or archive that is unsafe to hand to LLVM."""
 
 

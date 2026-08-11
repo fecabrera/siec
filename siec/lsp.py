@@ -23,6 +23,7 @@ from siec.cli import error_parts
 from siec.codegen import CodeGenerator, codegen
 from siec.codegen.generator import Variable
 from siec.codegen.types import is_reference, strip_const, strip_reference
+from siec.diagnostics import DiagnosticError
 from siec.lexer import Token, lex
 from siec.loader import ParsedProgramCache, discover_program
 from siec.parser import parse
@@ -460,7 +461,8 @@ def compile_unit(path: Path, include_paths: list[Path],
             dependencies=dependencies,
         )
         codegen(program, str(path), define_imports=False, gen=gen)
-    except (SyntaxError, TypeError, NameError, FileNotFoundError) as error:
+    except (DiagnosticError, SyntaxError, TypeError, NameError,
+            FileNotFoundError) as error:
         file, line, message = error_parts(error)
         report = Report(file or str(path), line, message)
 
@@ -503,7 +505,7 @@ def outline(text: str) -> list[Symbol] | None:
     """
     try:
         program = parse(lex(text))
-    except (SyntaxError, TypeError, NameError):
+    except (DiagnosticError, SyntaxError, TypeError, NameError):
         return None
 
     symbols: list[Symbol] = []

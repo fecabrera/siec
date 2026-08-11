@@ -179,7 +179,8 @@ def parse_primary(ts: TokenStream) -> Expr:
     if tok.syntax == "-":
         # fold '-' over a numeric literal into a negative constant, keeping it instruction-free
         if ts.peek().kind == "int":
-            return IntLiteral(-int_value(ts.next().value))
+            literal = ts.next()
+            return IntLiteral(-int_value(literal.value, literal.line))
 
         if ts.peek().kind == "float":
             return FloatLiteral(-float(ts.next().value))
@@ -341,7 +342,7 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, ArrayLiteral(elements))
 
     if tok.kind == "int":
-        return IntLiteral(int_value(tok.value))
+        return IntLiteral(int_value(tok.value, tok.line))
 
     if tok.kind == "float":
         return FloatLiteral(float(tok.value))

@@ -283,6 +283,35 @@ def test_conditional_include_never_resolves_the_unchosen_arm(tmp_path):
     assert [fn.name for fn in program.functions] == ["here", "main"]
 
 
+def test_conditional_include_condition_short_circuits(tmp_path):
+    """Load-time include selection does not evaluate an unreachable operand."""
+    write(tmp_path / "chosen.sie", "fn chosen() {}")
+    main = write(tmp_path / "main.sie", """
+        @if (true or 1 / 0) {
+            @include("chosen");
+        }
+        fn main() {}
+    """)
+
+    program = load_program([main], [])
+    assert [fn.name for fn in program.functions] == ["chosen", "main"]
+
+
+def test_conditional_include_invalid_operation_is_located(tmp_path):
+    """Load-time arithmetic failures name the directive and its source file."""
+    main = write(tmp_path / "main.sie", """
+        @if (1 / 0) {
+            @include("unused");
+        }
+        fn main() {}
+    """)
+
+    with pytest.raises(TypeError, match="division by zero") as info:
+        load_program([main], [])
+    assert info.value.sie_file == str(main.resolve())
+    assert str(info.value).startswith("line 2:")
+
+
 def test_conditional_include_sees_loaded_constants(tmp_path):
     """
     The condition may use '@const' values from the file itself and from

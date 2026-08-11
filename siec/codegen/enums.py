@@ -7,18 +7,73 @@ from siec.codegen.errors import source_location
 from siec.codegen.sizes import size_of
 from siec.codegen.generator import CodeGenerator, EnumInfo, StructInfo
 from siec.codegen.types import INTEGER_TYPES
+from siec.diagnostics import ConstantEvaluationError
+
+
+MAX_SHIFT = 127
+MIN_CONSTANT = -(1 << 127)
+MAX_CONSTANT = (1 << 128) - 1
+
+
+def checked_result(value: int) -> int:
+    """Keep constant integers within a representation Sie can provide."""
+    if not MIN_CONSTANT <= value <= MAX_CONSTANT:
+        raise ConstantEvaluationError(
+            "integer overflow in constant expression: the result exceeds "
+            "every Sie integer type")
+    return value
+
+
+def truncating_division(left: int, right: int) -> int:
+    """LLVM/C signed division: truncate the quotient toward zero."""
+    if right == 0:
+        raise ConstantEvaluationError("division by zero in constant expression")
+
+    quotient = abs(left) // abs(right)
+    result = -quotient if (left < 0) != (right < 0) else quotient
+    return checked_result(result)
+
+
+def truncating_remainder(left: int, right: int) -> int:
+    """LLVM/C signed remainder, whose sign follows the dividend."""
+    return checked_result(left - truncating_division(left, right) * right)
+
+
+def checked_shift(left: int, right: int, *, rightward: bool,
+                  max_shift: int = MAX_SHIFT) -> int:
+    """Reject shift counts that no Sie integer representation can execute."""
+    if right < 0:
+        raise ConstantEvaluationError(
+            "shift count cannot be negative in constant expression")
+    if right > max_shift:
+        raise ConstantEvaluationError(
+            f"shift count cannot exceed {max_shift} in constant expression")
+    return checked_result(left >> right if rightward else left << right)
+
+
+def checked_type_result(value: int, type_name: str) -> int:
+    """Require a resolved constant value to fit its integer context."""
+    bits = int(type_name[1:])
+    low = -(1 << (bits - 1)) if type_name.startswith("i") else 0
+    high = ((1 << (bits - 1)) - 1 if type_name.startswith("i")
+            else (1 << bits) - 1)
+    if not low <= value <= high:
+        raise ConstantEvaluationError(
+            f"constant value {value} does not fit {type_name}")
+    return value
+
 
 BINARY_OPS = {
-    "+": lambda a, b: a + b,
-    "-": lambda a, b: a - b,
-    "*": lambda a, b: a * b,
-    "/": lambda a, b: a // b,
-    "%": lambda a, b: a % b,
-    "<<": lambda a, b: a << b,
-    ">>": lambda a, b: a >> b,
-    "&": lambda a, b: a & b,
-    "|": lambda a, b: a | b,
-    "^": lambda a, b: a ^ b,
+    "+": lambda a, b: checked_result(a + b),
+    "-": lambda a, b: checked_result(a - b),
+    "*": lambda a, b: checked_result(a * b),
+    "/": truncating_division,
+    "%": truncating_remainder,
+    "<<": lambda a, b: checked_shift(a, b, rightward=False),
+    ">>": lambda a, b: checked_shift(a, b, rightward=True),
+    "&": lambda a, b: checked_result(a & b),
+    "|": lambda a, b: checked_result(a | b),
+    "^": lambda a, b: checked_result(a ^ b),
     "==": lambda a, b: int(a == b),
     "!=": lambda a, b: int(a != b),
     "<": lambda a, b: int(a < b),
@@ -134,12 +189,19 @@ def resolve_enums(gen: CodeGenerator) -> None:
         try:
             with source_location(line=member.line, file=enum.file):
                 if member.value is not None:
-                    value = evaluate(gen, member.value, resolve_member)
+                    value = evaluate(
+                        gen,
+                        member.value,
+                        resolve_member,
+                        integer_type=enum.type,
+                    )
                 elif index == 0:
                     value = 0
                 else:
                     previous = enum.members[index - 1]
-                    value = resolve_key((enum.name, previous.name)) + 1
+                    value = BINARY_OPS["+"](
+                        resolve_key((enum.name, previous.name)), 1)
+                value = checked_type_result(value, enum.type)
         finally:
             gen.current_file = previous_file
             active.pop()
@@ -213,13 +275,14 @@ def evaluate_size(gen: CodeGenerator, text: str) -> int:
     return size
 
 
-def evaluate(gen: CodeGenerator, expr, enum_resolver=None) -> int:
+def evaluate(gen: CodeGenerator, expr, enum_resolver=None,
+             integer_type: str | None = None) -> int:
     """
     Evaluate a constant integer expression at compile time: literals,
     integer operators, enum members, and '@const' references.
     """
     if isinstance(expr, IntLiteral):
-        return expr.value
+        return checked_result(expr.value)
 
     if isinstance(expr, BoolLiteral):
         return int(expr.value)
@@ -254,18 +317,33 @@ def evaluate(gen: CodeGenerator, expr, enum_resolver=None) -> int:
             raise TypeError(f"{expr.name!r} is not a compile-time constant")
 
         with constant_view(gen, const):
-            return evaluate(gen, const.value, enum_resolver)
+            return evaluate(gen, const.value, enum_resolver, integer_type)
 
     if isinstance(expr, UnaryOp) and expr.op in ("-", "~", "not"):
-        value = evaluate(gen, expr.operand, enum_resolver)
+        value = evaluate(gen, expr.operand, enum_resolver, integer_type)
         if expr.op == "not":
             return int(not value)
 
-        return -value if expr.op == "-" else ~value
+        return checked_result(-value if expr.op == "-" else ~value)
 
     if isinstance(expr, BinaryOp) and expr.op in BINARY_OPS:
-        left = evaluate(gen, expr.left, enum_resolver)
-        right = evaluate(gen, expr.right, enum_resolver)
+        left = evaluate(gen, expr.left, enum_resolver, integer_type)
+
+        # Match generated control flow: an unneeded right operand must not
+        # trigger an invalid operation or resolve a missing constant.
+        if expr.op == "and" and not left:
+            return 0
+        if expr.op == "or" and left:
+            return 1
+
+        right = evaluate(gen, expr.right, enum_resolver, integer_type)
+        if expr.op in ("<<", ">>") and integer_type is not None:
+            return checked_shift(
+                left,
+                right,
+                rightward=expr.op == ">>",
+                max_shift=int(integer_type[1:]) - 1,
+            )
         return BINARY_OPS[expr.op](left, right)
 
     raise TypeError("value must be a constant integer expression")

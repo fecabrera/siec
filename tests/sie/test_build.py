@@ -684,6 +684,18 @@ def test_a_library_is_not_built(home, monkeypatch, capsys):  # noqa: F811
     assert not (library / "build").exists()
 
 
+def test_library_control_characters_are_rejected_cleanly(
+        home, monkeypatch, capsys):  # noqa: F811
+    """A manifest library name cannot reach subprocess with an embedded NUL."""
+    app = package(home, "unsafe", libs=[r"bad\u0000name"])
+
+    assert run_sie(monkeypatch, "build", app) == 1
+    err = capsys.readouterr().err
+    assert "'libs' entries must not contain NUL or control characters" in err
+    assert "Traceback" not in err
+    assert not (app / "build").exists()
+
+
 def test_a_manifest_that_is_neither_is_reported(home, monkeypatch, capsys):  # noqa: F811
     """
     Without an [app] or a [library] there is nothing to build.

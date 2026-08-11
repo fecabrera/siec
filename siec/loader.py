@@ -100,10 +100,10 @@ def evaluate_directive(expr, lookup, chain=()) -> int:
     and cannot.
     """
     # deferred import: the ops table lives with the codegen evaluator
-    from siec.codegen.enums import BINARY_OPS
+    from siec.codegen.enums import BINARY_OPS, checked_result
 
     if isinstance(expr, IntLiteral):
-        return expr.value
+        return checked_result(expr.value)
 
     if isinstance(expr, BoolLiteral):
         return int(expr.value)
@@ -131,11 +131,17 @@ def evaluate_directive(expr, lookup, chain=()) -> int:
         if expr.op == "not":
             return int(not value)
 
-        return -value if expr.op == "-" else ~value
+        return checked_result(-value if expr.op == "-" else ~value)
 
     if isinstance(expr, BinaryOp) and expr.op in BINARY_OPS:
-        return BINARY_OPS[expr.op](evaluate_directive(expr.left, lookup, chain),
-                                   evaluate_directive(expr.right, lookup, chain))
+        left = evaluate_directive(expr.left, lookup, chain)
+        if expr.op == "and" and not left:
+            return 0
+        if expr.op == "or" and left:
+            return 1
+
+        return BINARY_OPS[expr.op](
+            left, evaluate_directive(expr.right, lookup, chain))
 
     raise TypeError("a condition guarding an '@include' evaluates before "
                     "the program assembles, so only literals, operators, "

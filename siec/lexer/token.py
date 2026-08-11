@@ -8,11 +8,24 @@ KEYWORDS = {"fn", "return", "let", "if", "else", "while", "for", "foreach",
             "try", "except", "move", "drop", "closure"}
 
 
-def int_value(text: str) -> int:
+MAX_INTEGER_DIGITS = 4096
+
+
+def int_value(text: str, line: int | None = None) -> int:
     """
     The value of an int token: hexadecimal with an '0x' prefix, decimal otherwise.
     """
-    return int(text, 16) if text[:2].lower() == "0x" else int(text)
+    digits = text[2:] if text[:2].lower() == "0x" else text
+    if len(digits) > MAX_INTEGER_DIGITS:
+        where = f"line {line}: " if line is not None else ""
+        raise SyntaxError(
+            f"{where}integer literal exceeds {MAX_INTEGER_DIGITS} digits")
+
+    try:
+        return int(text, 16) if text[:2].lower() == "0x" else int(text)
+    except ValueError:
+        where = f"line {line}: " if line is not None else ""
+        raise SyntaxError(f"{where}invalid integer literal") from None
 
 # simple one-character escapes; octal, hex, and universal forms are decoded by StringRule
 ESCAPES = {
