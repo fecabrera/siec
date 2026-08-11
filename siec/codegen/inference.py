@@ -60,6 +60,7 @@ from siec.codegen.types import (
 # operands, and arithmetic changes wholesale on floats
 ARITHMETIC = {"+": "add", "-": "sub", "*": "mul", "/": "sdiv", "%": "srem",
               "<<": "shl", ">>": "ashr", "&": "and_", "|": "or_", "^": "xor"}
+BITWISE = {"<<", ">>", "&", "|", "^"}
 UNSIGNED_ARITHMETIC = {"/": "udiv", "%": "urem", ">>": "lshr"}
 FLOAT_ARITHMETIC = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv", "%": "frem"}
 
@@ -594,7 +595,7 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
         # arithmetic, bitwise, and power widen to the larger operand type
         if expr.op in ARITHMETIC or expr.op == "**":
-            return arithmetic_type(gen, expr.left, expr.right, scope)
+            return arithmetic_type(gen, expr.left, expr.right, scope, expr.op)
 
     return None
 
@@ -717,7 +718,7 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
             return pointer
 
         # arithmetic widens to the larger operand type
-        return arithmetic_type(gen, expr.left, expr.right, scope)
+        return arithmetic_type(gen, expr.left, expr.right, scope, expr.op)
 
     # a ternary takes its arms' type, a declared arm winning over a literal
     if isinstance(expr, Ternary):
@@ -958,7 +959,7 @@ def adapts_in_arithmetic(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
 
 
 def arithmetic_type(gen: CodeGenerator, left: Expr, right: Expr,
-                    scope: dict) -> str | None:
+                    scope: dict, op: str | None = None) -> str | None:
     """
     The Sie type of an arithmetic or bitwise binary result: the wider of
     the operands' numeric types when they share a prefix.
@@ -983,6 +984,16 @@ def arithmetic_type(gen: CodeGenerator, left: Expr, right: Expr,
 
         if adapts_in_arithmetic(gen, right, scope) and left_name:
             return left_name
+
+        if op in BITWISE:
+            if right_class[1] >= left_class[1]:
+                return right_name
+            return left_name
+
+    if left_class is None and right_class is None:
+        for operand in (left, right):
+            if (inferred := infer_type(gen, operand, scope)) is not None:
+                return inferred
 
     return left_name or right_name
 

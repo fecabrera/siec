@@ -574,10 +574,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # the same type (even when both lower to the same LLVM type).
         left_name = strip_const(expand_alias(
             gen, expr_sie_type(gen, expr.left, scope)
-            or infer_type(gen, expr.left, scope)) or "")
+            or infer_type(gen, expr.left, scope), checked=False) or "")
         right_name = strip_const(expand_alias(
             gen, expr_sie_type(gen, expr.right, scope)
-            or infer_type(gen, expr.right, scope)) or "")
+            or infer_type(gen, expr.right, scope), checked=False) or "")
         # A bare function reference also lowers to a pointer and keeps its
         # established null/opaque comparison behavior.
         left_pointer = (left_name.endswith("*")

@@ -1199,13 +1199,14 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         expansion = macro_expansion(gen, call)
         with macro_view(gen, call.name):
             if isinstance(expansion, Block):
+                target = expected or block_emit_type(gen, expansion.body, scope)
                 check_block_expression(
                     gen,
                     BlockExpr(expansion.body),
                     scope,
-                    expected,
+                    target,
                 )
-                return expected
+                return expected or target
             return check_expression(gen, expansion, scope, expected)
 
     if call.name == "enumerate":
