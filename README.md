@@ -33,9 +33,9 @@ siec main.sie libfoo.a -o main
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
 - `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form, including executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
 - `-g` emits DWARF debug info, cc-style: every instruction maps to its source line, and every function, parameter, and variable is described with its type. A `-g` build debugs at source level in lldb or gdb: breakpoints by file and line, stepping, `bt` with Sie lines, and `frame variable` showing struct fields, arrays as their `{data, length}` pair, and unions. Debug at `-O0`, where nothing is reordered; on macOS, keep the `.o` the build leaves next to the executable, since the debugger reads the DWARF from it.
-- `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the process instead, its symbols resolvable the same way.
+- `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the isolated JIT worker instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
-- `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `@sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as the JIT runs in-process.
+- `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `@sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as its isolated JIT worker executes native code for the current machine.
 - `--emit-llvm` prints the LLVM IR and exits, without building.
 - `--emit-asm` prints the target's assembly and exits, without building.
 - `--run` JIT-compiles and runs the program in place of building it, exiting with the program's own exit code. Anything after the flag is passed along as its arguments:
@@ -164,33 +164,20 @@ building helloworld
 built examples/helloworld/build/helloworld
 ```
 
-The units compiled are the `.sie` files an `[app]` `sources` entry names: the file itself when it names one, and the files directly inside it when it names a directory. What sits deeper is reached through an [import](#imports) or an [`@include`](#include), so compiling it again on its own would be wrong. An app needs a `name`, which is what the binary is called, but no `version`: that only matters to something being installed. Pointing `build` at a `[library]` is an error: it is installed, not built.
-
-Each entry of `[dependencies]` is a package name and the versions of it that will do:
-
-```
-[dependencies]
-core = "*"
-libc = "~1"
-```
-
-`*` takes anything; `~1` takes any 1.x, and `~1.2` any 1.2.x, so a dependency keeps what its requirement wrote down; `^1.2.3` takes anything up to the next version that may break; `>=`, `>`, `<=`, `<` and `!=` compare as numbers; and a bare `1.2` is that version. Where several installed versions answer, the newest wins.
-
-Dependencies resolve against the install root, and so do theirs, the whole tree. Each one's `[library]` `sources` directories become the include path the compiler searches, and every `libs` entry in the tree becomes a library to link against, a dependent's ahead of what it depends on. The package being built comes first, so a module of its own is the one found.
-
-A package reached from two places is resolved once, against every requirement at once, so one build never holds two versions of it. Requirements that no installed version answers together stop the build, naming both the requirements and who asked:
+Pass `--run` to JIT-run the resolved package without writing a binary. As with
+`siec --run`, everything after the flag is passed to the program and the command
+returns the program's exit status:
 
 ```
-sie: no installed leaf answers '~1' by app, '~2' by mid@1.0.0; installed: 1.0.0, 2.0.0
+$ sie build examples/helloworld --run arg1 arg2
+running helloworld
+  core@1.0.0
+  libc@1.0.0
 ```
 
-Library _directories_ are not the manifest's business, since they belong to the machine rather than to the package: the linker reads them from `LIBRARY_PATH`, as it does for any C build.
+An app needs a `name` for the binary, but no `version`. Pointing `build` at a `[library]` is an error: it is installed, not built.
 
-```
-LIBRARY_PATH=$(brew --prefix)/lib sie build examples/helloworld
-```
-
-`-O` and `-g` mean what they do to the compiler and are passed through.
+`[dependencies]` names packages and which versions will do (`*`, `~1`, `^1.2.3`, comparisons, or a bare version). They resolve from the install root, newest first when several fit, and their sources and `libs` join the build. Library search directories come from `LIBRARY_PATH`, as for any C build. `-O` and `-g` pass through to the compiler.
 
 ## The language
 
@@ -214,11 +201,7 @@ import { f, g as h } from module.submodule;
 import module.submodule as sub;
 ```
 
-Every file is a module: `import a.b` loads `a/b.sie`, searched in the importing file's directory, then the working directory, then the include path. A file loads once no matter how often it is imported, so cycles are fine.
-
-A module exports its top-level declarations except `@static` and `@private` ones. Imports are not re-exported: if `b` imports `a`, `b.func` does not name `a`'s function. Types follow the same rules (`shapes.Box<i32>`, or `Box` after `import { Box } from shapes`), so two modules may share a short name without sharing an identity. An `import` cannot sit inside an `@if`.
-
-Under `-c`, an imported module's functions stay declarations in the caller and are defined in the module's own object; link the objects together. Generics, `@inline`, and imported `@static`s still instantiate per unit, like C.
+Every file is a module: `import a.b` loads `a/b.sie`. A file loads once no matter how often it is imported, so cycles are fine. A module exports its top-level declarations except `@static` and `@private` ones; imports are not re-exported.
 
 #### Include
 
@@ -248,7 +231,7 @@ v = <expr>;
 
 #### Assignment and ownership
 
-Initialization creates a new value and never invokes an assignment interface. Initializing from a named value that implements `Destroy` moves that value into the new binding; ordinary values retain their usual value-copy behavior. Plain assignment updates an existing value, selecting its operation from the right-hand expression's ownership:
+Initialization creates a new value and never invokes an assignment interface. Plain assignment updates an existing one, choosing its operation from how the right-hand side is owned:
 
 ```
 a = b;       // borrows b
@@ -256,9 +239,7 @@ a = move b;  // consumes b; using b afterward is an error
 a = make();  // consumes the unnamed temporary
 ```
 
-`move` takes an owned local variable as a whole. It cannot move a constant, reference, temporary, field, or indexed element, and a value moved on any continuing control-flow path cannot be read again until its variable is directly reinitialized. `a = move a` is rejected. A temporary needs no marker because no name remains through which to use it.
-
-Three builtin interfaces customize the operation:
+`move` takes an owned local as a whole. After a move, the variable cannot be read until it is reassigned. Three builtin interfaces customize the store:
 
 ```
 interface Clone {
@@ -274,19 +255,7 @@ interface Assign<T> {
 }
 ```
 
-For `a: A` and `b: B`, `a = b` calls `a.assign_from(b)` when `A` implements `AssignFrom<B>`. If `A` and `B` are the same type and there is no such implementation, `Clone` supplies the fallback: clone `b`, then store that new value into `a`. `a = move b` and assignments from temporaries call `a.assign(...)` when `A` implements `Assign<B>`. A temporary may fall back to `AssignFrom<B>`, borrowing its materialized value for the call; an explicit `move` never becomes a borrow. Assignment contracts admit the same implicit conversions as parameters, including numeric widening and concrete implementations of an interface-typed contract. Without a matching claim, assignment retains the ordinary built-in coercion and store.
-
-`AssignFrom` is the reusable-storage path: it preserves its source and may update the destination without allocating a replacement. `Assign` receives ownership and may take the source's resources directly. `Clone` constructs an independent value and is useful outside assignment as well:
-
-```
-struct Buffer: Clone, AssignFrom<Buffer>, Assign<Buffer> { ... }
-
-fn Buffer::clone(const &self) -> Buffer { ... }
-fn Buffer::assign_from(&self, source: const &Buffer) { ... }
-fn Buffer::assign(&self, source: Buffer) { ... }
-```
-
-Claims enforce those exact ownership signatures: `AssignFrom<T>` requires `const &T`, while `Assign<T>` requires `T`. Compound assignment's fallback result is a temporary and therefore follows the consuming assignment path. Trait-indexed assignment remains `set_item`; any replacement policy for the indexed value belongs inside that method.
+`a = b` calls `assign_from` when claimed, else clones when both sides share a type that implements `Clone`. `a = move b` and assignments from temporaries call `assign` when claimed. Without a matching claim, assignment keeps the ordinary store.
 
 #### Destruction and RAII
 
@@ -298,9 +267,7 @@ interface Destroy {
 }
 ```
 
-The receiver is mutable; a `const &self` method does not count. Conformance is nominal: the type must claim `Destroy`, not merely define a method named `destroy`.
-
-An initialized local or by-value parameter that implements `Destroy` is destroyed when it leaves scope (`return`, `break`, `continue`, `emit` included), sharing the scope's `defer` stack in reverse order:
+An initialized local or by-value parameter that implements `Destroy` is destroyed when it leaves scope, sharing the scope's `defer` stack in reverse order:
 
 ```
 let first = Resource();
@@ -309,23 +276,7 @@ let second = Resource();
 // second.destroy(), log(), first.destroy()
 ```
 
-Moving, returning, or passing the value by ownership transfers that cleanup; reading it afterward is an error. Fields and indexed elements cannot be moved on their own. `const T` is a non-owning view: const by-value parameters borrow rather than take ownership. Temporaries are destroyed at the end of the call or expression that uses them. Borrowed assignment of a destructible value needs `AssignFrom<T>` or `Clone`; a raw copy is rejected.
-
-`destroy` is responsible for the whole value, including owned fields; the compiler does not destroy fields for you. Tagged unions destroy only the active member, typically with `drop`:
-
-```
-fn TOMLObject::destroy(&self) {
-    case (self.type) {
-    when TOMLObjectType::String:
-        drop self.str;
-    when TOMLObjectType::Array:
-        drop self.arr;
-    }
-}
-```
-
-`drop place;` and `value.destroy()` do the same for a mutable place or whole local and disarm automatic cleanup, so a `defer value.destroy()` stays exactly-once once the type implements `Destroy`.
-
+Moving, returning, or passing the value by ownership transfers that cleanup. `destroy` is responsible for the whole value, including owned fields; the compiler does not destroy fields for you. `drop place;` and `value.destroy()` do the same for a mutable place and disarm automatic cleanup.
 #### Raw storage slots
 
 `Slot<T>` has `T`'s size and alignment but no automatic lifetime: you mark each transition yourself. It does not implement `Destroy`.
@@ -398,22 +349,14 @@ They behave like any other `@const` (usable in constant expressions, case arms, 
 
 ### Macros
 
-Macros are compile-time substitutions declared through `@macro`, similar to a type-checked version of C's `#define`. One without a parameter list is object-like and expands wherever its bare name appears; one with a list expands at each call, the argument expressions standing in for the parameters:
+Macros are compile-time substitutions declared through `@macro`. One without a parameter list expands wherever its bare name appears; one with a list expands at each call:
 
 ```
 @macro name = <expr>;                 // a bare `name` expands
 @macro name(param1, param2) = <expr>; // `name(a, b)` expands
 ```
 
-This is enough for C's `errno`, an expression reading a per-thread location at every use:
-
-```
-@macro errno = *errno_location();
-
-let e = errno; // reads through the call
-```
-
-Either kind may hold a [block](#blocks) instead of an expression, producing the use's value through `emit`. Without one the macro yields no value and stands only as a statement, its block spliced in place:
+Either kind may hold a [block](#blocks) instead, producing the use's value through `emit`:
 
 ```
 @macro name(param1, param2) {
@@ -422,7 +365,7 @@ Either kind may hold a [block](#blocks) instead of an expression, producing the 
 }
 ```
 
-Substitution passes expressions, not values, the way C's does: an argument named twice in the body evaluates twice, and a parameter the body assigns to writes through the caller's argument, which must then be assignable (a variable, member, or element):
+Substitution passes expressions, not values: an argument named twice evaluates twice, and assigning to a parameter writes through the caller's argument:
 
 ```
 @macro swap(a, b) {
@@ -434,10 +377,7 @@ Substitution passes expressions, not values, the way C's does: an argument named
 swap(p.x, p.y); // writes through the members
 ```
 
-A macro whose expansion is an assignable place takes assignments the same way: `errno = EINVAL;` stores through `*errno_location()`, compound operators and the place's members or elements included. One whose expansion is no lvalue is rejected.
-
-Unlike C's, the expansion is checked: a value macro's type follows from what it emits (each `emit` coercing to a typed context's target), a call must pass an argument per parameter, a macro expanding into itself is an error, and the block's locals stay scoped to the expansion. The names a macro's body uses resolve where the macro was written, so an imported `errno` reaches its module's private `errno_location`; the argument expressions are spliced in as written, so they should hold to the caller's own scope.
-
+The expansion is type-checked. Names in the body resolve where the macro was written; argument expressions resolve at the call.
 ### Conditional compilation
 
 `@if` compiles a group of top-level declarations only when a compile-time condition holds, with an optional `@else`:
@@ -687,7 +627,7 @@ Both arms must produce the same type; literal arms adapt to the context like any
 
 ### Loops
 
-Repetition is expressed through the `while` keyword, followed by a parenthesized expression and a block. The body runs while the expression is truthy, checked before each iteration:
+`while` runs a body while its condition is truthy:
 
 ```
 while (<expr>) {
@@ -695,24 +635,7 @@ while (<expr>) {
 }
 ```
 
-Like an if arm, the body is its own scope, a fresh one on each iteration, so a variable declared inside the body doesn't carry over to the next pass:
-
-```
-let i: i32 = 0;
-
-while (i < 10) {
-    let doubled: i32 = i * 2; // born and gone each iteration
-    i += 1;
-}
-```
-
-A single-statement body may drop the braces, keeping its own scope:
-
-```
-while (i > 0) i -= 1;
-```
-
-The `for` keyword drives a loop through three parts: an init statement run once, a condition checked before each pass, and a step statement run after each:
+`for` drives a loop through an init, a condition, and a step:
 
 ```
 for (let i: i32 = 0; i < n; i += 1) {
@@ -720,35 +643,20 @@ for (let i: i32 = 0; i < n; i += 1) {
 }
 ```
 
-The whole loop is its own scope (the init's variable lives exactly as long as the loop), and the body behaves like a while's, fresh on each iteration.
-
-A single-statement body may drop the braces here too:
-
-```
-for (let i: i32 = 0; i < n; i += 1) total += i;
-```
-
-Unlike other languages, there are no increment or decrement operators (`i++`, `i--`); this is intentional, and a step is written `i += 1`.
+Either loop's body may drop the braces when it is a single statement.
 
 #### Foreach
 
-`foreach (v : iterable)` walks a collection's elements through [the iteration interfaces](#the-iteration-interfaces): the iterable hands out its iterator (`iterator()` for a mutable value, `const_iterator()` for a `const` one, or itself when it already is one), and each pass binds `v` to the element `next()` references.
+`foreach (v : iterable)` walks a collection's elements. `v` is a [reference](#references) into the collection, so assigning it writes the element in place:
 
 ```
 foreach (v : nums) {
     total += v;
+    v = v * 2;
 }
 ```
 
-`v` is a true [reference](#references) into the collection, not a copy, exactly like a reference parameter: assigning it writes the element in place, and calling a mutating method on it mutates the collection's own.
-
-```
-foreach (v : nums) {
-    v = v * 2;    // doubles the array's elements themselves
-}
-```
-
-Anything `Iterable<T>` works - [arrays come iterable](#the-iteration-interfaces) - and `break`/`continue` steer the loop like any other. Iterating a bare iterator value walks a copy of its state, from wherever it stands. A `const` value iterates through its `const_iterator()`: its elements read as `const &T`, so the contract follows them and writing one is an error.
+Anything `Iterable<T>` works ([arrays included](#the-iteration-interfaces)). `break` and `continue` steer the loop like any other.
 
 #### Enumerate
 
@@ -965,7 +873,7 @@ Any of these forms may also return `i32` explicitly, in which case the returned 
 
 #### Const parameters
 
-A parameter can be marked `const` by prefixing its type, through `const T` instead of `T`. This is unrelated to `@const` constant expressions: here it's a contract between caller and callee rather than a compile-time substitution. `a: T` and `a: const T` are represented identically; the latter is simply the callee's promise not to mutate `a`. A `const` parameter cannot be reassigned, and no mutating method can be called on it.
+A parameter marked `const` is a promise not to mutate it. `a: T` and `a: const T` are represented identically; the latter simply cannot be reassigned or mutated through:
 
 ```
 fn f(a: const A) {
@@ -973,23 +881,11 @@ fn f(a: const A) {
 }
 ```
 
-Since `const` is not part of the type, a `T` passes directly where a `const T` is expected. The reverse never happens: a `const` pointer or array is never used where a mutable one is expected, not implicitly and not through a cast. The contract follows the value, through pointer fields read from a `const` struct, through indexing, and through inferred `let`s:
-
-```
-fn f(s: const char*) {
-    let t = s;         // t is const char* too
-    take(s);           // error: take wants a mutable char*
-    take(s as char*);  // error: const cannot be cast away
-}
-```
-
-Copies of non-aliasing values discard the contract naturally: a `const i32` argument is just a value, and copies of it are the caller's own. `const` also works anywhere a type is written: on `let` declarations, struct fields, and return types.
-
-This is also how a method's receiver declares whether it mutates the struct: a mutating method takes `self: &S`, while one that only reads from it takes `self: const &S`.
+A `T` passes where a `const T` is expected; a `const` pointer or array never passes where a mutable one is. Methods use the same spelling on their receiver: `self: &S` mutates, `self: const &S` only reads.
 
 #### Default arguments
 
-A parameter can declare a default value with `= expr`, letting calls omit its argument:
+A parameter can declare a default with `= expr`, so a call may omit it:
 
 ```
 fn greet(name: const char*, times: i32 = 1) {
@@ -1000,17 +896,7 @@ greet("sie");       // times is 1
 greet("sie", 3);
 ```
 
-Only the last parameters can carry defaults: they fill a call's omitted trailing arguments, so a parameter after a defaulted one needs a default too.
-
-The default is any expression, evaluated at each call as if written there, but resolved in the declaring file: it can reference that file's constants, globals, and functions without the caller importing them. [Methods](#methods) take defaults the same way, from either call form, and a [constructor](#constructors) fills `init`'s:
-
-```
-fn List<T>::init(self: &List<T>, capacity: u64 = DEFAULT_CAPACITY) { ... }
-
-let l = List<i32>();    // capacity is DEFAULT_CAPACITY
-```
-
-A call through a [function reference](#function-references) passes every argument: the reference's `fn(...)` type carries no defaults.
+Only trailing parameters may carry defaults. The expression is evaluated at each call, resolved where it was declared. Methods and [constructors](#constructors) take defaults the same way.
 
 #### Overloading
 
