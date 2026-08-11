@@ -1244,6 +1244,98 @@ fn main() -> i32 {
     assert names["return"].kind == "keyword"
 
 
+def test_complete_lists_struct_fields_inside_an_aggregate(tmp_path):
+    """Named aggregate literals complete the expected struct's fields."""
+    analysis, _ = unit(tmp_path, """\
+struct Point { x: i32; y: i32; }
+
+fn main() -> i32 {
+    let point: Point = { x = 1, y = 2 };
+    return point.x;
+}
+""")
+    edited = """\
+struct Point { x: i32; y: i32; }
+
+fn main() -> i32 {
+    let point: Point = {
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 3, 24)}
+    assert set(items) == {"x", "y"}
+    assert items["x"].kind == "field"
+    assert items["x"].detail == "x: i32"
+    assert items["y"].detail == "y: i32"
+
+    after_field = """\
+struct Point { x: i32; y: i32; }
+
+fn main() -> i32 {
+    let point: Point = { x = 1, 
+    return 0;
+}
+"""
+    remaining = complete(analysis, after_field, 3, len("    let point: Point = { x = 1, "))
+    assert [item.label for item in remaining] == ["y"]
+
+    filtered = complete(
+        analysis,
+        after_field.replace("{ x = 1, ", "{ x = 1, y"),
+        3,
+        len("    let point: Point = { x = 1, y"),
+    )
+    assert [item.label for item in filtered] == ["y"]
+
+
+def test_complete_lists_fields_for_an_assigned_aggregate(tmp_path):
+    """Assignment aggregates resolve the target's type for field names."""
+    analysis, _ = unit(tmp_path, """\
+struct Header { size: u64; free: bool; }
+
+fn main() -> i32 {
+    let header: Header = { size = 0, free = false };
+    return 0;
+}
+""")
+    edited = """\
+struct Header { size: u64; free: bool; }
+
+fn main() -> i32 {
+    let header: Header = { size = 0, free = false };
+    header = {
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(analysis, edited, 4, 14)}
+    assert set(items) == {"size", "free"}
+    assert items["size"].detail == "size: u64"
+
+    through_ptr = """\
+struct Header { size: u64; free: bool; }
+
+fn init(header: Header*) {
+    *header = {
+}
+fn main() -> i32 { return 0; }
+"""
+    analysis, _ = unit(tmp_path, """\
+struct Header { size: u64; free: bool; }
+
+fn init(header: Header*) {
+    *header = { size = 0, free = false };
+}
+fn main() -> i32 { return 0; }
+""")
+    items = {
+        item.label: item
+        for item in complete(analysis, through_ptr, 3, len("    *header = {"))
+    }
+    assert set(items) == {"size", "free"}
+
+
 def test_complete_lists_value_fields_and_methods(tmp_path):
     """A typed value's dot completion includes its fields and methods."""
     analysis, _ = unit(tmp_path, """\

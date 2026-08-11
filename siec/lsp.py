@@ -932,6 +932,8 @@ def complete(analysis: Analysis, text: str, line: int,
     A trailing ``p->`` offers that pointer's pointee fields and methods,
     matching the parser's ``(*p).field`` desugaring.
     A trailing ``Type::`` offers that type's enum members or methods.
+    Inside a named aggregate ``{ field = ... }``, offers the expected
+    struct's remaining fields.
     Everywhere else, locals, names visible to this file, imported module
     bindings, compiler builtins, and language keywords are offered.
     """
@@ -975,6 +977,10 @@ def complete(analysis: Analysis, text: str, line: int,
             if name.isidentifier() and name.startswith(partial)
             and name not in selected
         ]
+
+    aggregate = complete_aggregate_fields(analysis, sites, text, line, col)
+    if aggregate is not None:
+        return aggregate
 
     if scoped is not None:
         return complete_scoped_members(
@@ -1096,6 +1102,216 @@ def member_import_context(text: str, line: int,
                 partial_match.group(1) or "", selected)
 
     return None
+
+
+def source_offset(text: str, line: int, col: int) -> int | None:
+    """Byte offset of a 0-based line/column in ``text``, or None if OOB."""
+    lines = text.splitlines(keepends=True)
+    if line < 0 or line >= len(lines):
+        return None
+
+    return (sum(len(source_line) for source_line in lines[:line])
+            + min(col, len(lines[line].rstrip("\r\n"))))
+
+
+def split_top_level(text: str, sep: str = ",") -> list[str]:
+    """Split ``text`` on ``sep`` ignoring separators inside (), [], {}."""
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    for index, char in enumerate(text):
+        if char in "{[(":
+            depth += 1
+        elif char in "}])":
+            depth = max(depth - 1, 0)
+        elif char == sep and depth == 0:
+            parts.append(text[start:index])
+            start = index + 1
+    parts.append(text[start:])
+    return parts
+
+
+def enclosing_brace(text: str, offset: int) -> int | None:
+    """Index of the `{` that opens the brace group containing ``offset``."""
+    depth = 0
+    index = offset - 1
+    while index >= 0:
+        char = text[index]
+        if char == "}":
+            depth += 1
+        elif char == "{":
+            if depth == 0:
+                return index
+            depth -= 1
+        index -= 1
+    return None
+
+
+def aggregate_literal_context(text: str, line: int,
+                              col: int) -> tuple[int, str, frozenset] | None:
+    """
+    Return ``(brace_offset, partial, selected)`` when the cursor is naming
+    a field inside a named aggregate literal ``{ field = ... }``.
+
+    Positional aggregates, blocks, and import lists are ignored.  A cursor
+    already past ``=`` (typing a field's value) yields None.
+    """
+    if member_import_context(text, line, col) is not None:
+        return None
+
+    offset = source_offset(text, line, col)
+    if offset is None:
+        return None
+
+    brace = enclosing_brace(text, offset)
+    if brace is None:
+        return None
+
+    # 'import {' is handled elsewhere; a block body has statements
+    leader = text[:brace].rstrip()
+    if re.search(r"\bimport\s*$", leader):
+        return None
+
+    inside = text[brace + 1:offset]
+    depth = 0
+    for char in inside:
+        if char in "{[(":
+            depth += 1
+        elif char in "}])":
+            depth = max(depth - 1, 0)
+        elif char == ";" and depth == 0:
+            return None
+
+    parts = split_top_level(inside)
+    current = parts[-1]
+    if re.search(r"(?<![<>])=(?![>=])", current):
+        return None
+
+    partial_match = re.fullmatch(
+        r"\s*([A-Za-z_][A-Za-z0-9_]*)?\s*", current)
+    if partial_match is None:
+        return None
+
+    selected: set[str] = set()
+    for part in parts[:-1]:
+        named = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", part)
+        if named is None:
+            if part.strip():
+                return None
+            continue
+        selected.add(named.group(1))
+
+    return brace, partial_match.group(1) or "", frozenset(selected)
+
+
+def aggregate_expected_type(analysis: Analysis, text: str, brace: int,
+                            line: int, col: int) -> str | None:
+    """
+    The struct/array type an aggregate literal at ``brace`` is filling,
+    from a nearby ``let`` annotation, assignment, ``return``, or nested
+    ``field = {``.
+    """
+    from siec.codegen.aliases import expand_alias
+    from siec.codegen.inference import type_info
+    from siec.parser.expressions import parse_expression
+    from siec.parser.stream import TokenStream
+
+    gen = analysis.gen
+    prefix = text[:brace].rstrip()
+
+    annotated = re.search(
+        r":\s*(?:const\s+)?"
+        r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
+        r"(?:<[^;{}]*>)?)\s*=\s*$",
+        prefix)
+    if annotated is not None:
+        return strip_const(expand_alias(gen, annotated.group(1)))
+
+    if re.search(r"\breturn\s*$", prefix):
+        fn = enclosing_function(analysis.program, analysis.path, line + 1, col)
+        if fn is not None and fn.return_type is not None:
+            return strip_const(expand_alias(gen, fn.return_type))
+        return None
+
+    # 'field = {' nested inside another aggregate, not 'lhs = {'
+    nested = re.search(
+        r"[{,]\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*$", prefix)
+    parent = enclosing_brace(text, brace) if nested is not None else None
+    if nested is not None and parent is not None:
+        parent_type = aggregate_expected_type(
+            analysis, text, parent, line, col)
+        if parent_type is not None:
+            info = type_info(gen, parent_type)
+            if info is not None and info.fields:
+                field = next((f for f in info.fields
+                              if f.name == nested.group(1)), None)
+                if field is not None:
+                    return strip_const(expand_alias(gen, field.type))
+
+    assigned = re.search(
+        r"((?:\*\s*)?(?:self|[A-Za-z_][A-Za-z0-9_]*)"
+        r"(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*=\s*$",
+        prefix)
+    if assigned is not None:
+        fn = enclosing_function(analysis.program, analysis.path, line + 1, col)
+        scope = (local_scope(gen, fn, line + 1, col)[0]
+                 if fn is not None else {})
+        try:
+            expr = parse_expression(TokenStream(lex(assigned.group(1))))
+            return strip_const(expand_alias(
+                gen, hover_expr_type(gen, expr, scope) or "")) or None
+        except (TypeError, NameError, SyntaxError, KeyError, IndexError,
+                RuntimeError):
+            return None
+
+    return None
+
+
+def complete_aggregate_fields(analysis: Analysis, sites: dict, text: str,
+                              line: int, col: int) -> list[Completion] | None:
+    """
+    Field names for a named aggregate literal, or None when the cursor is
+    not naming one.
+    """
+    from siec.codegen.generics import split_generic
+    from siec.codegen.inference import type_info
+
+    context = aggregate_literal_context(text, line, col)
+    if context is None:
+        return None
+
+    brace, partial, selected = context
+    type_name = aggregate_expected_type(analysis, text, brace, line, col)
+    if not type_name:
+        return []
+
+    gen = analysis.gen
+    fn = enclosing_function(analysis.program, analysis.path, line + 1, col)
+    previous = gen.checking_function
+    gen.checking_function = fn
+    try:
+        info = type_info(gen, type_name)
+        if info is None and (parts := split_generic(type_name)) is not None:
+            info = gen.generic_structs.get(parts[0])
+        if info is None or not info.fields:
+            return []
+
+        candidates: dict[str, Completion] = {}
+        for field_ in info.fields:
+            name = field_.name
+            if (not name.isidentifier() or name.startswith("#")
+                    or name in selected or not name.startswith(partial)):
+                continue
+            if field_.is_private and not gen.can_access_private_field(type_name):
+                continue
+            finding = field_finding(analysis, sites, type_name, name)
+            detail = finding.text if finding is not None else \
+                f"{name}: {field_.type}"
+            candidates[name] = Completion(name, "field", detail)
+    finally:
+        gen.checking_function = previous
+
+    return [candidates[name] for name in sorted(candidates)]
 
 
 def complete_scoped_members(analysis: Analysis, sites: dict, base: str,
@@ -1911,7 +2127,10 @@ def create_server():
         trigger = context.trigger_character if context is not None else None
         if trigger in ("{", ",") and member_import_context(
                 doc.source, params.position.line,
-                params.position.character) is None:
+                params.position.character) is None \
+                and aggregate_literal_context(
+                    doc.source, params.position.line,
+                    params.position.character) is None:
             return []
 
         items = complete(analysis, doc.source, params.position.line,
