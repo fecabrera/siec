@@ -220,6 +220,21 @@ def test_mixed_signedness_comparison_is_rejected(env):
                         None, signed_and_unsigned(builder))
 
 
+def test_bool_compared_to_pointer_is_rejected(env):
+    """
+    Chained 'a <= b < c' becomes '(a <= b) < c'; reject the bool/pointer mix.
+    """
+    gen, builder = env
+    scope = {
+        "flag": Variable(builder.alloca(ir.IntType(1), name="flag"), "bool"),
+        "p": Variable(
+            builder.alloca(ir.PointerType(ir.IntType(8)), name="p"), "opaque*"),
+    }
+    with pytest.raises(TypeError, match="cannot apply '<'"):
+        emit_expression(
+            gen, builder, BinaryOp("<", Var("flag"), Var("p")), None, scope)
+
+
 def test_mixed_signedness_arithmetic_is_rejected(env):
     """
     Arithmetic between a signed value and an unsigned one raises a TypeError.

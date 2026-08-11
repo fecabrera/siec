@@ -579,12 +579,25 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         left, right = match_widths(gen, builder, expr, left, right, unsigned, scope)
 
         if is_float(left.type):
+            if not is_float(right.type):
+                raise TypeError(
+                    f"cannot apply {expr.op!r} to "
+                    f"{expr_sie_type(gen, expr.left, scope) or left.type} and "
+                    f"{expr_sie_type(gen, expr.right, scope) or right.type}")
             return builder.fcmp_ordered(expr.op, left, right)
 
         # only scalars and pointers compare; structs and arrays do not
         if not isinstance(left.type, (ir.IntType, ir.PointerType)):
             raise TypeError(f"cannot apply {expr.op!r} to a value of type "
                             f"{expr_sie_type(gen, expr.left, scope) or left.type}")
+
+        # chained 'a <= b < c' is '((a <= b) < c)'; reject the bool/pointer mix
+        # instead of emitting invalid icmp IR
+        if left.type != right.type:
+            raise TypeError(
+                f"cannot apply {expr.op!r} to "
+                f"{expr_sie_type(gen, expr.left, scope) or left.type} and "
+                f"{expr_sie_type(gen, expr.right, scope) or right.type}")
 
         compare = builder.icmp_unsigned if unsigned else builder.icmp_signed
         return compare(expr.op, left, right)
