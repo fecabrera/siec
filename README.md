@@ -871,6 +871,12 @@ fn main(args: char*[]) {
 
 Any of these forms may also return `i32` explicitly, in which case the returned value becomes the program's exit code instead of `0`.
 
+Entry-point types may use aliases and may carry an outer `const`; they are
+checked after aliases resolve, including aliases imported from another module.
+The entry must remain one public external definition, so `main` cannot be
+`@extern`, `@inline`, `@static`, `@private`, `@override`, `@remove`, or
+`@symbol`. A matching forward declaration may still precede its definition.
+
 #### Const parameters
 
 A parameter marked `const` is a promise not to mutate it. `a: T` and `a: const T` are represented identically; the latter simply cannot be reassigned or mutated through:

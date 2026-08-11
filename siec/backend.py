@@ -374,8 +374,29 @@ def add_archive(engine, path: str) -> None:
             raise _object_error(label, str(error)) from None
 
 
-def _run_jit_in_process(llvm_ir: str, argv: list[str], objects: list[str],
-                        libs: list[str], lib_dirs: list[str], opt: int) -> int:
+def _jit_entry_abi(module: ir.Module) -> str:
+    """Return the validated native shape of the module's defined entry point."""
+    entry = module.globals.get("main")
+    if not isinstance(entry, ir.Function) or not entry.blocks:
+        raise NameError("program has no 'main' function definition")
+
+    function_type = entry.function_type
+    i32 = ir.IntType(32)
+    char_pointer_pointer = ir.PointerType(ir.PointerType(ir.IntType(8)))
+    params = tuple(function_type.args)
+
+    if (function_type.return_type != i32 or function_type.var_arg):
+        raise TypeError("JIT entry 'main' has an invalid ABI")
+    if params == ():
+        return "none"
+    if params == (i32, char_pointer_pointer):
+        return "args"
+    raise TypeError("JIT entry 'main' has an invalid ABI")
+
+
+def _run_jit_in_process(llvm_ir: str, entry_abi: str, argv: list[str],
+                        objects: list[str], libs: list[str],
+                        lib_dirs: list[str], opt: int) -> int:
     """The isolated worker's LLVM and native-code execution path."""
     target_machine = _target_machine(opt=opt, jit=True)
     llvm_module = binding.parse_assembly(llvm_ir)
@@ -401,23 +422,30 @@ def _run_jit_in_process(llvm_ir: str, argv: list[str], objects: list[str],
         if not address:
             raise NameError("program has no 'main' function")
 
-        c_argv = (ctypes.c_char_p * (len(argv) + 1))(
-            *[a.encode() for a in argv], None)
-        c_main = ctypes.CFUNCTYPE(ctypes.c_int32, ctypes.c_int32,
-                                  ctypes.POINTER(ctypes.c_char_p))(address)
-
-        code = c_main(len(argv), c_argv)
+        if entry_abi == "none":
+            c_main = ctypes.CFUNCTYPE(ctypes.c_int32)(address)
+            code = c_main()
+        elif entry_abi == "args":
+            c_argv = (ctypes.c_char_p * (len(argv) + 1))(
+                *[a.encode() for a in argv], None)
+            c_main = ctypes.CFUNCTYPE(
+                ctypes.c_int32, ctypes.c_int32,
+                ctypes.POINTER(ctypes.c_char_p))(address)
+            code = c_main(len(argv), c_argv)
+        else:
+            raise TypeError("JIT entry 'main' has an invalid ABI descriptor")
         engine.run_static_destructors()
         ctypes.CDLL(None).fflush(None)
         return code
 
 
-def _jit_worker(connection, llvm_ir: str, argv: list[str], objects: list[str],
-                libs: list[str], lib_dirs: list[str], opt: int) -> None:
+def _jit_worker(connection, llvm_ir: str, entry_abi: str, argv: list[str],
+                objects: list[str], libs: list[str], lib_dirs: list[str],
+                opt: int) -> None:
     """Run one JIT request and return only structured status to the parent."""
     try:
         code = _run_jit_in_process(
-            llvm_ir, argv, objects, libs, lib_dirs, opt)
+            llvm_ir, entry_abi, argv, objects, libs, lib_dirs, opt)
         connection.send(("ok", code))
     except Exception as error:
         if isinstance(error, ObjectFormatError):
@@ -443,6 +471,8 @@ def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
     A malformed native input or generated-code fault can terminate the worker,
     but cannot corrupt or crash the compiler host.
     """
+    entry_abi = _jit_entry_abi(module)
+
     # 'fork' avoids re-importing an embedding application's __main__ on POSIX;
     # Windows has no fork and uses a fully serializable spawn request instead.
     method = "spawn" if sys.platform == "win32" else "fork"
@@ -450,8 +480,8 @@ def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
     receive, send = context.Pipe(duplex=False)
     process = context.Process(
         target=_jit_worker,
-        args=(send, str(module), list(argv), list(objects), list(libs),
-              list(lib_dirs), opt),
+        args=(send, str(module), entry_abi, list(argv), list(objects),
+              list(libs), list(lib_dirs), opt),
     )
 
     started = False

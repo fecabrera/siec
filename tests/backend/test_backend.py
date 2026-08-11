@@ -9,6 +9,7 @@ import signal
 import sys
 
 import pytest
+from llvmlite import ir
 
 from siec.backend import TargetError, compile_to_object, emit_llvm, link
 
@@ -60,3 +61,44 @@ def test_jit_worker_contains_an_abrupt_native_termination(
     monkeypatch.setattr(backend, "_run_jit_in_process", terminate)
     with pytest.raises(OSError, match="JIT worker terminated by"):
         backend.run_jit(compile_source(SOURCE), ["test.sie"])
+
+
+def test_jit_rejects_a_missing_or_declaration_only_entry():
+    """Native objects cannot silently supply an entry without a Sie descriptor."""
+    import siec.backend as backend
+
+    missing = ir.Module(name="missing")
+    with pytest.raises(NameError, match="no 'main' function definition"):
+        backend.run_jit(missing, ["test.sie"])
+
+    declaration = ir.Module(name="declaration")
+    ir.Function(declaration, ir.FunctionType(ir.IntType(32), []), name="main")
+    with pytest.raises(NameError, match="no 'main' function definition"):
+        backend.run_jit(declaration, ["test.sie"])
+
+
+@pytest.mark.parametrize("function_type", [
+    ir.FunctionType(ir.DoubleType(), []),
+    ir.FunctionType(ir.IntType(32), [ir.DoubleType()]),
+    ir.FunctionType(ir.IntType(32), [], var_arg=True),
+])
+def test_jit_rejects_an_invalid_entry_abi(function_type):
+    """The backend independently refuses an incompatible generated entry."""
+    import siec.backend as backend
+
+    module = ir.Module(name="invalid")
+    entry = ir.Function(module, function_type, name="main")
+    ir.IRBuilder(entry.append_basic_block("entry")).unreachable()
+
+    with pytest.raises(TypeError, match="invalid ABI"):
+        backend.run_jit(module, ["test.sie"])
+
+
+def test_jit_describes_both_valid_native_entry_shapes(compile_source):
+    """Zero-argument main is invoked differently from argc/argv main."""
+    import siec.backend as backend
+
+    assert backend._jit_entry_abi(compile_source(SOURCE)) == "none"
+    assert backend._jit_entry_abi(compile_source("""
+        fn main(argc: i32, argv: char**) -> i32 { return argc; }
+    """)) == "args"

@@ -60,6 +60,41 @@ def main_takes_args(fn: Function) -> bool:
             and strip_const(fn.params[0].type) == "char*[]")
 
 
+def validate_main(fn: Function) -> None:
+    """Validate the source-level entry point before lowering its native ABI."""
+    if fn.name != "main":
+        return
+
+    if fn.is_extern:
+        raise TypeError("'main' cannot be '@extern': the program must define "
+                        "its entry point")
+    if fn.is_inline:
+        raise TypeError("'main' cannot be '@inline': the C runtime must call "
+                        "its external definition")
+    if fn.is_private:
+        raise TypeError("'main' cannot be '@private': the program entry point "
+                        "must be public")
+    if fn.is_override:
+        raise TypeError("'main' cannot be '@override': the program has one "
+                        "fixed entry point")
+    if fn.removed is not None:
+        raise TypeError("'main' cannot be '@remove': the program must define "
+                        "its entry point")
+
+    valid_return = (fn.return_type is None
+                    or strip_const(fn.return_type) == "i32")
+    params = tuple(strip_const(param.type) for param in fn.params)
+    valid_params = params in ((), ("i32", "char**"), ("char*[]",))
+    has_defaults = any(param.default is not None for param in fn.params)
+
+    if (not valid_return or not valid_params or fn.var_arg or fn.variadic
+            or has_defaults):
+        raise TypeError(
+            "'main' must have one of these signatures: fn main(), "
+            "fn main(i32, char**), or fn main(char*[]), optionally "
+            "returning i32")
+
+
 def join_canonical_receiver(gen: CodeGenerator, fn) -> None:
     """
     A method declared through an alias ('String::init' for a 'List<char>'
@@ -128,6 +163,8 @@ def resolve_function_body(gen: CodeGenerator, fn: Function) -> str:
             gen.statics[key] = f"{fn.name}.static.{len(gen.statics)}"
 
         symbol = gen.statics[key]
+
+    validate_main(fn)
 
     # one name cannot be both a function and a global, whatever symbol
     # the function's signature mangles to below

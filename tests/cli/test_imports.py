@@ -41,6 +41,28 @@ def test_qualified_access(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_main_abi_types_resolve_across_imports(tmp_path, monkeypatch):
+    """Imported aliases canonicalize before the root entry ABI is validated."""
+    (tmp_path / "types.sie").write_text("""
+        @type ExitCode = i32;
+        @type Arguments = char*[];
+
+        struct Utility { value: i32; }
+        fn Utility::main(value: f64) -> f64 { return value; }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { ExitCode, Arguments } from types;
+
+        fn main(args: Arguments) -> ExitCode {
+            return args.length as ExitCode;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run", "argument") == 2
+
+
 def test_qualified_macro_access(tmp_path, monkeypatch):
     """Module qualification reaches both function-like and object macros."""
     (tmp_path / "macros.sie").write_text("""
