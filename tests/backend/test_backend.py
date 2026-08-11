@@ -1,8 +1,12 @@
-"""Tests for siec.backend: native object emission and linking.
+"""Tests for siec.backend: native object emission, linking, and JIT isolation.
 
 Feature behavior is covered by the per-feature files in this directory; these
 tests exercise the backend mechanism itself.
 """
+
+import os
+import signal
+import sys
 
 import pytest
 
@@ -42,3 +46,17 @@ def test_link_produces_a_runnable_executable(run):
     Linking yields an executable that returns the program's exit code.
     """
     assert run(SOURCE).returncode == 7
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="uses the POSIX fork worker")
+def test_jit_worker_contains_an_abrupt_native_termination(
+        monkeypatch, compile_source):
+    """A signal that kills native execution cannot terminate the compiler."""
+    import siec.backend as backend
+
+    def terminate(*args):
+        os.kill(os.getpid(), signal.SIGKILL)
+
+    monkeypatch.setattr(backend, "_run_jit_in_process", terminate)
+    with pytest.raises(OSError, match="JIT worker terminated by"):
+        backend.run_jit(compile_source(SOURCE), ["test.sie"])

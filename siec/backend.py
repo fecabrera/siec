@@ -2,6 +2,8 @@
 
 import ctypes
 import ctypes.util
+import multiprocessing
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +13,10 @@ from llvmlite import binding, ir
 
 class TargetError(Exception):
     """An LLVM target triple that the compiler cannot use."""
+
+
+class ObjectFormatError(OSError):
+    """An object file or archive that is unsafe to hand to LLVM."""
 
 
 def _target_machine(target: str | None = None, opt: int = 0,
@@ -51,6 +57,19 @@ def validate_target(target: str | None) -> None:
         _target_machine(target)
 
 
+def _optimize_module(machine, llvm_module, opt: int) -> None:
+    """Apply the compiler's optimization policy to one verified LLVM module."""
+    options = binding.create_pipeline_tuning_options(speed_level=opt)
+    pass_builder = binding.create_pass_builder(machine, options)
+
+    if opt > 0:
+        pass_builder.getModulePassManager().run(llvm_module, pass_builder)
+    else:
+        manager = binding.ModulePassManager()
+        manager.add_always_inliner_pass()
+        manager.run(llvm_module, pass_builder)
+
+
 def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None,
                    jit: bool = False) -> tuple:
     """
@@ -72,18 +91,9 @@ def prepare_module(module: ir.Module, opt: int = 0, target: str | None = None,
     llvm_module = binding.parse_assembly(str(module))
     llvm_module.verify()
 
-    options = binding.create_pipeline_tuning_options(speed_level=opt)
-    pass_builder = binding.create_pass_builder(machine, options)
-
-    if opt > 0:
-        pass_builder.getModulePassManager().run(llvm_module, pass_builder)
-    else:
-        # '@inline' functions inline even unoptimized: the standard pipeline
-        # honors 'alwaysinline' on its own, but -O0 runs no pipeline, so the
-        # always-inliner runs alone
-        manager = binding.ModulePassManager()
-        manager.add_always_inliner_pass()
-        manager.run(llvm_module, pass_builder)
+    # '@inline' functions inline even unoptimized: the standard pipeline
+    # honors 'alwaysinline' on its own, but -O0 runs only that pass.
+    _optimize_module(machine, llvm_module, opt)
 
     return machine, llvm_module
 
@@ -146,6 +156,208 @@ def load_library(name: str, lib_dirs: list[str]) -> None:
     raise NameError(f"cannot load library {name!r}")
 
 
+def _object_error(path: str, detail: str) -> ObjectFormatError:
+    """Build one consistently formatted native-input diagnostic."""
+    return ObjectFormatError(f"{path!r} is not a valid object file: {detail}")
+
+
+def validate_object_data(data: bytes, path: str) -> None:
+    """
+    Reject truncated or unrecognized native objects before LLVM parses them.
+
+    The JIT only accepts host objects, whose common containers are ELF, Mach-O,
+    and COFF. This intentionally validates the outer structure rather than
+    attempting to duplicate LLVM's complete relocation and section parser; JIT
+    isolation remains the final boundary for a structurally valid hostile file.
+    """
+    if len(data) < 4:
+        raise _object_error(path, "the file is too short")
+
+    if data.startswith(b"\x7fELF"):
+        if len(data) < 16:
+            raise _object_error(path, "the ELF identification is truncated")
+
+        word_size, byte_order, version = data[4], data[5], data[6]
+        if word_size not in (1, 2):
+            raise _object_error(path, "the ELF word size is invalid")
+        if byte_order not in (1, 2):
+            raise _object_error(path, "the ELF byte order is invalid")
+        if version != 1:
+            raise _object_error(path, "the ELF version is invalid")
+
+        header_size = 52 if word_size == 1 else 64
+        if len(data) < header_size:
+            raise _object_error(path, "the ELF header is truncated")
+
+        order = "little" if byte_order == 1 else "big"
+        if word_size == 1:
+            encoded_header_size = int.from_bytes(data[40:42], order)
+            section_offset = int.from_bytes(data[32:36], order)
+            section_entry_size = int.from_bytes(data[46:48], order)
+            section_count = int.from_bytes(data[48:50], order)
+            minimum_section_size = 40
+        else:
+            encoded_header_size = int.from_bytes(data[52:54], order)
+            section_offset = int.from_bytes(data[40:48], order)
+            section_entry_size = int.from_bytes(data[58:60], order)
+            section_count = int.from_bytes(data[60:62], order)
+            minimum_section_size = 64
+
+        if encoded_header_size < header_size or encoded_header_size > len(data):
+            raise _object_error(path, "the ELF header size is invalid")
+        if section_count:
+            if section_entry_size < minimum_section_size:
+                raise _object_error(path, "the ELF section entry size is invalid")
+            if (section_offset > len(data)
+                    or section_count > (len(data) - section_offset) // section_entry_size):
+                raise _object_error(path, "the ELF section table is truncated")
+        return
+
+    magic = data[:4]
+    macho = {
+        b"\xce\xfa\xed\xfe": ("little", 28),
+        b"\xcf\xfa\xed\xfe": ("little", 32),
+        b"\xfe\xed\xfa\xce": ("big", 28),
+        b"\xfe\xed\xfa\xcf": ("big", 32),
+    }
+    if magic in macho:
+        order, header_size = macho[magic]
+        if len(data) < header_size:
+            raise _object_error(path, "the Mach-O header is truncated")
+        command_size = int.from_bytes(data[20:24], order)
+        if command_size > len(data) - header_size:
+            raise _object_error(path, "the Mach-O load commands are truncated")
+        return
+
+    fat_macho = {
+        b"\xca\xfe\xba\xbe": ("big", 20),
+        b"\xbe\xba\xfe\xca": ("little", 20),
+        b"\xca\xfe\xba\xbf": ("big", 32),
+        b"\xbf\xba\xfe\xca": ("little", 32),
+    }
+    if magic in fat_macho:
+        order, entry_size = fat_macho[magic]
+        if len(data) < 8:
+            raise _object_error(path, "the universal Mach-O header is truncated")
+        architectures = int.from_bytes(data[4:8], order)
+        if architectures > (len(data) - 8) // entry_size:
+            raise _object_error(path, "the universal Mach-O table is truncated")
+        for index in range(architectures):
+            start = 8 + index * entry_size
+            width = 8 if entry_size == 32 else 4
+            offset = int.from_bytes(data[start + 8:start + 8 + width], order)
+            size = int.from_bytes(
+                data[start + 8 + width:start + 8 + 2 * width], order)
+            if offset > len(data) or size > len(data) - offset:
+                raise _object_error(path, "a universal Mach-O slice is truncated")
+        return
+
+    # COFF has no file magic. Its machine field and bounded section table
+    # distinguish supported object files from arbitrary data.
+    coff_machines = {
+        0x014C,  # i386
+        0x01C0, 0x01C2, 0x01C4,  # ARM
+        0x8664,  # x86-64
+        0xAA64,  # ARM64
+        0x5032, 0x5064, 0x5128,  # RISC-V
+    }
+    if len(data) >= 20 and int.from_bytes(data[:2], "little") in coff_machines:
+        sections = int.from_bytes(data[2:4], "little")
+        optional_size = int.from_bytes(data[16:18], "little")
+        table_offset = 20 + optional_size
+        if table_offset > len(data) or sections > (len(data) - table_offset) // 40:
+            raise _object_error(path, "the COFF section table is truncated")
+        return
+
+    raise _object_error(path, "the format is not recognized")
+
+
+def archive_members(path: str) -> list[tuple[str, bytes]]:
+    """Read and validate every native object member of a Unix archive."""
+    try:
+        data = Path(path).read_bytes()
+    except OSError as error:
+        raise ObjectFormatError(f"cannot read archive {path!r}: {error}") from None
+
+    if data[:8] != b"!<arch>\n":
+        raise ObjectFormatError(f"{path!r} is not a valid static library: "
+                                "the archive signature is missing")
+
+    members = []
+    position = 8
+    while position < len(data):
+        if len(data) - position < 60:
+            raise ObjectFormatError(f"{path!r} is not a valid static library: "
+                                    "a member header is truncated")
+
+        header = data[position:position + 60]
+        position += 60
+        if header[58:60] != b"`\n":
+            raise ObjectFormatError(f"{path!r} is not a valid static library: "
+                                    "a member header has an invalid trailer")
+
+        name = header[:16].decode("ascii", "replace").strip()
+        size_text = header[48:58].strip()
+        if not size_text or not size_text.isdigit():
+            raise ObjectFormatError(f"{path!r} is not a valid static library: "
+                                    "a member size is invalid")
+        size = int(size_text)
+        if size > len(data) - position:
+            raise ObjectFormatError(f"{path!r} is not a valid static library: "
+                                    "a member is truncated")
+
+        content = data[position:position + size]
+        position += size
+        if size & 1:
+            if position >= len(data):
+                raise ObjectFormatError(
+                    f"{path!r} is not a valid static library: "
+                    "a member's alignment byte is missing")
+            position += 1
+
+        # A BSD long name rides at the front of the member's data.
+        if name.startswith("#1/"):
+            length_text = name[3:]
+            if not length_text.isdigit():
+                raise ObjectFormatError(
+                    f"{path!r} is not a valid static library: "
+                    "a BSD member name length is invalid")
+            length = int(length_text)
+            if length > len(content):
+                raise ObjectFormatError(
+                    f"{path!r} is not a valid static library: "
+                    "a BSD member name is truncated")
+            name = content[:length].decode("ascii", "replace").rstrip("\0")
+            content = content[length:]
+
+        # Symbol tables and GNU's long-name table describe members; they are
+        # not themselves objects. A '/<n>' spelling is a real member whose
+        # name is stored in the GNU table.
+        if (name in ("/", "//", "/SYM64/")
+                or name.startswith("__.SYMDEF")):
+            continue
+
+        label = f"{path}({name.rstrip('/') or '<unnamed>'})"
+        validate_object_data(content, label)
+        members.append((name, content))
+
+    return members
+
+
+def add_object(engine, path: str) -> None:
+    """Validate and add the exact bytes read from one object file."""
+    try:
+        data = Path(path).read_bytes()
+    except OSError as error:
+        raise ObjectFormatError(f"cannot read object file {path!r}: {error}") from None
+
+    validate_object_data(data, path)
+    try:
+        engine.add_object_file(binding.ObjectFileRef.from_data(data))
+    except RuntimeError as error:
+        raise _object_error(path, str(error)) from None
+
+
 def add_archive(engine, path: str) -> None:
     """
     Load a static library's members into the JIT engine: the archive is
@@ -154,43 +366,23 @@ def add_archive(engine, path: str) -> None:
     Both archive flavors are read: GNU's, with its '//' long-name table,
     and BSD's, with '#1/<n>' names prefixed to the member's data.
     """
-    data = Path(path).read_bytes()
-    if data[:8] != b"!<arch>\n":
-        raise NameError(f"{path!r} is not a static library")
-
-    position = 8
-    while position + 60 <= len(data):
-        header = data[position:position + 60]
-        position += 60
-
-        name = header[:16].decode("ascii", "replace").strip()
-        size = int(header[48:58])
-        content = data[position:position + size]
-        position += size + (size & 1)  # members align to two bytes
-
-        # a BSD long name rides at the front of the member's data
-        if name.startswith("#1/"):
-            length = int(name[3:])
-            name = content[:length].decode("ascii", "replace").rstrip("\0")
-            content = content[length:]
-
-        # symbol tables and the name table describe members, they aren't
-        # ones; a '/<n>' name is a real member, named through the table
-        if name in ("/", "//", "/SYM64/") or name.startswith("__.SYMDEF"):
-            continue
-
-        engine.add_object_file(binding.ObjectFileRef.from_data(content))
+    for name, content in archive_members(path):
+        try:
+            engine.add_object_file(binding.ObjectFileRef.from_data(content))
+        except RuntimeError as error:
+            label = f"{path}({name.rstrip('/') or '<unnamed>'})"
+            raise _object_error(label, str(error)) from None
 
 
-def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
-            libs: list[str] = (), lib_dirs: list[str] = (), opt: int = 0) -> int:
-    """
-    JIT-compile a module in-process and run its main, returning its exit code.
+def _run_jit_in_process(llvm_ir: str, argv: list[str], objects: list[str],
+                        libs: list[str], lib_dirs: list[str], opt: int) -> int:
+    """The isolated worker's LLVM and native-code execution path."""
+    target_machine = _target_machine(opt=opt, jit=True)
+    llvm_module = binding.parse_assembly(llvm_ir)
+    llvm_module.triple = target_machine.triple
+    llvm_module.verify()
 
-    Extra object files are loaded into the engine, and '-l' libraries into
-    the process, their symbols resolvable from the program like any linked code.
-    """
-    target_machine, llvm_module = prepare_module(module, opt, jit=True)
+    _optimize_module(target_machine, llvm_module, opt)
 
     for name in libs:
         load_library(name, lib_dirs)
@@ -200,7 +392,7 @@ def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
             if str(path).endswith(".a"):
                 add_archive(engine, path)
             else:
-                engine.add_object_file(binding.ObjectFileRef.from_path(path))
+                add_object(engine, path)
 
         engine.finalize_object()
         engine.run_static_constructors()
@@ -209,19 +401,105 @@ def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
         if not address:
             raise NameError("program has no 'main' function")
 
-        # call main(argc, argv) through the C ABI; a main declared with
-        # fewer parameters simply ignores the extra arguments
-        c_argv = (ctypes.c_char_p * (len(argv) + 1))(*[a.encode() for a in argv], None)
+        c_argv = (ctypes.c_char_p * (len(argv) + 1))(
+            *[a.encode() for a in argv], None)
         c_main = ctypes.CFUNCTYPE(ctypes.c_int32, ctypes.c_int32,
                                   ctypes.POINTER(ctypes.c_char_p))(address)
 
         code = c_main(len(argv), c_argv)
         engine.run_static_destructors()
-
-        # returning from main skips the C runtime's exit-time flush, which
-        # would strand buffered stdio output in this still-running process
         ctypes.CDLL(None).fflush(None)
         return code
+
+
+def _jit_worker(connection, llvm_ir: str, argv: list[str], objects: list[str],
+                libs: list[str], lib_dirs: list[str], opt: int) -> None:
+    """Run one JIT request and return only structured status to the parent."""
+    try:
+        code = _run_jit_in_process(
+            llvm_ir, argv, objects, libs, lib_dirs, opt)
+        connection.send(("ok", code))
+    except Exception as error:
+        if isinstance(error, ObjectFormatError):
+            kind = "object"
+        elif isinstance(error, NameError):
+            kind = "name"
+        elif isinstance(error, TargetError):
+            kind = "target"
+        else:
+            kind = "backend"
+        connection.send(("error", kind, str(error)))
+    finally:
+        connection.close()
+
+
+def run_jit(module: ir.Module, argv: list[str], objects: list[str] = (),
+            libs: list[str] = (), lib_dirs: list[str] = (), opt: int = 0) -> int:
+    """
+    JIT-compile a module in an isolated process and return its exit code.
+
+    Extra object files are loaded into the engine, and '-l' libraries into
+    the worker, their symbols resolvable from the program like any linked code.
+    A malformed native input or generated-code fault can terminate the worker,
+    but cannot corrupt or crash the compiler host.
+    """
+    # 'fork' avoids re-importing an embedding application's __main__ on POSIX;
+    # Windows has no fork and uses a fully serializable spawn request instead.
+    method = "spawn" if sys.platform == "win32" else "fork"
+    context = multiprocessing.get_context(method)
+    receive, send = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_jit_worker,
+        args=(send, str(module), list(argv), list(objects), list(libs),
+              list(lib_dirs), opt),
+    )
+
+    started = False
+    try:
+        process.start()
+        started = True
+        send.close()
+        process.join()
+        exitcode = process.exitcode
+        try:
+            message = receive.recv() if receive.poll() else None
+        except EOFError:
+            # A signal may close the worker's pipe without a complete frame.
+            message = None
+    finally:
+        send.close()
+        receive.close()
+        if started:
+            if process.is_alive():
+                process.terminate()
+                process.join()
+            process.close()
+
+    if message is not None:
+        if message[0] == "ok":
+            return message[1]
+
+        _, kind, detail = message
+        if kind == "object":
+            raise ObjectFormatError(detail)
+        if kind == "name":
+            raise NameError(detail)
+        if kind == "target":
+            raise TargetError(detail)
+        raise OSError(f"JIT worker failed: {detail}")
+
+    if exitcode is not None and exitcode < 0:
+        signum = -exitcode
+        description = signal.strsignal(signum) or f"signal {signum}"
+        raise OSError(f"JIT worker terminated by {description}")
+
+    # A program that deliberately calls exit() cannot send a normal response;
+    # preserve its chosen process status. Other Python/backend failures are
+    # caught and sent above.
+    if exitcode is not None and 0 <= exitcode <= 255:
+        return exitcode
+
+    raise OSError(f"JIT worker terminated with exit code {exitcode}")
 
 
 def link(obj_paths: list[str], output: str, libs: list[str] = (),

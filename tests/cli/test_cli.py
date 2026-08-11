@@ -506,6 +506,37 @@ def test_object_files_resolve_under_run(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, obj, "--run") == 42
 
 
+def test_run_rejects_a_malformed_object_cleanly(
+        tmp_path, monkeypatch, capsys):
+    """A bad object is diagnosed without reaching LLVM or crashing siec."""
+    obj = tmp_path / "bad.o"
+    obj.write_bytes(b"bad")
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+
+    assert run_cli(monkeypatch, src, obj, "--run") == 1
+    err = capsys.readouterr().err
+    assert "is not a valid object file" in err
+    assert "Traceback" not in err
+
+
+def test_run_rejects_a_malformed_archive_cleanly(
+        tmp_path, monkeypatch, capsys):
+    """Malformed archive fields become diagnostics rather than ValueErrors."""
+    archive = tmp_path / "bad.a"
+    header = (b"bad.o/".ljust(48, b" ")
+              + b"not-size".ljust(10, b" ") + b"`\n")
+    archive.write_bytes(b"!<arch>\n" + header)
+    src = tmp_path / "p.sie"
+    src.write_text("fn main() -> i32 { return 0; }")
+
+    assert run_cli(monkeypatch, src, archive, "--run") == 1
+    err = capsys.readouterr().err
+    assert "is not a valid static library" in err
+    assert "member size is invalid" in err
+    assert "Traceback" not in err
+
+
 def test_only_object_files_is_an_error(tmp_path, monkeypatch, capsys):
     """
     A command line with no Sie sources exits non-zero with a readable error.
@@ -568,7 +599,7 @@ def test_link_failure_reports_cleanly(tmp_path, capsys, monkeypatch):
 
 def test_run_jits_the_program(tmp_path, monkeypatch):
     """
-    --run executes the program in-process and returns its exit code.
+    --run executes the program in an isolated JIT worker and returns its exit code.
     """
     source = """\
     fn main() -> i32 { return 7; }
@@ -1027,7 +1058,7 @@ def test_invalid_target_is_a_diagnostic_in_every_output_mode(
 
 def test_run_refuses_a_foreign_target(tmp_path, capsys, monkeypatch):
     """
-    The JIT runs in-process, so --run only accepts the host's triple.
+    The JIT worker runs native code, so --run only accepts the host's triple.
     """
     src = tmp_path / "p.sie"
     src.write_text("fn main() -> i32 { return 0; }")

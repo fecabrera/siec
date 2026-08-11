@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     # jit-run in place of building, exiting with the program's own code;
     # the program's argv is the source path plus the arguments after --run
     if opts.run is not None:
-        # the JIT runs in this process: only the host's own code can
+        # The isolated JIT worker still executes native code for this host.
         if opts.target is not None and opts.target != host_triple():
             print(f"siec: cannot jit-run a {opts.target!r} target on this "
                   "machine", file=sys.stderr)
