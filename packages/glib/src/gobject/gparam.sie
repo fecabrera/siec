@@ -2,7 +2,7 @@ import { GQuark, GData, guint, gpointer, gboolean, gint, } from glib;
 import { GType, GTypeInstance } from gtype;
 import { GValue } from gvalue;
 
-enum GParamFlags {
+enum GParamFlags: u32 {
     READABLE            = 1 << 0,
     WRITABLE            = 1 << 1,
     READWRITE           = GParamFlags::READABLE | GParamFlags::WRITABLE,
