@@ -1401,6 +1401,36 @@ def test_module_constants_build_on_their_siblings(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_long_constant_expressions_infer_across_imports(tmp_path, monkeypatch):
+    """
+    Long arithmetic chains over adaptive constants stay linear whether the
+    constants are reached through a module or imported as individual members.
+    """
+    (tmp_path / "numbers.sie").write_text("""
+        @const ONE = 1;
+        @const TWO = 2;
+        @const THREE = 3;
+        @const FOUR = 4;
+        @const FIVE = 5;
+        @const SIX = 6;
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import numbers;
+        import { ONE, TWO, THREE, FOUR, FIVE, SIX } from numbers;
+
+        fn main() -> i32 {
+            let qualified = numbers.ONE + numbers.TWO + numbers.THREE
+                          + numbers.FOUR + numbers.FIVE + numbers.SIX;
+            let selected = ONE + TWO + THREE + FOUR + FIVE + SIX;
+            return qualified + selected;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_a_template_return_type_is_not_gated_by_the_callers_view(tmp_path, monkeypatch):
     """
     Inferring a generic call's return type expands the template's own

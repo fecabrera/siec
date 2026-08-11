@@ -66,6 +66,11 @@ FLOAT_ARITHMETIC = {"+": "fadd", "-": "fsub", "*": "fmul", "/": "fdiv", "%": "fr
 
 COMPARISONS = {"<", ">", "<=", ">=", "==", "!="}
 
+# An omitted cached type is different from a resolved expression with no fixed
+# type. Binary-expression analysis passes the latter between its helpers so a
+# subtree is not recursively resolved again at every decision point.
+_UNRESOLVED = object()
+
 # the method a struct operand's binary operator desugars to: 'a + b' is
 # 'a.add(b)', the operator interfaces' ('Add<S, T>', ...) shorthand
 OPERATOR_METHODS = {"+": "add", "-": "sub", "*": "mul", "/": "div", "%": "rem",
@@ -128,7 +133,8 @@ def valueless_try(name: str | None) -> TypeError:
                      "'try' has none to give: it stands on its own")
 
 
-def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | None:
+def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict,
+                  left_type=_UNRESOLVED) -> Expr | None:
     """
     Rewrite a binary operator over a struct operand into the method call
     it means: 'a + b' is 'a.add(b)', each overload picked by b's type,
@@ -142,7 +148,9 @@ def operator_call(gen: "CodeGenerator", expr: BinaryOp, scope: dict) -> Expr | N
 
     # enum-typed operands keep their integer arithmetic; arrays take the
     # shorthand too, through their 'T[]::m' methods
-    name = strip_const(expr_sie_type(gen, expr.left, scope) or "")
+    if left_type is _UNRESOLVED:
+        left_type = expr_sie_type(gen, expr.left, scope)
+    name = strip_const(left_type or "")
     if name in gen.enums or (name not in gen.structs
                              and not name.endswith("[]")):
         return None
@@ -583,25 +591,36 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # a struct operand's binary operator types as the method call it
     # desugars to: 'a + b' is 'a.add(b)'
     if isinstance(expr, BinaryOp):
-        if (rewritten := operator_call(gen, expr, scope)) is not None:
+        # Resolve each operand at most once here. Previously operator lookup,
+        # pointer classification, and arithmetic promotion each walked the
+        # left subtree again, making a left-associated expression exponential.
+        left_type = expr_sie_type(gen, expr.left, scope)
+        if (rewritten := operator_call(
+                gen, expr, scope, left_type=left_type)) is not None:
             return expr_sie_type(gen, rewritten, scope)
 
         if expr.op in ("and", "or") or expr.op in COMPARISONS:
             return "bool"
 
+        right_type = expr_sie_type(gen, expr.right, scope)
+
         # 'p ± n' keeps the pointer's type, even when the integer is on the left
-        if (pointer := pointer_arithmetic_type(gen, expr, scope)) is not None:
+        if (pointer := pointer_arithmetic_type(
+                gen, expr, scope, left_type, right_type)) is not None:
             return pointer
 
         # arithmetic, bitwise, and power widen to the larger operand type
         if expr.op in ARITHMETIC or expr.op == "**":
-            return arithmetic_type(gen, expr.left, expr.right, scope, expr.op)
+            return arithmetic_type(
+                gen, expr.left, expr.right, scope, expr.op,
+                left_type, right_type)
 
     return None
 
 
 def pointer_arithmetic_type(gen: CodeGenerator, expr: BinaryOp,
-                            scope: dict) -> str | None:
+                            scope: dict, left_type=_UNRESOLVED,
+                            right_type=_UNRESOLVED) -> str | None:
     """
     The pointer type of a ``p + n``, ``n + p``, or ``p - n`` expression,
     or None when the operator is not a pointer offset.
@@ -609,8 +628,10 @@ def pointer_arithmetic_type(gen: CodeGenerator, expr: BinaryOp,
     if expr.op not in ("+", "-"):
         return None
 
-    left = expr_sie_type(gen, expr.left, scope)
-    right = expr_sie_type(gen, expr.right, scope)
+    left = (expr_sie_type(gen, expr.left, scope)
+            if left_type is _UNRESOLVED else left_type)
+    right = (expr_sie_type(gen, expr.right, scope)
+             if right_type is _UNRESOLVED else right_type)
     left_ptr = strip_const(left or "").endswith("*")
     right_ptr = strip_const(right or "").endswith("*")
 
@@ -912,14 +933,16 @@ def numeric_class(type_name: str | None) -> tuple[str, int] | None:
     return None
 
 
-def operand_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
+def operand_type(gen: CodeGenerator, expr: Expr, scope: dict,
+                 declared=_UNRESOLVED) -> str | None:
     """
     The Sie type name of an expression for arithmetic promotion.
 
     Literals and unannotated constants have no fixed width here; they adopt
     their partner's type during promotion, like they do at each use site.
     """
-    declared = expr_sie_type(gen, expr, scope)
+    if declared is _UNRESOLVED:
+        declared = expr_sie_type(gen, expr, scope)
     if declared is not None:
         return declared
 
@@ -938,6 +961,42 @@ def operand_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
         return infer_type(gen, expr, scope)
 
     return infer_type(gen, expr, scope)
+
+
+def adaptive_default_type(gen: CodeGenerator, expr: Expr,
+                          scope: dict) -> str | None:
+    """The default type of an arithmetic operand with no fixed-width type."""
+    if isinstance(expr, CachedExpr):
+        return adaptive_default_type(gen, expr.expr, scope)
+
+    if isinstance(expr, Move):
+        return adaptive_default_type(gen, expr.operand, scope)
+
+    if isinstance(expr, IntLiteral):
+        return integer_literal_type(expr.value)
+
+    if isinstance(expr, FloatLiteral):
+        return "f64"
+
+    if isinstance(expr, (SizeOf, TypeId)):
+        return "u64"
+
+    if isinstance(expr, UnaryOp) and expr.op in ("-", "~"):
+        return adaptive_default_type(gen, expr.operand, scope)
+
+    if isinstance(expr, Member):
+        if (folded := fold_qualified(gen, expr, scope)) is not None:
+            return adaptive_default_type(gen, folded, scope)
+
+    if isinstance(expr, Var):
+        from siec.codegen.constants import constant_view, find_constant
+
+        const = find_constant(gen, expr.name, getattr(expr, "module_file", None))
+        if const is not None and const.type is None:
+            with constant_view(gen, const):
+                return adaptive_default_type(gen, const.value, scope)
+
+    return None
 
 
 def adapts_in_arithmetic(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
@@ -959,13 +1018,15 @@ def adapts_in_arithmetic(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
 
 
 def arithmetic_type(gen: CodeGenerator, left: Expr, right: Expr,
-                    scope: dict, op: str | None = None) -> str | None:
+                    scope: dict, op: str | None = None,
+                    left_declared=_UNRESOLVED,
+                    right_declared=_UNRESOLVED) -> str | None:
     """
     The Sie type of an arithmetic or bitwise binary result: the wider of
     the operands' numeric types when they share a prefix.
     """
-    left_name = operand_type(gen, left, scope)
-    right_name = operand_type(gen, right, scope)
+    left_name = operand_type(gen, left, scope, left_declared)
+    right_name = operand_type(gen, right, scope, right_declared)
     left_class = numeric_class(enum_backing(gen, left_name))
     right_class = numeric_class(enum_backing(gen, right_name))
     if left_class and right_class:
@@ -992,7 +1053,7 @@ def arithmetic_type(gen: CodeGenerator, left: Expr, right: Expr,
 
     if left_class is None and right_class is None:
         for operand in (left, right):
-            if (inferred := infer_type(gen, operand, scope)) is not None:
+            if (inferred := adaptive_default_type(gen, operand, scope)) is not None:
                 return inferred
 
     return left_name or right_name
