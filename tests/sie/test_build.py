@@ -141,6 +141,49 @@ def test_the_package_is_the_working_directory_by_default(
     assert (app / "build" / "app").is_file()
 
 
+def test_run_jits_a_package_without_building_a_binary(
+        home, monkeypatch, capsys):  # noqa: F811
+    """'build --run' returns the app's status and leaves no build output."""
+    app = package(home, "app", files=[
+        ("src/main.sie", "fn main() -> i32 { return 7; }"),
+    ])
+
+    assert run_sie(monkeypatch, "build", app, "--run") == 7
+    assert not (app / "build").exists()
+    out = capsys.readouterr().out
+    assert "running app" in out
+    assert "built " not in out
+
+
+def test_run_uses_the_working_package_and_forwards_arguments(
+        home, monkeypatch):  # noqa: F811
+    """With no path, everything after '--run' becomes the app's argv."""
+    app = package(home, "app", files=[
+        ("src/main.sie", "fn main(argc: i32, argv: char**) -> i32 { "
+                         "return argc; }"),
+    ])
+    monkeypatch.chdir(app)
+
+    assert run_sie(monkeypatch, "build", "--run", "one", "two") == 3
+
+
+def test_run_resolves_and_compiles_installed_dependencies(
+        home, monkeypatch, capsys):  # noqa: F811
+    """The JIT receives the same resolved include tree as a normal build."""
+    install(monkeypatch, package(
+        home, "answer", version="1.0.0",
+        files=[("src/answer.sie",
+                "fn answer() -> i32 { return 42; }")]))
+    app = package(
+        home, "app", deps={"answer": "*"},
+        files=[("src/main.sie", "import answer; "
+                "fn main() -> i32 { return answer.answer(); }")])
+    capsys.readouterr()
+
+    assert run_sie(monkeypatch, "build", app, "--run") == 42
+    assert "answer@1.0.0" in capsys.readouterr().out
+
+
 def test_a_package_needs_no_version_to_be_built(home, monkeypatch):  # noqa: F811
     """
     Only the name decides what the binary is called, so a package that is
@@ -586,6 +629,21 @@ def test_debug_long_option_reaches_the_compiler(
 
     assert run_sie(monkeypatch, "build", app, "--debug") == 0
     assert "-g" in command[0]
+
+
+def test_run_and_its_arguments_reach_the_compiler(
+        home, monkeypatch, command):  # noqa: F811
+    """The run marker closes compiler options and preserves every app arg."""
+    app = package(home, "app")
+
+    assert run_sie(monkeypatch, "build", app, "-O2", "--run",
+                   "first", "-x") == 0
+
+    argv = command[0]
+    assert "-O2" in argv
+    assert argv[-3:] == ["--run", "first", "-x"]
+    assert "-o" not in argv
+    assert not (app / "build").exists()
 
 
 def test_a_dependency_that_installed_no_sources_adds_no_include(

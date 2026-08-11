@@ -1112,11 +1112,11 @@ def resolve(root: PackageManifest) -> list[PackageManifest]:
 
 def build(argv: list[str]) -> int:
     """
-    Compile a package against what is installed, into its own build/.
+    Compile a package against what is installed, or JIT-run it on request.
     """
     args = argparse.ArgumentParser(
         prog="sie build",
-        description="Build a package against its installed dependencies")
+        description="Build or JIT-run a package against its installed dependencies")
     args.add_argument("path", nargs="?", default=".",
                       help="the package to build (the working directory "
                            "by default)")
@@ -1124,6 +1124,9 @@ def build(argv: list[str]) -> int:
                       metavar="N", help="optimization level, cc-style (default 0)")
     args.add_argument("-g", "--debug", action="store_true", dest="debug",
                       help="emit DWARF debug info, for source-level debugging")
+    args.add_argument("--run", nargs=argparse.REMAINDER, metavar="ARG",
+                      help="JIT-run the package instead of building it; "
+                           "pass all following arguments to the program")
     opts = args.parse_args(argv)
 
     try:
@@ -1142,11 +1145,13 @@ def build(argv: list[str]) -> int:
 
     package = manifest.parent
 
-    try:
-        output = contained_path(package / "build", name, manifest)
-    except ValueError as error:
-        print(f"sie: {error}", file=sys.stderr)
-        return 1
+    output = None
+    if opts.run is None:
+        try:
+            output = contained_path(package / "build", name, manifest)
+        except ValueError as error:
+            print(f"sie: {error}", file=sys.stderr)
+            return 1
 
     sources = root.source_files()
     if not sources:
@@ -1174,14 +1179,15 @@ def build(argv: list[str]) -> int:
             if lib not in libs:
                 libs.append(lib)
 
-    try:
-        output.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        print(f"sie: {error.filename or output.parent}: {error.strerror}",
-              file=sys.stderr)
-        return 1
+    if output is not None:
+        try:
+            output.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            print(f"sie: {error.filename or output.parent}: {error.strerror}",
+                  file=sys.stderr)
+            return 1
 
-    print(f"building {root.spec}")
+    print(f"{'running' if opts.run is not None else 'building'} {root.spec}")
     for member in tree:
         print(f"  {member.spec}")
 
@@ -1194,7 +1200,10 @@ def build(argv: list[str]) -> int:
         command += [f"-O{opts.opt}"]
     if opts.debug:
         command += ["-g"]
-    command += ["-o", str(output)]
+    if opts.run is not None:
+        command += ["--run", *opts.run]
+    else:
+        command += ["-o", str(output)]
 
     from siec.cli import main as compile_main
 
@@ -1202,7 +1211,8 @@ def build(argv: list[str]) -> int:
     if status != 0:
         return status
 
-    print(f"built {display_path(str(output))}")
+    if output is not None:
+        print(f"built {display_path(str(output))}")
 
     return 0
 
@@ -1214,7 +1224,7 @@ def show(argv: list[str]) -> int:
     args = argparse.ArgumentParser(
         prog="sie", description="Sie package manager",
         epilog="commands:\n"
-               "  build [path]     compile a package into its build/\n"
+               "  build [path]     compile or JIT-run an app package\n"
                "  install [path]   copy a package into $SIE_PATH/lib\n"
                "  list             list what is installed there\n"
                "  uninstall <name> remove an installed package\n\n"
