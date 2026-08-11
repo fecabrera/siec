@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                       help="compile to an object file, without linking")
     args.add_argument("-O", default=0, type=int, choices=[0, 1, 2, 3], dest="opt",
                       metavar="N", help="optimization level, cc-style (default 0)")
-    args.add_argument("-g", action="store_true", dest="debug",
+    args.add_argument("-g", "--debug", action="store_true", dest="debug",
                       help="emit DWARF debug info, for source-level debugging")
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")

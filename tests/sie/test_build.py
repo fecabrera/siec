@@ -579,6 +579,15 @@ def test_optimization_and_debug_flags_reach_the_compiler(
     assert "-g" in command[0]
 
 
+def test_debug_long_option_reaches_the_compiler(
+        home, monkeypatch, command):  # noqa: F811
+    """'--debug' is the long form of '-g'."""
+    app = package(home, "app")
+
+    assert run_sie(monkeypatch, "build", app, "--debug") == 0
+    assert "-g" in command[0]
+
+
 def test_a_dependency_that_installed_no_sources_adds_no_include(
         home, monkeypatch, command):  # noqa: F811
     """
