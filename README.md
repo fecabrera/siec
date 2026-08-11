@@ -1495,6 +1495,11 @@ The reverse direction never happens implicitly: an `opaque*` only becomes a type
 let values: i32* = malloc(12) as i32*;
 ```
 
+Comparisons are the exception: an `opaque*` can be compared with any pointer
+type, on either side and with any comparison operator. Two typed pointers must
+still have the same type; for example, comparing a `u8*` with an unrelated
+`S*` is rejected.
+
 An explicit `as` also reinterprets any typed pointer as any other, C-style: `text.data as u8*` reads a `char*`'s bytes. Only the spelling converts; a `const` contract stays put, so casting one away is rejected.
 
 Integers and pointers cast into each other the same way, an address being a number either direction. This is how a binding spells a sentinel address, C's `(void *) -1`:

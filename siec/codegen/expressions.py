@@ -44,6 +44,7 @@ from siec.ast import (
     Var,
 )
 from siec.codegen.asm import emit_asm_block
+from siec.codegen.aliases import expand_alias
 from siec.codegen.calls import emit_call
 from siec.codegen.coercion import (emit_cast, emit_coerced,
                                    emit_reinterpret_address)
@@ -59,6 +60,7 @@ from siec.codegen.inference import (
     enum_backing,
     expr_sie_type,
     hoist_member,
+    infer_type,
     is_float,
     member_field,
     numeric_class,
@@ -164,8 +166,6 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                 return func
 
             # a struct base names its missing method precisely
-            from siec.codegen.aliases import expand_alias
-
             try:
                 named = strip_const(expand_alias(gen, expr.enum))
             except (NameError, TypeError):
@@ -202,8 +202,6 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             target = Var(target)
 
         if not isinstance(target, str):
-            from siec.codegen.inference import infer_type
-
             source = infer_type(gen, target, scope)
             if source and strip_const(strip_reference(source)) == "Any":
                 ident = emit_expression(gen, builder, Member(target, "id"),
@@ -232,8 +230,6 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if isinstance(expr, TypeOf):
         # '@typeof' of an 'Any' reads its runtime id; any other operand
         # folds to its static type's id, the operand never evaluated
-        from siec.codegen.inference import infer_type
-
         source = infer_type(gen, expr.value, scope)
         if source is None:
             raise TypeError("cannot take '@typeof': the expression "
@@ -573,9 +569,45 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if expr.op == "**":
             return emit_power(gen, builder, expr, expected_type, scope, unsigned)
 
-        # comparisons: type the right side by the left, yield an i1
-        left = emit_expression(gen, builder, expr.left, None, scope)
-        right = emit_expression(gen, builder, expr.right, left.type, scope)
+        # Pointer compatibility follows Sie types rather than LLVM pointees:
+        # opaque* is the wildcard pointer, while two typed pointers must name
+        # the same type (even when both lower to the same LLVM type).
+        left_name = strip_const(expand_alias(
+            gen, expr_sie_type(gen, expr.left, scope)
+            or infer_type(gen, expr.left, scope)) or "")
+        right_name = strip_const(expand_alias(
+            gen, expr_sie_type(gen, expr.right, scope)
+            or infer_type(gen, expr.right, scope)) or "")
+        # A bare function reference also lowers to a pointer and keeps its
+        # established null/opaque comparison behavior.
+        left_pointer = (left_name.endswith("*")
+                        or left_name.startswith("fn("))
+        right_pointer = (right_name.endswith("*")
+                         or right_name.startswith("fn("))
+        pointer_comparison = left_pointer or right_pointer
+
+        if (pointer_comparison
+                and (not left_pointer or not right_pointer
+                     or (left_name != right_name
+                         and "opaque*" not in (left_name, right_name)))):
+            raise TypeError(
+                f"cannot apply {expr.op!r} to "
+                f"{left_name or expr_sie_type(gen, expr.left, scope)} and "
+                f"{right_name or expr_sie_type(gen, expr.right, scope)}")
+
+        # comparisons type the right side by the left and yield an i1. An
+        # opaque-pointer comparison erases both pointees before emitting icmp.
+        comparison_type = (resolve_type("opaque*", gen.structs)
+                           if pointer_comparison and "opaque*" in (
+                               left_name, right_name) else None)
+        left = emit_expression(gen, builder, expr.left, comparison_type, scope)
+        right = emit_expression(gen, builder, expr.right,
+                                comparison_type or left.type, scope)
+        if comparison_type is not None:
+            if left.type != comparison_type:
+                left = builder.bitcast(left, comparison_type)
+            if right.type != comparison_type:
+                right = builder.bitcast(right, comparison_type)
         left, right = match_widths(gen, builder, expr, left, right, unsigned, scope)
 
         if is_float(left.type):
