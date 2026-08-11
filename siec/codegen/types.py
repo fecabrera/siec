@@ -203,7 +203,7 @@ def fn_type_parts(name: str) -> tuple[list[str], str | None, str]:
     for i, ch in enumerate(inner):
         if ch == "<":
             angles += 1
-        elif ch == ">":
+        elif ch == ">" and angles > 0:
             angles -= 1
         elif ch == "(":
             depth += 1
