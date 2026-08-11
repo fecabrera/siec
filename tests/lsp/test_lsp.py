@@ -1401,6 +1401,51 @@ fn main() -> i32 {
     assert [item.label for item in filtered] == ["value"]
 
 
+def test_complete_lists_chained_arrow_members(tmp_path):
+    """Arrow completion follows pointer chains like a->b->."""
+    analysis, _ = unit(tmp_path, """\
+struct Node {
+    next: Node*;
+    value: i32;
+}
+
+fn main() -> i32 {
+    let node: Node = { next = null, value = 1 };
+    let ptr: Node* = &node;
+    return ptr->next->value;
+}
+""")
+    edited = """\
+struct Node {
+    next: Node*;
+    value: i32;
+}
+
+fn main() -> i32 {
+    let node: Node = { next = null, value = 1 };
+    let ptr: Node* = &node;
+    ptr->next->
+    return 0;
+}
+"""
+
+    items = {item.label: item for item in complete(
+        analysis, edited, 8, len("    ptr->next->"))}
+    assert set(items) == {"next", "value"}
+    assert items["next"].kind == "field"
+    assert items["value"].detail == "value: i32"
+
+    filtered = complete(
+        analysis, edited.replace("ptr->next->", "ptr->next->v"),
+        8, len("    ptr->next->v"))
+    assert [item.label for item in filtered] == ["value"]
+
+    through_field = edited.replace("ptr->next->", "node.next->")
+    items = {item.label: item for item in complete(
+        analysis, through_field, 8, len("    node.next->"))}
+    assert set(items) == {"next", "value"}
+
+
 def test_complete_lists_enum_members(tmp_path):
     """Scoped completion after Type:: offers that enum's members."""
     analysis, _ = unit(tmp_path, """\

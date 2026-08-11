@@ -945,14 +945,19 @@ def complete(analysis: Analysis, text: str, line: int,
         return []
 
     before = lines[line][:col]
+    # dotted type/module paths for 'Type::' / 'mod.Type::'
     path_prefix = (
         r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)")
+    # value chains may mix '.' and '->': 'a.b->c->'
+    member_receiver = (
+        r"([A-Za-z_][A-Za-z0-9_]*"
+        r"(?:(?:\.|->)[A-Za-z_][A-Za-z0-9_]*)*)")
     scoped = re.search(
         path_prefix + r"::([A-Za-z_][A-Za-z0-9_]*)?$", before)
     arrow = re.search(
-        path_prefix + r"->([A-Za-z_][A-Za-z0-9_]*)?$", before)
+        member_receiver + r"->([A-Za-z_][A-Za-z0-9_]*)?$", before)
     access = re.search(
-        path_prefix + r"\.([A-Za-z_][A-Za-z0-9_]*)?$", before)
+        member_receiver + r"\.([A-Za-z_][A-Za-z0-9_]*)?$", before)
 
     gen = analysis.gen
     gen.current_file = analysis.path
