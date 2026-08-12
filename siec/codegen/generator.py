@@ -1,13 +1,23 @@
 """Code generation state and entry point."""
 
 import copy
-from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 
 from llvmlite import ir
 
 from siec.ast import Field, Function, Program
+from siec.codegen.state import (
+    CONTEXT_FIELDS,
+    EmissionContext,
+    FlowContext,
+    GenericRegistry,
+    SemanticModel,
+    SourceContext,
+    SymbolTable,
+    TypeRegistry,
+)
 
 
 def entry_alloca(builder: ir.IRBuilder, type_: ir.Type, name: str) -> ir.Instruction:
@@ -105,7 +115,12 @@ class EnumInfo:
 
 class CodeGenerator:
     """
-    State shared across the codegen subsystems for one module.
+    Compilation state for one module, composed of phase-scoped contexts.
+
+    Registries live on ``source``, ``symbols``, ``types``, ``generics``,
+    ``flow``, and ``emission``. Attribute access still forwards to those
+    containers so existing call sites keep working while phases migrate to
+    the narrower interfaces.
     """
 
     def __init__(self, module_name: str, target: str | None = None):
@@ -113,286 +128,41 @@ class CodeGenerator:
         Create an empty LLVM module to generate code into, aimed at the
         given target triple; the host's when none is given.
         """
-        from llvmlite import binding
+        object.__setattr__(self, "source", SourceContext())
+        object.__setattr__(self, "symbols", SymbolTable())
+        object.__setattr__(self, "types", TypeRegistry())
+        object.__setattr__(self, "generics", GenericRegistry())
+        object.__setattr__(self, "flow", FlowContext())
+        object.__setattr__(
+            self, "emission", EmissionContext.create(module_name, target))
+        # Filled by complete_semantics(); tooling should prefer reading it.
+        object.__setattr__(self, "semantic", None)
 
-        # the triple decides the target constants and every '@sizeof'
-        self.target = target or binding.get_default_triple()
+    def __getattr__(self, name: str):
+        owner = CONTEXT_FIELDS.get(name)
+        if owner is not None:
+            return getattr(object.__getattribute__(self, owner), name)
+        raise AttributeError(
+            f"{type(self).__name__!r} object has no attribute {name!r}")
 
-        # a fresh context keeps identified struct types from colliding across modules
-        self.module = ir.Module(name=module_name, context=ir.Context())
-        self.module.triple = self.target
-        self.types_lowered = False
-        self.functions_lowered = False
-        self.semantic_complete = False
-        self.declaration_inventory_complete = False
-        self.generic_type_depth = 0
-        self.str_count = 0
-        self.temporary_count = 0
-        self.string_pool: dict[str, ir.GlobalVariable] = {}
-        # Unchosen '@if' branch spans, by source file, for editor semantic
-        # highlighting. Code generation records the same choices it compiles.
-        self.inactive_regions: dict[str, list[tuple[int, int, int, int]]] = {}
+    def __setattr__(self, name: str, value) -> None:
+        owner = CONTEXT_FIELDS.get(name)
+        if owner is not None:
+            setattr(object.__getattribute__(self, owner), name, value)
+            return
+        object.__setattr__(self, name, value)
 
-        # Code generation's private working AST. Its passes rewrite types,
-        # conditionals, and expansions without touching the caller's tree.
-        self.program: Program | None = None
+    @contextmanager
+    def in_file(self, path: str | None):
+        """Resolve names under ``path`` for the duration of the block."""
+        with self.source.in_file(path):
+            yield
 
-        # the '-g' debug-info builder, None when not emitting debug info
-        self.debug = None
-
-        # the Sie return and parameter types of each declared function, for
-        # type inference and argument coercion at calls
-        self.return_types: dict[str, str | None] = {}
-        self.param_types: dict[str, list[str]] = {}
-        # Canonical callable declarations resolved without LLVM. The backend
-        # lowers this inventory only after semantic checking has completed.
-        self.resolved_functions: dict[str, Function] = {}
-        self.function_signatures: dict[str, tuple] = {}
-        # Raw callable declarations are collected before their type-bearing
-        # headers resolve. The written-name index is the declaration-phase
-        # view; later registries hold canonical resolved symbols.
-        self.raw_callables: dict[str, list[Function]] = {}
-        self.callable_declarations: list[Function] = []
-        self.collected_callables: set[int] = set()
-        self.callable_inventory_complete = False
-        self.callables_resolved = False
-        # the symbols declared '@noreturn', whose bodies must not return
-        self.noreturns: set[str] = set()
-        # each overloaded name's candidates: (signature key, symbol) pairs,
-        # in declaration order; calls pick among them by argument types
-        self.overloads: dict[str, list[tuple[tuple, str]]] = {}
-        # a generic struct's stamped overload bodies, waiting for a call
-        # to pick them: a candidate that fits only some element types
-        # stays a bodiless declaration everywhere else
-        self.deferred_overloads: dict[str, object] = {}
-        # same-named generic templates with other type-parameter counts
-        self.generic_overloads: dict[str, list] = {}
-
-        # interfaces: declarations, their required actions, what each
-        # struct claims, and the claims queued for checking once every
-        # method is declared
-        self.interfaces: dict = {}
-        self.interface_actions: dict = {}
-        self.implements: dict[str, set] = {}
-        self.interface_queries: set[tuple[str, str]] = set()
-        self.pending_conformance: deque[tuple] = deque()
-        self.resolved_conformance: deque[tuple] = deque()
-        # Raw extension declarations have an explicit collect/resolve/check
-        # lifecycle. Type-dependent conditional branches may add declarations
-        # until callable collection freezes; each declaration advances once.
-        self.extension_declarations: list = []
-        self.collected_extensions: set[int] = set()
-        self.resolved_extensions: set[int] = set()
-        self.checked_extensions: set[int] = set()
-        # the arrays' '@extend T[]' claims: (element placeholder,
-        # interface spelling, bounds, declaring file), substituted and
-        # filtered by their bounds per element on query
-        self.array_claims: list[tuple[str, str, dict | None, str]] = []
-        # blanket claims over a bare receiver placeholder:
-        # (placeholder, interface spellings, bounds, declaring file)
-        self.generic_claims: list[tuple[str, list[str], dict | None, str]] = []
-        # Claims added to a generic struct by '@extend Base<T>' retain their
-        # own bounds. Each concrete instance publishes only the claims whose
-        # extension environment accepts its arguments.
-        self.generic_struct_claims: dict[str, list[tuple]] = {}
-        # per-symbol parameter defaults with the declaring file, whose
-        # view resolves the default expressions at call sites
-        self.param_defaults: dict[str, tuple[list, str]] = {}
-
-        # symbols whose last parameter is the 'args...' const Any[] sugar;
-        # their calls pack extra arguments into it
-        self.variadics: set[str] = set()
-        self.var_args: set[str] = set()
-
-        # every type name wrapped 'as Any', by id: the runtime
-        # '@typename' table, emitted once emission has seen every wrap
-        self.any_names: dict[int, str] = {}
-        self.typename_fn = None
-
-        # the registered structs by name, for type resolution and member access
-        self.structs: dict[str, StructInfo] = {}
-
-        # generic struct templates by name, instantiated by use: each
-        # 'S<args>' spelling stamps a concrete struct into 'structs'
-        self.generic_structs: dict = {}
-
-        # generic alias templates by name: each 'a<args>' spelling expands
-        # the target with its arguments substituted
-        self.generic_aliases: dict = {}
-
-        # Alias syntax is collected separately from canonical targets. This
-        # keeps collection from asking what a target means while still making
-        # every alias identity visible to collision checks.
-        self.alias_declarations: list = []
-        self.collected_aliases: set[int] = set()
-        self.alias_targets: dict[str, str] = {}
-        self.resolved_aliases: set[int] = set()
-
-        # generic function templates by name; calls declare each 'f<args>'
-        # instance once and queue its body for emission
-        self.generic_functions: dict = {}
-        self.instantiated_functions: set = set()
-        self.pending_functions: deque[Function] = deque()
-        # Each concrete generic function or receiver-family method follows
-        # the same semantic lifecycle. Calls request instances, signature
-        # resolution queues them, and the fixed-point checker marks their
-        # bodies checked before final backend work consumes the complete set.
-        self.function_instance_states: dict[str, str] = {}
-        self.checked_functions: set[str] = set()
-        self.checked_instance_bodies: list[Function] = []
-        self.checked_default_types: set[str] = set()
-        self.checking_function: Function | None = None
-        self.checking_loop_depth = 0
-        # the concrete callee the last checked call resolved to, letting a
-        # call statement's path end when that callee never returns
-        self.checked_call: str | None = None
-        self.emitting = False
-        # concrete definitions displaced by an '@override' declaration;
-        # registration keeps their signatures, emission skips their bodies
-        self.overridden_functions: set[int] = set()
-        # exact method specializations suppress only the matching receiver
-        # family overload, leaving its siblings available
-        self.overridden_method_signatures: dict[str, set[tuple]] = {}
-
-        # a generic struct's method templates by (struct, method) name,
-        # stamped alongside each 'S<args>' instantiation on first call
-        self.generic_methods: dict = {}
-        # methods over a bare receiver placeholder, such as a bounded
-        # '@extend<T: Scalar> T' block, grouped by method name
-        self.generic_receiver_methods: dict[str, list] = {}
-        # '@private' methods by canonical 'Type::method' name. Method
-        # lookup starts from a carried receiver type rather than an import
-        # spelling, so it needs an explicit textual-module visibility gate.
-        self.private_methods: dict[str, set[str]] = {}
-
-        # nonzero while expanding names the compiler wrote itself
-        # (substituted generics), which no file's view should gate
-        self.ungated_types = 0
-
-        # the enclosing block expressions' (slot, end block, Sie type, defer
-        # depth) targets, innermost last: what an 'emit' stores into and jumps to
-        self.emit_targets: list[tuple] = []
-
-        # one frame of deferred (statement, scope) pairs per open scope,
-        # innermost last: what runs when each scope ends
-        self.defer_frames: list[list] = []
-
-        # borrowed destructible rvalues materialized by each active call;
-        # the call destroys them in reverse argument-evaluation order
-        self.borrowed_temporary_frames: list[list] = []
-
-        # nonzero while deferred statements are being flushed, where a
-        # 'return' or 'emit' would flush the very frame holding it
-        self.flushing_defers = 0
-
-        # the enclosing loops' (break block, continue block, defer depth)
-        # targets, innermost last: where a 'break' or 'continue' jumps
-        self.loop_targets: list[tuple] = []
-
-        # one loop-stack floor per active defer flush, innermost last: a
-        # deferred statement may only steer loops of its own, entered above
-        # the floor, never the ones it flushes inside of
-        self.flush_loop_floors: list[int] = []
-
-        # Resolved non-generic aliases by name, mapped to canonical targets.
-        self.aliases: dict[str, str] = {}
-
-        # the registered '@const' declarations by name, substituted at their uses
-        self.constants: dict = {}
-        self.resolved_constants: set[int] = set()
-        self.constants_resolved = False
-
-        # the registered '@const' macros by name, expanded at their calls
-        self.macros: dict = {}
-
-        # '@deprecated' functions by symbol, mapped to their advice; the
-        # call graph and the uses met while emitting decide which of them
-        # warn, once the whole program is in
-        self.deprecated: dict[str, str] = {}
-        self.call_graph: dict = {}
-        # each direct edge's first source location: compile errors in lazily
-        # emitted generic bodies use these to reconstruct a Sie call trace
-        self.call_sites: dict[tuple[str, str], tuple[str, int]] = {}
-        # generic structs may stamp interface methods without a direct call.
-        # Retain the type-use and resulting method edges so their errors can
-        # still explain what caused those bodies to be emitted.
-        self.type_instantiation_sites: dict[
-            str, tuple[str, str, int]
-        ] = {}
-        self.instantiation_sites: dict[
-            str, tuple[str, str, int]
-        ] = {}
-        self.deprecated_uses: list = []
-
-        # '@remove' functions by symbol, mapped to their advice: a
-        # declaration stands so uses name it, and each use fails
-        self.removed: dict[str, str] = {}
-
-        # the function whose body is being emitted, and the line of the
-        # statement inside it: where a use of a deprecated name sits
-        self.current_function: str | None = None
-        self.current_line: int = 0
-
-        # Enum syntax and identities are collected before backing types and
-        # member values resolve. The member map is the dependency inventory.
-        self.enums: dict[str, EnumInfo] = {}
-        self.enum_declarations: list = []
-        self.collected_enums: set[int] = set()
-        self.enum_member_declarations: dict[tuple[str, str], tuple] = {}
-        self.resolved_enums: set[int] = set()
-
-        # the '@extern let' globals by name, mapped to their Sie types;
-        # their storage lives in the module's globals
-        self.globals: dict[str, str] = {}
-        self.resolved_globals: dict[str, object] = {}
-
-        # '@static' functions and globals by (file, name), mapped to their
-        # module symbols: each file's statics are invisible to every other
-        self.statics: dict[tuple[str, str], str] = {}
-
-        # '@symbol' functions by Sie name, mapped to their chosen module
-        # symbols, visible everywhere; the declaring file rides along so
-        # a qualified member only maps through its own module's binding
-        self.symbol_names: dict[str, str] = {}
-        self.symbol_files: dict[str, str] = {}
-
-        # per '@extern' symbol: how each struct parameter travels to C,
-        # aligned with the parameters (None marks a direct one), and how a
-        # struct return comes back: (kind, coerce type, struct type)
-        self.abi_args: dict[str, list] = {}
-        self.abi_returns: dict[str, tuple] = {}
-
-        # what each file's 'import's bound: (file, prefix) naming a whole
-        # module, (file, name) naming one member; and each module's exports
-        self.module_bindings: dict[tuple[str, str], str] = {}
-        self.member_bindings: dict[tuple[str, str], str] = {}
-        self.module_exports: dict[str, set] = {}
-        self.import_targets: dict[tuple[str, str], str] = {}
-        self.local_type_symbols: dict[tuple[str, str], str] = {}
-        self.module_type_symbols: dict[tuple[str, str], str] = {}
-
-        # the unqualified names each file may use: its own, its includes',
-        # its member imports', and the compilation unit's; a file the
-        # loader never mapped (a lone parse) sees everything
-        self.visible: dict[str, set] = {}
-        self.builtin_names: set = set()
-
-        # the loader's finer-grained view, resolving WHICH declaration a
-        # name in view means when modules collide: each file with its
-        # includes, each member import's module, and the entry sources;
-        # all empty for a bare program, which is one namespace
-        self.include_closure: dict[str, set] = {}
-        self.member_targets: dict[tuple[str, str], tuple] = {}
-        self.entry_files: list = []
-
-        # under separate compilation, the files whose definitions this
-        # unit owns - the sources and their includes; None (a whole-program
-        # build) defines every file's
-        self.unit_files: set | None = None
-
-        # the source file whose function body is being emitted, deciding
-        # which statics are in view
-        self.current_file = ""
+    @contextmanager
+    def ungated(self):
+        """Bypass file visibility for compiler-stamped type names."""
+        with self.source.ungated():
+            yield
 
     def resolve_symbol(self, name: str) -> str:
         """
@@ -1271,3 +1041,4 @@ def complete_semantics(gen: CodeGenerator) -> None:
             "LLVM IR was constructed before semantic checking completed")
 
     gen.semantic_complete = True
+    gen.semantic = SemanticModel.snapshot(gen)

@@ -7,6 +7,27 @@ entry point).
 """
 
 from siec.codegen.generator import CodeGenerator, codegen
+from siec.codegen.state import (
+    EmissionContext,
+    FlowContext,
+    GenericRegistry,
+    SemanticModel,
+    SourceContext,
+    SymbolTable,
+    TypeRegistry,
+)
 from siec.codegen.types import SCALAR_TYPES, resolve_type
 
-__all__ = ["CodeGenerator", "codegen", "SCALAR_TYPES", "resolve_type"]
+__all__ = [
+    "CodeGenerator",
+    "codegen",
+    "SCALAR_TYPES",
+    "resolve_type",
+    "SourceContext",
+    "SymbolTable",
+    "TypeRegistry",
+    "GenericRegistry",
+    "FlowContext",
+    "EmissionContext",
+    "SemanticModel",
+]
