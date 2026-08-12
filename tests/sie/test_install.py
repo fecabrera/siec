@@ -1,6 +1,7 @@
 """Tests for 'sie install'."""
 
 import tomllib
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -269,6 +270,90 @@ def test_a_failed_replacement_restores_from_its_unique_backup(
     assert list(home.glob("zlib@1.0.0.backup-*")) == []
 
 
+def test_an_interrupted_replacement_is_recovered_before_store_access(
+        home, monkeypatch):
+    """A journal restores the old tree after termination between renames."""
+    from pathlib import Path
+
+    from siec.sie import locked_store, replace
+
+    root = install_root()
+    root.mkdir(parents=True)
+    target = root / "zlib@1.0.0"
+    staging = root / ".zlib@1.0.0.partial-interrupted"
+    target.mkdir()
+    staging.mkdir()
+    (target / "value").write_text("old\n")
+    (staging / "value").write_text("new\n")
+
+    original = Path.rename
+
+    def interrupt_after_backup(self, destination):
+        if self == staging:
+            raise KeyboardInterrupt
+        return original(self, destination)
+
+    monkeypatch.setattr(Path, "rename", interrupt_after_backup)
+    with pytest.raises(KeyboardInterrupt):
+        replace(staging, target)
+
+    assert not target.exists()
+    assert list(root.glob("zlib@1.0.0.backup-*"))
+
+    with locked_store(exclusive=False):
+        pass
+
+    assert (target / "value").read_text() == "old\n"
+    assert not staging.exists()
+    assert list(root.glob("zlib@1.0.0.backup-*")) == []
+    assert list(root.glob(".*.transaction.json")) == []
+
+
+def test_each_install_uses_its_own_staging_directory(
+        home, monkeypatch):
+    """Reinstalls cannot delete or consume another operation's staging tree."""
+    package = make_package(
+        home, "zlib", made_of='sources = ["src/"]\n',
+        files=[("src/value.sie", "value\n")])
+
+    import siec.sie
+
+    original = siec.sie.copy_into
+    staging_names = []
+
+    def observe_staging(source, entries, staging):
+        staging_names.append(staging.name)
+        return original(source, entries, staging)
+
+    monkeypatch.setattr(siec.sie, "copy_into", observe_staging)
+
+    assert run_sie(monkeypatch, "install", package) == 0
+    assert run_sie(monkeypatch, "install", package) == 0
+
+    assert len(set(staging_names)) == 2
+    assert all(name.startswith(".zlib@1.0.0.partial-")
+               for name in staging_names)
+    assert list(install_root().glob(".zlib@1.0.0.partial-*")) == []
+
+
+def test_concurrent_installs_are_serialized(home):
+    """Two writers cannot overlap replacement of one package identity."""
+    from siec.sie import install
+
+    package = make_package(
+        home, "zlib", made_of='sources = ["src/"]\n',
+        files=[("src/value.sie", "value\n")])
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: install([str(package)]), range(2)))
+
+    assert results == [0, 0]
+    installed = install_root() / "zlib@1.0.0"
+    assert (installed / "src" / "value.sie").read_text() == "value\n"
+    assert list(install_root().glob(".zlib@1.0.0.partial-*")) == []
+    assert list(install_root().glob("zlib@1.0.0.backup-*")) == []
+
+
 def test_an_invalid_reinstall_leaves_the_installed_package_untouched(
         home, monkeypatch, capsys):
     """
@@ -488,6 +573,34 @@ def test_a_nested_source_symlink_reaching_outside_is_refused(
     assert run_sie(monkeypatch, "install", "sneaky") == 1
 
     assert "symlink reaches outside the package" in capsys.readouterr().err
+    assert not (install_root() / "sneaky@1.0.0").exists()
+
+
+def test_a_source_swapped_for_an_outside_symlink_after_validation_is_refused(
+        home, monkeypatch, capsys):
+    """Copying preserves and revalidates a link introduced after the check."""
+    import shutil
+
+    outside = home / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.sie").write_text("secret\n")
+    package = make_package(
+        home, "sneaky", made_of='sources = ["src/"]\n',
+        files=[("src/public.sie", "public\n")])
+
+    import siec.sie
+
+    original = siec.sie.copy_into
+
+    def swap_after_validation(source, entries, staging):
+        shutil.rmtree(source / "src")
+        (source / "src").symlink_to(outside, target_is_directory=True)
+        return original(source, entries, staging)
+
+    monkeypatch.setattr(siec.sie, "copy_into", swap_after_validation)
+
+    assert run_sie(monkeypatch, "install", package) == 1
+    assert "outside the package" in capsys.readouterr().err
     assert not (install_root() / "sneaky@1.0.0").exists()
 
 

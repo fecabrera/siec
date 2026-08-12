@@ -11,14 +11,19 @@ finds in the same place.
 """
 
 import argparse
+import contextvars
 import datetime
+import json
 import os
 import re
 import secrets
 import shutil
+import stat
 import sys
+import tempfile
 import tomllib
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,6 +50,12 @@ DEFAULT_SIE_PATH = Path.home() / ".sie"
 
 # an array wider than this is listed an entry per line instead
 INLINE_WIDTH = 72
+
+# Store metadata is hidden so it can never be mistaken for a package.
+STORE_LOCK = ".store.lock"
+TRANSACTION_SUFFIX = ".transaction.json"
+ACTIVE_STORE: contextvars.ContextVar[Path | None] = contextvars.ContextVar(
+    "sie_active_store", default=None)
 
 def manifest_path(target: str) -> Path:
     """
@@ -235,6 +246,177 @@ def install_root() -> Path:
     base = Path(configured).expanduser() if configured else DEFAULT_SIE_PATH
 
     return base / "lib"
+
+
+def fsync_directory(path: Path) -> None:
+    """Persist directory-entry changes where the platform supports it."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(path, flags)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        # Windows and a few filesystems do not permit directory fsync. The
+        # renames remain atomic there even though their durability is up to
+        # the filesystem.
+        if os.name != "nt":
+            raise
+
+
+def remove_path(path: Path) -> None:
+    """Remove one store entry without ever following a symlink."""
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+    elif path.exists():
+        shutil.rmtree(path)
+
+
+def transaction_path(target: Path) -> Path:
+    """The durable replacement record for one installed identity."""
+    return target.with_name(f".{target.name}{TRANSACTION_SUFFIX}")
+
+
+def write_transaction(staging: Path, target: Path,
+                      backup: Path | None) -> Path:
+    """Atomically publish a replacement record before its first rename."""
+    record = transaction_path(target)
+    temporary = record.with_name(
+        f"{record.name}.writing-{secrets.token_hex(16)}")
+    data = {
+        "target": target.name,
+        "staging": staging.name,
+        "backup": backup.name if backup is not None else None,
+    }
+    try:
+        with temporary.open("x", encoding="utf-8") as stream:
+            json.dump(data, stream, separators=(",", ":"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, record)
+        fsync_directory(target.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return record
+
+
+def valid_transaction(record: Path, data: object) -> tuple[Path, Path, Path | None] | None:
+    """Decode store metadata only when every path is a constrained basename."""
+    if not isinstance(data, dict):
+        return None
+    target_name = data.get("target")
+    staging_name = data.get("staging")
+    backup_name = data.get("backup")
+    if not isinstance(target_name, str) or not isinstance(staging_name, str):
+        return None
+    name, separator, version = target_name.partition("@")
+    if (not separator or not PACKAGE_COMPONENT.fullmatch(name)
+            or not PACKAGE_COMPONENT.fullmatch(version)):
+        return None
+    if record.name != f".{target_name}{TRANSACTION_SUFFIX}":
+        return None
+    if (Path(staging_name).name != staging_name
+            or not staging_name.startswith(f".{target_name}.partial-")):
+        return None
+    if backup_name is not None and (
+            not isinstance(backup_name, str)
+            or Path(backup_name).name != backup_name
+            or not backup_name.startswith(f"{target_name}.backup-")):
+        return None
+
+    root = record.parent
+    return (root / target_name, root / staging_name,
+            None if backup_name is None else root / backup_name)
+
+
+def recover_store(root: Path) -> None:
+    """Finish or roll back replacements interrupted between atomic renames."""
+    for record in root.glob(f".*{TRANSACTION_SUFFIX}"):
+        try:
+            descriptor = os.open(
+                record, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    decoded = None
+                else:
+                    decoded = valid_transaction(record, json.load(stream))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            decoded = None
+
+        # A record is internal metadata. Discarding an invalid one is safer
+        # than accepting attacker-controlled paths or permanently wedging the
+        # package manager.
+        if decoded is None:
+            remove_path(record)
+            fsync_directory(root)
+            continue
+
+        target, staging, backup = decoded
+        if target.exists() or target.is_symlink():
+            remove_path(staging)
+            if backup is not None:
+                remove_path(backup)
+        elif backup is not None and (backup.exists() or backup.is_symlink()):
+            # A reinstall interrupted while its old package was out of the
+            # way. Prefer the known-good old tree over the uncommitted copy.
+            backup.rename(target)
+            fsync_directory(root)
+            remove_path(staging)
+        elif staging.exists() or staging.is_symlink():
+            # A first install has no prior version to restore; its staging
+            # tree was fully flushed before this record was published.
+            staging.rename(target)
+            fsync_directory(root)
+
+        record.unlink(missing_ok=True)
+        fsync_directory(root)
+
+
+@contextmanager
+def locked_store(exclusive: bool):
+    """Lock and recover the package store, then expose one stable snapshot."""
+    root = install_root()
+    root.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(root / STORE_LOCK, flags, 0o600)
+    stream = os.fdopen(descriptor, "r+b", closefd=True)
+    active = None
+    try:
+        if os.name == "nt":
+            import msvcrt
+            if os.fstat(stream.fileno()).st_size == 0:
+                stream.write(b"\0")
+                stream.flush()
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            # Recovery mutates the store, so every reader briefly takes the
+            # exclusive lock before downgrading to a shared snapshot lock.
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+
+        recover_store(root)
+
+        if os.name != "nt" and not exclusive:
+            import fcntl
+            fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
+        active = ACTIVE_STORE.set(root)
+        yield root
+    finally:
+        if active is not None:
+            ACTIVE_STORE.reset(active)
+        if os.name == "nt":
+            import msvcrt
+            stream.seek(0)
+            try:
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        stream.close()
 
 
 def manifest_component(manifest: Path, location: str,
@@ -538,9 +720,9 @@ def validate_content_path(package: Path, path: Path) -> None:
     """
     Ensure a declared path and every path below it stay in the package.
 
-    Internal symlinks are allowed and copied as their contents. Broken
-    links, cycles, and links resolving outside the package are rejected
-    before a staging directory is created.
+    Internal symlinks are allowed and preserved. Broken links, cycles, and
+    links resolving outside the package are rejected before staging and
+    checked again in the completed copy.
     """
     try:
         root = package.resolve(strict=True)
@@ -593,6 +775,159 @@ def validate_content_path(package: Path, path: Path) -> None:
     walk(path)
 
 
+def same_file(before: os.stat_result, after: os.stat_result,
+              content: bool = False) -> bool:
+    """Whether two observations identify the same unchanged object."""
+    identity = ((before.st_dev, before.st_ino, stat.S_IFMT(before.st_mode))
+                == (after.st_dev, after.st_ino, stat.S_IFMT(after.st_mode)))
+    return identity and (not content or (
+        before.st_size == after.st_size
+        and before.st_mtime_ns == after.st_mtime_ns))
+
+
+def changed_source(source: Path) -> ValueError:
+    return ValueError(
+        f"{display_path(str(source))}: package content changed while copying")
+
+
+def prepare_leaf(destination: Path) -> None:
+    """Make a staging leaf available without following an earlier symlink."""
+    if destination.is_symlink() or destination.is_file():
+        destination.unlink()
+    elif destination.exists():
+        shutil.rmtree(destination)
+
+
+def copy_regular(descriptor: int, before: os.stat_result,
+                 source: Path, destination: Path) -> None:
+    """Copy and flush a regular file already opened without following links."""
+    opened = os.fstat(descriptor)
+    if not stat.S_ISREG(opened.st_mode) or not same_file(before, opened):
+        raise changed_source(source)
+
+    prepare_leaf(destination)
+    destination_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    destination_descriptor = os.open(destination, destination_flags, 0o600)
+    try:
+        with (os.fdopen(os.dup(descriptor), "rb") as input_stream,
+              os.fdopen(os.dup(destination_descriptor), "wb") as output_stream):
+            shutil.copyfileobj(input_stream, output_stream)
+            output_stream.flush()
+            os.fsync(output_stream.fileno())
+        after = os.fstat(descriptor)
+        if not same_file(opened, after, content=True):
+            raise changed_source(source)
+        os.fchmod(destination_descriptor, stat.S_IMODE(opened.st_mode))
+        os.utime(destination, ns=(opened.st_atime_ns, opened.st_mtime_ns),
+                 follow_symlinks=False)
+        os.fsync(destination_descriptor)
+    finally:
+        os.close(destination_descriptor)
+
+
+def copy_node_at(parent: int, name: str, source: Path,
+                 destination: Path) -> None:
+    """Copy one child through its parent's descriptor, never by re-resolving it."""
+    before = os.stat(name, dir_fd=parent, follow_symlinks=False)
+
+    if stat.S_ISLNK(before.st_mode):
+        link = os.readlink(name, dir_fd=parent)
+        after = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if link != os.readlink(name, dir_fd=parent) or not same_file(before, after):
+            raise changed_source(source)
+        prepare_leaf(destination)
+        os.symlink(link, destination)
+        return
+
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if stat.S_ISREG(before.st_mode):
+        descriptor = os.open(name, os.O_RDONLY | nofollow, dir_fd=parent)
+        try:
+            copy_regular(descriptor, before, source, destination)
+        finally:
+            os.close(descriptor)
+        return
+
+    if stat.S_ISDIR(before.st_mode):
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | nofollow
+        descriptor = os.open(name, flags, dir_fd=parent)
+        try:
+            opened = os.fstat(descriptor)
+            if not stat.S_ISDIR(opened.st_mode) or not same_file(before, opened):
+                raise changed_source(source)
+            if destination.is_symlink() or (destination.exists()
+                                             and not destination.is_dir()):
+                prepare_leaf(destination)
+            destination.mkdir(parents=True, exist_ok=True)
+            for child in os.listdir(descriptor):
+                copy_node_at(descriptor, child, source / child,
+                             destination / child)
+            if not same_file(opened, os.fstat(descriptor), content=True):
+                raise changed_source(source)
+            os.chmod(destination, stat.S_IMODE(opened.st_mode))
+            fsync_directory(destination)
+        finally:
+            os.close(descriptor)
+        return
+
+    print(f"sie: warning: {display_path(str(source))} is not a regular "
+          "file or directory, skipping", file=sys.stderr)
+
+
+def copy_node_path(source: Path, destination: Path) -> None:
+    """Path-based fallback for platforms without descriptor-relative calls."""
+    before = source.lstat()
+    if stat.S_ISLNK(before.st_mode):
+        link = os.readlink(source)
+        after = source.lstat()
+        if link != os.readlink(source) or not same_file(before, after):
+            raise changed_source(source)
+        prepare_leaf(destination)
+        os.symlink(link, destination)
+    elif stat.S_ISREG(before.st_mode):
+        descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            copy_regular(descriptor, before, source, destination)
+        finally:
+            os.close(descriptor)
+    elif stat.S_ISDIR(before.st_mode):
+        if destination.is_symlink() or (destination.exists()
+                                         and not destination.is_dir()):
+            prepare_leaf(destination)
+        destination.mkdir(parents=True, exist_ok=True)
+        for child in os.scandir(source):
+            copy_node_path(source / child.name, destination / child.name)
+        if not same_file(before, source.lstat(), content=True):
+            raise changed_source(source)
+        os.chmod(destination, stat.S_IMODE(before.st_mode))
+        fsync_directory(destination)
+    else:
+        print(f"sie: warning: {display_path(str(source))} is not a regular "
+              "file or directory, skipping", file=sys.stderr)
+
+
+def copy_entry_at(root: int, package: Path, entry: str,
+                  destination: Path) -> None:
+    """Reach a manifest entry component-by-component below the package fd."""
+    parts = Path(entry).parts
+    if (not parts or Path(entry).is_absolute()
+            or any(part in ("", ".", "..") for part in parts)):
+        raise ValueError(f"{display_path(str(package / entry))}: invalid "
+                         "package content path")
+
+    parent = os.dup(root)
+    try:
+        for part in parts[:-1]:
+            flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                     | getattr(os, "O_NOFOLLOW", 0))
+            child = os.open(part, flags, dir_fd=parent)
+            os.close(parent)
+            parent = child
+        copy_node_at(parent, parts[-1], package / entry, destination)
+    finally:
+        os.close(parent)
+
+
 def copy_into(package: Path, entries: list[str], target: Path) -> list[str]:
     """
     Copy each entry from the package into `target`, keeping the place it
@@ -602,22 +937,37 @@ def copy_into(package: Path, entries: list[str], target: Path) -> list[str]:
     with a warning: the install is still worth having.
     """
     copied = []
+    descriptor_relative = os.open in os.supports_dir_fd
+    package_descriptor = None
+    if descriptor_relative:
+        flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                 | getattr(os, "O_NOFOLLOW", 0))
+        package_descriptor = os.open(package, flags)
 
-    for entry in entries:
-        source = package / entry
-        destination = target / entry
+    try:
+        for entry in entries:
+            source = package / entry
+            destination = target / entry
 
-        destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.parent.mkdir(parents=True, exist_ok=True)
 
-        if source.is_dir():
-            shutil.copytree(source, destination, dirs_exist_ok=True)
-            copied.append(entry + "/")
-        elif source.is_file():
-            shutil.copy2(source, destination)
-            copied.append(entry)
-        else:
-            print(f"sie: warning: {display_path(str(source))} is not there, "
-                  "skipping", file=sys.stderr)
+            try:
+                if package_descriptor is not None:
+                    copy_entry_at(package_descriptor, package, entry, destination)
+                else:
+                    copy_node_path(source, destination)
+            except FileNotFoundError:
+                print(f"sie: warning: {display_path(str(source))} is not there, "
+                      "skipping", file=sys.stderr)
+                continue
+
+            if destination.is_dir():
+                copied.append(entry + "/")
+            elif destination.exists() or destination.is_symlink():
+                copied.append(entry)
+    finally:
+        if package_descriptor is not None:
+            os.close(package_descriptor)
 
     return copied
 
@@ -630,24 +980,37 @@ def replace(staging: Path, target: Path) -> None:
     fails halfway leaves the previous install untouched.
     """
     previous = None
-    if target.exists():
+    if target.exists() or target.is_symlink():
         while previous is None:
             candidate = target.with_name(
                 f"{target.name}.backup-{secrets.token_hex(16)}")
             if not candidate.exists() and not candidate.is_symlink():
                 previous = candidate
 
+    # Every copied file and directory is flushed before this record makes
+    # the staging tree eligible for recovery and commit.
+    fsync_directory(staging)
+    record = write_transaction(staging, target, previous)
+
+    if previous is not None:
         target.rename(previous)
+        fsync_directory(target.parent)
 
     try:
         staging.rename(target)
+        fsync_directory(target.parent)
     except OSError:
         if previous is not None and previous.exists():
             previous.rename(target)
+            fsync_directory(target.parent)
+        record.unlink(missing_ok=True)
+        fsync_directory(target.parent)
         raise
 
     if previous is not None:
-        shutil.rmtree(previous, ignore_errors=True)
+        remove_path(previous)
+    record.unlink(missing_ok=True)
+    fsync_directory(target.parent)
 
 
 def install_details(manifest: Path) -> tuple[PackageManifest, list[str]]:
@@ -707,34 +1070,35 @@ def install(argv: list[str]) -> int:
               "[library] 'sources', so only its manifest is installed",
               file=sys.stderr)
 
-    staging = target.with_name("." + target.name + ".partial")
+    staging = None
 
     try:
-        # Manifest and path validation have completed above. Build the new
-        # install in full before replace() moves the currently installed one.
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.rmtree(staging, ignore_errors=True)
-        staging.mkdir()
+        with locked_store(exclusive=True) as root:
+            target = contained_path(root, f"{name}@{version}", manifest)
+            staging = Path(tempfile.mkdtemp(
+                prefix=f".{target.name}.partial-", dir=root))
 
-        copied = copy_into(package, entries, staging)
+            copied = copy_into(package, entries, staging)
 
-        # Validate what was actually copied, not only the source snapshot
-        # read above. A concurrently changed or corrupted manifest never
-        # reaches replace(), so the installed version remains in place.
-        staged, _ = install_details(staging / MANIFEST)
-        if (staged.name, staged.version) != (name, version):
-            raise ValueError(
-                f"{display_path(str(staging / MANIFEST))}: package identity "
-                "changed while staging")
+            # Validate what was actually copied, not only the source tree
+            # read above. Symlinks were preserved, so validation cannot be
+            # bypassed by swapping one for an outside target during copying.
+            staged, _ = install_details(staging / MANIFEST)
+            if (staged.name, staged.version) != (name, version):
+                raise ValueError(
+                    f"{display_path(str(staging / MANIFEST))}: package identity "
+                    "changed while staging")
 
-        replaced = target.exists()
-        replace(staging, target)
+            replaced = target.exists() or target.is_symlink()
+            replace(staging, target)
     except ValueError as error:
-        shutil.rmtree(staging, ignore_errors=True)
+        if staging is not None:
+            remove_path(staging)
         print(f"sie: {error}", file=sys.stderr)
         return 1
     except OSError as error:
-        shutil.rmtree(staging, ignore_errors=True)
+        if staging is not None:
+            remove_path(staging)
         print(f"sie: {error.filename or target}: {error.strerror}",
               file=sys.stderr)
         return 1
@@ -853,7 +1217,11 @@ def installed() -> list[tuple[str, str, Path]]:
     filed under a '<name>@<version>', whether or not its manifest can
     still be read.
     """
-    root = install_root()
+    root = ACTIVE_STORE.get()
+    if root is None:
+        with locked_store(exclusive=False) as root:
+            return installed()
+
     if not root.is_dir():
         return []
 
@@ -898,17 +1266,24 @@ def listing(argv: list[str]) -> int:
         description="List the packages installed in $SIE_PATH/lib")
     args.parse_args(argv)
 
-    packages = installed()
-    if not packages:
-        print(f"sie: nothing installed in {install_root()}", file=sys.stderr)
-        return 0
+    try:
+        with locked_store(exclusive=False) as root:
+            packages = installed()
+            if not packages:
+                print(f"sie: nothing installed in {root}", file=sys.stderr)
+                return 0
 
-    width = max(len(f"{name}@{version}") for name, version, _ in packages)
+            width = max(len(f"{name}@{version}")
+                        for name, version, _ in packages)
 
-    for name, version, package in packages:
-        spec = f"{name}@{version}"
-        text = description(package)
-        print(f"{spec:<{width}}  {text}".rstrip())
+            for name, version, package in packages:
+                spec = f"{name}@{version}"
+                text = description(package)
+                print(f"{spec:<{width}}  {text}".rstrip())
+    except OSError as error:
+        print(f"sie: {error.filename or install_root()}: {error.strerror}",
+              file=sys.stderr)
+        return 1
 
     return 0
 
@@ -939,6 +1314,18 @@ def uninstall(argv: list[str]) -> int:
               file=sys.stderr)
         return 1
 
+    try:
+        with locked_store(exclusive=True) as root:
+            return uninstall_from_store(opts, name, separator, version, root)
+    except OSError as error:
+        print(f"sie: {error.filename or install_root()}: {error.strerror}",
+              file=sys.stderr)
+        return 1
+
+
+def uninstall_from_store(opts, name: str, separator: str, version: str,
+                         root: Path) -> int:
+    """Select and remove packages while holding the store's write lock."""
     matches = [package for package in installed() if package[0] == name]
     if separator:
         selected = [package for package in matches if package[1] == version]
@@ -967,10 +1354,8 @@ def uninstall(argv: list[str]) -> int:
     for installed_name, installed_version, path in selected:
         try:
             # Never follow an install-root symlink while removing it.
-            if path.is_symlink():
-                path.unlink()
-            else:
-                shutil.rmtree(path)
+            remove_path(path)
+            fsync_directory(root)
         except OSError as error:
             print(f"sie: {error.filename or path}: {error.strerror}",
                   file=sys.stderr)
@@ -992,6 +1377,17 @@ def resolve(root: PackageManifest) -> list[PackageManifest]:
 
     Raises LookupError naming what could not be resolved and who wanted it.
     """
+    try:
+        with locked_store(exclusive=False):
+            return resolve_from_store(root)
+    except OSError as error:
+        raise LookupError(
+            f"{error.filename or install_root()}: {error.strerror}") from error
+
+
+def resolve_from_store(root: PackageManifest) -> list[PackageManifest]:
+    """Resolve from the store snapshot already held by the caller."""
+
     available: dict[str, list[tuple[str, Path]]] = {}
     for name, version, path in installed():
         available.setdefault(name, []).append((version, path))
@@ -1174,10 +1570,21 @@ def build(argv: list[str]) -> int:
         return 1
 
     try:
-        tree = resolve(root)
-    except LookupError as error:
-        print(f"sie: {error}", file=sys.stderr)
+        with locked_store(exclusive=False):
+            return build_from_store(root, sources, output, opts)
+    except (LookupError, OSError) as error:
+        if isinstance(error, OSError):
+            message = f"{error.filename or install_root()}: {error.strerror}"
+        else:
+            message = str(error)
+        print(f"sie: {message}", file=sys.stderr)
         return 1
+
+
+def build_from_store(root: PackageManifest, sources: list[Path],
+                     output: Path | None, opts) -> int:
+    """Resolve and compile against one locked package-store snapshot."""
+    tree = resolve_from_store(root)
 
     # the package's own directories come first, so a module of its own wins
     # over one a dependency happens to publish under the same name
