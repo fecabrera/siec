@@ -5,8 +5,164 @@
 const vscode = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
 const { indentationAfter } = require("./indentation");
+const { targetFor } = require("./run-debug");
+const fs = require("fs");
+const path = require("path");
 
 let client;
+
+function expandSetting(value, workspaceFolder) {
+    if (typeof value !== "string") {
+        return value;
+    }
+    return value
+        .replace(/\$\{workspaceFolder\}/g, workspaceFolder || "")
+        .replace(/\$\{env:([^}]+)\}/g, (_, name) => process.env[name] || "");
+}
+
+async function currentTarget(argsSetting) {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.languageId !== "sie"
+            || editor.document.uri.scheme !== "file") {
+        throw new Error("Open a .sie file to run or debug it.");
+    }
+    if (editor.document.isDirty && !await editor.document.save()) {
+        throw new Error("Save the current Sie file before running it.");
+    }
+
+    const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    const workspace = folder && folder.uri.fsPath;
+    const config = vscode.workspace.getConfiguration("sie", editor.document.uri);
+    const expand = (value) => expandSetting(value, workspace);
+    return {
+        folder,
+        target: targetFor(editor.document.uri.fsPath, workspace, {
+            compilerCommand: expand(config.get("compilerPath") || "siec"),
+            packageCommand: expand(config.get("packageManagerPath") || "sie"),
+            includePaths: (config.get("includePaths") || []).map(expand),
+            args: config.get(argsSetting) || [],
+        }),
+    };
+}
+
+function taskFor(folder, name, invocation, cwd) {
+    const scope = folder || vscode.TaskScope.Workspace;
+    const execution = new vscode.ProcessExecution(
+        invocation.command, invocation.args, { cwd },
+    );
+    const task = new vscode.Task(
+        { type: "sie", task: name }, scope, name, "sie", execution, [],
+    );
+    task.presentationOptions = {
+        reveal: vscode.TaskRevealKind.Always,
+        panel: vscode.TaskPanelKind.Dedicated,
+        clear: true,
+    };
+    return task;
+}
+
+function executeTask(task) {
+    return new Promise(async (resolve, reject) => {
+        let execution;
+        const subscription = vscode.tasks.onDidEndTaskProcess((event) => {
+            if (event.execution !== execution) {
+                return;
+            }
+            subscription.dispose();
+            if (event.exitCode === 0) {
+                resolve();
+            } else {
+                reject(new Error(`Sie build exited with code ${event.exitCode}.`));
+            }
+        });
+        try {
+            execution = await vscode.tasks.executeTask(task);
+        } catch (error) {
+            subscription.dispose();
+            reject(error);
+        }
+    });
+}
+
+async function runSie() {
+    try {
+        const { folder, target } = await currentTarget("runArgs");
+        await vscode.tasks.executeTask(taskFor(
+            folder, "Run Sie", target.run, target.cwd,
+        ));
+    } catch (error) {
+        vscode.window.showErrorMessage(error.message || String(error));
+    }
+}
+
+function debuggerType(config) {
+    const requested = config.get("debugger") || "auto";
+    if (requested !== "auto") {
+        return requested;
+    }
+    if (vscode.extensions.getExtension("vadimcn.vscode-lldb")) {
+        return "lldb";
+    }
+    if (vscode.extensions.getExtension("ms-vscode.cpptools")) {
+        return "cppdbg";
+    }
+    return undefined;
+}
+
+async function prepareDebugConfiguration() {
+    const { folder, target } = await currentTarget("debugArgs");
+    const uri = vscode.window.activeTextEditor.document.uri;
+    const config = vscode.workspace.getConfiguration("sie", uri);
+    const type = debuggerType(config);
+    if (!type) {
+        throw new Error(
+            "Sie debugging requires the CodeLLDB or Microsoft C/C++ extension.",
+        );
+    }
+
+    fs.mkdirSync(path.dirname(target.program), { recursive: true });
+    await executeTask(taskFor(folder, "Build Sie (debug)",
+                              target.build, target.cwd));
+
+    const launch = {
+        type,
+        request: "launch",
+        name: "Debug Sie",
+        program: target.program,
+        args: config.get("debugArgs") || [],
+        cwd: target.cwd,
+    };
+    if (type === "cppdbg") {
+        launch.MIMode = process.platform === "darwin" ? "lldb" : "gdb";
+        launch.externalConsole = false;
+        launch.stopAtEntry = false;
+    }
+    return { folder, launch };
+}
+
+async function debugSie() {
+    try {
+        const { folder, launch } = await prepareDebugConfiguration();
+        const started = await vscode.debug.startDebugging(folder, launch);
+        if (!started) {
+            throw new Error(`Could not start the ${launch.type} debugger.`);
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(error.message || String(error));
+    }
+}
+
+const debugConfigurationProvider = {
+    async provideDebugConfigurations() {
+        try {
+            const { launch } = await prepareDebugConfiguration();
+            return [launch];
+        } catch (error) {
+            vscode.window.showErrorMessage(error.message || String(error));
+            return [];
+        }
+    },
+};
 
 async function insertLineBreak() {
     const editor = vscode.window.activeTextEditor;
@@ -79,6 +235,12 @@ function activate(context) {
     context.subscriptions.push(client);
     context.subscriptions.push(vscode.commands.registerCommand(
         "sie.insertLineBreak", insertLineBreak,
+    ));
+    context.subscriptions.push(vscode.commands.registerCommand("sie.run", runSie));
+    context.subscriptions.push(vscode.commands.registerCommand("sie.debug", debugSie));
+    context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider(
+        "sie", debugConfigurationProvider,
+        vscode.DebugConfigurationProviderTriggerKind.Initial,
     ));
     client.start();
 }

@@ -1,8 +1,8 @@
 {
     "name": "sie-lang",
     "displayName": "Sie Language",
-    "description": "Sie language support: syntax highlighting and the sie-lsp language server",
-    "version": "0.1.0",
+    "description": "Sie language support: syntax highlighting, sie-lsp, and run/debug commands",
+    "version": "0.1.1",
     "publisher": "sielang",
     "engines": {
         "vscode": "^1.82.0"
@@ -31,6 +31,20 @@
                 "path": "./syntaxes/sie.tmLanguage.json"
             }
         ],
+        "breakpoints": [
+            {
+                "language": "sie"
+            }
+        ],
+        "debuggers": [
+            {
+                "type": "sie",
+                "label": "Sie",
+                "languages": [
+                    "sie"
+                ]
+            }
+        ],
         "configuration": {
             "title": "Sie",
             "properties": {
@@ -39,13 +53,41 @@
                     "default": "sie-lsp",
                     "description": "Command that launches the Sie language server."
                 },
+                "sie.compilerPath": {
+                    "type": "string",
+                    "default": "siec",
+                    "description": "Command that launches the Sie compiler."
+                },
+                "sie.packageManagerPath": {
+                    "type": "string",
+                    "default": "sie",
+                    "description": "Command that launches the Sie package manager."
+                },
                 "sie.includePaths": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     },
                     "default": [],
-                    "description": "Extra include directories for analysis, like the compiler's -I."
+                    "description": "Extra include directories for analysis and standalone-file builds, like the compiler's -I."
+                },
+                "sie.runArgs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": [],
+                    "description": "Arguments passed to a Sie program when running it."
+                },
+                "sie.debugArgs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": [],
+                    "description": "Arguments passed to a Sie program when debugging it."
+                },
+                "sie.debugger": {
+                    "type": "string",
+                    "enum": ["auto", "lldb", "cppdbg"],
+                    "default": "auto",
+                    "description": "Native debugger to use. Auto prefers CodeLLDB, then Microsoft C/C++."
                 }
             }
         },
@@ -53,19 +95,56 @@
             {
                 "command": "sie.insertLineBreak",
                 "title": "Sie: Insert Line Break"
+            },
+            {
+                "command": "sie.run",
+                "title": "Sie: Run File or Package",
+                "icon": "$(play)"
+            },
+            {
+                "command": "sie.debug",
+                "title": "Sie: Debug File or Package",
+                "icon": "$(debug-alt)"
             }
         ],
+        "menus": {
+            "editor/title/run": [
+                {
+                    "command": "sie.run",
+                    "when": "resourceLangId == sie",
+                    "group": "run@1"
+                },
+                {
+                    "command": "sie.debug",
+                    "when": "resourceLangId == sie",
+                    "group": "run@2"
+                }
+            ]
+        },
         "keybindings": [
             {
                 "command": "sie.insertLineBreak",
                 "key": "enter",
                 "when": "editorTextFocus && editorLangId == sie && !suggestWidgetVisible"
+            },
+            {
+                "command": "sie.debug",
+                "key": "f5",
+                "when": "editorLangId == sie"
+            },
+            {
+                "command": "sie.run",
+                "key": "ctrl+f5",
+                "when": "editorLangId == sie"
             }
         ]
     },
     "main": "./extension.js",
     "activationEvents": [
-        "onLanguage:sie"
+        "onLanguage:sie",
+        "onCommand:sie.run",
+        "onCommand:sie.debug",
+        "onDebug:sie"
     ],
     "dependencies": {
         "vscode-languageclient": "^9.0.1"

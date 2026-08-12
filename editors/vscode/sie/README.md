@@ -19,6 +19,13 @@ module's public exports after a dot (`import util; util.`) or inside a member
 import (`import { ... } from util;`). Branches rejected by compile-time `@if`
 conditions are dimmed through semantic highlighting.
 
+The editor buttons, F5 / Ctrl+F5, and VS Code's Run and Debug view run the
+current program. Inside an `[app]` package they run or build the whole package;
+otherwise they operate on the current file. Debug builds use `-O0 -g` and
+launch CodeLLDB (preferred) or the Microsoft C/C++ debugger, so source
+breakpoints, stepping, the call stack, and local variables work with the
+compiler's DWARF information.
+
 ## Install
 
 Install the server next to the compiler:
@@ -48,3 +55,9 @@ Reload VS Code and open a `.sie` file. (Packaging a `.vsix` with
   own: its `[package] include` entries, and, where it declares an `[app]`
   or `[library]`, that package's sources and every dependency's resolved
   from what `sie install` put down.
+- `sie.compilerPath` and `sie.packageManagerPath` — the `siec` and `sie`
+  commands to use. They may be absolute paths and may contain
+  `${workspaceFolder}` or `${env:NAME}`.
+- `sie.runArgs` and `sie.debugArgs` — arguments passed to the program.
+- `sie.debugger` — `auto`, `lldb`, or `cppdbg`. Install CodeLLDB or the
+  Microsoft C/C++ extension before debugging.
