@@ -13,9 +13,11 @@ Helix setups that connect it to '.sie' files.
 import asyncio
 import re
 import sys
-from collections.abc import Callable
+import traceback
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from functools import wraps
 from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -283,9 +285,11 @@ def inactive_semantic_tokens(analysis: Analysis, text: str) -> list[int]:
 class _ValidationDebouncer:
     """Own and retire delayed validation tasks, one per document URI."""
 
-    def __init__(self, validate: Callable, delay: float = 0.2):
+    def __init__(self, validate: Callable, delay: float = 0.2,
+                 on_error: Callable | None = None):
         self.validate = validate
         self.delay = delay
+        self.on_error = on_error
         self.pending: dict[str, asyncio.Task] = {}
 
     async def _invoke(self, uri: str) -> None:
@@ -297,6 +301,19 @@ class _ValidationDebouncer:
             if isawaitable(result):
                 await result
 
+    async def _failed(self, uri: str, error: Exception) -> None:
+        """Consume an unexpected failure and hand it to the server boundary."""
+        if self.on_error is None:
+            return
+        try:
+            result = self.on_error(uri, error)
+            if isawaitable(result):
+                await result
+        except Exception:
+            # Error reporting must never create another unobserved task
+            # exception. Server callbacks log defensively themselves.
+            pass
+
     def _replace(self, uri: str, delay: float) -> asyncio.Task:
         """Install one validation task, superseding this URI's older work."""
         self.cancel(uri)
@@ -306,6 +323,10 @@ class _ValidationDebouncer:
                 if delay:
                     await asyncio.sleep(delay)
                 await self._invoke(uri)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                await self._failed(uri, error)
             finally:
                 # A canceled predecessor may finish after its replacement was
                 # installed; only the task that still owns the URI may remove it.
@@ -2014,7 +2035,7 @@ def create_server():
         "type": types.CompletionItemKind.Class,
     }
 
-    workspace = {"root": None, "extra": []}
+    workspace = {"root": None, "extra": [], "debug": False}
     outlines: dict[str, list[Symbol]] = {}
     analyses: dict[str, Analysis] = {}
     loaded_files: dict[str, frozenset[str]] = {}
@@ -2025,6 +2046,57 @@ def create_server():
     # event loop without introducing cross-compilation races.
     analysis_executor = ThreadPoolExecutor(
         max_workers=1, thread_name_prefix="sie-lsp-analysis")
+
+    def log_failure(context: str, error: Exception | None = None) -> None:
+        """Log a stable message, adding exception detail only in debug mode."""
+        message = f"sie-lsp: {context} failed unexpectedly"
+        if workspace["debug"] and error is not None:
+            detail = "".join(traceback.format_exception(
+                type(error), error, error.__traceback__))
+            message += f"\n{detail}"
+        try:
+            server.window_log_message(types.LogMessageParams(
+                type=types.MessageType.Error, message=message))
+        except Exception:
+            # Logging may be unavailable during initialization or shutdown.
+            pass
+
+    def log_invalid_options(message: str) -> None:
+        """Report ignored client configuration without failing initialize."""
+        try:
+            server.window_log_message(types.LogMessageParams(
+                type=types.MessageType.Warning,
+                message=f"sie-lsp: {message}"))
+        except Exception:
+            pass
+
+    def guarded(context: str, fallback):
+        """Keep malformed requests and handler bugs behind the LSP boundary."""
+        def decorate(function):
+            def default():
+                return fallback() if callable(fallback) else fallback
+
+            if iscoroutinefunction(function):
+                @wraps(function)
+                async def asynchronous(*args, **kwargs):
+                    try:
+                        return await function(*args, **kwargs)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as error:
+                        log_failure(context, error)
+                        return default()
+                return asynchronous
+
+            @wraps(function)
+            def synchronous(*args, **kwargs):
+                try:
+                    return function(*args, **kwargs)
+                except Exception as error:
+                    log_failure(context, error)
+                    return default()
+            return synchronous
+        return decorate
 
     def document_path(uri: str) -> Path:
         return Path(to_fs_path(uri)).resolve()
@@ -2118,12 +2190,34 @@ def create_server():
         # A debounced analysis may finish after the client's automatic
         # request for this edit. Ask capable clients to repaint the branch
         # choices now that they match the compiler's latest state.
-        workspace_caps = getattr(server.client_capabilities, "workspace", None)
+        capabilities = getattr(server, "client_capabilities", None)
+        workspace_caps = getattr(capabilities, "workspace", None)
         semantic_caps = getattr(workspace_caps, "semantic_tokens", None)
         if getattr(semantic_caps, "refresh_support", False):
             server.workspace_semantic_tokens_refresh(None)
 
-    debounce = _ValidationDebouncer(validate)
+    def validation_failed(uri: str, error: Exception) -> None:
+        """Invalidate stale editor state and publish one sanitized failure."""
+        analyses.pop(uri, None)
+        outlines.pop(uri, None)
+        loaded_files.pop(uri, None)
+        log_failure("document analysis", error)
+
+        try:
+            doc = server.workspace.get_text_document(uri)
+            diagnostic = types.Diagnostic(
+                range=line_range(None, doc),
+                message=("Sie analysis failed unexpectedly; see the language "
+                         "server log for details"),
+                severity=types.DiagnosticSeverity.Error,
+                source="siec")
+            server.text_document_publish_diagnostics(
+                types.PublishDiagnosticsParams(
+                    uri=uri, diagnostics=[diagnostic]))
+        except Exception as reporting_error:
+            log_failure("diagnostic reporting", reporting_error)
+
+    debounce = _ValidationDebouncer(validate, on_error=validation_failed)
     analysis_stopped = False
 
     def stop_analysis() -> None:
@@ -2154,32 +2248,65 @@ def create_server():
             debounce.schedule(affected_uri)
 
     @server.feature(types.INITIALIZE)
+    @guarded("initialize request", None)
     def initialize(params: types.InitializeParams) -> None:
-        if params.root_uri is not None:
-            workspace["root"] = Path(to_fs_path(params.root_uri))
+        root_uri = getattr(params, "root_uri", None)
+        if root_uri is not None:
+            if isinstance(root_uri, str):
+                workspace["root"] = Path(to_fs_path(root_uri))
+            else:
+                log_invalid_options("ignoring non-string workspace root URI")
 
-        options = params.initialization_options or {}
-        workspace["extra"] = options.get("includePaths", [])
+        raw_options = getattr(params, "initialization_options", None)
+        if raw_options is None:
+            options = {}
+        elif isinstance(raw_options, Mapping):
+            options = raw_options
+        else:
+            options = {}
+            log_invalid_options("initializationOptions must be an object")
+
+        raw_paths = options.get("includePaths", [])
+        if (isinstance(raw_paths, list)
+                and all(isinstance(path, str) and "\0" not in path
+                        for path in raw_paths)):
+            workspace["extra"] = list(raw_paths)
+        else:
+            workspace["extra"] = []
+            log_invalid_options(
+                "initializationOptions.includePaths must be an array of paths")
+
+        raw_debug = options.get("debug", False)
+        if isinstance(raw_debug, bool):
+            workspace["debug"] = raw_debug
+        else:
+            workspace["debug"] = False
+            log_invalid_options(
+                "initializationOptions.debug must be a boolean")
 
     @server.feature(types.SHUTDOWN)
     def shutdown(*_args) -> None:
         stop_analysis()
 
     @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
+    @guarded("didOpen notification", None)
     async def did_open(params: types.DidOpenTextDocumentParams) -> None:
         await validate_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_SAVE)
+    @guarded("didSave notification", None)
     async def did_save(params: types.DidSaveTextDocumentParams) -> None:
         await validate_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
+    @guarded("didChange notification", None)
     async def did_change(params: types.DidChangeTextDocumentParams) -> None:
         # let the keystrokes settle, then recompile; a newer change
         # cancels a wait still in flight
         schedule_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_CLOSE)
+    @guarded("didClose notification", None)
     def did_close(params: types.DidCloseTextDocumentParams) -> None:
         uri = params.text_document.uri
         dependants = set(dependent_uris(loaded_files, document_path(uri)))
@@ -2198,6 +2325,7 @@ def create_server():
             debounce.schedule(dependant)
 
     @server.feature(types.TEXT_DOCUMENT_HOVER)
+    @guarded("hover request", None)
     def hover(params: types.HoverParams) -> types.Hover | None:
         finding = resolve(params.text_document.uri, params.position)
         if finding is None:
@@ -2210,6 +2338,7 @@ def create_server():
     @server.feature(
         types.TEXT_DOCUMENT_COMPLETION,
         types.CompletionOptions(trigger_characters=[".", ":", ">", "{", ","]))
+    @guarded("completion request", list)
     def completion(params: types.CompletionParams) -> list:
         uri = params.text_document.uri
         analysis = analyses.get(uri)
@@ -2239,6 +2368,7 @@ def create_server():
         types.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL,
         types.SemanticTokensLegend(token_types=["comment"],
                                    token_modifiers=[]))
+    @guarded("semantic tokens request", lambda: types.SemanticTokens(data=[]))
     def semantic_tokens(
             params: types.SemanticTokensParams) -> types.SemanticTokens:
         analysis = analyses.get(params.text_document.uri)
@@ -2250,6 +2380,7 @@ def create_server():
             data=inactive_semantic_tokens(analysis, doc.source))
 
     @server.feature(types.TEXT_DOCUMENT_DEFINITION)
+    @guarded("definition request", list)
     def definition(params: types.DefinitionParams) -> list:
         finding = resolve(params.text_document.uri, params.position)
         if finding is None:
@@ -2263,6 +2394,7 @@ def create_server():
                 for file, line in finding.targets if line]
 
     @server.feature(types.TEXT_DOCUMENT_DOCUMENT_SYMBOL)
+    @guarded("document symbol request", list)
     def document_symbol(params: types.DocumentSymbolParams) -> list:
         uri = params.text_document.uri
         doc = server.workspace.get_text_document(uri)

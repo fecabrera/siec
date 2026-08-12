@@ -3,6 +3,7 @@
 import asyncio
 import threading
 import time
+from types import SimpleNamespace
 
 from siec.lsp import (Report, SearchPathCache, UnitAnalysisCache, analyze,
                       compile_unit, complete, dependent_uris, outline,
@@ -301,6 +302,35 @@ def test_debounced_validation_retires_completed_and_replaced_tasks():
     asyncio.run(exercise())
 
 
+def test_debounced_validation_consumes_and_reports_unexpected_failures():
+    """A scheduled compiler failure never reaches the loop exception handler."""
+    from siec.lsp import _ValidationDebouncer
+
+    async def exercise():
+        handled = []
+        leaked = []
+
+        async def fail(_uri):
+            raise RuntimeError("private compiler detail")
+
+        debounce = _ValidationDebouncer(
+            fail, delay=0,
+            on_error=lambda uri, error: handled.append((uri, str(error))))
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _loop, context: leaked.append(context))
+
+        uri = "file:///broken.sie"
+        debounce.schedule(uri)
+        await debounce.pending[uri]
+        await asyncio.sleep(0)
+
+        assert handled == [(uri, "private compiler detail")]
+        assert leaked == []
+        assert debounce.pending == {}
+
+    asyncio.run(exercise())
+
+
 def test_debounced_sync_validation_does_not_block_the_event_loop():
     """Legacy synchronous validation callbacks run in a worker thread."""
     from siec.lsp import _ValidationDebouncer
@@ -433,6 +463,140 @@ def test_close_cancels_a_pending_validation(tmp_path, monkeypatch):
 
         assert [params.diagnostics for params in published] == [[]]
         assert errors == []
+        shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_initialization_rejects_malformed_option_shapes_without_raising(
+        monkeypatch):
+    """Untrusted initialization JSON is ignored with sanitized warnings."""
+    from lsprotocol import types
+
+    from siec.lsp import create_server
+
+    server = create_server()
+    logs = []
+    monkeypatch.setattr(server, "window_log_message", logs.append)
+    initialize = server.protocol.fm.features[types.INITIALIZE]
+    shutdown = server.protocol.fm.features[types.SHUTDOWN]
+
+    initialize(SimpleNamespace(root_uri=None, initialization_options=[]))
+    initialize(SimpleNamespace(
+        root_uri=None,
+        initialization_options={"includePaths": "one/path", "debug": "yes"}))
+
+    assert len(logs) == 3
+    assert all(log.type == types.MessageType.Warning for log in logs)
+    assert all("Traceback" not in log.message for log in logs)
+    shutdown()
+
+
+def test_failed_server_validation_clears_stale_analysis_and_is_sanitized(
+        tmp_path, monkeypatch):
+    """An internal compiler bug replaces old semantics without leaking detail."""
+    from lsprotocol import types
+    from pygls.uris import from_fs_path
+    from pygls.workspace import Workspace
+
+    import siec.lsp as lsp
+
+    src = write(tmp_path / "main.sie", "fn main() -> i32 { return 0; }")
+    uri = from_fs_path(str(src))
+
+    async def exercise():
+        server = lsp.create_server()
+        server.protocol._workspace = Workspace(None)
+        server.workspace.put_text_document(types.TextDocumentItem(
+            uri=uri, language_id="sie", version=1, text=src.read_text()))
+
+        published = []
+        logs = []
+        leaked = []
+        monkeypatch.setattr(server, "text_document_publish_diagnostics",
+                            published.append)
+        monkeypatch.setattr(server, "window_log_message", logs.append)
+        asyncio.get_running_loop().set_exception_handler(
+            lambda _loop, context: leaked.append(context))
+
+        did_open = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_OPEN]
+        did_save = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_SAVE]
+        hover = server.protocol.fm.features[types.TEXT_DOCUMENT_HOVER]
+        shutdown = server.protocol.fm.features[types.SHUTDOWN]
+
+        await did_open(types.DidOpenTextDocumentParams(
+            text_document=types.TextDocumentItem(
+                uri=uri, language_id="sie", version=1,
+                text=src.read_text())))
+        params = types.HoverParams(
+            text_document=types.TextDocumentIdentifier(uri=uri),
+            position=types.Position(line=0, character=4))
+        assert hover(params) is not None
+
+        def fail_compile(*_args, **_kwargs):
+            raise RuntimeError("private compiler detail")
+
+        monkeypatch.setattr(lsp, "compile_unit", fail_compile)
+        await did_save(types.DidSaveTextDocumentParams(
+            text_document=types.TextDocumentIdentifier(uri=uri)))
+        await asyncio.sleep(0)
+
+        assert hover(params) is None
+        assert leaked == []
+        assert len(published[-1].diagnostics) == 1
+        message = published[-1].diagnostics[0].message
+        assert "failed unexpectedly" in message
+        assert "private compiler detail" not in message
+        assert logs
+        assert all("private compiler detail" not in log.message for log in logs)
+        assert all("Traceback" not in log.message for log in logs)
+        shutdown()
+
+    asyncio.run(exercise())
+
+
+def test_request_failure_returns_a_safe_fallback_without_traceback(
+        tmp_path, monkeypatch):
+    """Unexpected hover failures are logged and answered as no result."""
+    from lsprotocol import types
+    from pygls.uris import from_fs_path
+    from pygls.workspace import Workspace
+
+    import siec.lsp as lsp
+
+    src = write(tmp_path / "main.sie", "fn main() -> i32 { return 0; }")
+    uri = from_fs_path(str(src))
+
+    async def exercise():
+        server = lsp.create_server()
+        server.protocol._workspace = Workspace(None)
+        server.workspace.put_text_document(types.TextDocumentItem(
+            uri=uri, language_id="sie", version=1, text=src.read_text()))
+        logs = []
+        monkeypatch.setattr(server, "text_document_publish_diagnostics",
+                            lambda _params: None)
+        monkeypatch.setattr(server, "window_log_message", logs.append)
+
+        did_open = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_OPEN]
+        hover = server.protocol.fm.features[types.TEXT_DOCUMENT_HOVER]
+        shutdown = server.protocol.fm.features[types.SHUTDOWN]
+        await did_open(types.DidOpenTextDocumentParams(
+            text_document=types.TextDocumentItem(
+                uri=uri, language_id="sie", version=1,
+                text=src.read_text())))
+
+        def fail_inspection(*_args, **_kwargs):
+            raise RuntimeError("private request detail")
+
+        monkeypatch.setattr(lsp, "inspect", fail_inspection)
+        result = hover(types.HoverParams(
+            text_document=types.TextDocumentIdentifier(uri=uri),
+            position=types.Position(line=0, character=4)))
+
+        assert result is None
+        assert logs[-1].type == types.MessageType.Error
+        assert "private request detail" not in logs[-1].message
+        assert "Traceback" not in logs[-1].message
         shutdown()
 
     asyncio.run(exercise())
