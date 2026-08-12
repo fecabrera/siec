@@ -15,7 +15,7 @@ from siec.backend import (
     validate_target,
 )
 from siec.codegen import codegen
-from siec.codegen.errors import display_path
+from siec.codegen.errors import display_path, format_diagnostic
 from siec.diagnostics import DiagnosticError
 from siec.loader import discover_program
 
@@ -157,6 +157,9 @@ def main(argv: list[str] | None = None) -> int:
             FileNotFoundError) as error:
         print(format_error(str(sources[0]), error), file=sys.stderr)
         return 1
+
+    for diagnostic in getattr(module, "sie_diagnostics", ()):
+        print(format_diagnostic(diagnostic), file=sys.stderr)
 
     try:
         if opts.emit_llvm:

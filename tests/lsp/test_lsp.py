@@ -107,6 +107,23 @@ def test_analyze_prefers_overlay_text(tmp_path):
     assert analyze(src, [], {str(src.resolve()): fixed}) is None
 
 
+def test_compile_unit_collects_deprecation_warnings(tmp_path):
+    """
+    Deprecation warnings arrive as structured diagnostics, not stderr.
+    """
+    analysis, _ = unit(tmp_path, """\
+@deprecated("use later") fn old() -> i32 { return 1; }
+fn main() -> i32 { return old() - 1; }
+""")
+
+    assert analysis.report is None
+    assert len(analysis.diagnostics) == 1
+    warning = analysis.diagnostics[0]
+    assert warning.severity == "warning"
+    assert warning.code == "deprecated"
+    assert "'old' is deprecated: use later" in warning.message
+
+
 def test_compile_unit_reuses_unchanged_sources_and_complete_analysis(
         tmp_path, monkeypatch):
     """

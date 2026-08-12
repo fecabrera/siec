@@ -31,6 +31,24 @@ def test_emit_llvm_prints_the_module(tmp_path, capsys, monkeypatch):
     assert 'define i32 @"main"' in out
 
 
+def test_deprecation_warnings_print_on_stderr(tmp_path, capsys, monkeypatch):
+    """
+    Structured compile warnings are formatted onto stderr after codegen.
+    """
+    source = """\
+    @deprecated("use later") fn old() -> i32 { return 1; }
+    fn main() -> i32 { return old() - 1; }
+    """
+
+    src = tmp_path / "p.sie"
+    src.write_text(source)
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+
+    err = capsys.readouterr().err
+    assert "warning: 'old' is deprecated: use later" in err
+
+
 def test_emit_asm_prints_native_assembly(tmp_path, capsys, monkeypatch):
     """
     --emit-asm prints the host target's assembly instead of building.

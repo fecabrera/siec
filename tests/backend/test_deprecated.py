@@ -2,21 +2,28 @@
 
 import pytest
 
+from siec.codegen.errors import format_diagnostic
 
-def warnings_of(compile_source, capsys, source: str) -> str:
+
+def warnings_of(compile_source, source: str) -> str:
     """
-    Compile source and hand back what the compiler warned on stderr.
+    Compile source and render the structured warnings the compiler recorded.
     """
-    compile_source(source)
-    return capsys.readouterr().err
+    module = compile_source(source)
+    rendered = [
+        format_diagnostic(diagnostic)
+        for diagnostic in getattr(module, "sie_diagnostics", ())
+        if diagnostic.severity == "warning"
+    ]
+    return "\n".join(rendered) + ("\n" if rendered else "")
 
 
-def test_reachable_use_warns(compile_source, capsys):
+def test_reachable_use_warns(compile_source):
     """
     A call to a '@deprecated' function from code 'main' reaches warns
     with the declared advice, at the call site's line.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     fn new_func() -> i32 { return 1; }
 
     @deprecated("use new_func")
@@ -31,12 +38,12 @@ def test_reachable_use_warns(compile_source, capsys):
     assert warned.count("warning") == 1
 
 
-def test_transitive_uses_warn(compile_source, capsys):
+def test_transitive_uses_warn(compile_source):
     """
     Reachability follows the call graph: a use inside a function 'main'
     reaches through other calls warns too.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     @deprecated("use later") fn old() -> i32 { return 1; }
 
     fn middle() -> i32 { return old(); }
@@ -48,12 +55,12 @@ def test_transitive_uses_warn(compile_source, capsys):
     assert "'old' is deprecated: use later" in warned
 
 
-def test_unreachable_use_stays_quiet(compile_source, capsys):
+def test_unreachable_use_stays_quiet(compile_source):
     """
     A use no path from 'main' arrives at is not reported: the program
     never runs it.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     @deprecated("use later") fn old() -> i32 { return 1; }
 
     fn never_called() -> i32 { return old(); }
@@ -64,12 +71,12 @@ def test_unreachable_use_stays_quiet(compile_source, capsys):
     assert warned == ""
 
 
-def test_deprecated_callers_stay_quiet(compile_source, capsys):
+def test_deprecated_callers_stay_quiet(compile_source):
     """
     A deprecated function may lean on its own generation: uses inside one
     are not reported.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     @deprecated("use later") fn old() -> i32 { return 1; }
 
     @deprecated("use later too")
@@ -82,12 +89,12 @@ def test_deprecated_callers_stay_quiet(compile_source, capsys):
     assert "'old' is deprecated" not in warned
 
 
-def test_references_warn(compile_source, capsys):
+def test_references_warn(compile_source):
     """
     Handing a deprecated function around reaches it as surely as calling
     it: the reference warns, and makes it reachable from there.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     @deprecated("use later") fn old() -> i32 { return 1; }
 
     fn main() -> i32 {
@@ -99,12 +106,12 @@ def test_references_warn(compile_source, capsys):
     assert "line 5: warning: 'old' is deprecated: use later" in warned
 
 
-def test_methods_and_generics_warn(compile_source, capsys):
+def test_methods_and_generics_warn(compile_source):
     """
     A method or a generic function deprecates like any other; a generic's
     warning names the instance the call stamped.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     struct Box { v: i32; }
 
     @deprecated("use Box::value") fn Box::get(&self) -> i32 { return self.v; }
@@ -123,12 +130,12 @@ def test_methods_and_generics_warn(compile_source, capsys):
     assert "'scale<i32>' is deprecated: use scale2" in warned
 
 
-def test_one_warning_per_site(compile_source, capsys):
+def test_one_warning_per_site(compile_source):
     """
     A site warns once, however many times emission passes it; two sites
     warn twice.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     @deprecated("use later") fn old() -> i32 { return 1; }
 
     fn twice<T>(v: T) -> i32 { return old(); }
@@ -143,12 +150,12 @@ def test_one_warning_per_site(compile_source, capsys):
     assert warned.count("warning") == 2
 
 
-def test_a_unit_without_main_reports_every_use(compile_source, capsys):
+def test_a_unit_without_main_reports_every_use(compile_source):
     """
     A library unit has no 'main' to walk from, so anything it defines may
     be an entry: its uses all report.
     """
-    warned = warnings_of(compile_source, capsys, """
+    warned = warnings_of(compile_source, """
     @deprecated("use later") fn old() -> i32 { return 1; }
 
     fn exported() -> i32 { return old(); }

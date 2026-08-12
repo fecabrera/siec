@@ -2,8 +2,9 @@
 
 import pytest
 
-from siec.codegen import codegen
-from siec.codegen.errors import source_location
+from siec.codegen import CodeGenerator, codegen
+from siec.codegen.errors import format_diagnostic, source_location, warn
+from siec.diagnostics import Diagnostic
 from siec.lexer import lex
 from siec.parser import parse
 
@@ -54,6 +55,27 @@ def test_source_location_ignores_a_zero_line():
             raise TypeError("boom")
 
     assert getattr(info.value, "sie_line", None) is None
+
+
+def test_warn_accumulates_structured_diagnostics():
+    """
+    warn() records on the generator instead of printing to stderr.
+    """
+    gen = CodeGenerator("m")
+    warn(gen, "example advice", line=4, file="m.sie", code="deprecated")
+
+    assert gen.diagnostics == [
+        Diagnostic(
+            severity="warning",
+            message="example advice",
+            file="m.sie",
+            line=4,
+            code="deprecated",
+        )
+    ]
+    assert format_diagnostic(gen.diagnostics[0]) == (
+        "m.sie at line 4: warning: example advice"
+    )
 
 
 def compile_source(source):

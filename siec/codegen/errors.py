@@ -1,9 +1,16 @@
 """Attaching source location (file and line) to compile errors during codegen."""
 
+from __future__ import annotations
+
 import os
-import sys
 from collections import deque
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
+from siec.diagnostics import Diagnostic
+
+if TYPE_CHECKING:
+    from siec.codegen.generator import CodeGenerator
 
 
 def display_path(path: str) -> str:
@@ -18,15 +25,15 @@ def display_path(path: str) -> str:
     return relative if len(relative) < len(path) else path
 
 
-def warn(message: str, line: int = 0, file: str | None = None) -> None:
+def format_diagnostic(diagnostic: Diagnostic) -> str:
     """
-    Report a compile-time warning on stderr, located like an error is:
-    '<source> at line <n>: warning: <message>'.
+    Render a diagnostic as '<source> at line <n>: <severity>: <message>'.
 
-    A warning describes code that compiles; only an error stops the build.
-    A location it lacks simply drops out of the line.
+    A location it lacks simply drops out of the line, matching the historical
+    warning and error prefixes the CLI printed.
     """
     where = ""
+    file, line = diagnostic.file, diagnostic.line
     if file and line:
         where = f"{display_path(file)} at line {line}: "
     elif file:
@@ -34,7 +41,25 @@ def warn(message: str, line: int = 0, file: str | None = None) -> None:
     elif line:
         where = f"line {line}: "
 
-    print(f"{where}warning: {message}", file=sys.stderr)
+    return f"{where}{diagnostic.severity}: {diagnostic.message}"
+
+
+def warn(gen: CodeGenerator, message: str, line: int = 0,
+         file: str | None = None, *, code: str | None = None) -> None:
+    """
+    Record a compile-time warning on the generator.
+
+    A warning describes code that compiles; only an error stops the build.
+    Callers format the collected diagnostics for the CLI or publish them
+    through the LSP — nothing is printed here.
+    """
+    gen.diagnostics.append(Diagnostic(
+        severity="warning",
+        message=message,
+        file=file,
+        line=line or None,
+        code=code,
+    ))
 
 
 @contextmanager

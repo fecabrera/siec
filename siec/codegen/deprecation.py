@@ -119,5 +119,6 @@ def report_deprecations(gen: CodeGenerator) -> None:
             continue
 
         seen.add(site)
-        warn(f"{display_name(symbol)!r} is deprecated: {gen.deprecated[symbol]}",
-             line, file)
+        warn(gen,
+             f"{display_name(symbol)!r} is deprecated: {gen.deprecated[symbol]}",
+             line, file, code="deprecated")

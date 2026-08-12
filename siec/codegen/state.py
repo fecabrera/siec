@@ -197,6 +197,8 @@ class EmissionContext:
     emitting: bool = False
     types_lowered: bool = False
     functions_lowered: bool = False
+    # Structured warnings/notes accumulated during this compilation.
+    diagnostics: list = field(default_factory=list)
 
     @classmethod
     def create(cls, module_name: str, target: str | None = None) -> EmissionContext:

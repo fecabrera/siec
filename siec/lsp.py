@@ -61,6 +61,7 @@ class Analysis:
     gen: CodeGenerator | None = None
     overlays: dict[str, str] | None = None
     files: frozenset[str] = frozenset()
+    diagnostics: tuple = ()
 
 
 @dataclass
@@ -530,6 +531,7 @@ def compile_unit(path: Path, include_paths: list[Path],
         gen if analyzed is not None else None,
         dict(overlays or {}),
         frozenset(dependencies),
+        tuple(gen.diagnostics),
     )
     if cache is not None:
         cache.put(path, paths, overlays, analysis)
@@ -2183,6 +2185,24 @@ def create_server():
                 message=message,
                 severity=types.DiagnosticSeverity.Error,
                 source="siec")]
+
+        for item in analysis.diagnostics:
+            if item.severity != "warning":
+                continue
+
+            message, line = item.message, item.line
+            if item.file and item.file != str(path):
+                where = f" at line {line}" if line is not None else ""
+                message = f"{Path(item.file).name}{where}: {message}"
+                line = None
+
+            diagnostics.append(types.Diagnostic(
+                range=line_range(line, doc),
+                message=message,
+                severity=types.DiagnosticSeverity.Warning,
+                source="siec",
+                code=item.code,
+            ))
 
         server.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics))

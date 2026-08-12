@@ -987,6 +987,10 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     report_deprecations(gen)
 
+    # Expose the collected diagnostics on the module for callers that only
+    # hold the IR result (tests, tools); the generator remains authoritative.
+    gen.module.sie_diagnostics = list(gen.diagnostics)
+
     return gen.module
 
 
