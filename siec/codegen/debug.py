@@ -150,12 +150,23 @@ class DebugInfo:
             return None
 
         if name not in self.di_types:
-            # the placeholder breaks recursive struct cycles: a pointer to
-            # an in-progress type falls back to an untyped pointer
+            # The placeholder breaks recursive struct cycles.  If the same
+            # pointer is requested while it is still being built, preserve
+            # the member's pointer type even though its pointee is not ready.
             self.di_types[name] = None
             self.di_types[name] = self.build_type(name)
+        elif self.di_types[name] is None and name.endswith("*"):
+            return self.pointer_type(None)
 
         return self.di_types[name]
+
+    def pointer_type(self, base):
+        """A pointer, optionally without a pointee for a recursive cycle."""
+        return self.module.add_debug_info("DIDerivedType", {
+            "tag": ir.DIToken("DW_TAG_pointer_type"),
+            "baseType": base,
+            "size": 64,
+        })
 
     def build_type(self, name: str):
         """
@@ -176,11 +187,8 @@ class DebugInfo:
 
         if name.endswith("*"):
             inner = name[:-1]
-            return self.module.add_debug_info("DIDerivedType", {
-                "tag": ir.DIToken("DW_TAG_pointer_type"),
-                "baseType": None if inner == "opaque" else self.di_type(inner),
-                "size": 64,
-            })
+            return self.pointer_type(
+                None if inner == "opaque" else self.di_type(inner))
 
         # an 'X[]' fat array is its two-field struct: data and length
         if name.endswith("[]"):

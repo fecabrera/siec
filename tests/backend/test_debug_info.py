@@ -122,6 +122,30 @@ def test_recursive_structs_do_not_recurse():
     """))
 
 
+def test_recursive_member_reached_through_an_outer_struct_keeps_its_type():
+    """
+    Building an outer struct can encounter both a node pointer and its
+    pointee at once.  The recursive member must remain an untyped pointer,
+    not lose its DWARF type entirely.
+    """
+    text = str(debug_module("""
+    struct node { value: i32; next: node*; }
+    struct heap { head: node*; }
+
+    fn main() -> i32 {
+        let h: heap = { head = null };
+        return 0;
+    }
+    """))
+
+    next_member = next(
+        line for line in text.splitlines()
+        if 'name: "next"' in line and "DW_TAG_member" in line
+    )
+    assert "baseType: null" not in next_member
+    assert "baseType:" in next_member
+
+
 def test_reference_params_get_addressable_storage():
     """
     A '&T' parameter spills its pointer into a debug slot and describes
