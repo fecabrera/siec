@@ -17,6 +17,7 @@ struct HeapAllocator: Allocator, Destroy {
 
     fn init(&self, size: u64, min_blk_size: u64 = 16) {
         self.size = size;
+        self.min_blk_size = min_blk_size;
         self.head = mmap(null, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) as HeapBlockHeader*;
         *self.head = {
             next = null,
