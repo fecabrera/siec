@@ -14,7 +14,9 @@ import asyncio
 import re
 import sys
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -281,31 +283,62 @@ def inactive_semantic_tokens(analysis: Analysis, text: str) -> list[int]:
 class _ValidationDebouncer:
     """Own and retire delayed validation tasks, one per document URI."""
 
-    def __init__(self, validate: Callable[[str], None], delay: float = 0.2):
+    def __init__(self, validate: Callable, delay: float = 0.2):
         self.validate = validate
         self.delay = delay
         self.pending: dict[str, asyncio.Task] = {}
 
-    def schedule(self, uri: str) -> None:
-        """Replace any validation waiting for the same document."""
+    async def _invoke(self, uri: str) -> None:
+        """Run async callbacks directly and legacy sync callbacks off-loop."""
+        if iscoroutinefunction(self.validate):
+            await self.validate(uri)
+        else:
+            result = await asyncio.to_thread(self.validate, uri)
+            if isawaitable(result):
+                await result
+
+    def _replace(self, uri: str, delay: float) -> asyncio.Task:
+        """Install one validation task, superseding this URI's older work."""
         self.cancel(uri)
 
         async def settled() -> None:
             try:
-                await asyncio.sleep(self.delay)
-                self.validate(uri)
+                if delay:
+                    await asyncio.sleep(delay)
+                await self._invoke(uri)
             finally:
                 # A canceled predecessor may finish after its replacement was
                 # installed; only the task that still owns the URI may remove it.
                 if self.pending.get(uri) is asyncio.current_task():
                     self.pending.pop(uri, None)
 
-        self.pending[uri] = asyncio.get_running_loop().create_task(settled())
+        task = asyncio.get_running_loop().create_task(settled())
+        self.pending[uri] = task
+        return task
+
+    def schedule(self, uri: str) -> None:
+        """Replace any validation waiting or running for the same document."""
+        self._replace(uri, self.delay)
+
+    async def run_now(self, uri: str) -> None:
+        """Supersede older work and await an immediate off-loop validation."""
+        task = self._replace(uri, 0)
+        try:
+            await task
+        except asyncio.CancelledError:
+            # A newer edit or a close owns the URI now.
+            if self.pending.get(uri) is task:
+                raise
 
     def cancel(self, uri: str) -> None:
-        """Cancel and forget a document's delayed validation, if any."""
+        """Cancel and forget a document's delayed or running validation."""
         if (task := self.pending.pop(uri, None)) is not None:
             task.cancel()
+
+    def cancel_all(self) -> None:
+        """Cancel every validation while preserving per-task retirement."""
+        for uri in list(self.pending):
+            self.cancel(uri)
 
 
 def package_paths(root: "PackageManifest",
@@ -1987,6 +2020,11 @@ def create_server():
     loaded_files: dict[str, frozenset[str]] = {}
     analysis_cache = UnitAnalysisCache()
     path_cache = SearchPathCache()
+    # Compiler and loader caches are mutable and intentionally serialized.
+    # A dedicated worker keeps their entire synchronous pipeline off the LSP
+    # event loop without introducing cross-compilation races.
+    analysis_executor = ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="sie-lsp-analysis")
 
     def document_path(uri: str) -> Path:
         return Path(to_fs_path(uri)).resolve()
@@ -2008,24 +2046,50 @@ def create_server():
         doc = server.workspace.get_text_document(uri)
         return inspect(analysis, doc.source, position.line, position.character)
 
-    def validate(uri: str) -> None:
+    def open_overlays() -> dict[str, str]:
+        """Snapshot every open buffer on the event-loop thread."""
+        return {str(document_path(doc.uri)): doc.source
+                for doc in server.workspace.text_documents.values()}
+
+    def compile_snapshot(path: Path, root: Path | None,
+                         extra: tuple[str, ...],
+                         overlays: dict[str, str]) -> Analysis:
+        """Resolve paths and compile one immutable editor snapshot."""
+        paths = search_paths(root, list(extra), path.parent, path_cache)
+        return compile_unit(path, paths, overlays, analysis_cache)
+
+    async def validate(uri: str) -> None:
         doc = server.workspace.get_text_document(uri)
         path = document_path(uri)
+        revision = (getattr(doc, "version", None), doc.source)
 
         # every open buffer overlays its file, so cross-file edits
         # analyze as typed, saved or not
-        overlays = {str(document_path(d.uri)): d.source
-                    for d in server.workspace.text_documents.values()}
-
-        # Manifest and package resolution is reused until a watched manifest
-        # or the installed-package directory changes.
-        paths = search_paths(
+        overlays = open_overlays()
+        analysis = await asyncio.get_running_loop().run_in_executor(
+            analysis_executor,
+            compile_snapshot,
+            path,
             workspace["root"],
-            workspace["extra"],
-            path.parent,
-            path_cache,
+            tuple(workspace["extra"]),
+            overlays,
         )
-        analysis = compile_unit(path, paths, overlays, analysis_cache)
+
+        # Cancellation cannot stop Python already executing in a thread, but
+        # it cancels this coroutine immediately. These guards also cover the
+        # narrow race where a result and a document change reach the loop in
+        # the same turn. A dependency edit can change another overlay without
+        # changing this document's version, so compare the complete snapshot.
+        if debounce.pending.get(uri) is not asyncio.current_task():
+            return
+        if uri not in server.workspace.text_documents:
+            return
+        current = server.workspace.get_text_document(uri)
+        if ((getattr(current, "version", None), current.source) != revision
+                or open_overlays() != overlays):
+            debounce.schedule(uri)
+            return
+
         loaded_files[uri] = analysis.files
         if analysis.program is not None:
             analyses[uri] = analysis
@@ -2060,16 +2124,32 @@ def create_server():
             server.workspace_semantic_tokens_refresh(None)
 
     debounce = _ValidationDebouncer(validate)
+    analysis_stopped = False
+
+    def stop_analysis() -> None:
+        """Retire editor jobs and stop accepting compiler work."""
+        nonlocal analysis_stopped
+        if analysis_stopped:
+            return
+        analysis_stopped = True
+        debounce.cancel_all()
+        analysis_executor.shutdown(wait=False, cancel_futures=True)
 
     def affected(uri: str) -> set[str]:
         """The changed document and every open unit whose inputs contain it."""
         return {uri, *dependent_uris(loaded_files, document_path(uri))}
 
-    def validate_affected(uri: str) -> None:
-        for affected_uri in affected(uri):
-            validate(affected_uri)
+    async def validate_affected(uri: str) -> None:
+        if analysis_stopped:
+            return
+        await asyncio.gather(*(
+            debounce.run_now(affected_uri)
+            for affected_uri in affected(uri)
+        ))
 
     def schedule_affected(uri: str) -> None:
+        if analysis_stopped:
+            return
         for affected_uri in affected(uri):
             debounce.schedule(affected_uri)
 
@@ -2081,13 +2161,17 @@ def create_server():
         options = params.initialization_options or {}
         workspace["extra"] = options.get("includePaths", [])
 
+    @server.feature(types.SHUTDOWN)
+    def shutdown(*_args) -> None:
+        stop_analysis()
+
     @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
-    def did_open(params: types.DidOpenTextDocumentParams) -> None:
-        validate_affected(params.text_document.uri)
+    async def did_open(params: types.DidOpenTextDocumentParams) -> None:
+        await validate_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_SAVE)
-    def did_save(params: types.DidSaveTextDocumentParams) -> None:
-        validate_affected(params.text_document.uri)
+    async def did_save(params: types.DidSaveTextDocumentParams) -> None:
+        await validate_affected(params.text_document.uri)
 
     @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
     async def did_change(params: types.DidChangeTextDocumentParams) -> None:
@@ -2104,7 +2188,10 @@ def create_server():
         outlines.pop(uri, None)
         analyses.pop(uri, None)
         loaded_files.pop(uri, None)
-        analysis_cache.discard(document_path(uri))
+        # Cache mutation stays ordered with compilation on the same worker.
+        if not analysis_stopped:
+            analysis_executor.submit(
+                analysis_cache.discard, document_path(uri))
         server.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(uri=uri, diagnostics=[]))
         for dependant in dependants:

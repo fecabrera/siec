@@ -1,6 +1,8 @@
 """Tests for siec.lsp: the analysis behind the language server."""
 
 import asyncio
+import threading
+import time
 
 from siec.lsp import (Report, SearchPathCache, UnitAnalysisCache, analyze,
                       compile_unit, complete, dependent_uris, outline,
@@ -299,6 +301,103 @@ def test_debounced_validation_retires_completed_and_replaced_tasks():
     asyncio.run(exercise())
 
 
+def test_debounced_sync_validation_does_not_block_the_event_loop():
+    """Legacy synchronous validation callbacks run in a worker thread."""
+    from siec.lsp import _ValidationDebouncer
+
+    async def exercise():
+        started = threading.Event()
+        finished = threading.Event()
+
+        def blocking(_uri):
+            started.set()
+            time.sleep(0.08)
+            finished.set()
+
+        debounce = _ValidationDebouncer(blocking, delay=0)
+        debounce.schedule("file:///slow.sie")
+        task = debounce.pending["file:///slow.sie"]
+
+        while not started.is_set():
+            await asyncio.sleep(0.001)
+
+        before = time.monotonic()
+        await asyncio.sleep(0.01)
+        assert time.monotonic() - before < 0.05
+        assert not finished.is_set()
+
+        await task
+        assert finished.is_set()
+
+    asyncio.run(exercise())
+
+
+def test_running_validation_is_superseded_before_it_can_publish():
+    """A completed worker cannot publish after a newer URI generation wins."""
+    from siec.lsp import _ValidationDebouncer
+
+    async def exercise():
+        first_started = threading.Event()
+        release_first = threading.Event()
+        invoked = 0
+        published = []
+
+        async def validate(_uri):
+            nonlocal invoked
+            invoked += 1
+            generation = invoked
+            if generation == 1:
+                first_started.set()
+                await asyncio.to_thread(release_first.wait)
+            published.append(generation)
+
+        debounce = _ValidationDebouncer(validate, delay=0)
+        uri = "file:///changing.sie"
+        debounce.schedule(uri)
+        while not first_started.is_set():
+            await asyncio.sleep(0.001)
+
+        debounce.schedule(uri)
+        replacement = debounce.pending[uri]
+        await replacement
+        release_first.set()
+        await asyncio.sleep(0.01)
+
+        assert published == [2]
+        assert debounce.pending == {}
+
+    asyncio.run(exercise())
+
+
+def test_shutdown_cancels_pending_validation(tmp_path, monkeypatch):
+    """The LSP shutdown request retires delayed compiler work immediately."""
+    from lsprotocol import types
+    from pygls.uris import from_fs_path
+
+    from siec.lsp import create_server
+
+    uri = from_fs_path(str(tmp_path / "main.sie"))
+
+    async def exercise():
+        server = create_server()
+        published = []
+        monkeypatch.setattr(server, "text_document_publish_diagnostics",
+                            published.append)
+        did_change = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_CHANGE]
+        shutdown = server.protocol.fm.features[types.SHUTDOWN]
+
+        await did_change(types.DidChangeTextDocumentParams(
+            text_document=types.VersionedTextDocumentIdentifier(
+                uri=uri, version=1),
+            content_changes=[]))
+        shutdown()
+        await asyncio.sleep(0.25)
+
+        assert published == []
+
+    asyncio.run(exercise())
+
+
 def test_close_cancels_a_pending_validation(tmp_path, monkeypatch):
     """
     Closing during the debounce window publishes only the clearing
@@ -323,6 +422,7 @@ def test_close_cancels_a_pending_validation(tmp_path, monkeypatch):
 
         did_change = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_CHANGE]
         did_close = server.protocol.fm.features[types.TEXT_DOCUMENT_DID_CLOSE]
+        shutdown = server.protocol.fm.features[types.SHUTDOWN]
 
         await did_change(types.DidChangeTextDocumentParams(
             text_document=types.VersionedTextDocumentIdentifier(uri=uri, version=1),
@@ -333,6 +433,7 @@ def test_close_cancels_a_pending_validation(tmp_path, monkeypatch):
 
         assert [params.diagnostics for params in published] == [[]]
         assert errors == []
+        shutdown()
 
     asyncio.run(exercise())
 
