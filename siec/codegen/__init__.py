@@ -7,6 +7,7 @@ entry point).
 """
 
 from siec.codegen.generator import CodeGenerator, codegen
+from siec.codegen.hir import TypedExpr, stamp, typed
 from siec.codegen.state import (
     EmissionContext,
     FlowContext,
@@ -30,4 +31,7 @@ __all__ = [
     "FlowContext",
     "EmissionContext",
     "SemanticModel",
+    "TypedExpr",
+    "typed",
+    "stamp",
 ]

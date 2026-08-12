@@ -80,6 +80,8 @@ NO_EMIT = object()
 
 def check_member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[int, str]:
     """Resolve a member access and enforce private-field visibility."""
+    from siec.codegen.hir import stamp
+
     hoist_member(gen, expr, scope)
     base_type = expr_sie_type(gen, expr.base, scope)
     info = type_info(gen, base_type)
@@ -91,6 +93,7 @@ def check_member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[i
 
     index, field_type = info.field(expr.field)
     check_field_access(gen, base_type, info.fields[index])
+    stamp(expr, field_index=index, field_type=field_type, sie_type=field_type)
     return index, field_type
 
 
@@ -743,6 +746,29 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
 
 def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                      expected: str | None = None) -> str | None:
+    """
+    Check an expression against an optional expected type.
+
+    Stamps typed-HIR fields on ``expr`` so emission can reuse the decisions
+    instead of re-inferring them.
+    """
+    from siec.codegen.hir import annotate_result
+
+    if expr is None:
+        return None
+
+    result = _check_expression(gen, expr, scope, expected)
+    return annotate_result(
+        expr,
+        result,
+        expected,
+        line=getattr(expr, "line", 0) or gen.current_line,
+        file=gen.current_file,
+    )
+
+
+def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
+                      expected: str | None = None) -> str | None:
     """Check an expression and return its inferred Sie type."""
     if expr is None:
         return None
@@ -1344,7 +1370,12 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                 )
             gen.checked_call = None
             return ctor
+        if call.type_args is not None:
+            raise TypeError(f"function {call.name!r} is not generic")
         raise NameError(f"undefined function {call.name!r}")
+
+    if call.type_args is not None and "<" not in symbol:
+        raise TypeError(f"function {call.name!r} is not generic")
 
     params = gen.param_types[symbol]
     check_call_arguments(
@@ -1360,9 +1391,18 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
     note_use(gen, symbol)
     gen.checked_call = symbol
-    call.resolved_symbol = symbol
-    written_call.resolved_symbol = symbol
-    return strip_reference(gen.return_types.get(symbol))
+    from siec.codegen.hir import stamp
+
+    result = strip_reference(gen.return_types.get(symbol))
+    stamp(call, resolved_symbol=symbol, sie_type=result,
+          expected_type=expected, overwrite=True)
+    stamp(written_call, resolved_symbol=symbol, sie_type=result,
+          expected_type=expected, overwrite=True)
+    if expected is not None and result is not None and expected != result:
+        stamp(call, coerce_to=expected, coerce_kind="widen", overwrite=True)
+        stamp(written_call, coerce_to=expected, coerce_kind="widen",
+              overwrite=True)
+    return result
 
 
 def check_indirect_call(gen: CodeGenerator, call: Call, scope: dict,

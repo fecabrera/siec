@@ -729,13 +729,18 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
     picks the method, and joins the arguments as the hidden first one.
     """
     from siec.codegen.calls import emit_call
+    from siec.codegen.hir import resolved_callee, stamp
     from siec.codegen.inference import expr_sie_type
 
-    receiver_type = expr_sie_type(gen, expr.receiver, scope)
-    symbol = resolve_method(gen, receiver_type, expr.method)
+    # Prefer the callee checking already selected.
+    symbol = resolved_callee(expr)
+    if symbol is None:
+        receiver_type = expr_sie_type(gen, expr.receiver, scope)
+        symbol = resolve_method(gen, receiver_type, expr.method)
     if symbol is None:
         from siec.codegen.deprecation import check_removed_method
 
+        receiver_type = expr_sie_type(gen, expr.receiver, scope)
         # a removed method leaves no declaration to resolve; its name
         # still answers for the advice
         check_removed_method(gen, receiver_type, expr.method)
@@ -751,9 +756,12 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
     else:
         call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
 
-    # a coercion target rides along to drive a generic method's arguments
+    # Carry HIR stamps onto the synthetic call so emit_call skips re-pick.
+    stamp(call, resolved_symbol=symbol, overwrite=True)
     if (context := getattr(expr, "expected_type", None)) is not None:
         call.expected_type = context
+    if (sie_type := getattr(expr, "sie_type", None)) is not None:
+        stamp(call, sie_type=sie_type, overwrite=True)
 
     return emit_call(gen, builder, call, scope, as_address)
 

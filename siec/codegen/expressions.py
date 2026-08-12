@@ -691,10 +691,13 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return emit_lvalue(gen, builder, folded, scope)
 
-        # an unnamed member's fields hoist: 'r.value' writes through 'r.#n'
-        hoist_member(gen, expr, scope)
-
-        index, field_name = member_field(gen, expr, scope)
+        # Prefer the field index checking already recorded.
+        index = getattr(expr, "field_index", None)
+        field_name = getattr(expr, "field_type", None)
+        if index is None or field_name is None:
+            # an unnamed member's fields hoist: 'r.value' writes through 'r.#n'
+            hoist_member(gen, expr, scope)
+            index, field_name = member_field(gen, expr, scope)
         base = emit_lvalue(gen, builder, expr.base, scope)
 
         # a union field reinterprets the shared storage: the union's own

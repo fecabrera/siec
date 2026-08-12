@@ -31,9 +31,11 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     """
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
+    from siec.codegen.hir import resolved_callee
 
     # a typed context (a coercion target) may drive a generic callee's
-    # type arguments; captured before any receiver rewrite drops it
+    # type arguments; prefer the HIR stamp checking left, then any
+    # coercion-side annotation
     expected = getattr(call, "expected_type", None)
 
     # a macro call expands in place instead of resolving a function; in
@@ -51,7 +53,8 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
         with macro_view(gen, call.name):
             if isinstance(expansion, BlockExpr):
-                emitted = infer_type(gen, call, scope)
+                emitted = (getattr(call, "sie_type", None)
+                           or infer_type(gen, call, scope))
                 target = (resolve_type(emitted, gen.structs)
                           if emitted is not None else None)
                 return emit_block_expr(gen, builder, expansion, target, scope,
@@ -59,6 +62,54 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
             # an expression macro substitutes its expression in place
             return emit_expression(gen, builder, expansion, None, scope)
+
+    # Checking already picked the concrete callee: skip name / overload /
+    # generic resolution and go straight to ABI and argument emission.
+    # Method sugar 'p.m(a)' keeps the written args without the receiver, so
+    # dotted calls that take a receiver always fall through to re-attach it.
+    stamped = resolved_callee(call)
+    if (stamped is not None and stamped in gen.return_types
+            and (call.type_args is None
+                 or stamped in gen.instantiated_functions
+                 or "<" in stamped)):
+        from siec.codegen.deprecation import check_removed, note_use
+        from siec.codegen.methods import takes_receiver
+        from siec.codegen.worklist import activate_function_instance
+
+        params = gen.param_types.get(stamped, [])
+        arity_ok = (
+            len(call.args) == len(params)
+            or (stamped in gen.variadics and len(call.args) >= len(params) - 1)
+            or (stamped in gen.var_args and len(call.args) >= len(params))
+        )
+        # Defaults make trailing params optional.
+        if not arity_ok and stamped in gen.param_defaults:
+            defaults, _ = gen.param_defaults[stamped]
+            required = len(params)
+            while (required and required <= len(defaults)
+                   and defaults[required - 1] is not None):
+                required -= 1
+            arity_ok = len(call.args) >= required and len(call.args) <= len(params)
+
+        if arity_ok and not (
+                takes_receiver(gen, stamped) and "." in call.name):
+            if call.type_args is not None and "<" not in stamped:
+                raise TypeError(f"function {call.name!r} is not generic")
+
+            check_removed(gen, stamped)
+            activate_function_instance(gen, stamped)
+            symbol = stamped
+            note_use(gen, symbol)
+
+            func = gen.module.globals.get(symbol)
+            if not isinstance(func, ir.Function):
+                raise NameError(f"undefined function {call.name!r}")
+
+            if as_address and not is_reference(gen.return_types.get(func.name)):
+                raise TypeError("cannot take the address of a call's value")
+
+            return _emit_resolved_call(gen, builder, call, scope, func,
+                                       as_address)
 
     # the builtin 'enumerate(x)' resolves to its '__enumerate' instance
     if call.name == "enumerate":
@@ -192,6 +243,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # only a reference-returning call has an address to keep
     if as_address and not is_reference(gen.return_types.get(func.name)):
         raise TypeError("cannot take the address of a call's value")
+
+    return _emit_resolved_call(gen, builder, call, scope, func, as_address)
+
+
+def _emit_resolved_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
+                        scope: dict, func: ir.Function, as_address: bool):
+    """Emit arguments and the call once the concrete LLVM callee is known."""
+    from siec.codegen.expressions import emit_expression
 
     # check arity, letting varargs functions take extra arguments; an
     # indirect struct return hides its own first parameter
