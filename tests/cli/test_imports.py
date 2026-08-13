@@ -143,12 +143,17 @@ def test_imported_macro_preserves_struct_method_argument_view(
             }
         }
     """)
+    (tmp_path / "other.sie").write_text("""
+        struct Application { value: i32; }
+    """)
     src = tmp_path / "main.sie"
     src.write_text("""
         import { Application } from wrapper;
+        import other;
 
         fn main() -> i32 {
             let app = Application();
+            let other_app: other.Application = { value = 0 };
             return app.read(() => {});
         }
     """)

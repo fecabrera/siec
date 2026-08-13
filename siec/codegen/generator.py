@@ -341,8 +341,14 @@ class CodeGenerator:
         if method_type is None:
             return False
 
-        struct_type = strip_const(strip_reference(expand_alias(self, struct_type)))
-        method_type = strip_const(strip_reference(expand_alias(self, method_type)))
+        # Both spellings come from checked semantic state: a scope's inferred
+        # base type and the collected method receiver. In a program where two
+        # modules declare the same source name they may already be loader-
+        # qualified identities, which must not be gated again as source text.
+        struct_type = strip_const(strip_reference(
+            expand_alias(self, struct_type, checked=False)))
+        method_type = strip_const(strip_reference(
+            expand_alias(self, method_type, checked=False)))
 
         if struct_type == method_type:
             return True
