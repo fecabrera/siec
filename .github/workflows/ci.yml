@@ -106,7 +106,11 @@ jobs:
           # and GLib >= 2.80, which are satisfied by the versions above.
           git clone --branch 1.7.6 --depth 1 https://gitlab.gnome.org/GNOME/libadwaita.git
           cd libadwaita
-          meson setup _build
+          meson setup _build \
+            -Dexamples=false \
+            -Dintrospection=disabled' \
+            -D tests=false \
+            -D vapi=false
           ninja -C _build
           ninja -C _build install
 
