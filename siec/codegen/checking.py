@@ -757,14 +757,20 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
     if expr is None:
         return None
 
-    result = _check_expression(gen, expr, scope, expected)
-    return annotate_result(
-        expr,
-        result,
-        expected,
-        line=getattr(expr, "line", 0) or gen.current_line,
-        file=gen.current_file,
-    )
+    from siec.codegen.resolution import expression_view
+
+    # A macro argument still belongs to the file where its caller wrote it.
+    # Apply that view to the whole semantic operation, including private-field
+    # checks and alias expansion, rather than only to qualified-name lookup.
+    with expression_view(gen, expr):
+        result = _check_expression(gen, expr, scope, expected)
+        return annotate_result(
+            expr,
+            result,
+            expected,
+            line=getattr(expr, "line", 0) or gen.current_line,
+            file=gen.current_file,
+        )
 
 
 def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,

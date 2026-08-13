@@ -114,6 +114,49 @@ def test_imported_macro_preserves_qualified_argument_view(tmp_path,
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_imported_macro_preserves_struct_method_argument_view(
+        tmp_path, monkeypatch):
+    """Nested macro arguments keep their struct method's source view."""
+    (tmp_path / "signals.sie").write_text("""
+        @type Callback = fn();
+        @macro callback<T>(value) = value as T as Callback;
+        @macro connect(instance, handler, data) =
+            consume(instance, handler, data);
+        fn consume(instance: opaque*, handler: Callback,
+                   data: opaque*) -> i32 { return 42; }
+    """)
+    (tmp_path / "wrapper.sie").write_text("""
+        import { callback, connect } from signals;
+
+        struct Application {
+            @private handle: opaque*;
+
+            fn init(&self) {
+                self.handle = null;
+            }
+
+            fn read(&self, action: closure fn()) -> i32 {
+                return connect(
+                    self.handle,
+                    callback<fn(opaque*, opaque*)>(action),
+                    action.env);
+            }
+        }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import { Application } from wrapper;
+
+        fn main() -> i32 {
+            let app = Application();
+            return app.read(() => {});
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_member_imports_with_aliases(tmp_path, monkeypatch):
     """
     'import { f as g, C } from a.b;' binds chosen members unqualified.
