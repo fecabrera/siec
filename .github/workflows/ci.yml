@@ -63,6 +63,7 @@ jobs:
             libgtk-4-dev \
             libadwaita-1-dev \
             gobject-introspection \
+            libvala-0.56-dev \
             meson \
             ninja-build
 
