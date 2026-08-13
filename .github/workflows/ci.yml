@@ -108,9 +108,9 @@ jobs:
           cd libadwaita
           meson setup _build \
             -Dexamples=false \
-            -Dintrospection=disabled' \
-            -D tests=false \
-            -D vapi=false
+            -Dintrospection=disabled \
+            -Dtests=false \
+            -Dvapi=false
           ninja -C _build
           ninja -C _build install
 
