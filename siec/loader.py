@@ -541,15 +541,12 @@ def discover_program(sources: list[Path], include_paths: list[Path],
         for file in include_closure.get(root, {root}):
             roots_by_file.setdefault(file, []).append(root)
 
-    def declaration_root(file: str) -> str:
+    def declaration_roots(file: str) -> set[str]:
+        """Every textual module surface containing ``file``."""
+        roots = set(roots_by_file.get(file, ()))
         if file in entry_unit_files:
-            return "<entry>"
-        roots = roots_by_file.get(file, [])
-        if not roots:
-            return file
-        # A module root belongs to its own textual group even when another
-        # entry happens to include it; otherwise choose deterministically.
-        return file if file in roots else roots[0]
+            roots.add("<entry>")
+        return roots or {file}
 
     structs_by_name = {}
     for struct in structs:
@@ -560,26 +557,52 @@ def discover_program(sources: list[Path], include_paths: list[Path],
     local_type_symbols = {}
     module_type_symbols = {}
     for name, declarations in structs_by_name.items():
-        roots = {declaration_root(decl.file) for decl in declarations}
-        if len(roots) < 2:
+        # A declaration can belong to several module surfaces: an imported
+        # aggregate may @include a file which is also reached by an import
+        # cycle inside that aggregate. Same-named declarations sharing any
+        # such surface describe one type, rather than one type per arbitrary
+        # root. Form the transitive groups induced by shared roots.
+        groups = []
+        for declaration in declarations:
+            roots = declaration_roots(declaration.file)
+            touching = [group for group in groups if group[1] & roots]
+            if not touching:
+                groups.append(([declaration], set(roots)))
+                continue
+
+            members, combined = touching[0]
+            members.append(declaration)
+            combined.update(roots)
+            for group in touching[1:]:
+                members.extend(group[0])
+                combined.update(group[1])
+                groups.remove(group)
+
+        if len(groups) < 2:
             continue
 
         identities = {}
-        for root in sorted(roots):
-            stable_root = (root if root == "<entry>"
-                           else module_paths.get(root, Path(root).stem))
+        for members, roots in groups:
+            stable_roots = [
+                root if root == "<entry>"
+                else module_paths.get(root, Path(root).stem)
+                for root in sorted(roots)
+            ]
+            stable_root = "|".join(stable_roots)
             digest = hashlib.sha256(stable_root.encode()).hexdigest()[:12]
             identity = f"__module_{digest}_{name}"
-            identities[root] = identity
-            if root != "<entry>":
-                module_type_symbols[(root, name)] = identity
-            files = (entry_unit_files if root == "<entry>"
-                     else include_closure.get(root, {root}))
-            for file in files:
-                local_type_symbols[(file, name)] = identity
+            for declaration in members:
+                identities[id(declaration)] = identity
+            for root in roots:
+                if root != "<entry>":
+                    module_type_symbols[(root, name)] = identity
+                files = (entry_unit_files if root == "<entry>"
+                         else include_closure.get(root, {root}))
+                for file in files:
+                    local_type_symbols[(file, name)] = identity
 
         for declaration in declarations:
-            declaration.name = identities[declaration_root(declaration.file)]
+            declaration.name = identities[id(declaration)]
 
     # the unit's own files: the command-line sources and, textually, their
     # includes; a file reached only through 'import' sits outside it, so

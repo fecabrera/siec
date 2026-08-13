@@ -1447,6 +1447,45 @@ def test_included_names_reexport_through_imports(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_included_type_survives_internal_import_cycle(tmp_path, monkeypatch):
+    """
+    Files in an imported aggregate remain one textual type namespace when
+    they also import each other. A member imported back from the aggregate
+    therefore resolves to the same opaque declaration.
+    """
+    (tmp_path / "facade.sie").write_text("""
+        @include("handle")
+        @include("left")
+        @include("right")
+        @include("wrapper")
+    """)
+    (tmp_path / "handle.sie").write_text("struct Handle;\n")
+    (tmp_path / "left.sie").write_text("""
+        import right;
+        struct Handle;
+    """)
+    (tmp_path / "right.sie").write_text("""
+        import left;
+        struct Handle;
+    """)
+    (tmp_path / "wrapper.sie").write_text("""
+        import { Handle } from facade;
+        struct Wrapper { handle: Handle*; }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import facade;
+
+        fn main() -> i32 {
+            let wrapper: facade.Wrapper;
+            return 42;
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_module_constants_build_on_their_siblings(tmp_path, monkeypatch):
     """
     A constant's value resolves in its declaring file's view: a module's
