@@ -19,10 +19,18 @@ import {
 import { adw_window_new } from adwaita;
 
 struct Window: Handler<GtkWidget> {
-    handle: GtkWidget*;
+    @private handle: GtkWidget*;
 
     fn init(&self) {
         self.handle = adw_window_new();
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
     }
 
     fn set_title(&self, title: const &char[]) {
@@ -40,7 +48,7 @@ struct Window: Handler<GtkWidget> {
     }
 
     fn set_child(&self, obj: &Handler<GtkWidget>) {
-        gtk_window_set_child(GTK_WINDOW(self.handle), obj.handle);
+        gtk_window_set_child(GTK_WINDOW(self.handle), obj.get_handle());
     }
 
     fn present(&self) {

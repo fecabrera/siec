@@ -1,0 +1,22 @@
+import { GtkWidget, Handler } from gtk;
+import {
+    AdwNavigationPage,
+    ADW_NAVIGATION_PAGE,
+    adw_navigation_page_new,
+} from adwaita;
+
+struct NavigationPage: Handler<AdwNavigationPage> {
+    @private handle: AdwNavigationPage*;
+
+    fn init(&self, child: Handler<GtkWidget>, title: const &char[]) {
+        self.handle = adw_navigation_page_new(child.get_handle(), title);
+    }
+
+    fn get_handle(&self) -> AdwNavigationPage* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwNavigationPage* {
+        return self.handle;
+    }
+}

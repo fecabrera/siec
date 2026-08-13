@@ -23,18 +23,26 @@ import {
 } from gtk;
 
 struct Window: Handler<GtkWidget> {
-    handle: GtkWidget*;
+    @private handle: GtkWidget*;
 
     fn init(&self) {
         self.handle = gtk_window_new();
     }
 
     fn init(&self, app: &Application) {
-        self.handle = gtk_application_window_new(app.handle);
+        self.handle = gtk_application_window_new(app.get_handle());
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
     }
 
     fn set_titlebar(&self, obj: &Handler<GtkWidget>) {
-        gtk_window_set_titlebar(GTK_WINDOW(self.handle), obj.handle);
+        gtk_window_set_titlebar(GTK_WINDOW(self.handle), obj.get_handle());
     }
 
     fn get_titlebar<T: Handler<GtkWidget>>(&self) -> T {
@@ -56,7 +64,7 @@ struct Window: Handler<GtkWidget> {
     }
 
     fn set_child(&self, obj: &Handler<GtkWidget>) {
-        gtk_window_set_child(GTK_WINDOW(self.handle), obj.handle);
+        gtk_window_set_child(GTK_WINDOW(self.handle), obj.get_handle());
     }
 
     fn present(&self) {

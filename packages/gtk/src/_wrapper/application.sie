@@ -18,7 +18,7 @@ import {
 } from gobject;
 
 struct Application: Handler<GtkApplication>, Destroy {
-    handle: GtkApplication*;
+    @private handle: GtkApplication*;
     
     fn init(&self, id: const char[], flags: GApplicationFlags = GApplicationFlags::DEFAULT_FLAGS) {
         self.handle = gtk_application_new(id, flags);
@@ -26,6 +26,14 @@ struct Application: Handler<GtkApplication>, Destroy {
 
     fn destroy(&self) {
         g_object_unref(self.handle);
+    }
+
+    fn get_handle(&self) -> GtkApplication* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkApplication* {
+        return self.handle;
     }
 
     fn add_window(&self, obj: &Handler<GtkWindow*>) {

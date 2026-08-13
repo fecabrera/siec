@@ -1,11 +1,14 @@
 import { GtkWidget, Handler } from gtk;
-import { adw_header_bar_new } from adwaita;
+import {
+    ADW_SIDEBAR,
+    adw_sidebar_new,
+} from adwaita;
 
-struct HeaderBar: Handler<GtkWidget> {
+struct Sidebar: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
     fn init(&self) {
-        self.handle = adw_header_bar_new();
+        self.handle = adw_sidebar_new();
     }
 
     fn get_handle(&self) -> GtkWidget* {

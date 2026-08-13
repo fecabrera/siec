@@ -16,10 +16,18 @@ import {
 } from gtk;
 
 struct HeaderBar: Handler<GtkWidget> {
-    handle: GtkWidget*;
+    @private handle: GtkWidget*;
     
     fn init(&self) {
         self.handle = gtk_header_bar_new();
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
     }
 
     fn get_title_widget<T: Handler<GtkWidget>>(&self) -> T {
@@ -27,15 +35,15 @@ struct HeaderBar: Handler<GtkWidget> {
     }
 
     fn set_title_widget(&self, obj: &Handler<GtkWidget>) {
-        gtk_header_bar_set_title_widget(GTK_HEADER_BAR(self.handle), obj.handle);
+        gtk_header_bar_set_title_widget(GTK_HEADER_BAR(self.handle), obj.get_handle());
     }
 
     fn pack_start(&self, obj: &Handler<GtkWidget>) {
-        gtk_header_bar_pack_start(GTK_HEADER_BAR(self.handle), obj.handle);
+        gtk_header_bar_pack_start(GTK_HEADER_BAR(self.handle), obj.get_handle());
     }
 
     fn pack_end(&self, obj: &Handler<GtkWidget>) {
-        gtk_header_bar_pack_end(GTK_HEADER_BAR(self.handle), obj.handle);
+        gtk_header_bar_pack_end(GTK_HEADER_BAR(self.handle), obj.get_handle());
     }
 
     fn get_show_title_buttons(&self) -> bool {

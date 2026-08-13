@@ -9,25 +9,33 @@ import {
 } from adwaita;
 
 struct ToolbarView: Handler<GtkWidget> {
-    handle: GtkWidget*;
+    @private handle: GtkWidget*;
 
     fn init(&self) {
         self.handle = adw_toolbar_view_new();
     }
 
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
     fn set_content(&self, obj: &Handler<GtkWidget>) {
-        adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+        adw_toolbar_view_set_content(ADW_TOOLBAR_VIEW(self.handle), obj.get_handle());
     }
 
     fn add_top_bar(&self, obj: &Handler<GtkWidget>) {
-        adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+        adw_toolbar_view_add_top_bar(ADW_TOOLBAR_VIEW(self.handle), obj.get_handle());
     }
 
     fn add_bottom_bar(&self, obj: &Handler<GtkWidget>) {
-        adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+        adw_toolbar_view_add_bottom_bar(ADW_TOOLBAR_VIEW(self.handle), obj.get_handle());
     }
 
     fn remove(&self, obj: &Handler<GtkWidget>) {
-        adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(self.handle), obj.handle);
+        adw_toolbar_view_remove(ADW_TOOLBAR_VIEW(self.handle), obj.get_handle());
     }
 }

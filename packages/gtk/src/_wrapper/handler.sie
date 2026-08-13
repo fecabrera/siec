@@ -1,3 +1,4 @@
 interface Handler<T> {
-    handle: T*;
+    fn get_handle(&self) -> T*;
+    fn get_const_handle(const &self) -> const T*;
 }

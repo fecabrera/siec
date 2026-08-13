@@ -13,5 +13,8 @@
 @include("_wrapper/application")
 @include("_wrapper/applicationwindow")
 @include("_wrapper/headerbar")
+@include("_wrapper/navigationpage")
+@include("_wrapper/navigationsplitview")
+@include("_wrapper/sidebar")
 @include("_wrapper/toolbarview")
 @include("_wrapper/window")
