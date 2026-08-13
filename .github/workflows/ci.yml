@@ -82,22 +82,25 @@ jobs:
           # dependency stack rather than mixing Ubuntu's older GNOME libraries
           # with newer GTK and libadwaita builds.
           python -m pip install "meson>=1.8,<2"
+          hash -r
+          SIE_MESON="$(command -v meson)"
+          "$SIE_MESON" --version
           export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 
           git clone --branch 2.84.4 --depth 1 https://gitlab.gnome.org/GNOME/glib.git
-          meson setup glib-build glib \
+          "$SIE_MESON" setup glib-build glib \
             --prefix=/usr/local \
             --libdir=lib \
             --buildtype=release \
             -Dintrospection=disabled \
             -Dtests=false
-          meson compile -C glib-build
-          sudo meson install -C glib-build
+          "$SIE_MESON" compile -C glib-build
+          sudo "$SIE_MESON" install -C glib-build
           sudo ldconfig
           pkg-config --atleast-version=2.84.0 glib-2.0 gio-2.0
 
           git clone --branch 10.4.0 --depth 1 https://github.com/harfbuzz/harfbuzz.git
-          meson setup harfbuzz-build harfbuzz \
+          "$SIE_MESON" setup harfbuzz-build harfbuzz \
             --prefix=/usr/local \
             --libdir=lib \
             --buildtype=release \
@@ -105,27 +108,27 @@ jobs:
             -Dtests=disabled \
             -Dutilities=disabled \
             -Dintrospection=disabled
-          meson compile -C harfbuzz-build
-          sudo meson install -C harfbuzz-build
+          "$SIE_MESON" compile -C harfbuzz-build
+          sudo "$SIE_MESON" install -C harfbuzz-build
           sudo ldconfig
           pkg-config --atleast-version=8.4.0 harfbuzz harfbuzz-subset
 
           git clone --branch 1.56.4 --depth 1 https://gitlab.gnome.org/GNOME/pango.git
-          meson setup pango-build pango \
+          "$SIE_MESON" setup pango-build pango \
             --prefix=/usr/local \
             --libdir=lib \
             --buildtype=release \
             -Dintrospection=disabled \
             -Dbuild-testsuite=false \
             -Dbuild-examples=false
-          meson compile -C pango-build
-          sudo meson install -C pango-build
+          "$SIE_MESON" compile -C pango-build
+          sudo "$SIE_MESON" install -C pango-build
           sudo ldconfig
           pkg-config --atleast-version=1.56.0 pango pangocairo
 
           SIE_GTK_VERSION=4.21.1
           git clone --branch "$SIE_GTK_VERSION" --depth 1 https://gitlab.gnome.org/GNOME/gtk.git
-          meson setup gtk-build gtk \
+          "$SIE_MESON" setup gtk-build gtk \
             --prefix=/usr/local \
             --libdir=lib \
             --buildtype=release \
@@ -138,20 +141,20 @@ jobs:
             -Dprint-cups=disabled \
             -Dvulkan=disabled \
             -Dwayland-backend=false
-          meson compile -C gtk-build
-          sudo meson install -C gtk-build
+          "$SIE_MESON" compile -C gtk-build
+          sudo "$SIE_MESON" install -C gtk-build
           sudo ldconfig
           pkg-config --atleast-version=4.21.1 gtk4
 
           git clone --branch 1.9.0 --depth 1 https://gitlab.gnome.org/GNOME/libadwaita.git
           cd libadwaita
-          meson setup _build \
+          "$SIE_MESON" setup _build \
             -Dexamples=false \
             -Dintrospection=disabled \
             -Dtests=false \
             -Dvapi=false
-          sudo ninja -C _build
-          sudo ninja -C _build install
+          "$SIE_MESON" compile -C _build
+          sudo "$SIE_MESON" install -C _build
 
           # siec links library names directly (for example, -lgtk-4), rather
           # than through pkg-config. Prefer the GTK, Pango, and libadwaita
