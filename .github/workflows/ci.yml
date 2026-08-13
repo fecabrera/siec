@@ -64,6 +64,7 @@ jobs:
             libadwaita-1-dev \
             gobject-introspection \
             libvala-0.56-dev \
+            libvaladoc-0.56-dev \
             meson \
             ninja-build
 
