@@ -111,8 +111,8 @@ jobs:
             -Dintrospection=disabled \
             -Dtests=false \
             -Dvapi=false
-          ninja -C _build
-          ninja -C _build install
+          sudo ninja -C _build
+          sudo ninja -C _build install
 
       - name: Install libraries
         if: matrix.os == 'macos-latest'
