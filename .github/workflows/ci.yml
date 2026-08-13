@@ -114,6 +114,12 @@ jobs:
           sudo ninja -C _build
           sudo ninja -C _build install
 
+          # siec links library names directly (for example, -lgtk-4), rather
+          # than through pkg-config. Prefer the GTK, Pango, and libadwaita
+          # libraries just installed in /usr/local over Ubuntu's older copies.
+          echo "LIBRARY_PATH=/usr/local/lib${LIBRARY_PATH:+:$LIBRARY_PATH}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
       - name: Install libraries
         if: matrix.os == 'macos-latest'
         run: |
