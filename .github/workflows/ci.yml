@@ -78,12 +78,54 @@ jobs:
           sudo make install
           sudo ldconfig
 
-          SIE_GTK_VERSION=4.18.6
-          SIE_GTK_ARCHIVE="gtk-$SIE_GTK_VERSION.tar.xz"
-          curl -LO "https://download.gnome.org/sources/gtk/4.18/$SIE_GTK_ARCHIVE"
-          echo "e1817c650ddc3261f9a8345b3b22a26a5d80af154630dedc03cc7becefffd0fa  $SIE_GTK_ARCHIVE" | sha256sum -c
-          tar xf "$SIE_GTK_ARCHIVE"
-          meson setup gtk-build "gtk-$SIE_GTK_VERSION" \
+          # AdwSidebar was introduced in libadwaita 1.9.  Build its complete
+          # dependency stack rather than mixing Ubuntu's older GNOME libraries
+          # with newer GTK and libadwaita builds.
+          python -m pip install "meson>=1.8,<2"
+          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+
+          git clone --branch 2.84.4 --depth 1 https://gitlab.gnome.org/GNOME/glib.git
+          meson setup glib-build glib \
+            --prefix=/usr/local \
+            --libdir=lib \
+            --buildtype=release \
+            -Dintrospection=disabled \
+            -Dtests=false
+          meson compile -C glib-build
+          sudo meson install -C glib-build
+          sudo ldconfig
+          pkg-config --atleast-version=2.84.0 glib-2.0 gio-2.0
+
+          git clone --branch 10.4.0 --depth 1 https://github.com/harfbuzz/harfbuzz.git
+          meson setup harfbuzz-build harfbuzz \
+            --prefix=/usr/local \
+            --libdir=lib \
+            --buildtype=release \
+            -Ddocs=disabled \
+            -Dtests=disabled \
+            -Dutilities=disabled \
+            -Dintrospection=disabled
+          meson compile -C harfbuzz-build
+          sudo meson install -C harfbuzz-build
+          sudo ldconfig
+          pkg-config --atleast-version=8.4.0 harfbuzz harfbuzz-subset
+
+          git clone --branch 1.56.4 --depth 1 https://gitlab.gnome.org/GNOME/pango.git
+          meson setup pango-build pango \
+            --prefix=/usr/local \
+            --libdir=lib \
+            --buildtype=release \
+            -Dintrospection=disabled \
+            -Dbuild-testsuite=false \
+            -Dbuild-examples=false
+          meson compile -C pango-build
+          sudo meson install -C pango-build
+          sudo ldconfig
+          pkg-config --atleast-version=1.56.0 pango pangocairo
+
+          SIE_GTK_VERSION=4.21.1
+          git clone --branch "$SIE_GTK_VERSION" --depth 1 https://gitlab.gnome.org/GNOME/gtk.git
+          meson setup gtk-build gtk \
             --prefix=/usr/local \
             --libdir=lib \
             --buildtype=release \
@@ -99,12 +141,9 @@ jobs:
           meson compile -C gtk-build
           sudo meson install -C gtk-build
           sudo ldconfig
-          pkg-config --atleast-version=4.18 gtk4
+          pkg-config --atleast-version=4.21.1 gtk4
 
-          # Do not build libadwaita's development branch: it can require a newer
-          # GLib than the Ubuntu runner provides.  1.7.6 supports GTK >= 4.17.5
-          # and GLib >= 2.80, which are satisfied by the versions above.
-          git clone --branch 1.7.6 --depth 1 https://gitlab.gnome.org/GNOME/libadwaita.git
+          git clone --branch 1.9.0 --depth 1 https://gitlab.gnome.org/GNOME/libadwaita.git
           cd libadwaita
           meson setup _build \
             -Dexamples=false \
