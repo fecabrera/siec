@@ -53,16 +53,11 @@ jobs:
       - name: Install dependencies
         run: pipenv sync --dev
 
-      - name: Install libcurl
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
-
-      # ubuntu-latest (24.04) has no libmpdec package - Ubuntu dropped
-      # mpdecimal after 22.04 and only reintroduced it in 25.10 - so the
-      # library builds from the upstream release instead
-      - name: Install libmpdec
+      - name: Install libraries
         if: matrix.os == 'ubuntu-latest'
         run: |
+          sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+
           curl -LO https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz
           echo "96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8  mpdecimal-4.0.1.tar.gz" | sha256sum -c
           tar xf mpdecimal-4.0.1.tar.gz
@@ -72,12 +67,6 @@ jobs:
           sudo make install
           sudo ldconfig
 
-      # Ubuntu 24.04 provides GTK 4.14, while the bindings expose APIs added
-      # in GTK 4.18. Build the oldest compatible stable release on top of the
-      # distribution's development dependencies.
-      - name: Install GTK
-        if: matrix.os == 'ubuntu-latest'
-        run: |
           sudo apt-get update
           sudo apt-get install -y libdrm-dev libgtk-4-dev meson ninja-build
           SIE_GTK_VERSION=4.18.6
@@ -103,9 +92,11 @@ jobs:
           sudo ldconfig
           pkg-config --atleast-version=4.18 gtk4
 
-      - name: Install libadwaita
-        if: matrix.os == 'ubuntu-lates'
-        run: sudo apt-get install -y libadwaita-1-dev
+          git clone https://gitlab.gnome.org/GNOME/libadwaita.git
+          cd libadwaita
+          meson setup _build
+          ninja -C _build
+          ninja -C _build install
 
       - name: Install libraries
         if: matrix.os == 'macos-latest'
@@ -113,7 +104,7 @@ jobs:
           brew install gtk4 mpdecimal libadwaita
           echo "LIBRARY_PATH=$(brew --prefix)/lib:$(brew --prefix mpdecimal)/lib" >> "$GITHUB_ENV"
 
-      - name: Build Sie
+      - name: Build examples and wheel
         run: |
           pip install -e '.[lsp]'
           for dir in packages/*; do sie install $dir; done
