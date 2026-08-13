@@ -707,14 +707,21 @@ def method_call(gen: CodeGenerator, call: Call, scope: dict) -> tuple | None:
 
     names = call.name.split(".")
     receiver = Var(names[0])
+    if hasattr(call, "macro_argument_file"):
+        receiver.macro_argument_file = call.macro_argument_file
     for part in names[1:-1]:
         receiver = Member(receiver, part)
+        if hasattr(call, "macro_argument_file"):
+            receiver.macro_argument_file = call.macro_argument_file
 
-    receiver_type = expr_sie_type(gen, receiver, scope)
-    if receiver_type is None:
-        return None
+    from siec.codegen.resolution import expression_view
 
-    symbol = resolve_method(gen, receiver_type, names[-1])
+    with expression_view(gen, call):
+        receiver_type = expr_sie_type(gen, receiver, scope)
+        if receiver_type is None:
+            return None
+
+        symbol = resolve_method(gen, receiver_type, names[-1])
     if symbol is None:
         return None
 

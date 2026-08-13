@@ -208,7 +208,19 @@ def is_float(type_: ir.Type) -> bool:
 def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     """
     Infer the Sie type name of an expression; None when it has no fixed one.
+
+    A macro argument retains the source view where it was written even while
+    overload selection infers it from inside the macro's declaration view.
     """
+    from siec.codegen.resolution import expression_view
+
+    with expression_view(gen, expr):
+        return _expr_sie_type(gen, expr, scope)
+
+
+def _expr_sie_type(gen: CodeGenerator, expr: Expr,
+                   scope: dict) -> str | None:
+    """Implementation of :func:`expr_sie_type` under its source view."""
     if isinstance(expr, CachedExpr):
         return expr_sie_type(gen, expr.expr, scope)
 

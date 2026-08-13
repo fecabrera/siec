@@ -1486,6 +1486,53 @@ def test_included_type_survives_internal_import_cycle(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_imported_method_can_call_private_sibling_after_type_collision(
+        tmp_path, monkeypatch):
+    """
+    Canonicalizing same-named types from two imported aggregates must not
+    make an imported method lose a private helper declared beside it.
+    """
+    (tmp_path / "first.sie").write_text('@include("first/application")\n')
+    (tmp_path / "first").mkdir()
+    (tmp_path / "first" / "application.sie").write_text("""
+        struct Application {
+            fn init(&self) {}
+            fn value(&self) -> i32 { return 0; }
+        }
+    """)
+    (tmp_path / "second.sie").write_text(
+        '@include("second/application")\n')
+    (tmp_path / "second").mkdir()
+    (tmp_path / "second" / "application.sie").write_text("""
+        import { Application } from second;
+        import { pass_through } from support;
+
+        struct Application {
+            fn init(&self) {}
+            @private fn helper(&self) -> i32 { return 42; }
+            fn value(&self, callback: closure fn()) -> i32 {
+                return pass_through(self.helper());
+            }
+        }
+    """)
+    (tmp_path / "support.sie").write_text("""
+        fn identity(value: i32) -> i32 { return value; }
+        @macro pass_through(value) = identity(value);
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import first;
+        import second;
+
+        fn main() -> i32 {
+            return second.Application().value(() => {});
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_module_constants_build_on_their_siblings(tmp_path, monkeypatch):
     """
     A constant's value resolves in its declaring file's view: a module's
