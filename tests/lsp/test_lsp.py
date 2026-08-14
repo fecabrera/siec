@@ -6,8 +6,8 @@ import time
 from types import SimpleNamespace
 
 from siec.lsp import (Report, SearchPathCache, UnitAnalysisCache, analyze,
-                      compile_unit, complete, dependent_uris, outline,
-                      search_paths)
+                      call_signature_help, compile_unit, complete,
+                      dependent_uris, outline, search_paths)
 
 
 def write(path, text):
@@ -1506,6 +1506,162 @@ def test_server_triggers_completion_for_member_import_lists():
         types.TEXT_DOCUMENT_COMPLETION]
     assert options == types.CompletionOptions(
         trigger_characters=[".", ":", ">", "{", ","])
+
+
+def signature_at(analysis, text: str):
+    """Request signature help at the single '|' cursor marker."""
+    offset = text.index("|")
+    before = text[:offset]
+    source = text[:offset] + text[offset + 1:]
+    line = before.count("\n")
+    col = len(before.rsplit("\n", 1)[-1])
+    return call_signature_help(analysis, source, line, col)
+
+
+def test_signature_help_for_functions_methods_and_macros(tmp_path):
+    """Call help displays parameters for every callable declaration form."""
+    source = """\
+fn add(x: i32, y: i32) -> i32 { return x + y; }
+
+struct Point {
+    fn contains(&self, x: f64, y: f64) -> bool { return true; }
+}
+
+@macro choose<T>(left, right) = left as T;
+
+fn main() -> i32 {
+    let point: Point = {};
+    add(1, 2);
+    point.contains(1.0, 2.0);
+    return choose<i32>(1, 2);
+}
+"""
+    analysis, _ = unit(tmp_path, source)
+
+    function = signature_at(analysis, source.replace("add(1, 2)",
+                                                      "add(1, |)"))
+    assert function.active_parameter == 1
+    assert function.signatures[0].label == \
+        "fn add(x: i32, y: i32) -> i32"
+    assert function.signatures[0].parameters == ("x: i32", "y: i32")
+
+    method = signature_at(
+        analysis,
+        source.replace("point.contains(1.0, 2.0)",
+                       "point.contains(1.0, |)"),
+    )
+    assert method.active_parameter == 1
+    assert method.signatures[0].label == \
+        "fn Point::contains(x: f64, y: f64) -> bool"
+    assert method.signatures[0].parameters == ("x: f64", "y: f64")
+
+    macro = signature_at(
+        analysis,
+        source.replace("choose<i32>(1, 2)", "choose<i32>(1, |)"),
+    )
+    assert macro.active_parameter == 1
+    assert macro.signatures[0].label == \
+        "@macro choose<T>(left, right)"
+    assert macro.signatures[0].parameters == ("left", "right")
+
+
+def test_signature_help_crosses_nested_generic_arguments(tmp_path):
+    """A nested generic type list before '(' still leads back to the macro."""
+    source = """\
+struct Box<T> { value: T; }
+@macro make<T>(value) = value;
+fn main() -> i32 { make<Box<Box<i32>>>(0); return 0; }
+"""
+    analysis, _ = unit(tmp_path, source)
+    found = signature_at(
+        analysis,
+        source.replace("make<Box<Box<i32>>>(0)",
+                       "make<Box<Box<i32>>>(|)"),
+    )
+    assert found.signatures[0].label == "@macro make<T>(value)"
+    assert found.active_parameter == 0
+
+
+def test_signature_help_uses_the_innermost_call(tmp_path):
+    """Nested calls and literal commas select the innermost parameter."""
+    source = """\
+fn inner(x: i32, y: i32) -> i32 { return x + y; }
+fn outer(values: i32[], value: i32) -> i32 { return value; }
+fn main() -> i32 { return outer([1, 2], inner(1, 2)); }
+"""
+    analysis, _ = unit(tmp_path, source)
+    found = signature_at(
+        analysis,
+        source.replace("inner(1, 2)", "inner(1, |)"),
+    )
+    assert found.active_parameter == 1
+    assert found.signatures[0].label == \
+        "fn inner(x: i32, y: i32) -> i32"
+
+
+def test_signature_help_lists_overloads_and_selects_by_argument(tmp_path):
+    """Every overload is shown, with one accepting the active argument."""
+    source = """\
+fn pick(x: i32) -> i32 { return x; }
+fn pick(x: i32, y: i32) -> i32 { return x + y; }
+fn main() -> i32 { return pick(1, 2); }
+"""
+    analysis, _ = unit(tmp_path, source)
+    found = signature_at(
+        analysis,
+        source.replace("pick(1, 2)", "pick(1, |)"),
+    )
+    assert [candidate.label for candidate in found.signatures] == [
+        "fn pick(x: i32) -> i32",
+        "fn pick(x: i32, y: i32) -> i32",
+    ]
+    assert found.active_signature == 1
+    assert found.active_parameter == 1
+
+
+def test_signature_help_resolves_imported_callables(tmp_path):
+    """Imported package-style functions and macros expose their parameters."""
+    write(tmp_path / "widgets.sie", """\
+fn contains(widget: opaque*, x: f64, y: f64) -> bool { return true; }
+@macro clamp(value, low, high) = value;
+""")
+    source = """\
+import { contains, clamp } from widgets;
+fn main() -> i32 {
+    contains(null, 1.0, 2.0);
+    return clamp(42, 0, 100);
+}
+"""
+    analysis, _ = unit(tmp_path, source)
+
+    function = signature_at(
+        analysis,
+        source.replace("contains(null, 1.0, 2.0)",
+                       "contains(null, 1.0, |)"),
+    )
+    assert function.signatures[0].parameters == (
+        "widget: opaque*", "x: f64", "y: f64")
+    assert function.active_parameter == 2
+
+    macro = signature_at(
+        analysis,
+        source.replace("clamp(42, 0, 100)", "clamp(42, 0, |)"),
+    )
+    assert macro.signatures[0].parameters == ("value", "low", "high")
+    assert macro.active_parameter == 2
+
+
+def test_server_registers_signature_help_triggers():
+    """Opening a call and advancing an argument request signature help."""
+    from lsprotocol import types
+
+    from siec.lsp import create_server
+
+    server = create_server()
+    options = server.protocol.fm.feature_options[
+        types.TEXT_DOCUMENT_SIGNATURE_HELP]
+    assert options == types.SignatureHelpOptions(
+        trigger_characters=["(", ","], retrigger_characters=[","])
 
 
 def test_complete_lists_locals_visible_names_and_modules(tmp_path):

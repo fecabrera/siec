@@ -58,7 +58,7 @@ So an extension declared later, or imported from another module, still applies w
 
 ### Editor support
 
-`sie-lsp` is a language server on the compiler's front end. It recompiles open buffers as they change and serves diagnostics, outline, completion, hover, and go-to-definition from what the compiler knows.
+`sie-lsp` is a language server on the compiler's front end. It recompiles open buffers as they change and serves diagnostics, outline, completion, signature help, hover, and go-to-definition from what the compiler knows. Inside a function, method, or macro call, signature help lists its parameters and follows the active one as commas are entered.
 
 ```
 pip install -e '.[lsp]'

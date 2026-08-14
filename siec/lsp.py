@@ -220,6 +220,21 @@ class Completion:
     detail: str | None = None
 
 
+@dataclass(frozen=True)
+class CallSignature:
+    """One callable declaration rendered for LSP signature help."""
+    label: str
+    parameters: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CallHelp:
+    """The signatures and active argument at a cursor inside a call."""
+    signatures: tuple[CallSignature, ...]
+    active_signature: int
+    active_parameter: int
+
+
 KEYWORD_COMPLETIONS = (
     "and", "as", "bool", "break", "case", "char", "const", "continue",
     "defer", "else", "emit", "enum", "false", "f32", "f64", "fn",
@@ -835,9 +850,9 @@ def pattern_text(pattern: list) -> str:
     return f"({', '.join(parts)})"
 
 
-def signature(fn: Function) -> str:
+def signature_parts(fn: Function) -> tuple[str, tuple[str, ...], str]:
     """
-    A function's declaration in Sie syntax, its generic parameters kept.
+    A function's displayed name, parameters, and return suffix.
 
     An interface-typed parameter became a synthetic constrained type
     parameter at registration; it renders back as the interface it was
@@ -886,9 +901,15 @@ def signature(fn: Function) -> str:
             return f"{pattern_text(p.pattern)}: {type_name}"
         return f"{p.name}: {type_name}"
 
-    params = ", ".join(param_text(p) for p in fn.params)
+    params = tuple(param_text(p) for p in fn.params)
     ret = f" -> {fn.return_type}" if fn.return_type else ""
-    return f"fn {name}({params}){ret}"
+    return name, params, ret
+
+
+def signature(fn: Function) -> str:
+    """A function's declaration in Sie syntax, its generic parameters kept."""
+    name, params, ret = signature_parts(fn)
+    return f"fn {name}({', '.join(params)}){ret}"
 
 
 def struct_text(node) -> str:
@@ -1559,6 +1580,143 @@ def inspect(analysis: Analysis, text: str, line: int, col: int) -> Finding | Non
     except (TypeError, NameError, SyntaxError, KeyError, IndexError,
             RuntimeError):
         return None
+
+
+def call_context(text: str, line: int,
+                 col: int) -> tuple[Token, int, bool] | None:
+    """
+    Return the callee token, zero-based argument index, and whether the call
+    uses an implicit dotted receiver for the innermost call at the cursor.
+
+    Tokens make parentheses inside strings and comments inert. Bracketed and
+    braced literals keep their own commas from advancing the call parameter.
+    """
+    try:
+        before = [
+            token for token in lex(text)
+            if token.kind != "eof"
+            and (token.line - 1 < line
+                 or token.line - 1 == line and token.col < col)
+        ]
+    except SyntaxError:
+        return None
+
+    stack = []
+    square = brace = 0
+    for index, token in enumerate(before):
+        syntax = token.syntax
+        if syntax == "[":
+            square += 1
+        elif syntax == "]":
+            square = max(0, square - 1)
+        elif syntax == "{":
+            brace += 1
+        elif syntax == "}":
+            brace = max(0, brace - 1)
+        elif syntax == "(":
+            stack.append([index, 0, square, brace])
+        elif syntax == ")":
+            if stack:
+                stack.pop()
+        elif (syntax == "," and stack
+              and square == stack[-1][2] and brace == stack[-1][3]):
+            stack[-1][1] += 1
+
+    if not stack:
+        return None
+
+    open_index, argument, _, _ = stack[-1]
+    index = open_index - 1
+    if index < 0:
+        return None
+
+    # Explicit generic arguments sit between the callable's name and '('.
+    # Walk back over their balanced angle brackets to the name itself.
+    if before[index].syntax in (">", ">>"):
+        depth = 2 if before[index].syntax == ">>" else 1
+        index -= 1
+        while index >= 0 and depth:
+            if before[index].syntax in (">", ">>"):
+                depth += 2 if before[index].syntax == ">>" else 1
+            elif before[index].syntax == "<":
+                depth -= 1
+            index -= 1
+
+    if index < 0 or before[index].kind != "ident":
+        return None
+
+    callee = before[index]
+    previous = before[index - 1].syntax if index else None
+    if previous == "fn":
+        return None
+    return callee, argument, previous in (".", "->")
+
+
+def macro_signature(node) -> CallSignature:
+    """Render a function-like macro and its value parameters."""
+    name = node.name
+    if node.type_params:
+        def bound_text(value) -> str:
+            bounds = value if isinstance(value, tuple) else (value,)
+            return " & ".join(bounds)
+
+        params = ", ".join(
+            param + (f": {bound_text(node.constraints[param])}"
+                     if param in (node.constraints or {}) else "")
+            for param in node.type_params
+        )
+        name += f"<{params}>"
+
+    parameters = tuple(node.params or ())
+    return CallSignature(
+        f"@macro {name}({', '.join(parameters)})", parameters)
+
+
+def callable_signature(node, implicit_receiver: bool) -> CallSignature:
+    """Render a function declaration for one particular call spelling."""
+    name, parameters, ret = signature_parts(node)
+    if (implicit_receiver and node.params
+            and node.params[0].name == "self"):
+        parameters = parameters[1:]
+    return CallSignature(
+        f"fn {name}({', '.join(parameters)}){ret}", parameters)
+
+
+def call_signature_help(analysis: Analysis, text: str, line: int,
+                        col: int) -> CallHelp | None:
+    """Resolve signature help for the innermost call containing the cursor."""
+    context = call_context(text, line, col)
+    if context is None or analysis.program is None or analysis.gen is None:
+        return None
+
+    callee, active_parameter, implicit_receiver = context
+    finding = inspect(analysis, text, callee.line - 1, callee.col + 1)
+    if finding is None or not finding.targets:
+        return None
+
+    targets = set(finding.targets)
+    declarations = []
+    for entries in declaration_sites(analysis.program).values():
+        for kind, node in entries:
+            if (node.file, node.line) not in targets:
+                continue
+            if kind == "function":
+                declarations.append(
+                    callable_signature(node, implicit_receiver))
+            elif kind == "constant" and node.is_macro \
+                    and node.params is not None:
+                declarations.append(macro_signature(node))
+
+    signatures = tuple(dict.fromkeys(declarations))
+    if not signatures:
+        return None
+
+    active_signature = next(
+        (index for index, candidate in enumerate(signatures)
+         if active_parameter < len(candidate.parameters)),
+        0,
+    )
+    return CallHelp(signatures, active_signature, active_parameter)
 
 
 def resolve_chain(analysis: Analysis, sites: dict, scope: dict, lines: dict,
@@ -2354,6 +2512,45 @@ def create_server():
         content = types.MarkupContent(kind=types.MarkupKind.Markdown,
                                       value=f"```sie\n{finding.text}\n```")
         return types.Hover(contents=content)
+
+    @server.feature(
+        types.TEXT_DOCUMENT_SIGNATURE_HELP,
+        types.SignatureHelpOptions(
+            trigger_characters=["(", ","], retrigger_characters=[","]))
+    @guarded("signature help request", None)
+    def signature_help(
+            params: types.SignatureHelpParams) -> types.SignatureHelp | None:
+        uri = params.text_document.uri
+        analysis = analyses.get(uri)
+        if analysis is None:
+            return None
+
+        doc = server.workspace.get_text_document(uri)
+        found = call_signature_help(
+            analysis, doc.source, params.position.line,
+            params.position.character)
+        if found is None:
+            return None
+
+        signatures = []
+        for candidate in found.signatures:
+            active = min(found.active_parameter,
+                         max(len(candidate.parameters) - 1, 0))
+            signatures.append(types.SignatureInformation(
+                label=candidate.label,
+                parameters=[types.ParameterInformation(label=parameter)
+                            for parameter in candidate.parameters],
+                active_parameter=active,
+            ))
+
+        selected = found.signatures[found.active_signature]
+        active = min(found.active_parameter,
+                     max(len(selected.parameters) - 1, 0))
+        return types.SignatureHelp(
+            signatures=signatures,
+            active_signature=found.active_signature,
+            active_parameter=active,
+        )
 
     @server.feature(
         types.TEXT_DOCUMENT_COMPLETION,
