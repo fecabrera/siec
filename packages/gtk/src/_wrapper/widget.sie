@@ -1,0 +1,371 @@
+import { gboolean } from glib;
+import {
+    GtkWidget,
+    GtkAlign,
+    Handler,
+    gtk_widget_unparent,
+    gtk_widget_show,
+    gtk_widget_hide,
+    gtk_widget_map,
+    gtk_widget_unmap,
+    gtk_widget_realize,
+    gtk_widget_unrealize,
+    gtk_widget_queue_draw,
+    gtk_widget_queue_resize,
+    gtk_widget_queue_allocate,
+    gtk_widget_activate,
+    gtk_widget_set_can_focus,
+    gtk_widget_get_can_focus,
+    gtk_widget_set_focusable,
+    gtk_widget_get_focusable,
+    gtk_widget_has_focus,
+    gtk_widget_is_focus,
+    gtk_widget_has_visible_focus,
+    gtk_widget_grab_focus,
+    gtk_widget_set_focus_on_click,
+    gtk_widget_get_focus_on_click,
+    gtk_widget_set_can_target,
+    gtk_widget_get_can_target,
+    gtk_widget_has_default,
+    gtk_widget_set_receives_default,
+    gtk_widget_get_receives_default,
+    gtk_widget_set_name,
+    gtk_widget_set_sensitive,
+    gtk_widget_get_sensitive,
+    gtk_widget_is_sensitive,
+    gtk_widget_set_visible,
+    gtk_widget_get_visible,
+    gtk_widget_is_visible,
+    gtk_widget_is_drawable,
+    gtk_widget_get_realized,
+    gtk_widget_get_mapped,
+    gtk_widget_set_parent,
+    gtk_widget_set_child_visible,
+    gtk_widget_get_child_visible,
+    gtk_widget_get_width,
+    gtk_widget_get_height,
+    gtk_widget_get_baseline,
+    gtk_widget_error_bell,
+    gtk_widget_set_size_request,
+    gtk_widget_get_size_request,
+    gtk_widget_set_opacity,
+    gtk_widget_get_opacity,
+    gtk_widget_get_scale_factor,
+    gtk_widget_get_hexpand,
+    gtk_widget_set_hexpand,
+    gtk_widget_get_hexpand_set,
+    gtk_widget_set_hexpand_set,
+    gtk_widget_get_vexpand,
+    gtk_widget_set_vexpand,
+    gtk_widget_get_vexpand_set,
+    gtk_widget_set_vexpand_set,
+    gtk_widget_get_halign,
+    gtk_widget_set_halign,
+    gtk_widget_get_valign,
+    gtk_widget_set_valign,
+    gtk_widget_get_margin_start,
+    gtk_widget_set_margin_start,
+    gtk_widget_get_margin_end,
+    gtk_widget_set_margin_end,
+    gtk_widget_get_margin_top,
+    gtk_widget_set_margin_top,
+    gtk_widget_get_margin_bottom,
+    gtk_widget_set_margin_bottom,
+    gtk_widget_is_ancestor,
+    gtk_widget_contains,
+} from gtk;
+
+struct Widget: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+    
+    fn unparent(&self) {
+        gtk_widget_unparent(self.handle);
+    }
+    
+    fn show(&self) {
+        gtk_widget_show(self.handle);
+    }
+    
+    fn hide(&self) {
+        gtk_widget_hide(self.handle);
+    }
+    
+    fn map(&self) {
+        gtk_widget_map(self.handle);
+    }
+    
+    fn unmap(&self) {
+        gtk_widget_unmap(self.handle);
+    }
+    
+    fn realize(&self) {
+        gtk_widget_realize(self.handle);
+    }
+    
+    fn unrealize(&self) {
+        gtk_widget_unrealize(self.handle);
+    }
+    
+    fn queue_draw(&self) {
+        gtk_widget_queue_draw(self.handle);
+    }
+    
+    fn queue_resize(&self) {
+        gtk_widget_queue_resize(self.handle);
+    }
+    
+    fn queue_allocate(&self) {
+        gtk_widget_queue_allocate(self.handle);
+    }
+    
+    fn activate(&self) {
+        gtk_widget_activate(self.handle);
+    }
+    
+    fn set_can_focus(&self, can_focus: bool) {
+        gtk_widget_set_can_focus(self.handle, can_focus as gboolean);
+    }
+    
+    fn get_can_focus(&self) -> bool {
+        return gtk_widget_get_can_focus(self.handle) as bool;
+    }
+    
+    fn set_focusable(&self, focusable: bool) {
+        gtk_widget_set_focusable(self.handle, focusable as gboolean);
+    }
+    
+    fn get_focusable(&self) -> bool {
+        return gtk_widget_get_focusable(self.handle) as bool;
+    }
+    
+    fn has_focus(&self) -> bool {
+        return gtk_widget_has_focus(self.handle) as bool;
+    }
+    
+    fn is_focus(&self) -> bool {
+        return gtk_widget_is_focus(self.handle) as bool;
+    }
+    
+    fn has_visible_focus(&self) -> bool {
+        return gtk_widget_has_visible_focus(self.handle) as bool;
+    }
+    
+    fn grab_focus(&self) -> bool {
+        return gtk_widget_grab_focus(self.handle) as bool;
+    }
+    
+    fn set_focus_on_click(&self, focus_on_click: bool) {
+        gtk_widget_set_focus_on_click(self.handle, focus_on_click as gboolean);
+    }
+    
+    fn get_focus_on_click(&self) -> bool {
+        return gtk_widget_get_focus_on_click(self.handle) as bool;
+    }
+    
+    fn set_can_target(&self, can_target: bool) {
+        gtk_widget_set_can_target(self.handle, can_target as gboolean);
+    }
+    
+    fn get_can_target(&self) -> bool {
+        return gtk_widget_get_can_target(self.handle) as bool;
+    }
+    
+    fn has_default(&self) -> bool {
+        return gtk_widget_has_default(self.handle) as bool;
+    }
+    
+    fn set_receives_default(&self, receives_default: bool) {
+        gtk_widget_set_receives_default(self.handle, receives_default as gboolean);
+    }
+    
+    fn get_receives_default(&self) -> bool {
+        return gtk_widget_get_receives_default(self.handle) as bool;
+    }
+    
+    fn set_name(&self, name: const &char[]) {
+        gtk_widget_set_name(self.handle, name);
+    }
+    
+    fn set_sensitive(&self, sensistive: bool) {
+        gtk_widget_set_sensitive(self.handle, sensistive as gboolean);
+    }
+    
+    fn get_sensitive(&self) -> bool {
+        return gtk_widget_get_sensitive(self.handle) as bool;
+    }
+    
+    fn is_sensitive(&self) -> bool {
+        return gtk_widget_is_sensitive(self.handle) as bool;
+    }
+    
+    fn set_visible(&self, visible: bool) {
+        gtk_widget_set_visible(self.handle, visible as gboolean);
+    }
+    
+    fn get_visible(&self) -> bool {
+        return gtk_widget_get_visible(self.handle) as bool;
+    }
+    
+    fn is_visible(&self) -> bool {
+        return gtk_widget_is_visible(self.handle) as bool;
+    }
+    
+    fn is_drawable(&self) -> bool {
+        return gtk_widget_is_drawable(self.handle) as bool;
+    }
+    
+    fn get_realized(&self) -> bool {
+        return gtk_widget_get_realized(self.handle) as bool;
+    }
+    
+    fn get_mapped(&self) -> bool {
+        return gtk_widget_get_mapped(self.handle) as bool;
+    }
+    
+    fn set_parent(&self, parent: &Handler<GtkWidget>) {
+        gtk_widget_set_parent(self.handle, parent.get_handle());
+    }
+    
+    fn set_child_visible(&self, child_visible: bool) {
+        gtk_widget_set_child_visible(self.handle, child_visible as gboolean);
+    }
+    
+    fn get_child_visible(&self) -> bool {
+        return gtk_widget_get_child_visible(self.handle) as bool;
+    }
+    
+    fn get_width(&self) -> i32 {
+        return gtk_widget_get_width(self.handle);
+    }
+    
+    fn get_height(&self) -> i32 {
+        return gtk_widget_get_height(self.handle);
+    }
+    
+    fn get_baseline(&self) -> i32 {
+        return gtk_widget_get_baseline(self.handle);
+    }
+    
+    fn error_bell(&self) {
+        gtk_widget_error_bell(self.handle);
+    }
+    
+    fn set_size_request(&self, width: i32, height: i32) {
+        gtk_widget_set_size_request(self.handle, width, height);
+    }
+    
+    fn get_size_request(&self) -> Tuple<i32, i32> {
+        let w: i32;
+        let h: i32;
+        gtk_widget_get_size_request(self.handle, &w, &h);
+        return (w, h);
+    }
+    
+    fn set_opacity(&self, opacity: f64) {
+        gtk_widget_set_opacity(self.handle, opacity);
+    }
+    
+    fn get_opacity(&self) -> f64 {
+        return gtk_widget_get_opacity(self.handle);
+    }
+    
+    fn get_scale_factor(&self) -> i32 {
+        return gtk_widget_get_scale_factor(self.handle);
+    }
+    
+    fn get_hexpand(&self) -> bool {
+        return gtk_widget_get_hexpand(self.handle) as bool;
+    }
+    
+    fn set_hexpand(&self, expand: bool) {
+        gtk_widget_set_hexpand(self.handle, expand as gboolean);
+    }
+    
+    fn get_hexpand_set(&self) -> bool {
+        return gtk_widget_get_hexpand_set(self.handle) as bool;
+    }
+    
+    fn set_hexpand_set(&self, set: bool) {
+        gtk_widget_set_hexpand_set(self.handle, set as gboolean);
+    }
+    
+    fn get_vexpand(&self) -> bool {
+        return gtk_widget_get_vexpand(self.handle) as bool;
+    }
+    
+    fn set_vexpand(&self, expand: bool) {
+        gtk_widget_set_vexpand(self.handle, expand as gboolean);
+    }
+    
+    fn get_vexpand_set(&self) -> bool {
+        return gtk_widget_get_vexpand_set(self.handle) as bool;
+    }
+    
+    fn set_vexpand_set(&self, set: bool) {
+        gtk_widget_set_vexpand_set(self.handle, set as gboolean);
+    }
+    
+    fn get_halign(&self) -> GtkAlign {
+        return gtk_widget_get_halign(self.handle);
+    }
+    
+    fn set_halign(&self, align: GtkAlign) {
+        gtk_widget_set_halign(self.handle, align);
+    }
+    
+    fn get_valign(&self) -> GtkAlign {
+        return gtk_widget_get_valign(self.handle);
+    }
+    
+    fn set_valign(&self, align: GtkAlign) {
+        gtk_widget_set_valign(self.handle, align);
+    }
+    
+    fn get_margin_start(&self) -> i32 {
+        return gtk_widget_get_margin_start(self.handle);
+    }
+    
+    fn set_margin_start(&self, margin: i32) {
+        gtk_widget_set_margin_start(self.handle, margin);
+    }
+    
+    fn get_margin_end(&self) -> i32 {
+        return gtk_widget_get_margin_end(self.handle);
+    }
+    
+    fn set_margin_end(&self, margin: i32) {
+        gtk_widget_set_margin_end(self.handle, margin);
+    }
+    
+    fn get_margin_top(&self) -> i32 {
+        return gtk_widget_get_margin_top(self.handle);
+    }
+    
+    fn set_margin_top(&self, margin: i32) {
+        gtk_widget_set_margin_top(self.handle, margin);
+    }
+    
+    fn get_margin_bottom(&self) -> i32 {
+        return gtk_widget_get_margin_bottom(self.handle);
+    }
+    
+    fn set_margin_bottom(&self, margin: i32) {
+        gtk_widget_set_margin_bottom(self.handle, margin);
+    }
+    
+    fn is_ancestor(&self, widget: &Handler<GtkWidget>) -> bool {
+        return gtk_widget_is_ancestor(self.handle, widget.get_handle());
+    }
+
+    fn contains(&self, x: f64, y: f64) -> bool {
+        return gtk_widget_contains(self.handle, x, y) as bool;
+    }
+}

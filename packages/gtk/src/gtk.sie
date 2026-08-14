@@ -25,4 +25,5 @@
 @include("_wrapper/label");
 @include("_wrapper/menubutton");
 @include("_wrapper/popover");
+@include("_wrapper/widget");
 @include("_wrapper/window");
