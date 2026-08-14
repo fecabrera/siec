@@ -1,0 +1,154 @@
+import { gboolean } from glib;
+import { GMenuModel } from gio;
+import {
+    GTK_LABEL,
+    GtkLabel,
+    GtkWidget,
+    Handler,
+    gtk_label_new,
+    gtk_label_new_with_mnemonic,
+    gtk_label_set_text,
+    gtk_label_set_label,
+    gtk_label_set_markup,
+    gtk_label_set_use_markup,
+    gtk_label_get_use_markup,
+    gtk_label_set_use_underline,
+    gtk_label_get_use_underline,
+    gtk_label_set_width_chars,
+    gtk_label_get_width_chars,
+    gtk_label_set_max_width_chars,
+    gtk_label_get_max_width_chars,
+    gtk_label_set_lines,
+    gtk_label_get_lines,
+    gtk_label_set_selectable,
+    gtk_label_get_selectable,
+    gtk_label_get_selection_bounds,
+    gtk_label_set_single_line_mode,
+    gtk_label_get_single_line_mode,
+    gtk_label_set_xalign,
+    gtk_label_get_xalign,
+    gtk_label_set_yalign,
+    gtk_label_get_yalign,
+    gtk_label_set_extra_menu,
+    gtk_label_get_extra_menu,
+} from gtk;
+
+struct Label: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self, str: const &char[]) {
+        self.handle = gtk_label_new(str);
+    }
+
+    fn with_mnemonic(str: const &char[]) -> Label {
+        return { gtk_label_new_with_mnemonic(str) };
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_gtk_label(&self) -> GtkLabel* {
+        return GTK_LABEL(self.handle);
+    }
+
+    fn set_text(&self, str: const &char[]) {
+        gtk_label_set_text(self.as_gtk_label(), str);
+    }
+
+    fn set_label(&self, str: const &char[]) {
+        gtk_label_set_label(self.as_gtk_label(), str);
+    }
+    
+    fn gtk_label_set_markup(&self, str: const &char[]) {
+        gtk_label_set_markup(self.as_gtk_label(), str);
+    }
+    
+    fn gtk_label_set_use_markup(&self, use_markup: bool) {
+        gtk_label_set_use_markup(self.as_gtk_label(), use_markup as gboolean);
+    }
+    
+    fn gtk_label_get_use_markup(&self) -> bool {
+        return gtk_label_get_use_markup(self.as_gtk_label()) as bool;
+    }
+    
+    fn set_use_underline(&self, use_underline: bool) {
+        gtk_label_set_use_underline(self.as_gtk_label(), use_underline as gboolean);
+    }
+    
+    fn get_use_underline(&self) -> bool {
+        return gtk_label_get_use_underline(self.as_gtk_label()) as bool;
+    }
+    
+    fn set_width_chars(&self, n_chars: i32) {
+        gtk_label_set_width_chars(self.as_gtk_label(), n_chars);
+    }
+    
+    fn get_width_chars(&self) -> i32 {
+        return gtk_label_get_width_chars(self.as_gtk_label());
+    }
+    
+    fn set_max_width_chars(&self, n_chars: i32) {
+        gtk_label_set_max_width_chars(self.as_gtk_label(), n_chars);
+    }
+    
+    fn get_max_width_chars(&self) -> i32 {
+        return gtk_label_get_max_width_chars(self.as_gtk_label());
+    }
+    
+    fn set_lines(&self, lines: i32) {
+        gtk_label_set_lines(self.as_gtk_label(), lines);
+    }
+    
+    fn get_lines(&self) -> i32 {
+        return gtk_label_get_lines(self.as_gtk_label());
+    }
+    
+    fn set_selectable(&self, selectable: bool) {
+        gtk_label_set_selectable(self.as_gtk_label(), selectable as gboolean);
+    }
+    
+    fn get_selectable(&self) -> bool {
+        return gtk_label_get_selectable(self.as_gtk_label()) as bool;
+    }
+    
+    fn get_selection_bounds(&self) -> Tuple<i32, i32> {
+        let x: i32;
+        let y: i32;
+        gtk_label_get_selection_bounds(self.as_gtk_label(), &x, &y);
+        return (x, y);
+    }
+    
+    fn set_single_line_mode(&self, single_line_mode: bool) {
+        gtk_label_set_single_line_mode(self.as_gtk_label(), single_line_mode as gboolean);
+    }
+    
+    fn get_single_line_mode(&self) -> bool {
+        return gtk_label_get_single_line_mode(self.as_gtk_label()) as bool;
+    }
+    
+    fn set_xalign(&self, align: f32) {
+        gtk_label_set_xalign(self.as_gtk_label(), align);
+    }
+    
+    fn get_xalign(&self) -> f32 {
+        return gtk_label_get_xalign(self.as_gtk_label());
+    }
+    
+    fn set_yalign(&self, align: f32) {
+        gtk_label_set_yalign(self.as_gtk_label(), align);
+    }
+    
+    fn get_yalign(&self) -> f32 {
+        return gtk_label_get_yalign(self.as_gtk_label());
+    }
+    
+    fn set_extra_menu(&self, extra_menu: &Handler<GMenuModel>) {
+        gtk_label_set_extra_menu(self.as_gtk_label(), extra_menu.get_handle());
+    }
+}

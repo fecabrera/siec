@@ -8,7 +8,7 @@ import {
 struct NavigationPage: Handler<AdwNavigationPage> {
     @private handle: AdwNavigationPage*;
 
-    fn init(&self, child: Handler<GtkWidget>, title: const &char[]) {
+    fn init(&self, child: &Handler<GtkWidget>, title: const &char[]) {
         self.handle = adw_navigation_page_new(child.get_handle(), title);
     }
 

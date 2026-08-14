@@ -10,8 +10,8 @@ import { GtkWidget } from gtkwidget;
 struct GtkLabel;
 
 @extern fn gtk_label_get_type() -> GType;
-@extern fn gtk_label_new(str: const char*);
-@extern fn gtk_label_new_with_mnemonic(str: const char*);
+@extern fn gtk_label_new(str: const char*) -> GtkWidget*;
+@extern fn gtk_label_new_with_mnemonic(str: const char*) -> GtkWidget*;
 @extern fn gtk_label_set_text(label: GtkLabel*,
                               str: const char*);
 @extern fn gtk_label_get_text(label: GtkLabel*) -> const char*;

@@ -22,6 +22,7 @@
 @include("_wrapper/button");
 @include("_wrapper/calendar");
 @include("_wrapper/headerbar");
+@include("_wrapper/label");
 @include("_wrapper/menubutton");
 @include("_wrapper/popover");
 @include("_wrapper/window");
