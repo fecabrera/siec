@@ -1,0 +1,40 @@
+import { gboolean } from glib;
+import { G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_CLASS_CAST, GType } from gobject;
+import { GtkWidget } from gtkwidget;
+import { GtkOrientation, GtkBaselinePosition } from gtkenums;
+
+@macro GTK_TYPE_BOX = gtk_box_get_type();
+@macro GTK_BOX(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkBox>(obj, GTK_TYPE_BOX);
+@macro GTK_IS_BOX(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_BOX);
+
+struct GtkBox {
+    parent_instance: GtkWidget;
+}
+
+struct GtkBoxClass;
+
+@extern fn gtk_box_get_type() -> GType;
+@extern fn gtk_box_new(orientation: GtkOrientation,
+                       spacing: i32) -> GtkWidget*;
+@extern fn gtk_box_set_homogeneous(box: GtkBox*,
+                                   homogeneous: gboolean);
+@extern fn gtk_box_get_homogeneous(box: GtkBox*) -> gboolean;
+@extern fn gtk_box_set_spacing(box: GtkBox*, spacing: i32);
+@extern fn gtk_box_get_spacing(box: GtkBox*) -> i32;
+@extern fn gtk_box_set_baseline_position(box: GtkBox*, position: GtkBaselinePosition);
+@extern fn gtk_box_get_baseline_position(box: GtkBox*) -> GtkBaselinePosition;
+@extern fn gtk_box_set_baseline_child(box: GtkBox*,
+                                      child: i32);
+@extern fn gtk_box_get_baseline_child(box: GtkBox*) -> i32;
+@extern fn gtk_box_append(box: GtkBox*,
+                          child: GtkWidget*);
+@extern fn gtk_box_prepend(box: GtkBox*,
+                           child: GtkWidget*);
+@extern fn gtk_box_remove(box: GtkBox*,
+                          child: GtkWidget*);
+@extern fn gtk_box_insert_child_after(box: GtkBox*,
+                                      child: GtkWidget*,
+                                      sibling: GtkWidget*);
+@extern fn gtk_box_reorder_child_after(box: GtkBox*,
+                                       child: GtkWidget*,
+                                       sibling: GtkWidget*);

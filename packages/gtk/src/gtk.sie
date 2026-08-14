@@ -1,7 +1,9 @@
 @include("gtk/gtkactionbar")
 @include("gtk/gtkapplication")
 @include("gtk/gtkapplicationwindow")
+@include("gtk/gtkbox")
 @include("gtk/gtkbutton")
+@include("gtk/gtkcalendar")
 @include("gtk/gtkcheckbutton")
 @include("gtk/gtkenums")
 @include("gtk/gtkfilter")
@@ -13,6 +15,9 @@
 
 @include("_wrapper/handler");
 @include("_wrapper/application");
+@include("_wrapper/applicationwindow");
+@include("_wrapper/box");
 @include("_wrapper/button");
+@include("_wrapper/calendar");
 @include("_wrapper/headerbar");
 @include("_wrapper/window");

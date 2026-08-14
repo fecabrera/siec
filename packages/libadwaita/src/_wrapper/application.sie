@@ -38,16 +38,21 @@ struct Application: Handler<AdwApplication> {
         return self.handle;
     }
 
+    @private
+    fn as_gtk_application(&self) -> GtkApplication* {
+        return GTK_APPLICATION(self.handle);
+    }
+
     fn add_window(&self, obj: &Handler<GtkWindow*>) {
-        gtk_application_add_window(GTK_APPLICATION(self.handle), obj.get_handle());
+        gtk_application_add_window(self.as_gtk_application(), obj.get_handle());
     }
 
     fn remove_window(&self, obj: &Handler<GtkWindow*>) {
-        gtk_application_remove_window(GTK_APPLICATION(self.handle), obj.get_handle());
+        gtk_application_remove_window(self.as_gtk_application(), obj.get_handle());
     }
 
     fn connect_activate(&self, callback: closure fn()) {
-        g_signal_connect(GTK_APPLICATION(self.handle), "activate", G_CALLBACK<fn(GtkApplication*, opaque*)>(callback), callback.env);
+        g_signal_connect(self.as_gtk_application(), "activate", G_CALLBACK<fn(GtkApplication*, opaque*)>(callback), callback.env);
     }
 
     fn run(&self, argc: i32, argv: char**) -> i32 {

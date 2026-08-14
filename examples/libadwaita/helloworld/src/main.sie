@@ -10,16 +10,16 @@ fn main(argc: i32, argv: char**) -> i32 {
         window.set_default_size(800, 600);
 
         let toolbar_view = adwaita.ToolbarView();
-        
         let header_bar = adwaita.HeaderBar();
-        toolbar_view.add_top_bar(header_bar);
-
         let button = gtk.Button("Hello, World!");
+        
         button.set_halign(gtk.GtkAlign::CENTER);
         button.set_valign(gtk.GtkAlign::CENTER);
         button.connect_clicked(() => {
             window.close();
         });
+        
+        toolbar_view.add_top_bar(header_bar);
         toolbar_view.set_content(button);
         
         window.set_content(toolbar_view);

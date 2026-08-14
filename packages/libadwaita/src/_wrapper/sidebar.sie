@@ -1,8 +1,13 @@
 import { GtkWidget, Handler } from gtk;
 import {
     ADW_SIDEBAR,
+    AdwSidebar,
     adw_sidebar_new,
+    adw_sidebar_append,
+    adw_sidebar_prepend,
+    adw_sidebar_insert,
 } from adwaita;
+import { SidebarSection } from sidebarsection;
 
 struct Sidebar: Handler<GtkWidget> {
     @private handle: GtkWidget*;
@@ -17,5 +22,22 @@ struct Sidebar: Handler<GtkWidget> {
 
     fn get_const_handle(const &self) -> const GtkWidget* {
         return self.handle;
+    }
+
+    @private
+    fn as_sidebar(&self) -> AdwSidebar* {
+        return ADW_SIDEBAR(self.handle);
+    }
+
+    fn append(&self, section: &SidebarSection) {
+        adw_sidebar_append(self.as_sidebar(), section.get_handle());
+    }
+
+    fn prepend(&self, section: &SidebarSection) {
+        adw_sidebar_prepend(self.as_sidebar(), section.get_handle());
+    }
+
+    fn insert(&self, section: &SidebarSection, position: i32) {
+        adw_sidebar_insert(self.as_sidebar(), section.get_handle(), position);
     }
 }

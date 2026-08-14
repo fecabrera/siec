@@ -1,0 +1,76 @@
+import { gboolean } from glib;
+import {
+    GTK_BOX,
+    GtkWidget,
+    GtkBox,
+    Handler,
+    GtkOrientation,
+    GtkBaselinePosition,
+    gtk_box_new,
+    gtk_box_append,
+    gtk_box_prepend,
+    gtk_box_remove,
+    gtk_box_set_homogeneous,
+    gtk_box_get_homogeneous,
+    gtk_box_set_baseline_position,
+    gtk_box_get_baseline_position,
+    gtk_box_set_spacing,
+    gtk_box_get_spacing,
+} from gtk;
+
+struct Box: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self, orientation: GtkOrientation, spacing: i32) {
+        self.handle = gtk_box_new(orientation, spacing);
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_gtk_box(&self) -> GtkBox* {
+        return GTK_BOX(self.handle);
+    }
+    
+    fn set_homogeneous(&self, homogeneous: bool) {
+        gtk_box_set_homogeneous(self.as_gtk_box(), homogeneous as gboolean);
+    }
+    
+    fn get_homogeneous(&self) -> bool {
+        return gtk_box_get_homogeneous(self.as_gtk_box()) as bool;
+    }
+
+    fn set_spacing(&self, spacing: i32) {
+        gtk_box_set_spacing(self.as_gtk_box(), spacing);
+    }
+
+    fn get_spacing(&self) -> i32 {
+        return gtk_box_get_spacing(self.as_gtk_box());
+    }
+    
+    fn set_baseline_position(&self, position: GtkBaselinePosition) {
+        gtk_box_set_baseline_position(self.as_gtk_box(), position);
+    }
+    
+    fn get_baseline_position(&self) -> GtkBaselinePosition {
+        return gtk_box_get_baseline_position(self.as_gtk_box());
+    }
+
+    fn append(&self, child: &Handler<GtkWidget>) {
+        gtk_box_append(self.as_gtk_box(), child.get_handle());
+    }
+
+    fn prepend(&self, child: &Handler<GtkWidget>) {
+        gtk_box_prepend(self.as_gtk_box(), child.get_handle());
+    }
+
+    fn remove(&self, child: &Handler<GtkWidget>) {
+        gtk_box_remove(self.as_gtk_box(), child.get_handle());
+    }
+}

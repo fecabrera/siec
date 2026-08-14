@@ -11,34 +11,43 @@ fn main(argc: i32, argv: char**) -> i32 {
 
         // sidebar
         let sidebar_view = adwaita.ToolbarView();
-
         let sidebar_header = adwaita.HeaderBar();
-        sidebar_view.add_top_bar(sidebar_header);
-
+        
         let sidebar = adwaita.Sidebar();
+        let section1 = adwaita.SidebarSection("Section 1");
+        let item1 = adwaita.SidebarItem("Item 1");
+        let item2 = adwaita.SidebarItem("Item 2");
+        let item3 = adwaita.SidebarItem("Item 2");
+        
+        item1.set_subtitle("Subtitle");
+        item2.set_subtitle("Subtitle");
+        item3.set_subtitle("Subtitle");
+        section1.append(item1);
+        section1.append(item2);
+        section1.append(item3);
+        sidebar.append(section1);
+        sidebar_view.add_top_bar(sidebar_header);
         sidebar_view.set_content(sidebar);
 
         // content
         let content_view = adwaita.ToolbarView();
-
         let content_header = adwaita.HeaderBar();
-        content_view.add_top_bar(content_header);
-        
         let button = gtk.Button("Hello, World!");
         button.set_halign(gtk.GtkAlign::CENTER);
         button.set_valign(gtk.GtkAlign::CENTER);
         button.connect_clicked(() => {
             window.close();
         });
+
+        content_view.add_top_bar(content_header);
         content_view.set_content(button);
 
         // split view
+        let sidebar_page = adwaita.NavigationPage(sidebar_view, "Sidebar");
+        let content_page = adwaita.NavigationPage(content_view, "Content");
         let split_view = adwaita.NavigationSplitView();
 
-        let sidebar_page = adwaita.NavigationPage(sidebar_view, "Sidebar");
         split_view.set_sidebar(sidebar_page);
-        
-        let content_page = adwaita.NavigationPage(content_view, "Content");
         split_view.set_content(content_page);
         
         window.set_content(split_view);

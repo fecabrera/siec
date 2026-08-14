@@ -1,0 +1,84 @@
+import { gboolean, GDateTime } from glib;
+import {
+    GTK_CALENDAR,
+    GtkCalendar,
+    GtkWidget,
+    Handler,
+    gtk_calendar_new,
+    gtk_calendar_set_show_heading,
+    gtk_calendar_get_show_heading,
+    gtk_calendar_set_show_day_names,
+    gtk_calendar_get_show_day_names,
+    gtk_calendar_set_day,
+    gtk_calendar_get_day,
+    gtk_calendar_set_month,
+    gtk_calendar_get_month,
+    gtk_calendar_set_year,
+    gtk_calendar_get_year,
+    gtk_calendar_set_date,
+} from gtk;
+
+struct Calendar: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = gtk_calendar_new();
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_gtk_calendar(&self) -> GtkCalendar* {
+        return GTK_CALENDAR(self.handle);
+    }
+    
+    fn set_show_heading(&self, value: bool) {
+        gtk_calendar_set_show_heading(self.as_gtk_calendar(), value as gboolean);
+    }
+    
+    fn get_show_heading(&self) -> bool {
+        return gtk_calendar_get_show_heading(self.as_gtk_calendar()) as bool;
+    }
+    
+    fn set_show_day_names(&self, value: i32) {
+        gtk_calendar_set_show_day_names(self.as_gtk_calendar(), value);
+    }
+    
+    fn get_show_day_names(&self) -> i32 {
+        return gtk_calendar_get_show_day_names(self.as_gtk_calendar());
+    }
+    
+    fn set_day(&self, day: i32) {
+        gtk_calendar_set_day(self.as_gtk_calendar(), day);
+    }
+    
+    fn get_day(&self) -> i32 {
+        return gtk_calendar_get_day(self.as_gtk_calendar());
+    }
+    
+    fn set_month(&self, month: i32) {
+        gtk_calendar_set_month(self.as_gtk_calendar(), month);
+    }
+    
+    fn get_month(&self) -> i32 {
+        return gtk_calendar_get_month(self.as_gtk_calendar());
+    }
+    
+    fn set_year(&self, year: i32) {
+        gtk_calendar_set_year(self.as_gtk_calendar(), year);
+    }
+    
+    fn get_year(&self) -> i32 {
+        return gtk_calendar_get_year(self.as_gtk_calendar());
+    }
+    
+    fn set_date(&self, date: &Handler<GDateTime>) {
+        gtk_calendar_set_date(self.as_gtk_calendar(), date.get_handle());
+    }
+}

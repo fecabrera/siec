@@ -1,11 +1,13 @@
 import { Handler } from handler;
 import {
+    GTK_APPLICATION_WINDOW,
     GTK_WINDOW,
     GtkApplication,
+    GtkApplicationWindow,
     GtkWindow,
     GtkWidget,
     Application,
-    gtk_window_new,
+    gtk_application_window_new,
     gtk_window_set_title,
     gtk_window_get_default_size,
     gtk_window_set_default_size,
@@ -22,11 +24,12 @@ import {
     gtk_window_close,
 } from gtk;
 
-struct Window: Handler<GtkWidget> {
+
+struct ApplicationWindow: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
-    fn init(&self) {
-        self.handle = gtk_window_new();
+    fn init(&self, app: &Application) {
+        self.handle = gtk_application_window_new(app.get_handle());
     }
 
     fn get_handle(&self) -> GtkWidget* {
@@ -35,6 +38,10 @@ struct Window: Handler<GtkWidget> {
 
     fn get_const_handle(const &self) -> const GtkWidget* {
         return self.handle;
+    }
+
+    fn as_gtk_application_window(&self) -> GtkApplicationWindow* {
+        return GTK_APPLICATION_WINDOW(self.handle);
     }
 
     fn as_gtk_window(&self) -> GtkWindow* {
