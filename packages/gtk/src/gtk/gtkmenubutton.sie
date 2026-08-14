@@ -1,0 +1,59 @@
+import { gboolean, gpointer, GDestroyNotify } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GMenuModel } from gio;
+import { GtkWidget } from gtkwidget;
+import { GtkPopover } from gtkpopover;
+import { GtkArrowType } from gtkenums;
+
+@macro GTK_TYPE_MENU_BUTTON = gtk_menu_button_get_type();
+@macro GTK_MENU_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkMenuButton>(obj, GTK_TYPE_MENU_BUTTON);
+@macro GTK_IS_MENU_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_MENU_BUTTON);
+
+struct GtkMenuButton;
+
+@type GtkMenuButtonCreatePopupFunc = fn(GtkMenuButton*, gpointer);
+
+@extern fn gtk_menu_button_get_type() -> GType;
+@extern fn gtk_menu_button_new() -> GtkWidget*;
+@extern fn gtk_menu_button_set_popover(menu_button: GtkMenuButton*,
+                                       popover: GtkWidget*);
+@extern fn gtk_menu_button_get_popover(menu_button: GtkMenuButton*) -> GtkPopover*;
+@extern fn gtk_menu_button_set_direction(menu_button: GtkMenuButton*,
+                                         direction: GtkArrowType);
+@extern fn gtk_menu_button_get_direction(menu_button: GtkMenuButton*) -> GtkArrowType;
+@extern fn gtk_menu_button_set_menu_model(menu_button: GtkMenuButton*,
+                                          menu_model: GMenuModel*);
+@extern fn gtk_menu_button_get_menu_model(menu_button: GtkMenuButton*) -> GMenuModel*;
+@extern fn gtk_menu_button_set_icon_name(menu_button: GtkMenuButton*,
+                                         icon_name: const char*);
+@extern fn gtk_menu_button_get_icon_name(menu_button: GtkMenuButton*) -> const char*;
+@extern fn gtk_menu_button_set_always_show_arrow(menu_button: GtkMenuButton*,
+                                                 always_show_arrow: gboolean);
+@extern fn gtk_menu_button_get_always_show_arrow(menu_button: GtkMenuButton*) -> gboolean;
+@extern fn gtk_menu_button_set_label(menu_button: GtkMenuButton*,
+                                     label: const char*);
+@extern fn gtk_menu_button_get_label(menu_button: GtkMenuButton*) -> const char*;
+@extern fn gtk_menu_button_set_use_underline(menu_button: GtkMenuButton*,
+                                             use_underline: gboolean);
+@extern fn gtk_menu_button_get_use_underline(menu_button: GtkMenuButton*) -> gboolean;
+@extern fn gtk_menu_button_set_has_frame(menu_button: GtkMenuButton*,
+                                         has_frame: gboolean);
+@extern fn gtk_menu_button_get_has_frame(menu_button: GtkMenuButton*) -> gboolean;
+@extern fn gtk_menu_button_popup(menu_button: GtkMenuButton*);
+@extern fn gtk_menu_button_popdown(menu_button: GtkMenuButton*);
+@extern fn gtk_menu_button_set_create_popup_func(menu_button: GtkMenuButton*,
+                                                 func: GtkMenuButtonCreatePopupFunc,
+                                                 user_data: gpointer,
+                                                 destroy_notify: GDestroyNotify);
+@extern fn gtk_menu_button_set_primary(menu_button: GtkMenuButton*,
+                                       primary: gboolean);
+@extern fn gtk_menu_button_get_primary(menu_button: GtkMenuButton*) -> gboolean;
+@extern fn gtk_menu_button_set_child(menu_button: GtkMenuButton*,
+                                     child: GtkWidget*);
+@extern fn gtk_menu_button_get_child(menu_button: GtkMenuButton*) -> GtkWidget*;
+@extern fn gtk_menu_button_set_active(menu_button: GtkMenuButton*,
+                                      active: gboolean);
+@extern fn gtk_menu_button_get_active(menu_button: GtkMenuButton*) -> gboolean;
+@extern fn gtk_menu_button_set_can_shrink(menu_button: GtkMenuButton*,
+                                          can_shrink: gboolean);
+@extern fn gtk_menu_button_get_can_shrink(menu_button: GtkMenuButton*) -> gboolean;

@@ -7,6 +7,7 @@
 @include("adwaita/adw_sidebar_item")
 @include("adwaita/adw_sidebar_section")
 @include("adwaita/adw_sidebar")
+@include("adwaita/adw_split_button")
 @include("adwaita/adw_toolbar_view")
 @include("adwaita/adw_window")
 
@@ -18,5 +19,6 @@
 @include("_wrapper/sidebar")
 @include("_wrapper/sidebaritem")
 @include("_wrapper/sidebarsection")
+@include("_wrapper/splitbutton")
 @include("_wrapper/toolbarview")
 @include("_wrapper/window")

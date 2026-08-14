@@ -1,0 +1,44 @@
+import { GtkWidget, GtkPositionType } from gtk;
+import { gboolean } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+
+@macro GTK_TYPE_POPOVER = gtk_popover_get_type();
+@macro GTK_POPOVER(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkPopover>(obj, GTK_TYPE_POPOVER);
+@macro GTK_IS_POPOVER(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_POPOVER);
+
+struct GtkPopover {
+    parent: GtkWidget;
+}
+
+@extern fn gtk_popover_get_type() -> GType;
+@extern fn gtk_popover_new() -> GtkWidget*;
+@extern fn gtk_popover_set_child(popover: GtkPopover*,
+                                 child: GtkWidget*);
+@extern fn gtk_popover_get_child(popover: GtkPopover*) -> GtkWidget*;
+
+@extern fn gtk_popover_set_position(popover: GtkPopover*,
+                                    position: GtkPositionType);
+@extern fn gtk_popover_get_position(popover: GtkPopover*) -> GtkPositionType;
+@extern fn gtk_popover_set_autohide(popover: GtkPopover*,
+                                    autohide: gboolean);
+@extern fn gtk_popover_get_autohide(popover: GtkPopover*) -> gboolean;
+@extern fn gtk_popover_set_has_arrow(popover: GtkPopover*,
+                                     has_arrow: gboolean);
+@extern fn gtk_popover_get_has_arrow(popover: GtkPopover*) -> gboolean;
+@extern fn gtk_popover_set_mnemonics_visible(popover: GtkPopover*,
+                                             mnemonics_visible: gboolean);
+@extern fn gtk_popover_get_mnemonics_visible(popover: GtkPopover*) -> gboolean;
+@extern fn gtk_popover_popup(popover: GtkPopover*);
+@extern fn gtk_popover_popdown(popover: GtkPopover*);
+@extern fn gtk_popover_set_offset(popover: GtkPopover*,
+                                  x_offset: i32,
+                                  y_offset: i32);
+@extern fn gtk_popover_get_offset(popover: GtkPopover*,
+                                  x_offset: i32*,
+                                  y_offset: i32*);
+@extern fn gtk_popover_set_cascade_popdown(popover: GtkPopover*,
+                                           cascade_popdown: gboolean);
+@extern fn gtk_popover_get_cascade_popdown(popover: GtkPopover*) -> gboolean;
+@extern fn gtk_popover_set_default_widget(popover: GtkPopover*,
+                                          widget: GtkWidget*);
+@extern fn gtk_popover_present(popover: GtkPopover*);

@@ -9,6 +9,8 @@
 @include("gtk/gtkfilter")
 @include("gtk/gtkheaderbar")
 @include("gtk/gtklabel")
+@include("gtk/gtkmenubutton")
+@include("gtk/gtkpopover")
 @include("gtk/gtktypes")
 @include("gtk/gtkwidget")
 @include("gtk/gtkwindow")
@@ -20,4 +22,6 @@
 @include("_wrapper/button");
 @include("_wrapper/calendar");
 @include("_wrapper/headerbar");
+@include("_wrapper/menubutton");
+@include("_wrapper/popover");
 @include("_wrapper/window");

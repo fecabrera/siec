@@ -1,0 +1,136 @@
+import { gboolean } from glib;
+import { GMenuModel } from gio;
+import {
+    GTK_MENU_BUTTON,
+    GtkMenuButton,
+    GtkWidget,
+    GtkArrowType,
+    Handler,
+    gtk_menu_button_new,
+    gtk_menu_button_set_popover,
+    gtk_menu_button_set_direction,
+    gtk_menu_button_get_direction,
+    gtk_menu_button_set_menu_model,
+    gtk_menu_button_set_icon_name,
+    gtk_menu_button_set_always_show_arrow,
+    gtk_menu_button_get_always_show_arrow,
+    gtk_menu_button_set_label,
+    gtk_menu_button_set_use_underline,
+    gtk_menu_button_get_use_underline,
+    gtk_menu_button_set_has_frame,
+    gtk_menu_button_get_has_frame,
+    gtk_menu_button_popup,
+    gtk_menu_button_popdown,
+    gtk_menu_button_set_primary,
+    gtk_menu_button_get_primary,
+    gtk_menu_button_set_child,
+    gtk_menu_button_set_active,
+    gtk_menu_button_get_active,
+    gtk_menu_button_set_can_shrink,
+    gtk_menu_button_get_can_shrink,
+} from gtk;
+
+struct MenuButton: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = gtk_menu_button_new();
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_gtk_menu_button(&self) -> GtkMenuButton* {
+        return GTK_MENU_BUTTON(self.handle);
+    }
+
+    fn set_popover(&self, popover: &Handler<GtkWidget>) {
+        gtk_menu_button_set_popover(self.as_gtk_menu_button(), popover.get_handle());
+    }
+
+    fn set_direction(&self, direction: GtkArrowType) {
+        gtk_menu_button_set_direction(self.as_gtk_menu_button(), direction);
+    }
+
+    fn get_direction(&self) -> GtkArrowType {
+        return gtk_menu_button_get_direction(self.as_gtk_menu_button());
+    }
+
+    fn set_menu_model(&self, menu_model: &Handler<GMenuModel>) {
+        gtk_menu_button_set_menu_model(self.as_gtk_menu_button(), menu_model.get_handle());
+    }
+
+    fn set_icon_name(&self, icon_name: const &char[]) {
+        gtk_menu_button_set_icon_name(self.as_gtk_menu_button(), icon_name);
+    }
+    
+    fn set_always_show_arrow(&self, always_show_arrow: bool) {
+        gtk_menu_button_set_always_show_arrow(self.as_gtk_menu_button(), always_show_arrow as gboolean);
+    }
+    
+    fn get_always_show_arrow(&self) -> bool {
+        return gtk_menu_button_get_always_show_arrow(self.as_gtk_menu_button()) as bool;
+    }
+
+    fn set_label(&self, label: const &char[]) {
+        gtk_menu_button_set_label(self.as_gtk_menu_button(), label);
+    }
+
+    fn set_use_underline(&self, use_underline: bool) {
+        gtk_menu_button_set_use_underline(self.as_gtk_menu_button(), use_underline as gboolean);
+    }
+
+    fn get_use_underline(&self) -> bool {
+        return gtk_menu_button_get_use_underline(self.as_gtk_menu_button()) as bool;
+    }
+    
+    fn gtk_menu_button_set_has_frame(&self, has_frame: bool) {
+        gtk_menu_button_set_has_frame(self.as_gtk_menu_button(), has_frame as gboolean);
+    }
+    
+    fn gtk_menu_button_get_has_frame(&self) -> bool {
+        return gtk_menu_button_get_has_frame(self.as_gtk_menu_button()) as bool;
+    }
+
+    fn popup(&self) {
+        gtk_menu_button_popup(self.as_gtk_menu_button());
+    }
+
+    fn popdown(&self) {
+        gtk_menu_button_popdown(self.as_gtk_menu_button());
+    }
+    
+    fn set_primary(&self, primary: bool) {
+        gtk_menu_button_set_primary(self.as_gtk_menu_button(), primary as gboolean);
+    }
+    
+    fn get_primary(&self) -> bool {
+        return gtk_menu_button_get_primary(self.as_gtk_menu_button()) as bool;
+    }
+
+    fn set_child(&self, child: &Handler<GtkWidget>) {
+        gtk_menu_button_set_child(self.as_gtk_menu_button(), child.get_handle());
+    }
+    
+    fn set_active(&self, active: bool) {
+        gtk_menu_button_set_active(self.as_gtk_menu_button(), active as gboolean);
+    }
+    
+    fn get_active(&self) -> bool {
+        return gtk_menu_button_get_active(self.as_gtk_menu_button()) as bool;
+    }
+    
+    fn set_can_shrink(&self, can_shrink: bool) {
+        gtk_menu_button_set_can_shrink(self.as_gtk_menu_button(), can_shrink as gboolean);
+    }
+    
+    fn get_can_shrink(&self) -> bool {
+        return gtk_menu_button_get_can_shrink(self.as_gtk_menu_button()) as bool;
+    }
+}

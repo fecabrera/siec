@@ -1,0 +1,118 @@
+import { gboolean } from glib;
+import {
+    GTK_POPOVER,
+    GtkPopover,
+    GtkWidget,
+    Handler,
+    GtkPositionType,
+    gtk_popover_new,
+    gtk_popover_set_child,
+    gtk_popover_set_position,
+    gtk_popover_get_position,
+    gtk_popover_set_autohide,
+    gtk_popover_get_autohide,
+    gtk_popover_set_has_arrow,
+    gtk_popover_get_has_arrow,
+    gtk_popover_set_mnemonics_visible,
+    gtk_popover_get_mnemonics_visible,
+    gtk_popover_popup,
+    gtk_popover_popdown,
+    gtk_popover_set_offset,
+    gtk_popover_get_offset,
+    gtk_popover_set_cascade_popdown,
+    gtk_popover_get_cascade_popdown,
+    gtk_popover_set_default_widget,
+    gtk_popover_present,
+} from gtk;
+
+struct Popover: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = gtk_popover_new();
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_gtk_popover(&self) -> GtkPopover* {
+        return GTK_POPOVER(self.handle);
+    }
+
+    fn set_child(&self, child: &Handler<GtkWidget>) {
+        gtk_popover_set_child(self.as_gtk_popover(), child.get_handle());
+    }
+    
+    fn set_position(&self, position: GtkPositionType) {
+        gtk_popover_set_position(self.as_gtk_popover(), position);
+    }
+    
+    fn get_position(&self) -> GtkPositionType {
+        return gtk_popover_get_position(self.as_gtk_popover());
+    }
+    
+    fn set_autohide(&self, autohide: bool) {
+        gtk_popover_set_autohide(self.as_gtk_popover(), autohide as gboolean);
+    }
+    
+    fn get_autohide(&self) -> bool {
+        return gtk_popover_get_autohide(self.as_gtk_popover()) as bool;
+    }
+    
+    fn set_has_arrow(&self, has_arrow: bool) {
+        gtk_popover_set_has_arrow(self.as_gtk_popover(), has_arrow as gboolean);
+    }
+    
+    fn get_has_arrow(&self) -> bool {
+        return gtk_popover_get_has_arrow(self.as_gtk_popover()) as bool;
+    }
+    
+    fn set_mnemonics_visible(&self, mnemonics_visible: bool) {
+        gtk_popover_set_mnemonics_visible(self.as_gtk_popover(), mnemonics_visible as gboolean);
+    }
+    
+    fn get_mnemonics_visible(&self) -> bool {
+        return gtk_popover_get_mnemonics_visible(self.as_gtk_popover()) as bool;
+    }
+    
+    fn popup(&self) {
+        gtk_popover_popup(self.as_gtk_popover());
+    }
+    
+    fn popdown(&self) {
+        gtk_popover_popdown(self.as_gtk_popover());
+    }
+    
+    fn set_offset(&self, (x_offset, y_offset): Tuple<i32, i32>) {
+        gtk_popover_set_offset(self.as_gtk_popover(), x_offset, y_offset);
+    }
+    
+    fn get_offset(&self) -> Tuple<i32, i32> {
+        let x_offset: i32;
+        let y_offset: i32;
+        gtk_popover_get_offset(self.as_gtk_popover(), &x_offset, &y_offset);
+        return (x_offset, y_offset);
+    }
+    
+    fn set_cascade_popdown(&self, cascade_popdown: bool) {
+        gtk_popover_set_cascade_popdown(self.as_gtk_popover(), cascade_popdown as gboolean);
+    }
+    
+    fn get_cascade_popdown(&self) -> bool {
+        return gtk_popover_get_cascade_popdown(self.as_gtk_popover()) as bool;
+    }
+    
+    fn set_default_widget(&self, widget: &Handler<GtkWidget>) {
+        gtk_popover_set_default_widget(self.as_gtk_popover(), widget.get_handle());
+    }
+    
+    fn present(&self) {
+        gtk_popover_present(self.as_gtk_popover());
+    }
+}
