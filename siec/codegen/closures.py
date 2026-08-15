@@ -16,18 +16,61 @@ def closure_type(expr) -> str:
     return result
 
 
-def check_closure(gen, expr, scope: dict) -> str:
-    """Check a closure body in its lexical scope and record its captures."""
+def expand_closure_signature(gen, expr, parameters=frozenset()) -> str:
+    """Resolve a closure's written types in the current file and return it.
+
+    Nested closures are resolved during the Resolve phase, before Check
+    infers a ``let`` type or validates it. Check may call this again for a
+    closure created later (a macro expansion), which is idempotent.
+    """
     from siec.codegen.aliases import expand_alias
-    from siec.codegen.checking import check_block, checked_variable
+    from siec.codegen.errors import source_location
     from siec.codegen.types import validate_type
 
     expr.file = expr.file or gen.current_file
-    expr.return_type = expand_alias(gen, expr.return_type)
-    for param in expr.params:
-        param.type = expand_alias(gen, param.type)
-        validate_type(param.type, gen.structs)
-    validate_type(expr.return_type, gen.structs)
+    with source_location(line=expr.line, file=expr.file):
+        expr.return_type = expand_alias(
+            gen, expr.return_type, parameters=parameters)
+        for param in expr.params:
+            param.type = expand_alias(
+                gen, param.type, parameters=parameters)
+            validate_type(param.type, gen.structs)
+        validate_type(expr.return_type, gen.structs)
+    return closure_type(expr)
+
+
+def resolve_nested_closures(gen, node, parameters=frozenset()) -> None:
+    """Resolve every nested closure signature under a resolved callable."""
+    from dataclasses import fields, is_dataclass
+
+    from siec.ast import ClosureExpr, Param
+
+    if node is None:
+        return
+    if isinstance(node, list):
+        for item in node:
+            resolve_nested_closures(gen, item, parameters)
+        return
+    if isinstance(node, ClosureExpr):
+        expand_closure_signature(gen, node, parameters)
+        resolve_nested_closures(gen, node.body, parameters)
+        for param in node.params:
+            resolve_nested_closures(gen, param.default, parameters)
+        return
+    if isinstance(node, Param):
+        resolve_nested_closures(gen, node.default, parameters)
+        return
+    if not is_dataclass(node):
+        return
+    for field in fields(node):
+        resolve_nested_closures(gen, getattr(node, field.name), parameters)
+
+
+def check_closure(gen, expr, scope: dict) -> str:
+    """Check a closure body in its lexical scope and record its captures."""
+    from siec.codegen.checking import check_block, checked_variable
+
+    type_name = expand_closure_signature(gen, expr)
 
     expr.captures = {
         name: variable.type
@@ -48,7 +91,7 @@ def check_closure(gen, expr, scope: dict) -> str:
     if expr.return_type is not None and not terminates:
         raise TypeError(f"closure {expr.name or '<anonymous>'!r} must return "
                         "a value")
-    return closure_type(expr)
+    return type_name
 
 
 def _heap_slot(gen, builder: ir.IRBuilder, type_: ir.Type, name: str,

@@ -454,3 +454,12 @@ def resolve_callable_header(gen: CodeGenerator, fn, *,
             parameters,
             allow_interface=interface_action,
         )
+
+        # Nested closures belong to this callable's source. Resolve their
+        # signatures here so Check infers and validates already-canonical
+        # types instead of expanding aliases while checking bodies.
+        from siec.codegen.closures import resolve_nested_closures
+
+        resolve_nested_closures(gen, fn.body, parameters)
+        for param in fn.params:
+            resolve_nested_closures(gen, param.default, parameters)

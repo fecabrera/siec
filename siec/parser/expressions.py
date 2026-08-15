@@ -15,6 +15,7 @@ from siec.ast import (
     Emit,
     EnumMember,
     Expr,
+    ExprStmt,
     FloatLiteral,
     Index,
     IntLiteral,
@@ -22,6 +23,7 @@ from siec.ast import (
     MethodCall,
     Move,
     NullLiteral,
+    Return,
     SizeOf,
     Slice,
     StrLiteral,
@@ -500,7 +502,13 @@ def parse_closure_tail(ts: TokenStream, line: int,
 
 
 def parse_lambda_tail(ts: TokenStream, line: int) -> ClosureExpr:
-    """Parse ``(...) [-> T] => { ... }`` after its opening parenthesis."""
+    """Parse ``(...) [-> T] => { ... }`` or ``(...) [-> T] => expr``.
+
+    The result is the same nested function a ``fn name(...) { ... }``
+    declaration would bind: a ``closure fn(...)`` value. A brace body is
+    that function's statement list. An expression body is one statement,
+    ``return expr`` when a return type is written and ``expr`` otherwise.
+    """
     params = []
     while ts.peek().syntax != ")":
         if params:
@@ -514,9 +522,22 @@ def parse_lambda_tail(ts: TokenStream, line: int) -> ClosureExpr:
         return_type = parse_type(ts)
     ts.expect("sym", "=>")
 
-    from siec.parser.statements import parse_block
+    from siec.parser.statements import parse_block, parse_step
 
-    return ClosureExpr(params, return_type, parse_block(ts), line=line)
+    if ts.peek().syntax == "{":
+        body = parse_block(ts)
+    else:
+        start = ts.peek()
+        statement = parse_step(ts)
+        if return_type is not None and isinstance(statement, ExprStmt):
+            statement = Return(statement.expr, line=statement.line)
+        end = ts.peek()
+        body = Body(
+            [statement],
+            (start.line, start.col, end.line, end.col),
+        )
+
+    return ClosureExpr(params, return_type, body, line=line)
 
 
 def _simple_type_path(name: str) -> bool:

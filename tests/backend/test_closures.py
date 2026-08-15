@@ -150,6 +150,83 @@ def test_method_accepts_arrow_closure(run):
     assert run(source).returncode == 42
 
 
+def test_let_arrow_closure_matches_nested_function(run):
+    source = """
+    fn main() -> i32 {
+        let value = 40;
+        let add = (amount: i32) => { value += amount; };
+        add(2);
+        return value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_let_expression_bodied_arrow_closure(run):
+    source = """
+    fn invoke(callback: closure fn(i32)) {
+        callback(2);
+    }
+
+    fn main() -> i32 {
+        let value = 40;
+        let add = (amount: i32) => value += amount;
+        invoke(add);
+        return value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_let_expression_bodied_arrow_closure_can_return(run):
+    source = """
+    fn main() -> i32 {
+        let add = (a: i32, b: i32) -> i32 => a + b;
+        return add(40, 2);
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_let_arrow_closure_expands_parameter_aliases(run):
+    source = """
+    @type Count = i32;
+
+    fn invoke(callback: closure fn(i32)) {
+        callback(2);
+    }
+
+    fn main() -> i32 {
+        let value = 40;
+        let add = (amount: Count) => { value += amount; };
+        invoke(add);
+        return value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_method_let_arrow_closure_expands_parameter_aliases(run):
+    source = """
+    @type Count = i32;
+
+    struct Host {
+        fn connect(&self, callback: closure fn(i32)) {
+            let handle = (amount: Count) => callback(amount);
+            handle(2);
+        }
+    }
+
+    fn main() -> i32 {
+        let host: Host;
+        let value = 40;
+        host.connect((amount: i32) => { value += amount; });
+        return value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_callback_adapter_requires_environment_parameter(compile_source):
     with pytest.raises(TypeError, match="must end in an 'opaque\\*'"):
         compile_source("""
