@@ -1,0 +1,75 @@
+import { GtkWidget, Handler } from gtk;
+import {
+    ADW_TAB_VIEW,
+    AdwTabView,
+    AdwTabViewShortcuts,
+    AdwTabPage,
+    adw_tab_view_new,
+    adw_tab_view_get_shortcuts,
+    adw_tab_view_set_shortcuts,
+    adw_tab_view_add_shortcuts,
+    adw_tab_view_add_page,
+    adw_tab_view_insert,
+    adw_tab_view_prepend,
+    adw_tab_view_append,
+    adw_tab_view_insert_pinned,
+    adw_tab_view_prepend_pinned,
+    adw_tab_view_append_pinned,
+} from adwaita;
+import { TabPage } from tabpage;
+
+struct TabView: Handler<AdwTabView> {
+    @private handle: AdwTabView*;
+
+    fn init(&self) {
+        self.handle = adw_tab_view_new();
+    }
+
+    fn get_handle(&self) -> AdwTabView* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwTabView* {
+        return self.handle;
+    }
+    
+    fn get_shortcuts(&self) -> AdwTabViewShortcuts {
+        return adw_tab_view_get_shortcuts(self.handle);
+    }
+    
+    fn set_shortcuts(&self, shortcuts: AdwTabViewShortcuts) {
+        adw_tab_view_set_shortcuts(self.handle, shortcuts);
+    }
+    
+    fn add_shortcuts(&self, shortcuts: AdwTabViewShortcuts) {
+        adw_tab_view_add_shortcuts(self.handle, shortcuts);
+    }
+    
+    fn add_page(&self, child: &Handler<GtkWidget>, parent: &Handler<AdwTabPage>) -> TabPage {
+        return TabPage(adw_tab_view_add_page(self.handle, child.get_handle(), parent.get_handle()));
+    }
+    
+    fn insert(&self, child: &Handler<GtkWidget>, position: i32) -> TabPage {
+        return TabPage(adw_tab_view_insert(self.handle, child.get_handle()));
+    }
+    
+    fn prepend(&self, child: &Handler<GtkWidget>) -> TabPage {
+        return TabPage(adw_tab_view_prepend(self.handle, child.get_handle()));
+    }
+    
+    fn append(&self, child: &Handler<GtkWidget>) -> TabPage {
+        return TabPage(adw_tab_view_append(self.handle, child.get_handle()));
+    }
+    
+    fn insert_pinned(&self, child: &Handler<GtkWidget>, position: i32) {
+        adw_tab_view_insert_pinned(self.handle, child.get_handle(), position);
+    }
+    
+    fn prepend_pinned(&self, child: &Handler<GtkWidget>) {
+        adw_tab_view_prepend_pinned(self.handle, child.get_handle());
+    }
+    
+    fn append_pinned(&self, child: &Handler<GtkWidget>) {
+        adw_tab_view_append_pinned(self.handle, child.get_handle());
+    }
+}

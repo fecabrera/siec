@@ -78,6 +78,10 @@ import {
 struct Widget: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
     fn get_handle(&self) -> GtkWidget* {
         return self.handle;
     }

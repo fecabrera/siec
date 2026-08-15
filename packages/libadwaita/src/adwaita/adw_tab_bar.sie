@@ -1,0 +1,43 @@
+import { GtkWidget } from gtk;
+import { gboolean } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { AdwTabView } from adw_tab_view;
+
+@macro ADW_TYPE_TAB_BAR = adw_tab_bar_get_type();
+@macro ADW_TAB_BAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwTabBar>(obj, ADW_TYPE_TAB_BAR);
+@macro ADW_IS_TAB_BAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_TAB_BAR);
+
+struct AdwTabBar {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_tab_bar_get_type() -> GType;
+@extern fn adw_tab_bar_new() -> AdwTabBar*;
+@extern fn adw_tab_bar_get_view(tab_bar: AdwTabBar*) -> AdwTabView*;
+@extern fn adw_tab_bar_set_view(tab_bar: AdwTabBar*,
+                                view: AdwTabView*);
+@extern fn adw_tab_bar_get_start_action_widget(tab_bar: AdwTabBar*) -> GtkWidget*;
+@extern fn adw_tab_bar_set_start_action_widget(tab_bar: AdwTabBar*,
+                                               widget: GtkWidget*);
+@extern fn adw_tab_bar_get_end_action_widget(tab_bar: AdwTabBar*) -> GtkWidget*;
+@extern fn adw_tab_bar_set_end_action_widget(tab_bar: AdwTabBar*,
+                                             widget: GtkWidget*);
+@extern fn adw_tab_bar_get_autohide(tab_bar: AdwTabBar*) -> gboolean;
+@extern fn adw_tab_bar_set_autohide(tab_bar: AdwTabBar*,
+                                    autohide: gboolean);
+@extern fn adw_tab_bar_get_tabs_revealed(tab_bar: AdwTabBar*) -> gboolean;
+@extern fn adw_tab_bar_get_expand_tabs(tab_bar: AdwTabBar*) -> gboolean;
+@extern fn adw_tab_bar_set_expand_tabs(tab_bar: AdwTabBar*,
+                                       expand_tabs: gboolean);
+@extern fn adw_tab_bar_get_inverted(tab_bar: AdwTabBar*) -> gboolean;
+@extern fn adw_tab_bar_set_inverted(tab_bar: AdwTabBar*,
+                                    inverted: gboolean);
+// @extern fn adw_tab_bar_setup_extra_drop_target(tab_bar: AdwTabBar*,
+//                                                actions: GdkDragAction,
+//                                                types: GType*,
+//                                                n_types: gsize);
+// @extern fn adw_tab_bar_get_extra_drag_preferred_action(tab_bar: AdwTabBar*) -> GdkDragAction;
+@extern fn adw_tab_bar_get_extra_drag_preload(tab_bar: AdwTabBar*) -> gboolean;
+@extern fn adw_tab_bar_set_extra_drag_preload(tab_bar: AdwTabBar*,
+                                              preload: gboolean);
+@extern fn adw_tab_bar_get_is_overflowing(tab_bar: AdwTabBar*) -> gboolean;
