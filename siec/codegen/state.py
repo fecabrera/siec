@@ -182,6 +182,38 @@ class FlowContext:
     flush_loop_floors: list[int] = field(default_factory=list)
     temporary_count: int = 0
 
+    @contextmanager
+    def nested_function(self):
+        """Isolate per-function stacks while emitting a nested LLVM body.
+
+        Closures are lowered while an outer call's temporary frame is still
+        open. Without a fresh stack, inner allocas are destroyed in the
+        caller's function, which LLVM rejects as an undefined value.
+        """
+        previous = (
+            self.emit_targets,
+            self.defer_frames,
+            self.borrowed_temporary_frames,
+            self.flushing_defers,
+            self.loop_targets,
+            self.flush_loop_floors,
+        )
+        self.emit_targets = []
+        self.defer_frames = []
+        self.borrowed_temporary_frames = []
+        self.flushing_defers = 0
+        self.loop_targets = []
+        self.flush_loop_floors = []
+        try:
+            yield
+        finally:
+            (self.emit_targets,
+             self.defer_frames,
+             self.borrowed_temporary_frames,
+             self.flushing_defers,
+             self.loop_targets,
+             self.flush_loop_floors) = previous
+
 
 @dataclass
 class EmissionContext:

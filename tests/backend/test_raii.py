@@ -217,6 +217,96 @@ def test_early_return_flushes_owned_scopes_inside_out(run):
     assert result.stdout == "drop 2\ndrop 1\n"
 
 
+def test_closure_argument_drops_its_own_temporaries(run):
+    """A nested function's temporaries must not join the caller's drop frame."""
+    result = run(RESOURCE + r"""
+    fn invoke(callback: closure fn()) {
+        callback();
+    }
+
+    fn main() -> i32 {
+        invoke(() => {
+            inspect(Resource(42));
+        });
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "use 42\ndrop 42\n"
+
+
+def test_outer_temporary_drops_after_call_with_closure_argument(run):
+    """Outer borrowed temporaries still drop after the call that builds a closure."""
+    result = run(RESOURCE + r"""
+    fn take(value: const &Resource, callback: closure fn()) {
+        inspect(value);
+        callback();
+    }
+
+    fn main() -> i32 {
+        take(Resource(1), () => {
+            inspect(Resource(2));
+        });
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "use 1\nuse 2\ndrop 2\ndrop 1\n"
+
+
+def test_mutable_reference_mutates_the_owned_temporary(run):
+    """Writes through '&T' must hit the same storage Destroy will drop."""
+    result = run(RESOURCE + r"""
+    fn bump(value: &Resource) {
+        value.id += 1;
+    }
+
+    fn main() -> i32 {
+        bump(Resource(41));
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 42\n"
+
+
+def test_mutable_reference_to_temporary_does_not_double_free(run):
+    """Replacing a temporary's heap buffer must not free it twice."""
+    result = run(r"""
+    @extern fn malloc(size: u64) -> opaque*;
+    @extern fn free(ptr: opaque*);
+    @extern fn printf(format: char*, ...);
+
+    struct Buffer: Destroy { ptr: opaque*; }
+
+    fn Buffer::init(&self) {
+        self.ptr = malloc(8);
+    }
+
+    fn Buffer::grow(&self) {
+        free(self.ptr);
+        self.ptr = malloc(16);
+    }
+
+    fn Buffer::destroy(&self) {
+        free(self.ptr);
+        self.ptr = null;
+        printf("drop\n");
+    }
+
+    fn grow(value: &Buffer) {
+        value.grow();
+    }
+
+    fn main() -> i32 {
+        grow(Buffer());
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop\n"
+
+
 def test_nested_borrowed_temporary_lives_through_outer_call(run):
     """A nested borrowed temporary drops after the full call expression."""
     result = run(RESOURCE + r"""

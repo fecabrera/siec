@@ -169,17 +169,15 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
 
     previous_function = gen.current_function
     previous_file = gen.current_file
-    previous_frames = gen.defer_frames
     gen.current_function = invoke.name
     gen.current_file = expr.file
     gen.return_types[invoke.name] = expr.return_type
-    gen.defer_frames = []
     try:
-        emit_block(gen, inner_builder, expr.body, inner_scope)
-        if not inner_builder.block.is_terminated:
-            inner_builder.ret_void()
+        with gen.flow.nested_function():
+            emit_block(gen, inner_builder, expr.body, inner_scope)
+            if not inner_builder.block.is_terminated:
+                inner_builder.ret_void()
     finally:
-        gen.defer_frames = previous_frames
         gen.current_function = previous_function
         gen.current_file = previous_file
 

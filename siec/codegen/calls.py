@@ -476,11 +476,18 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
                             "assignable argument") from None
 
         value = emit_coerced(gen, builder, arg, referenced, scope)
+        from siec.codegen.ownership import (expression_identity,
+                                           temporary_registered,
+                                           temporary_slot)
+
+        # A destroyable call result already occupies a unique slot. Alias
+        # it rather than copying: a mutable reference may reallocate, and
+        # Destroy must run against that same storage.
+        if (existing := temporary_slot(gen, arg)) is not None:
+            return existing
+
         slot = entry_alloca(builder, value.type, "ref.spill")
         builder.store(value, slot)
-        from siec.codegen.ownership import (expression_identity,
-                                           temporary_registered)
-
         if (destroyable(gen, referenced)
                 and not temporary_registered(gen, arg)
                 and gen.borrowed_temporary_frames):

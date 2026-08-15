@@ -163,13 +163,20 @@ def consume_temporary(gen: CodeGenerator, expr) -> None:
             return
 
 
+def temporary_slot(gen: CodeGenerator, expr):
+    """The storage of a tracked full-expression temporary, if any."""
+    if not gen.borrowed_temporary_frames:
+        return None
+    identity = expression_identity(expr)
+    for cleanup in reversed(gen.borrowed_temporary_frames[-1]):
+        if cleanup.expression == identity:
+            return cleanup.slot
+    return None
+
+
 def temporary_registered(gen: CodeGenerator, expr) -> bool:
     """Whether this expression already owns one tracked temporary slot."""
-    identity = expression_identity(expr)
-    return bool(gen.borrowed_temporary_frames and any(
-        cleanup.expression == identity
-        for cleanup in gen.borrowed_temporary_frames[-1]
-    ))
+    return temporary_slot(gen, expr) is not None
 
 
 def disarm_expression(gen: CodeGenerator, builder, expr, scope: dict) -> None:
