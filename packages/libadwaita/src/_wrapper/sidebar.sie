@@ -1,3 +1,5 @@
+import { G_CALLBACK, g_signal_connect } from gobject;
+import { guint } from glib;
 import { GtkWidget, Handler } from gtk;
 import {
     ADW_SIDEBAR,
@@ -43,5 +45,10 @@ struct Sidebar: Handler<GtkWidget> {
 
     fn insert(&self, section: &SidebarSection, position: i32) {
         adw_sidebar_insert(self.as_sidebar(), section.get_handle(), position);
+    }
+
+    fn connect_activated(&self, callback: closure fn(u32)) {
+        let handle_activated = (sidebar: AdwSidebar*, index: guint) => callback(index);
+        g_signal_connect(self.handle, "activated", G_CALLBACK<fn(AdwSidebar*, guint, opaque*)>(handle_activated), handle_activated.env);
     }
 }

@@ -1,3 +1,4 @@
+import { format } from std.format;
 import gtk;
 import adwaita;
 
@@ -15,14 +16,18 @@ fn main(argc: i32, argv: char**) -> i32 {
         
         let sidebar = adwaita.Sidebar();
         let section1 = adwaita.SidebarSection();
+        let section2 = adwaita.SidebarSection();
         let item1 = adwaita.SidebarItem("Item 1");
         let item2 = adwaita.SidebarItem("Item 2");
-        let item3 = adwaita.SidebarItem("Item 2");
+        let item3 = adwaita.SidebarItem("Item 3");
+        let item4 = adwaita.SidebarItem("Item 4");
         
         section1.append(item1);
         section1.append(item2);
         section1.append(item3);
+        section2.append(item4);
         sidebar.append(section1);
+        sidebar.append(section2);
         sidebar_view.add_top_bar(sidebar_header);
         sidebar_view.set_content(sidebar);
 
@@ -47,6 +52,11 @@ fn main(argc: i32, argv: char**) -> i32 {
 
         split_view.set_sidebar(sidebar_page);
         split_view.set_content(content_page);
+
+        // handle sidebar clicks
+        sidebar.connect_activated((index: u32) => {
+            button.set_label(format("Pressed {}", index + 1));
+        });
         
         window.set_content(split_view);
         window.present();
