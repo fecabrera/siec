@@ -11,4 +11,5 @@ sources = ["src/"]
 libs = ["gtk-4", "pangocairo-1.0", "pango-1.0", "harfbuzz", "gdk_pixbuf-2.0", "cairo-gobject", "cairo"]
 
 [dependencies]
+core = "*"
 glib = "*"

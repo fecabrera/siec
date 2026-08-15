@@ -1,8 +1,21 @@
+import { String } from std.collections;
+import { gboolean } from glib;
 import {
+    GTK_BUTTON,
+    GtkButton,
     GtkWidget,
     GtkAlign,
     Handler,
     gtk_button_new_with_label,
+    gtk_button_set_has_frame,
+    gtk_button_get_has_frame,
+    gtk_button_set_label,
+    gtk_button_set_use_underline,
+    gtk_button_get_use_underline,
+    gtk_button_set_icon_name,
+    gtk_button_set_child,
+    gtk_button_set_can_shrink,
+    gtk_button_get_can_shrink,
     gtk_widget_set_halign,
     gtk_widget_set_valign,
 } from gtk;
@@ -21,6 +34,52 @@ struct Button: Handler<GtkWidget> {
 
     fn get_const_handle(const &self) -> const GtkWidget* {
         return self.handle;
+    }
+
+    @private
+    fn as_gtk_button(&self) -> GtkButton* {
+        return GTK_BUTTON(self.handle);
+    }
+    
+    fn set_has_frame(&self, has_frame: bool) {
+        gtk_button_set_has_frame(self.as_gtk_button(), has_frame as gboolean);
+    }
+    
+    fn get_has_frame(&self) -> bool {
+        return gtk_button_get_has_frame(self.as_gtk_button()) as bool;
+    }
+
+    fn set_label(&self, label: const &char[]) {
+        gtk_button_set_label(self.as_gtk_button(), label);
+    }
+
+    fn set_label(&self, label: &String) {
+        label.null_terminate();
+        self.set_label(label.as_const_array());
+    }
+    
+    fn set_use_underline(&self, use_underline: bool) {
+        gtk_button_set_use_underline(self.as_gtk_button(), use_underline as gboolean);
+    }
+    
+    fn get_use_underline(&self) -> bool {
+        return gtk_button_get_use_underline(self.as_gtk_button()) as bool;
+    }
+    
+    fn set_icon_name(&self, icon_name: const &char[]) {
+        gtk_button_set_icon_name(self.as_gtk_button(), icon_name);
+    }
+    
+    fn set_child(&self, child: &Handler<GtkWidget>) {
+        gtk_button_set_child(self.as_gtk_button(), child.get_handle());
+    }
+    
+    fn set_can_shrink(&self, can_shrink: bool) {
+        gtk_button_set_can_shrink(self.as_gtk_button(), can_shrink as gboolean);
+    }
+    
+    fn get_can_shrink(&self) -> bool {
+        return gtk_button_get_can_shrink(self.as_gtk_button()) as bool;
     }
 
     fn set_halign(&self, align: GtkAlign) {
