@@ -1,0 +1,78 @@
+import { List } from std.collections;
+import { GtkWidget, Handler } from gtk;
+import {
+    ADW_NAVIGATION_VIEW,
+    AdwNavigationView,
+    adw_navigation_view_new,
+    adw_navigation_view_add,
+    adw_navigation_view_remove,
+    adw_navigation_view_push,
+    adw_navigation_view_push_by_tag,
+    adw_navigation_view_pop,
+    adw_navigation_view_pop_to_page,
+    adw_navigation_view_pop_to_tag,
+    adw_navigation_view_replace,
+    adw_navigation_view_replace_with_tags,
+} from adwaita;
+import { NavigationPage } from navigationpage;
+
+struct NavigationView: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_navigation_view_new();
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_adw_navigation_view(&self) -> AdwNavigationView* {
+        return ADW_NAVIGATION_VIEW(self.handle);
+    }
+    
+    fn add(&self, page: &NavigationPage) {
+        adw_navigation_view_add(self.as_adw_navigation_view(), page.get_handle());
+    }
+    
+    fn remove(&self, page: &NavigationPage) {
+        adw_navigation_view_remove(self.as_adw_navigation_view(), page.get_handle());
+    }
+    
+    fn push(&self, page: &NavigationPage) {
+        adw_navigation_view_push(self.as_adw_navigation_view(), page.get_handle());
+    }
+    
+    fn push_by_tag(&self, tag: const &char[]) {
+        adw_navigation_view_push_by_tag(self.as_adw_navigation_view(), tag);
+    }
+    
+    fn pop(&self) -> bool {
+        return adw_navigation_view_pop(self.as_adw_navigation_view()) as bool;
+    }
+    
+    fn pop_to_page(&self, page: &NavigationPage) -> bool {
+        return adw_navigation_view_pop_to_page(self.as_adw_navigation_view(), page.get_handle()) as bool;
+    }
+    
+    fn pop_to_tag(&self, tag: const &char[]) -> bool {
+        return adw_navigation_view_pop_to_tag(self.as_adw_navigation_view(), tag) as bool;
+    }
+    
+    fn replace(&self, pages: &NavigationPage[]) {
+        let list = List<AdwNavigationPage*>(pages.length);
+        foreach (page : pages) {
+            list.push(page.get_handle());
+        }
+        adw_navigation_view_replace(self.as_adw_navigation_view(), list.as_array(), list.get_length() as i32);
+    }
+    
+    fn replace_with_tags(&self, tags: const &char*[]) {
+        adw_navigation_view_replace_with_tags(self.as_adw_navigation_view(), tags, tags.length as i32);
+    }
+}

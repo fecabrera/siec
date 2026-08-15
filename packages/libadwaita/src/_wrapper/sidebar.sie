@@ -49,6 +49,8 @@ struct Sidebar: Handler<GtkWidget> {
 
     fn connect_activated(&self, callback: closure fn(u32)) {
         let handle_activated = (sidebar: AdwSidebar*, index: guint) => callback(index);
-        g_signal_connect(self.handle, "activated", G_CALLBACK<fn(AdwSidebar*, guint, opaque*)>(handle_activated), handle_activated.env);
+        let cb = G_CALLBACK<fn(AdwSidebar*, guint, opaque*)>(handle_activated);
+        let cb_data = handle_activated.env;
+        g_signal_connect(self.handle, "activated", cb, cb_data);
     }
 }

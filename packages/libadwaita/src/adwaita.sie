@@ -17,6 +17,7 @@
 @include("_wrapper/applicationwindow")
 @include("_wrapper/headerbar")
 @include("_wrapper/navigationpage")
+@include("_wrapper/navigationview")
 @include("_wrapper/navigationsplitview")
 @include("_wrapper/sidebar")
 @include("_wrapper/sidebaritem")
