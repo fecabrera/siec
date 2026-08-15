@@ -3,6 +3,7 @@
 @include("glib/gdataset")
 @include("glib/gdate")
 @include("glib/gdatetime")
+@include("glib/gerror")
 @include("glib/ghash")
 @include("glib/glist")
 @include("glib/gquark")

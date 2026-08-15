@@ -1,0 +1,18 @@
+import { GError, GVariant, guint, gboolean, gconstpointer } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+
+@macro G_TYPE_ICON = g_icon_get_type();
+@macro G_ICON(obj) = G_TYPE_CHECK_INSTANCE_CAST<GIcon>(obj, G_TYPE_ICON);
+@macro G_IS_ICON(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, G_TYPE_ICON);
+
+struct GIcon;
+
+@extern fn g_icon_get_type() -> GType;
+@extern fn g_icon_hash(icon: gconstpointer) -> guint;
+@extern fn g_icon_equal(icon1: GIcon*,
+                        icon2: GIcon*) -> gboolean;
+@extern fn g_icon_to_string(icon: GIcon*) -> char*;
+@extern fn g_icon_new_for_string(str: const char*,
+                                 error: GError**) -> GIcon*;
+@extern fn g_icon_serialize(icon: GIcon*) -> GVariant*;
+@extern fn g_icon_deserialize(value: GVariant*) -> GIcon*;
