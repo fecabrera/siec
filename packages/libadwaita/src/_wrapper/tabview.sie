@@ -25,6 +25,10 @@ struct TabView: Handler<AdwTabView> {
         self.handle = adw_tab_view_new();
     }
 
+    fn init(&self, handle: AdwTabView*) {
+        self.handle = handle;
+    }
+
     fn get_handle(&self) -> AdwTabView* {
         return self.handle;
     }

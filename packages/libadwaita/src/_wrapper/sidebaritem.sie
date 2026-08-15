@@ -10,6 +10,10 @@ import {
 struct SidebarItem: Handler<AdwSidebarItem> {
     @private handle: AdwSidebarItem*;
 
+    fn init(&self, handle: AdwSidebarItem*) {
+        self.handle = handle;
+    }
+
     fn init(&self, title: const &char[]) {
         self.handle = adw_sidebar_item_new(title);
     }

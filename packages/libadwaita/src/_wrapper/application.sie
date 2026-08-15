@@ -22,6 +22,10 @@ import { AdwApplication, adw_application_new } from adwaita;
 struct Application: Handler<AdwApplication> {
     @private handle: AdwApplication*;
 
+    fn init(&self, handle: AdwApplication*) {
+        self.handle = handle;
+    }
+
     fn init(&self, id: const char[], flags: GApplicationFlags = GApplicationFlags::DEFAULT_FLAGS) {
         self.handle = adw_application_new(id, flags);
     }

@@ -19,6 +19,10 @@ struct SidebarSection: Handler<AdwSidebarSection> {
         self.handle = adw_sidebar_section_new();
     }
 
+    fn init(&self, handle: AdwSidebarSection*) {
+        self.handle = handle;
+    }
+
     fn init(&self, title: const &char[]) {
         self.init();
         self.set_title(title);

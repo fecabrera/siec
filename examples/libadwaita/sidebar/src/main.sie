@@ -14,14 +14,11 @@ fn main(argc: i32, argv: char**) -> i32 {
         let sidebar_header = adwaita.HeaderBar();
         
         let sidebar = adwaita.Sidebar();
-        let section1 = adwaita.SidebarSection("Section 1");
+        let section1 = adwaita.SidebarSection();
         let item1 = adwaita.SidebarItem("Item 1");
         let item2 = adwaita.SidebarItem("Item 2");
         let item3 = adwaita.SidebarItem("Item 2");
         
-        item1.set_subtitle("Subtitle");
-        item2.set_subtitle("Subtitle");
-        item3.set_subtitle("Subtitle");
         section1.append(item1);
         section1.append(item2);
         section1.append(item3);
@@ -39,6 +36,7 @@ fn main(argc: i32, argv: char**) -> i32 {
             window.close();
         });
 
+        content_header.set_show_title(false);
         content_view.add_top_bar(content_header);
         content_view.set_content(button);
 
