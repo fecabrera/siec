@@ -91,6 +91,9 @@ struct Button: Handler<GtkWidget> {
     }
 
     fn connect_clicked(&self, callback: closure fn()) {
-        g_signal_connect(self.handle, "clicked", G_CALLBACK<fn(GtkWidget*, opaque*)>(callback), callback.env);
+        let handle_clicked = (widget: GtkWidget*) => callback();
+        let cb = G_CALLBACK<fn(GtkWidget*, opaque*)>(handle_clicked);
+        let cb_data = handle_clicked.env;
+        g_signal_connect(self.handle, "clicked", cb, cb_data);
     }
 }
