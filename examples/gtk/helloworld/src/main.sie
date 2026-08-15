@@ -6,7 +6,7 @@ fn main(argc: i32, argv: char**) -> i32 {
     app.connect_activate(() => {
         let window = gtk.ApplicationWindow(app);
         window.set_title("Hello");
-        window.set_default_size(200, 200);
+        window.set_default_size(600, 400);
 
         let button = gtk.Button("Hello, World!");
         button.set_halign(gtk.GtkAlign::CENTER);
