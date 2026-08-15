@@ -1,5 +1,26 @@
+import { gboolean } from glib;
 import { GtkWidget, Handler } from gtk;
-import { adw_header_bar_new } from adwaita;
+import {
+    ADW_HEADER_BAR,
+    AdwHeaderBar,
+    AdwCenteringPolicy,
+    adw_header_bar_new,
+    adw_header_bar_pack_start,
+    adw_header_bar_pack_end,
+    adw_header_bar_remove,
+    adw_header_bar_set_title_widget,
+    adw_header_bar_get_show_start_title_buttons,
+    adw_header_bar_set_show_start_title_buttons,
+    adw_header_bar_get_show_end_title_buttons,
+    adw_header_bar_set_show_end_title_buttons,
+    adw_header_bar_get_show_back_button,
+    adw_header_bar_set_show_back_button,
+    adw_header_bar_set_decoration_layout,
+    adw_header_bar_get_centering_policy,
+    adw_header_bar_set_centering_policy,
+    adw_header_bar_get_show_title,
+    adw_header_bar_set_show_title,
+} from adwaita;
 
 struct HeaderBar: Handler<GtkWidget> {
     @private handle: GtkWidget*;
@@ -14,5 +35,69 @@ struct HeaderBar: Handler<GtkWidget> {
 
     fn get_const_handle(const &self) -> const GtkWidget* {
         return self.handle;
+    }
+
+    @private
+    fn as_adw_header(&self) -> AdwHeaderBar* {
+        return ADW_HEADER_BAR(self.handle);
+    }
+    
+    fn pack_start(&self, child: &Handler<GtkWidget>) {
+        adw_header_bar_pack_start(self.as_adw_header(), child.get_handle());
+    }
+    
+    fn pack_end(&self, child: &Handler<GtkWidget>) {
+        adw_header_bar_pack_end(self.as_adw_header(), child.get_handle());
+    }
+    
+    fn remove(&self, child: &Handler<GtkWidget>) {
+        adw_header_bar_remove(self.as_adw_header(), child.get_handle());
+    }
+    
+    fn set_title_widget(&self, widget: &Handler<GtkWidget>) {
+        adw_header_bar_set_title_widget(self.as_adw_header(), widget.get_handle());
+    }
+    
+    fn get_show_start_title_buttons(&self) -> bool {
+        return adw_header_bar_get_show_start_title_buttons(self.as_adw_header()) as bool;
+    }
+    
+    fn set_show_start_title_buttons(&self, show_start_title_buttons: bool) {
+        adw_header_bar_set_show_start_title_buttons(self.as_adw_header(), show_start_title_buttons as gboolean);
+    }
+    
+    fn get_show_end_title_buttons(&self) -> bool {
+        return adw_header_bar_get_show_end_title_buttons(self.as_adw_header()) as bool;
+    }
+    
+    fn set_show_end_title_buttons(&self, show_end_title_buttons: bool) {
+        adw_header_bar_set_show_end_title_buttons(self.as_adw_header(), show_end_title_buttons as gboolean);
+    }
+    
+    fn get_show_back_button(&self) -> bool {
+        return adw_header_bar_get_show_back_button(self.as_adw_header()) as bool;
+    }
+    
+    fn set_show_back_button(&self, show_back_button: bool) {
+        adw_header_bar_set_show_back_button(self.as_adw_header(), show_back_button as gboolean);
+    }
+    
+    fn set_decoration_layout(&self, layout: const &char[]) {
+        adw_header_bar_set_decoration_layout(self.as_adw_header(), layout);
+    }
+
+    fn get_centering_policy(&self) -> AdwCenteringPolicy {
+        return adw_header_bar_get_centering_policy(self.as_adw_header());
+    }
+
+    fn set_centering_policy(&self, centering_policy: AdwCenteringPolicy) {
+        adw_header_bar_set_centering_policy(self.as_adw_header(), centering_policy);
+    }
+
+    fn get_show_title(&self) -> bool {
+        return adw_header_bar_get_show_title(self.as_adw_header()) as bool;
+    }
+    fn set_show_title(&self, show_title: bool) {
+        adw_header_bar_set_show_title(self.as_adw_header(), show_title as gboolean);
     }
 }
