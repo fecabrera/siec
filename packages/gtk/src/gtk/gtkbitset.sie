@@ -1,0 +1,19 @@
+import { gboolean, guint, guint64 } from glib;
+import { GType } from gobject;
+
+@macro GTK_TYPE_BITSET = gtk_bitset_get_type();
+
+struct GtkBitset;
+
+@extern fn gtk_selection_model_get_type() -> GType;
+@extern fn gtk_bitset_ref(bitset: GtkBitset*) -> GtkBitset*;
+@extern fn gtk_bitset_unref(bitset: GtkBitset*);
+@extern fn gtk_bitset_contains(bitset: const GtkBitset*,
+                               value: guint) -> gboolean;
+@extern fn gtk_bitset_is_empty(bitset: const GtkBitset*) -> gboolean;
+@extern fn gtk_bitset_equals(bitset: const GtkBitset*,
+                             other: const GtkBitset*) -> gboolean;
+@extern fn gtk_bitset_get_size(bitset: const GtkBitset*) -> guint64;
+@extern fn gtk_bitset_get_size_in_range(bitset: const GtkBitset*,
+                                        first: guint,
+                                        last: guint) -> guint64;

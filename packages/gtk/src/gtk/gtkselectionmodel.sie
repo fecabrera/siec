@@ -1,0 +1,36 @@
+import { GType } from gobject;
+import { gboolean, guint } from glib;
+import { GtkBitset } from gtkbitset;
+
+@macro GTK_TYPE_SELECTION_MODEL = gtk_selection_model_get_type();
+
+struct GtkSelectionModel;
+
+@extern fn gtk_selection_model_get_type() -> GType;
+
+@extern fn gtk_selection_model_is_selected(model: GtkSelectionModel*,
+                                           position: guint) -> gboolean;
+@extern fn gtk_selection_model_get_selection(model: GtkSelectionModel*) -> GtkBitset*;
+@extern fn gtk_selection_model_get_selection_in_range(model: GtkSelectionModel*,
+                                                      position: guint,
+                                                      n_items: guint) -> GtkBitset*;
+@extern fn gtk_selection_model_select_item(model: GtkSelectionModel*,
+                                           position: guint,
+                                           unselect_rest: gboolean) -> gboolean;
+@extern fn gtk_selection_model_unselect_item(model: GtkSelectionModel*,
+                                             position: guint) -> gboolean;
+@extern fn gtk_selection_model_select_range(model: GtkSelectionModel*,
+                                            position: guint,
+                                            n_items: guint,
+                                            unselect_rest: gboolean) -> gboolean;
+@extern fn gtk_selection_model_unselect_range(model: GtkSelectionModel*,
+                                              position: guint,
+                                              n_items: guint) -> gboolean;
+@extern fn gtk_selection_model_select_all(model: GtkSelectionModel*) -> gboolean;
+@extern fn gtk_selection_model_unselect_all(model: GtkSelectionModel*) -> gboolean;
+@extern fn gtk_selection_model_set_selection(model: GtkSelectionModel*,
+                                             selected: GtkBitset*,
+                                             mask: GtkBitset*) -> gboolean;
+@extern fn gtk_selection_model_selection_changed(model: GtkSelectionModel*,
+                                                 position: guint,
+                                                 n_items: guint);
