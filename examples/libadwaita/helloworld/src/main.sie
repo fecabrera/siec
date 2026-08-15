@@ -7,7 +7,7 @@ fn main(argc: i32, argv: char**) -> i32 {
     app.connect_activate(() => {
         let window = adwaita.ApplicationWindow(app);
         window.set_title("Hello");
-        window.set_default_size(800, 600);
+        window.set_default_size(600, 400);
 
         let toolbar_view = adwaita.ToolbarView();
         let header_bar = adwaita.HeaderBar();
@@ -15,9 +15,7 @@ fn main(argc: i32, argv: char**) -> i32 {
         
         button.set_halign(gtk.GtkAlign::CENTER);
         button.set_valign(gtk.GtkAlign::CENTER);
-        button.connect_clicked(() => {
-            window.close();
-        });
+        button.connect_clicked(() => window.close());
         
         toolbar_view.add_top_bar(header_bar);
         toolbar_view.set_content(button);
