@@ -204,6 +204,19 @@ interface Formattable {
  * @param modifiers The modifiers to format the array with.
  * @return A String containing the formatted array.
  */
+@extend T[]: Formattable {
+    fn format(const &self, modifiers: const &char[]) -> String {
+        return String(@typename(self));
+    }
+}
+
+/**
+ * Format the array.
+ *
+ * @param self The array to format.
+ * @param modifiers The modifiers to format the array with.
+ * @return A String containing the formatted array.
+ */
 @template<T: Formattable> {
     @extend T[]: Formattable {
         fn format(const &self, modifiers: const &char[]) -> String {
