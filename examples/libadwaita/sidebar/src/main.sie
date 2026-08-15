@@ -17,10 +17,10 @@ fn main(argc: i32, argv: char**) -> i32 {
         let sidebar = adwaita.Sidebar();
         let section1 = adwaita.SidebarSection();
         let section2 = adwaita.SidebarSection();
-        let item1 = adwaita.SidebarItem("Item 1");
-        let item2 = adwaita.SidebarItem("Item 2");
-        let item3 = adwaita.SidebarItem("Item 3");
-        let item4 = adwaita.SidebarItem("Item 4");
+        let item1 = adwaita.SidebarItem("Page 1");
+        let item2 = adwaita.SidebarItem("Page 2");
+        let item3 = adwaita.SidebarItem("Page 3");
+        let item4 = adwaita.SidebarItem("Page 4");
         
         section1.append(item1);
         section1.append(item2);
@@ -31,23 +31,44 @@ fn main(argc: i32, argv: char**) -> i32 {
         sidebar_view.add_top_bar(sidebar_header);
         sidebar_view.set_content(sidebar);
 
+        // page 1
+        let page1_view = adwaita.ToolbarView();
+        let page1_header = adwaita.HeaderBar();
+        let page1 = adwaita.NavigationPage(page1_view, "Page 1", "page-1");
+        page1_view.add_top_bar(page1_header);
+        page1_view.set_content(gtk.Label("Page 1"));
+        
+        // page 2
+        let page2_view = adwaita.ToolbarView();
+        let page2_header = adwaita.HeaderBar();
+        let page2 = adwaita.NavigationPage(page2_view, "Page 2", "page-2");
+        page2_view.add_top_bar(page2_header);
+        page2_view.set_content(gtk.Label("Page 2"));
+        
+        // page 3
+        let page3_view = adwaita.ToolbarView();
+        let page3_header = adwaita.HeaderBar();
+        let page3 = adwaita.NavigationPage(page3_view, "Page 3", "page-3");
+        page3_view.add_top_bar(page3_header);
+        page3_view.set_content(gtk.Label("Page 3"));
+        
+        // page 4
+        let page4_view = adwaita.ToolbarView();
+        let page4_header = adwaita.HeaderBar();
+        let page4 = adwaita.NavigationPage(page4_view, "Page 4", "page-4");
+        page4_view.add_top_bar(page4_header);
+        page4_view.set_content(gtk.Label("Page 4"));
+        
         // content
-        let content_view = adwaita.ToolbarView();
-        let content_header = adwaita.HeaderBar();
-        let button = gtk.Button("Hello, World!");
-        button.set_halign(gtk.GtkAlign::CENTER);
-        button.set_valign(gtk.GtkAlign::CENTER);
-        button.connect_clicked(() => {
-            window.close();
-        });
-
-        content_header.set_show_title(false);
-        content_view.add_top_bar(content_header);
-        content_view.set_content(button);
+        let navigation = adwaita.NavigationView();
+        navigation.add(page1);
+        navigation.add(page2);
+        navigation.add(page3);
+        navigation.add(page4);
 
         // split view
         let sidebar_page = adwaita.NavigationPage(sidebar_view, "Sidebar");
-        let content_page = adwaita.NavigationPage(content_view, "Content");
+        let content_page = adwaita.NavigationPage(navigation, "Content");
         let split_view = adwaita.NavigationSplitView();
 
         split_view.set_sidebar(sidebar_page);
@@ -55,7 +76,15 @@ fn main(argc: i32, argv: char**) -> i32 {
 
         // handle sidebar clicks
         sidebar.connect_activated((index: u32) => {
-            button.set_label(format("Pressed {}", index + 1));
+            if (index == 0) {
+                navigation.replace([page1]);
+            } else if (index == 1) {
+                navigation.replace([page2]);
+            } else if (index == 2) {
+                navigation.replace([page3]);
+            } else if (index == 3) {
+                navigation.replace([page4]);
+            }
         });
         
         window.set_content(split_view);
