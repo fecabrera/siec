@@ -8,6 +8,7 @@
 @include("adwaita/adw_sidebar_section")
 @include("adwaita/adw_sidebar")
 @include("adwaita/adw_split_button")
+@include("adwaita/adw_tab_view")
 @include("adwaita/adw_toolbar_view")
 @include("adwaita/adw_window")
 
