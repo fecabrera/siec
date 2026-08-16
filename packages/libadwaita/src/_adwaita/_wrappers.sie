@@ -11,6 +11,8 @@
 @include("_wrappers/tabbar")
 @include("_wrappers/tabview")
 @include("_wrappers/tabpage")
+@include("_wrappers/toast")
+@include("_wrappers/toastoverlay")
 @include("_wrappers/toggle")
 @include("_wrappers/togglegroup")
 @include("_wrappers/toolbarview")
