@@ -1,0 +1,68 @@
+import { gboolean } from glib;
+import { GtkWidget } from gtk;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { AdwLengthUnit } from adw_length_unit;
+
+@macro ADW_TYPE_WRAP_LAYOUT = adw_wrap_layout_get_type();
+@macro ADW_WRAP_LAYOUT(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwWrapBox>(obj, ADW_TYPE_WRAP_LAYOUT);
+@macro ADW_IS_WRAP_LAYOUT(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_WRAP_LAYOUT);
+
+struct AdwWrapLayout;
+
+enum AdwJustifyMode {
+    NONE,
+    FILL,
+    SPREAD,
+}
+  
+enum AdwPackDirection {
+    START_TO_END,
+    END_TO_START,
+}
+  
+enum AdwWrapPolicy {
+    MINIMUM,
+    NATURAL,
+}
+
+@extern fn adw_wrap_layout_get_type() -> GType;
+// @extern fn adw_wrap_layout_new() -> GtkLayoutManager*;
+@extern fn adw_wrap_layout_get_child_spacing(layout: AdwWrapLayout*) -> i32;
+@extern fn adw_wrap_layout_set_child_spacing(layout: AdwWrapLayout*,
+                                             child_spacing: i32);
+@extern fn adw_wrap_layout_get_child_spacing_unit(layout: AdwWrapLayout*) -> AdwLengthUnit;
+@extern fn adw_wrap_layout_set_child_spacing_unit(layout: AdwWrapLayout*,
+                                                  unit: AdwLengthUnit);
+@extern fn adw_wrap_layout_get_pack_direction(layout: AdwWrapLayout*) -> AdwPackDirection;
+@extern fn adw_wrap_layout_set_pack_direction(layout: AdwWrapLayout*,
+                                              pack_direction: AdwPackDirection);
+@extern fn adw_wrap_layout_get_align(layout: AdwWrapLayout*) -> f32;
+@extern fn adw_wrap_layout_set_align(layout: AdwWrapLayout*,
+                                     align: f32);
+@extern fn adw_wrap_layout_get_justify(layout: AdwWrapLayout*) -> AdwJustifyMode;
+@extern fn adw_wrap_layout_set_justify(layout: AdwWrapLayout*,
+                                       justify: AdwJustifyMode);
+@extern fn adw_wrap_layout_get_justify_last_line(layout: AdwWrapLayout*) -> gboolean;
+@extern fn adw_wrap_layout_set_justify_last_line(layout: AdwWrapLayout*,
+                                                 justify_last_line: gboolean);
+@extern fn  adw_wrap_layout_get_line_spacing(layout: AdwWrapLayout*) -> i32;
+@extern fn adw_wrap_layout_set_line_spacing(layout: AdwWrapLayout*,
+                                            line_spacing: i32);
+@extern fn adw_wrap_layout_get_line_spacing_unit(layout: AdwWrapLayout*) -> AdwLengthUnit;
+@extern fn adw_wrap_layout_set_line_spacing_unit(layout: AdwWrapLayout*,
+                                                 unit: AdwLengthUnit);
+@extern fn adw_wrap_layout_get_line_homogeneous(layout: AdwWrapLayout*) -> gboolean;
+@extern fn adw_wrap_layout_set_line_homogeneous(layout: AdwWrapLayout*,
+                                                homogeneous: gboolean);
+@extern fn adw_wrap_layout_get_natural_line_length(layout: AdwWrapLayout*) -> i32;
+@extern fn adw_wrap_layout_set_natural_line_length(layout: AdwWrapLayout*,
+                                                   natural_line_length: i32);
+@extern fn adw_wrap_layout_get_natural_line_length_unit(layout: AdwWrapLayout*) -> AdwLengthUnit;
+@extern fn adw_wrap_layout_set_natural_line_length_unit(layout: AdwWrapLayout*,
+                                                        unit: AdwLengthUnit);
+@extern fn adw_wrap_layout_get_wrap_reverse(layout: AdwWrapLayout*) -> gboolean;
+@extern fn adw_wrap_layout_set_wrap_reverse(layout: AdwWrapLayout*,
+                                            wrap_reverse: gboolean);
+@extern fn adw_wrap_layout_get_wrap_policy(layout: AdwWrapLayout*) -> AdwWrapPolicy;
+@extern fn adw_wrap_layout_set_wrap_policy(layout: AdwWrapLayout*,
+                                           wrap_policy: AdwWrapPolicy);

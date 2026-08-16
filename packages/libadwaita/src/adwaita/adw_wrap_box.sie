@@ -1,0 +1,73 @@
+import { gboolean } from glib;
+import { GtkWidget } from gtk;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { AdwLengthUnit } from adw_length_unit;
+import {
+    AdwWrapLayout,
+    AdwPackDirection,
+    AdwWrapPolicy,
+    AdwJustifyMode
+} from adw_wrap_layout;
+
+@macro ADW_TYPE_WRAP_BOX = adw_wrap_box_get_type();
+@macro ADW_WRAP_BOX(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwWrapBox>(obj, ADW_TYPE_WRAP_BOX);
+@macro ADW_IS_WRAP_BOX(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_WRAP_BOX);
+
+struct AdwWrapBox {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_wrap_box_get_type() -> GType;
+@extern fn adw_wrap_box_new() -> GtkWidget*;
+@extern fn adw_wrap_box_get_child_spacing(wrap_box: AdwWrapBox*) -> i32;
+@extern fn adw_wrap_box_set_child_spacing(wrap_box: AdwWrapBox*,
+                                          child_spacing: i32);
+@extern fn adw_wrap_box_get_child_spacing_unit(wrap_box: AdwWrapBox*) -> AdwLengthUnit;
+@extern fn adw_wrap_box_set_child_spacing_unit(wrap_box: AdwWrapBox*,
+                                               unit: AdwLengthUnit);
+@extern fn adw_wrap_box_get_pack_direction(wrap_box: AdwWrapBox*) -> AdwPackDirection;
+@extern fn adw_wrap_box_set_pack_direction(wrap_box: AdwWrapBox*,
+                                           pack_direction: AdwPackDirection);
+@extern fn adw_wrap_box_get_align(wrap_box: AdwWrapBox*) -> f32;
+@extern fn adw_wrap_box_set_align(wrap_box: AdwWrapBox*,
+                                  align: f32);
+@extern fn adw_wrap_box_get_justify(wrap_box: AdwWrapBox*) -> AdwJustifyMode;
+@extern fn adw_wrap_box_set_justify(wrap_box: AdwWrapBox*,
+                                    justify: AdwJustifyMode);
+@extern fn adw_wrap_box_get_justify_last_line(wrap_box: AdwWrapBox*) -> gboolean;
+@extern fn adw_wrap_box_set_justify_last_line(wrap_box: AdwWrapBox*,
+                                              justify_last_line: gboolean);
+@extern fn adw_wrap_box_get_line_spacing(wrap_box: AdwWrapBox*) -> i32;
+@extern fn adw_wrap_box_set_line_spacing(wrap_box: AdwWrapBox*,
+                                         line_spacing: i32);
+@extern fn adw_wrap_box_get_line_spacing_unit(wrap_box: AdwWrapBox*) -> AdwLengthUnit;
+@extern fn adw_wrap_box_set_line_spacing_unit(wrap_box: AdwWrapBox*,
+                                              unit: AdwLengthUnit);
+@extern fn adw_wrap_box_get_line_homogeneous(wrap_box: AdwWrapBox*) -> gboolean;
+@extern fn adw_wrap_box_set_line_homogeneous(wrap_box: AdwWrapBox*,
+                                             homogeneous: gboolean);
+@extern fn adw_wrap_box_get_natural_line_length(wrap_box: AdwWrapBox*) -> i32;
+@extern fn adw_wrap_box_set_natural_line_length(wrap_box: AdwWrapBox*,
+                                                natural_line_length: i32);
+@extern fn adw_wrap_box_get_natural_line_length_unit(wrap_box: AdwWrapBox*) -> AdwLengthUnit;
+@extern fn adw_wrap_box_set_natural_line_length_unit(wrap_box: AdwWrapBox*,
+                                                     unit: AdwLengthUnit);
+@extern fn adw_wrap_box_get_wrap_reverse(wrap_box: AdwWrapBox*) -> gboolean;
+@extern fn adw_wrap_box_set_wrap_reverse(wrap_box: AdwWrapBox*,
+                                         wrap_reverse: gboolean);
+@extern fn adw_wrap_box_get_wrap_policy(wrap_box: AdwWrapBox*) -> AdwWrapPolicy;
+@extern fn adw_wrap_box_set_wrap_policy(wrap_box: AdwWrapBox*,
+                                        wrap_policy: AdwWrapPolicy);
+@extern fn adw_wrap_box_insert_child_after(wrap_box: AdwWrapBox*,
+                                       child: GtkWidget*,
+                                       sibling: GtkWidget*);
+@extern fn adw_wrap_box_reorder_child_after(wrap_box: AdwWrapBox*,
+                                       child: GtkWidget*,
+                                       sibling: GtkWidget*);
+@extern fn adw_wrap_box_append(wrap_box: AdwWrapBox*,
+                               child: GtkWidget*);
+@extern fn adw_wrap_box_prepend(wrap_box: AdwWrapBox*,
+                                child: GtkWidget*);
+@extern fn adw_wrap_box_remove(wrap_box: AdwWrapBox*,
+                               child: GtkWidget*);
+@extern fn adw_wrap_box_remove_all(wrap_box: AdwWrapBox*);
