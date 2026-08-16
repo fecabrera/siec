@@ -36,6 +36,33 @@ def test_result_holds_a_value_or_an_error(run):
     assert run(source).returncode == 0
 
 
+def test_result_truthiness_reads_its_ok_tag(run):
+    """Both Result shapes are truthy exactly when they hold success."""
+    source = """
+    fn checked(ok: bool) -> Result<i32, u8> {
+        if (ok) { return Ok(42); }
+        return Error(1);
+    }
+
+    fn validated(ok: bool) -> Result<u8> {
+        if (ok) { return Ok(); }
+        return Error(2);
+    }
+
+    fn main() -> i32 {
+        let good = checked(true);
+        let bad = checked(false);
+        if (good and not bad and good.value == 42 and bad.error == 1
+                and not checked(false) and checked(true)
+                and not validated(false) and validated(true)) {
+            return 42;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_result_with_only_an_error(run):
     """
     'Result<E>' carries just the tag and an error: the arity picks the

@@ -540,7 +540,7 @@ let a: i32 = 10;
 a += 5; // a holds the value 15, equivalent to a = a + 5
 ```
 
-### Truthyness
+### Truthiness
 
 Values other than `bool` can still be used wherever a truthy value is expected:
 
@@ -548,7 +548,22 @@ Values other than `bool` can still be used wherever a truthy value is expected:
 - Booleans are truthy when they're `true`.
 - Pointers are truthy when they're non-null.
 - Arrays are truthy when their length is `> 0`.
-- Every other type, including custom ones, has no implicit truthyness and must be compared explicitly.
+
+These built-in rules implement the `Truthy` interface directly in the compiler. A struct can implement the same interface through a read-only `truthy` method:
+
+```
+interface Truthy {
+    fn truthy(const &self) -> bool;
+}
+
+struct Result<V, E>: Truthy { ... }
+
+fn Result<V, E>::truthy(const &self) -> bool {
+    return self.ok;
+}
+```
+
+`Truthy` is contextual: it applies to `if`, loops, ternary conditions, and `and`, `or`, and `not`. It does not make a value implicitly convertible to `bool` in an assignment or argument.
 
 ### Conditionals
 
@@ -2699,7 +2714,7 @@ An aggregate literal has no type of its own; offered to an `Iterable<T>` paramet
 Errors are handled through `Result<V, E>`, a builtin struct that contains a return value or an error; and `Result<E>`, a builtin struct that only contains an error value. Both are visible everywhere without an import, and the argument count picks between them.
 
 ```
-struct Result<V, E> {
+struct Result<V, E>: Truthy {
     ok: bool;
     union {
         value: V;
@@ -2707,13 +2722,24 @@ struct Result<V, E> {
     };
 }
 
-struct Result<E> {
+struct Result<E>: Truthy {
     ok: bool;
     error: E;
 }
 ```
 
 `ok` tags which member holds: in `Result<V, E>`, `value` and `error` share one storage through the [unnamed union](#unnamed-structs-and-unions), so the whole result costs one tag plus the larger of the two.
+
+Both result shapes implement `Truthy` through `ok`, so a result can be tested directly. A true result holds its value; a false one holds its error:
+
+```
+let result = divide(10, 2);
+if (not result) {
+    report(result.error);
+} else {
+    use(result.value);
+}
+```
 
 Results are built through the builtin `Ok` and `Error` functions, one pair per `Result` shape:
 

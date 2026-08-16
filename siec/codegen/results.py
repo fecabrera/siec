@@ -679,6 +679,13 @@ class ResultFlow:
         if isinstance(expr, Try):
             return self.visit_try(expr)
 
+        # Result implements Truthy through its 'ok' tag. Testing a named
+        # result therefore establishes the same flow facts as reading
+        # '.ok' explicitly.
+        if (self.result_type(expr) is not None
+                and (path := path_of(expr)) is not None):
+            return {path: OK}, {path: ERR}
+
         if isinstance(expr, Call):
             for arg in expr.args:
                 self.check(arg)

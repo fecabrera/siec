@@ -761,12 +761,28 @@ def is_raw(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
 def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict):
     """
     Emit an expression coerced to a bool: numbers compare against zero,
-    C-style, and pointers against null.
+    C-style, pointers against null, and a Truthy struct through its
+    semantically resolved method.
     """
+    if (symbol := getattr(expr, "truthy_symbol", None)) is not None:
+        call = Call(symbol, [expr])
+        from siec.codegen.hir import stamp
+
+        stamp(call, resolved_symbol=symbol, sie_type="bool", overwrite=True)
+        return emit_expression(gen, builder, call, ir.IntType(1), scope)
+
     value = emit_expression(gen, builder, expr, ir.IntType(1), scope)
 
     if isinstance(value.type, ir.PointerType):
         return builder.icmp_unsigned("!=", value, ir.Constant(value.type, None))
+
+    if is_array_struct(value.type):
+        length = builder.extract_value(value, 1, name="truth.length")
+        return builder.icmp_unsigned("!=", length,
+                                     ir.Constant(length.type, 0))
+
+    if isinstance(value.type, ir.ArrayType):
+        return ir.Constant(ir.IntType(1), value.type.count != 0)
 
     if is_float(value.type):
         return builder.fcmp_ordered("!=", value, ir.Constant(value.type, 0))

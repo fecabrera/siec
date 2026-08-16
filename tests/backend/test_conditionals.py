@@ -1,5 +1,7 @@
 """Feature tests for conditionals and truthiness."""
 
+import pytest
+
 
 def test_if_runs_the_arm_when_true(run):
     """
@@ -90,3 +92,61 @@ def test_pointer_is_truthy_when_non_null(run):
     }
     """
     assert run(source).returncode == 4
+
+
+def test_truthy_structs_work_in_boolean_contexts(run):
+    """A Truthy struct supplies conditions, logical operands, and 'not'."""
+    source = """
+    struct Switch: Truthy {
+        on: bool;
+    }
+
+    fn Switch::truthy(const &self) -> bool {
+        return self.on;
+    }
+
+    fn main() -> i32 {
+        let yes: Switch = { true };
+        let no: Switch = { false };
+
+        if (yes and not no) {
+            return yes ? 42 : 1;
+        }
+        return 2;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_truthy_is_not_an_implicit_bool_conversion(compile_source):
+    """Truthy applies only where control flow asks for truth."""
+    with pytest.raises(TypeError, match="cannot implicitly convert Switch to bool"):
+        compile_source("""
+        struct Switch: Truthy { on: bool; }
+        fn Switch::truthy(const &self) -> bool { return self.on; }
+
+        fn main() -> i32 {
+            let value: Switch = { true };
+            let converted: bool = value;
+            return converted ? 1 : 0;
+        }
+        """)
+
+
+def test_builtin_truthiness_satisfies_the_interface_bound(run):
+    """Compiler truth rules are visible as ordinary Truthy conformance."""
+    source = """
+    fn test<T: Truthy>(value: const &T) -> bool {
+        return value ? true : false;
+    }
+
+    fn main(argc: i32, argv: char**) -> i32 {
+        let values: i32[] = [1];
+        let empty: i32[] = [];
+        if (test(5) and test(argv) and test(values) and not test(empty)) {
+            return 42;
+        }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 42

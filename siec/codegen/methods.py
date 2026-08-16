@@ -387,7 +387,9 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         template_entries = [
             (template, dict(zip(template.receiver_params, parts[1])))
             for template in templates
+            if len(template.receiver_params or ()) == len(parts[1])
         ]
+        templates = [template for template, _ in template_entries]
         if overrides:
             template_entries = [
                 (template, mapping)

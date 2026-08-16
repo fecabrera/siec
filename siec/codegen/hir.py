@@ -44,6 +44,7 @@ class TypedExpr:
     coerce_to: str | None = None
     coerce_kind: CoerceKind | None = None
     resolved_symbol: str | None = None
+    truthy_symbol: str | None = None
     field_index: int | None = None
     field_type: str | None = None
     value_category: ValueCategory | None = None
@@ -57,6 +58,7 @@ _TYPED_ATTRS = (
     "coerce_to",
     "coerce_kind",
     "resolved_symbol",
+    "truthy_symbol",
     "field_index",
     "field_type",
     "value_category",
@@ -74,6 +76,7 @@ def typed(expr: Expr | object) -> TypedExpr:
         coerce_to=getattr(expr, "coerce_to", None),
         coerce_kind=getattr(expr, "coerce_kind", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
+        truthy_symbol=getattr(expr, "truthy_symbol", None),
         field_index=getattr(expr, "field_index", None),
         field_type=getattr(expr, "field_type", None),
         value_category=getattr(expr, "value_category", None),

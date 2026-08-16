@@ -401,7 +401,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             return terminates
 
         if isinstance(stmt, If):
-            check_expression(gen, stmt.condition, scope)
+            check_truth(gen, stmt.condition, scope)
             left_scope = dict(scope)
             left = check_block(gen, stmt.body, left_scope, fn,
                                loop=loop, emit_type=emit_type)
@@ -471,7 +471,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             return bool(arms and all(arms) and other)
 
         if isinstance(stmt, While):
-            check_expression(gen, stmt.condition, scope)
+            check_truth(gen, stmt.condition, scope)
             inner = dict(scope)
             gen.checking_loop_depth += 1
             try:
@@ -485,7 +485,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
         if isinstance(stmt, For):
             inner = dict(scope)
             check_statement(gen, stmt.init, inner, fn, loop=True)
-            check_expression(gen, stmt.condition, inner)
+            check_truth(gen, stmt.condition, inner)
             body_scope = dict(inner)
             gen.checking_loop_depth += 1
             try:
@@ -773,6 +773,41 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         )
 
 
+def check_truth(gen: CodeGenerator, expr: Expr, scope: dict) -> None:
+    """Check one contextual truth test and resolve a struct's Truthy method."""
+    actual = check_expression(gen, expr, scope)
+    canonical = strip_const(strip_reference(actual)) if actual else None
+
+    from siec.codegen.inference import type_info
+    from siec.codegen.interfaces import intrinsic_truthy, type_implements
+
+    if intrinsic_truthy(gen, canonical):
+        return
+
+    if type_info(gen, canonical) is not None and type_implements(
+            gen, canonical, "Truthy"):
+        from siec.codegen.methods import resolve_method
+
+        symbol = resolve_method(gen, canonical, "truthy")
+        if symbol is None:
+            raise TypeError(
+                f"type {canonical!r} implements 'Truthy' but has no "
+                "'truthy' method")
+
+        call = Call(symbol, [expr])
+        result = check_call(gen, call, scope, "bool", resolved=symbol)
+        if strip_const(result) != "bool":
+            raise TypeError(
+                f"type {canonical!r}'s 'truthy' method must return 'bool'")
+
+        from siec.codegen.hir import stamp
+
+        stamp(expr, truthy_symbol=symbol, overwrite=True)
+        return
+
+    raise TypeError(f"cannot test a value of type {actual or '?'} for truth")
+
+
 def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                       expected: str | None = None) -> str | None:
     """Check an expression and return its inferred Sie type."""
@@ -1017,7 +1052,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         return expr_sie_type(gen, expr, scope)
 
     if isinstance(expr, Ternary):
-        check_expression(gen, expr.condition, scope)
+        check_truth(gen, expr.condition, scope)
         if expected is not None:
             check_expression(gen, expr.then, scope, expected)
             check_expression(gen, expr.orelse, scope, expected)
@@ -1116,6 +1151,15 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
         if (rewritten := operator_call(gen, expr, scope)) is not None:
             return check_expression(gen, rewritten, scope, expected)
+
+        if expr.op in ("and", "or"):
+            check_truth(gen, expr.left, scope)
+            check_truth(gen, expr.right, scope)
+            return "bool"
+
+    if isinstance(expr, UnaryOp) and expr.op == "not":
+        check_truth(gen, expr.operand, scope)
+        return "bool"
 
     # Walk the expression's children first so nested calls request their
     # instances even when the outer node's type is already obvious.

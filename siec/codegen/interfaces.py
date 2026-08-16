@@ -638,6 +638,10 @@ def interface_implementers(gen: CodeGenerator, required: str) -> list[str]:
         found.extend(name for name in SIGNED_TYPES if name not in found)
     if required == "UnsignedInteger":
         found.extend(name for name in UNSIGNED_TYPES if name not in found)
+    if required == "Truthy":
+        candidates = (*SCALAR_TYPES, *gen.enums, *gen.any_names.values())
+        found.extend(name for name in candidates
+                     if intrinsic_truthy(gen, name) and name not in found)
 
     for param, claim, constraints, file in gen.array_claims:
         bindings: dict = {}
@@ -727,6 +731,8 @@ def claimed_interfaces(gen: CodeGenerator, concrete: str,
         claims.add("SignedInteger")
     if concrete in UNSIGNED_TYPES and relevant("UnsignedInteger"):
         claims.add("UnsignedInteger")
+    if intrinsic_truthy(gen, concrete) and relevant("Truthy"):
+        claims.add("Truthy")
 
     if concrete.endswith("[]"):
         element = concrete[:-2]
@@ -769,6 +775,8 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
         return strip_const(concrete) in SIGNED_TYPES
     if required == "UnsignedInteger":
         return strip_const(concrete) in UNSIGNED_TYPES
+    if required == "Truthy" and intrinsic_truthy(gen, concrete):
+        return True
 
     # Blanket claims may depend on other blanket claims. A cycle supplies
     # no evidence of conformance, so fail that path closed while allowing
@@ -787,6 +795,17 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
         return True
 
     return any(unify_spelling(gen, required, claim) for claim in claims)
+
+
+def intrinsic_truthy(gen: CodeGenerator, concrete: str | None) -> bool:
+    """Whether the compiler supplies a built-in Truthy implementation."""
+    name = strip_const(concrete) if concrete is not None else ""
+    return (
+        name in SCALAR_TYPES
+        or name in gen.enums
+        or name.endswith(("*", "[]"))
+        or name.startswith("fn(")
+    )
 
 
 def unify_spelling(gen: CodeGenerator, required: str, provided: str) -> bool:

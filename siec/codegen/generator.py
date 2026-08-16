@@ -423,6 +423,12 @@ interface Integer;
 interface SignedInteger;
 interface UnsignedInteger;
 
+// Truthy lets a struct define its value in boolean contexts without making
+// it implicitly convertible to bool elsewhere.
+interface Truthy;
+
+fn Truthy::truthy(const &self) -> bool;
+
 // Clone constructs a new value from a borrowed value of the same concrete
 // type. Assignment uses it only when no specialized AssignFrom<Self> exists.
 interface Clone;
@@ -668,7 +674,7 @@ fn __const_enumerate<I, T>(it: I) -> ConstEnumerateIterator<I, T> {
     return e;
 }
 
-struct Result<V, E> {
+struct Result<V, E>: Truthy {
     ok: bool;
     union {
         value: V;
@@ -676,9 +682,17 @@ struct Result<V, E> {
     };
 }
 
-struct Result<E> {
+struct Result<E>: Truthy {
     ok: bool;
     error: E;
+}
+
+fn Result<V, E>::truthy(const &self) -> bool {
+    return self.ok;
+}
+
+fn Result<E>::truthy(const &self) -> bool {
+    return self.ok;
 }
 
 fn Ok<V, E>(v: V) -> Result<V, E> {
@@ -820,6 +834,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     gen.builtin_names.update(struct.name for struct in prelude.structs)
     gen.builtin_names.update(("Result", "Ok", "Error", "Scalar", "Integer",
                               "SignedInteger", "UnsignedInteger", "Clone",
+                              "Truthy",
                               "AssignFrom", "Assign", "Destroy",
                               "Iterator", "Iterable",
                               "ConstIterator", "GetItem", "SetItem",
