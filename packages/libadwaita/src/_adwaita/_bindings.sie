@@ -1,5 +1,6 @@
 @include("_bindings/adw_application")
 @include("_bindings/adw_application_window")
+@include("_bindings/adw_avatar")
 @include("_bindings/adw_header_bar")
 @include("_bindings/adw_length_unit")
 @include("_bindings/adw_navigation_split_view")

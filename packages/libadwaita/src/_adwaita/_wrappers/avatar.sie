@@ -1,0 +1,61 @@
+import { gboolean } from glib;
+import { GtkWidget, Handler } from gtk;
+import {
+    ADW_AVATAR, 
+    AdwAvatar,
+    adw_avatar_new,
+    adw_avatar_set_icon_name,
+    adw_avatar_set_text,
+    adw_avatar_get_show_initials,
+    adw_avatar_set_show_initials,
+    adw_avatar_get_size,
+    adw_avatar_set_size,
+} from _adwaita._bindings;
+
+struct Avatar: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn init(&self, size: i32, text: const &char[], show_initials: bool) {
+        self.handle = adw_avatar_new(size, text, show_initials as gboolean);
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_adw_avatar(&self) -> AdwAvatar* {
+        return ADW_AVATAR(self.handle);
+    }
+    
+    fn set_icon_name(&self, icon_name: const &char[]) {
+        adw_avatar_set_icon_name(self.get_adw_avatar(), icon_name);
+    }
+    
+    fn set_text(&self, text: const &char[]) {
+        adw_avatar_set_text(self.get_adw_avatar(), text);
+    }
+
+    fn get_show_initials(&self) -> bool {
+        return adw_avatar_get_show_initials(self.get_adw_avatar()) as bool;
+    }
+
+    fn set_show_initials(&self, show_initials: bool) {
+        adw_avatar_set_show_initials(self.get_adw_avatar(), show_initials as gboolean);
+    }
+    
+    fn get_size(&self) -> i32 {
+        return adw_avatar_get_size(self.get_adw_avatar());
+    }
+    
+    fn set_size(&self, size: i32) {
+        adw_avatar_set_size(self.get_adw_avatar(), size);
+    }
+}

@@ -1,5 +1,6 @@
 @include("_wrappers/application")
 @include("_wrappers/applicationwindow")
+@include("_wrappers/avatar")
 @include("_wrappers/headerbar")
 @include("_wrappers/navigationpage")
 @include("_wrappers/navigationview")
