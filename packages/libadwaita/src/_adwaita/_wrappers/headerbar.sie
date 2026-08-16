@@ -22,6 +22,8 @@ import {
     adw_header_bar_set_show_title,
 } from _adwaita._bindings;
 
+@type CenteringPolicy = AdwCenteringPolicy;
+
 struct HeaderBar: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
@@ -90,11 +92,11 @@ struct HeaderBar: Handler<GtkWidget> {
         adw_header_bar_set_decoration_layout(self.get_adw_header(), layout);
     }
 
-    fn get_centering_policy(&self) -> AdwCenteringPolicy {
+    fn get_centering_policy(&self) -> CenteringPolicy {
         return adw_header_bar_get_centering_policy(self.get_adw_header());
     }
 
-    fn set_centering_policy(&self, centering_policy: AdwCenteringPolicy) {
+    fn set_centering_policy(&self, centering_policy: CenteringPolicy) {
         adw_header_bar_set_centering_policy(self.get_adw_header(), centering_policy);
     }
 

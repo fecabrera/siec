@@ -8,6 +8,8 @@ import {
     adw_view_switcher_set_policy,
 } from _adwaita._bindings;
 
+@type ViewSwitcherPolicy = AdwViewSwitcherPolicy;
+
 struct ViewSwitcher: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
@@ -32,11 +34,11 @@ struct ViewSwitcher: Handler<GtkWidget> {
         return ADW_VIEW_SWITCHER(self.handle);
     }
 
-    fn get_policy(&self) -> AdwViewSwitcherPolicy {
+    fn get_policy(&self) -> ViewSwitcherPolicy {
         return adw_view_switcher_get_policy(self.get_adw_view_switcher());
     }
 
-    fn set_policy(&self, policy: AdwViewSwitcherPolicy) {
+    fn set_policy(&self, policy: ViewSwitcherPolicy) {
         adw_view_switcher_set_policy(self.get_adw_view_switcher(), policy);
     }
 }

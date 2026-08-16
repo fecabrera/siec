@@ -18,6 +18,8 @@ import {
 } from _adwaita._bindings;
 import { TabPage } from tabpage;
 
+@type TabViewShortcuts = AdwTabViewShortcuts;
+
 struct TabView: Handler<AdwTabView> {
     @private handle: AdwTabView*;
 
@@ -37,15 +39,15 @@ struct TabView: Handler<AdwTabView> {
         return self.handle;
     }
     
-    fn get_shortcuts(&self) -> AdwTabViewShortcuts {
+    fn get_shortcuts(&self) -> TabViewShortcuts {
         return adw_tab_view_get_shortcuts(self.handle);
     }
     
-    fn set_shortcuts(&self, shortcuts: AdwTabViewShortcuts) {
+    fn set_shortcuts(&self, shortcuts: TabViewShortcuts) {
         adw_tab_view_set_shortcuts(self.handle, shortcuts);
     }
     
-    fn add_shortcuts(&self, shortcuts: AdwTabViewShortcuts) {
+    fn add_shortcuts(&self, shortcuts: TabViewShortcuts) {
         adw_tab_view_add_shortcuts(self.handle, shortcuts);
     }
     
