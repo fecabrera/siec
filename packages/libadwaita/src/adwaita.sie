@@ -11,6 +11,9 @@
 @include("adwaita/adw_tab_bar")
 @include("adwaita/adw_tab_view")
 @include("adwaita/adw_toolbar_view")
+@include("adwaita/adw_view_stack")
+@include("adwaita/adw_view_switcher_sidebar")
+@include("adwaita/adw_view_switcher")
 @include("adwaita/adw_window")
 
 @include("_wrapper/application")
@@ -27,4 +30,8 @@
 @include("_wrapper/tabview")
 @include("_wrapper/tabpage")
 @include("_wrapper/toolbarview")
+@include("_wrapper/viewstack")
+@include("_wrapper/viewstackpage")
+@include("_wrapper/viewswitcher")
+@include("_wrapper/viewswitchersidebar")
 @include("_wrapper/window")

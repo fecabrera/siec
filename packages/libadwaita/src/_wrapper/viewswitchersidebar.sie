@@ -1,0 +1,45 @@
+import { G_CALLBACK, g_signal_connect } from gobject;
+import { GtkWidget, Handler } from gtk;
+import {
+    ADW_VIEW_SWITCHER_SIDEBAR,
+    AdwViewSwitcherSidebar,
+    adw_view_switcher_sidebar_new,
+    adw_view_switcher_sidebar_set_stack,
+} from adwaita;
+import { ViewStack } from viewstack;
+
+struct ViewSwitcherSidebar: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_view_switcher_sidebar_new();
+    }
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_adw_switcher_sidebar(&self) -> AdwViewSwitcherSidebar* {
+        return ADW_VIEW_SWITCHER_SIDEBAR(self.handle);
+    }
+
+    fn set_stack(&self, stack: &ViewStack) {
+        adw_view_switcher_sidebar_set_stack(self.as_adw_switcher_sidebar(), stack.as_adw_view_stack());
+    }
+
+    fn connect_activated(&self, callback: closure fn()) {
+        let handle_activated = (sidebar: AdwViewSwitcherSidebar*) => callback();
+        let cb = G_CALLBACK<fn(AdwViewSwitcherSidebar*, opaque*)>(handle_activated);
+        let cb_data = handle_activated.env;
+        g_signal_connect(self.handle, "activated", cb, cb_data);
+    }
+}
