@@ -8,7 +8,9 @@ import { AdwLengthUnit } from adw_length_unit;
 @macro ADW_NAVIGATION_SPLIT_VIEW(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwNavigationSplitView>(obj, ADW_TYPE_NAVIGATION_SPLIT_VIEW);
 @macro ADW_IS_NAVIGATION_SPLIT_VIEW(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_NAVIGATION_SPLIT_VIEW);
 
-struct AdwNavigationSplitView;
+struct AdwNavigationSplitView {
+    parent_instance: GtkWidget;
+}
 
 @extern fn adw_navigation_split_view_get_type() -> GType;
 @extern fn adw_navigation_split_view_new() -> GtkWidget*;

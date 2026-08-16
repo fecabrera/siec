@@ -6,7 +6,9 @@ import { GtkWidget } from gtkwidget;
 @macro GTK_ACTION_BAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkActionBar>(obj, GTK_TYPE_ACTION_BAR);
 @macro GTK_IS_ACTION_BAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_HEADER_BAR);
 
-struct GtkActionBar;
+struct GtkActionBar {
+    parent_instance: GtkWidget;
+}
 
 @extern fn gtk_action_bar_get_type() -> GType;
 @extern fn gtk_action_bar_new() -> GtkWidget*;

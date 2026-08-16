@@ -6,7 +6,9 @@ import { GtkWidget } from gtk;
 @macro ADW_NAVIGATION_PAGE(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwNavigationPage>(obj, ADW_TYPE_NAVIGATION_PAGE);
 @macro ADW_IS_NAVIGATION_PAGE(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_NAVIGATION_PAGE);
 
-struct AdwNavigationPage;
+struct AdwNavigationPage {
+    parent_instance: GtkWidget;
+}
 
 @extern fn adw_navigation_page_get_type() -> GType;
 @extern fn adw_navigation_page_new(child: GtkWidget*,
@@ -31,7 +33,9 @@ struct AdwNavigationPage;
 @macro ADW_NAVIGATION_VIEW(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwNavigationView>(obj, ADW_TYPE_NAVIGATION_VIEW);
 @macro ADW_IS_NAVIGATION_VIEW(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_NAVIGATION_VIEW);
 
-struct AdwNavigationView;
+struct AdwNavigationView {
+    parent_instance: GtkWidget;
+}
 
 @extern fn adw_navigation_view_get_type() -> GType;
 @extern fn adw_navigation_view_new() -> GtkWidget*;

@@ -7,7 +7,9 @@ import { GMenuModel } from gio;
 @macro ADW_SPLIT_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwSplitButton>(obj, ADW_TYPE_SPLIT_BUTTON);
 @macro ADW_IS_SPLIT_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_SPLIT_BUTTON);
 
-struct AdwSplitButton;
+struct AdwSplitButton {
+    parent_instance: GtkWidget;
+}
 
 @extern fn adw_split_button_get_type() -> GType;
 @extern fn adw_split_button_new() -> GtkWidget*;

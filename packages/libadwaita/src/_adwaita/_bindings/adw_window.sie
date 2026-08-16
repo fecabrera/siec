@@ -6,8 +6,9 @@ import { gboolean } from glib;
 @macro ADW_WINDOW(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwWindow>(obj, ADW_TYPE_WINDOW);
 @macro ADW_IS_WINDOW(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_WINDOW);
 
-struct AdwWindow;
-struct AdwWindowClass;
+struct AdwWindow {
+    parent_instance: GtkWidget;
+}
 
 @extern fn adw_window_get_type() -> GType;
 @extern fn adw_window_new() -> GtkWidget*;

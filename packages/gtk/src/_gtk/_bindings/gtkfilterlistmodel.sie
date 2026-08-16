@@ -1,7 +1,9 @@
-import { GType } from gobject;
+import { GObject, GType } from gobject;
 
 @macro GTK_TYPE_FILTER_LIST_MODEL = gtk_filter_list_model_get_type();
 
-struct GtkFilterListModel;
+struct GtkFilterListModel {
+    parent_instance: GObject;
+}
 
 @extern fn gtk_filter_list_model_get_type() -> GType;

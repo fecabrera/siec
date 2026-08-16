@@ -17,7 +17,9 @@ enum AdwSidebarMode {
 @macro ADW_SIDEBAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwSidebar>(obj, ADW_TYPE_SIDEBAR);
 @macro ADW_IS_SIDEBAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_SIDEBAR);
 
-struct AdwSidebar;
+struct AdwSidebar {
+    parent_instance: GtkWidget;
+}
 
 @extern fn adw_sidebar_get_type() -> GType;
 @extern fn adw_sidebar_new() -> GtkWidget*;

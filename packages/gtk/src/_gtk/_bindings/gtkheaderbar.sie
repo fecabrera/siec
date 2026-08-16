@@ -6,7 +6,9 @@ import { GtkWidget } from gtkwidget;
 @macro GTK_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkHeaderBar>(obj, GTK_TYPE_HEADER_BAR);
 @macro GTK_IS_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_HEADER_BAR);
 
-struct GtkHeaderBar;
+struct GtkHeaderBar {
+    parent_instance: GtkWidget;
+}
 
 @extern fn gtk_header_bar_get_type() -> GType;
 @extern fn gtk_header_bar_new() -> GtkWidget*;

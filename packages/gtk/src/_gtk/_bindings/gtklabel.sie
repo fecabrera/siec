@@ -7,7 +7,9 @@ import { GtkWidget } from gtkwidget;
 @macro GTK_LABEL(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkLabel>(obj, GTK_TYPE_LABEL);
 @macro GTK_IS_LABEL(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_LABEL);
 
-struct GtkLabel;
+struct GtkLabel {
+    parent_instance: GtkWidget;
+}
 
 @extern fn gtk_label_get_type() -> GType;
 @extern fn gtk_label_new(str: const char*) -> GtkWidget*;

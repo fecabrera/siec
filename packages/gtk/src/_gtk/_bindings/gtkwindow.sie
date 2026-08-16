@@ -8,7 +8,7 @@ import { GtkApplication } from gtkapplication;
 @macro GTK_WINDOW_CLASS(klass) = G_TYPE_CHECK_CLASS_CAST<GtkWindowClass>(klass, GTK_TYPE_WINDOW);
 
 struct GtkWindow {
-    parent_instance: GtkWidget*;
+    parent_instance: GtkWidget;
 }
 
 struct GtkWindowClass;

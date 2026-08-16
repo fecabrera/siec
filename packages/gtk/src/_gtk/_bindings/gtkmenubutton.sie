@@ -9,7 +9,9 @@ import { GtkArrowType } from gtkenums;
 @macro GTK_MENU_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkMenuButton>(obj, GTK_TYPE_MENU_BUTTON);
 @macro GTK_IS_MENU_BUTTON(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_MENU_BUTTON);
 
-struct GtkMenuButton;
+struct GtkMenuButton {
+    parent_instance: GtkWidget;
+}
 
 @type GtkMenuButtonCreatePopupFunc = fn(GtkMenuButton*, gpointer);
 

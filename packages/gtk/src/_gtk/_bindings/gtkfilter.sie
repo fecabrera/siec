@@ -1,4 +1,4 @@
-import { GType } from gobject;
+import { GObject, GType } from gobject;
 import { gboolean, gpointer } from glib;
 
 enum GtkFilterMatch {
@@ -18,7 +18,9 @@ enum GtkFilterChange {
 
 @macro GTK_TYPE_FILTER = gtk_filter_get_type();
 
-struct GtkFilter;
+struct GtkFilter {
+    parent_instance: GObject;
+}
 
 @extern fn gtk_filter_get_type() -> GType;
 @extern fn gtk_filter_match(filter: GtkFilter*,
