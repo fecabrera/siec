@@ -35,6 +35,8 @@
 @include("_wrapper/tabbar")
 @include("_wrapper/tabview")
 @include("_wrapper/tabpage")
+@include("_wrapper/toggle")
+@include("_wrapper/togglegroup")
 @include("_wrapper/toolbarview")
 @include("_wrapper/viewstack")
 @include("_wrapper/viewstackpage")
