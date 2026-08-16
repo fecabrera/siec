@@ -8,7 +8,7 @@ import {
     adw_sidebar_append,
     adw_sidebar_prepend,
     adw_sidebar_insert,
-} from adwaita;
+} from _adwaita._bindings;
 import { SidebarSection } from sidebarsection;
 
 struct Sidebar: Handler<GtkWidget> {

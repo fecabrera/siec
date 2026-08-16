@@ -6,7 +6,7 @@ import {
     adw_tab_page_set_tooltip,
     adw_tab_page_get_loading,
     adw_tab_page_set_loading,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct TabPage: Handler<AdwTabPage> {
     @private handle: AdwTabPage*;

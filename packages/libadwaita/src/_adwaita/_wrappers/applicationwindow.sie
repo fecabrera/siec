@@ -16,17 +16,19 @@ import {
     gtk_window_unfullscreen,
     gtk_window_close,
 } from gtk;
-import { adw_window_new } from adwaita;
+import { GApplicationFlags } from gio;
+import {
+    ADW_APPLICATION_WINDOW,
+    adw_application_window_new,
+    adw_application_window_set_content,
+} from _adwaita._bindings;
+import { Application } from application;
 
-struct Window: Handler<GtkWidget> {
+struct ApplicationWindow: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
-    fn init(&self) {
-        self.handle = adw_window_new();
-    }
-
-    fn init(&self, handle: GtkWidget*) {
-        self.handle = handle;
+    fn init(&self, app: &Application) {
+        self.handle = adw_application_window_new(GTK_APPLICATION(app.get_handle()));
     }
 
     fn get_handle(&self) -> GtkWidget* {
@@ -35,6 +37,14 @@ struct Window: Handler<GtkWidget> {
 
     fn get_const_handle(const &self) -> const GtkWidget* {
         return self.handle;
+    }
+
+    fn get_content<T: Handler<GtkWidget*>>(&self) -> T {
+        return { adw_application_window_get_content(ADW_APPLICATION_WINDOW(self.handle)) };
+    }
+
+    fn set_content(&self, obj: &Handler<GtkWidget>) {
+        adw_application_window_set_content(ADW_APPLICATION_WINDOW(self.handle), obj.get_handle());
     }
 
     fn set_title(&self, title: const &char[]) {

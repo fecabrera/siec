@@ -7,7 +7,7 @@ import {
     adw_navigation_page_set_child,
     adw_navigation_page_set_tag,
     adw_navigation_page_set_title,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct NavigationPage: Handler<AdwNavigationPage> {
     @private handle: AdwNavigationPage*;

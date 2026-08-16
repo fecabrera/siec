@@ -1,12 +1,12 @@
 import { GtkWidget, Handler } from gtk;
 import {
-    NavigationPage,
     AdwNavigationSplitView,
     ADW_NAVIGATION_SPLIT_VIEW,
     adw_navigation_split_view_new,
     adw_navigation_split_view_set_content,
     adw_navigation_split_view_set_sidebar,
-} from adwaita;
+} from _adwaita._bindings;
+import { NavigationPage } from navigationpage;
 
 struct NavigationSplitView: Handler<GtkWidget> {
     @private handle: GtkWidget*;

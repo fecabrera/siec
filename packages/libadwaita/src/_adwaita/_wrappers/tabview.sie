@@ -15,7 +15,7 @@ import {
     adw_tab_view_insert_pinned,
     adw_tab_view_prepend_pinned,
     adw_tab_view_append_pinned,
-} from adwaita;
+} from _adwaita._bindings;
 import { TabPage } from tabpage;
 
 struct TabView: Handler<AdwTabView> {

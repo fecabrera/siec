@@ -5,7 +5,7 @@ import {
     adw_sidebar_item_new,
     adw_sidebar_item_set_title,
     adw_sidebar_item_set_subtitle,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct SidebarItem: Handler<AdwSidebarItem> {
     @private handle: AdwSidebarItem*;

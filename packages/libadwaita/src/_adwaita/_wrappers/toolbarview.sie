@@ -6,7 +6,7 @@ import {
     adw_toolbar_view_add_top_bar,
     adw_toolbar_view_add_bottom_bar,
     adw_toolbar_view_remove,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct ToolbarView: Handler<GtkWidget> {
     @private handle: GtkWidget*;

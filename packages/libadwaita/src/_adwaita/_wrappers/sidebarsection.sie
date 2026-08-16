@@ -9,7 +9,7 @@ import {
     adw_sidebar_section_insert,
     adw_sidebar_section_remove,
     adw_sidebar_section_remove_all,
-} from adwaita;
+} from _adwaita._bindings;
 import { SidebarItem } from sidebaritem;
 
 struct SidebarSection: Handler<AdwSidebarSection> {

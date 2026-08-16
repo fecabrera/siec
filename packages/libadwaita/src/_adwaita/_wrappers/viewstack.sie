@@ -7,7 +7,7 @@ import {
     adw_view_stack_add_named,
     adw_view_stack_add_titled,
     adw_view_stack_add_titled_with_icon,
-} from adwaita;
+} from _adwaita._bindings;
 import { ViewStackPage } from viewstackpage;
 
 struct ViewStack: Handler<GtkWidget> {
@@ -25,29 +25,29 @@ struct ViewStack: Handler<GtkWidget> {
         return self.handle;
     }
 
-    fn as_adw_view_stack(&self) -> AdwViewStack* {
+    fn get_adw_view_stack(&self) -> AdwViewStack* {
         return ADW_VIEW_STACK(self.handle);
     }
 
     fn add(&self, child: &Handler<GtkWidget>) -> ViewStackPage {
-        let handle = adw_view_stack_add(self.as_adw_view_stack(), child.get_handle());
+        let handle = adw_view_stack_add(self.get_adw_view_stack(), child.get_handle());
         return ViewStackPage(handle);
     }
 
     fn add(&self, child: &Handler<GtkWidget>, name: const &char[]) -> ViewStackPage {
-        let handle = adw_view_stack_add_named(self.as_adw_view_stack(), child.get_handle(), name);
+        let handle = adw_view_stack_add_named(self.get_adw_view_stack(), child.get_handle(), name);
         return ViewStackPage(handle);
     }
 
     fn add(&self, child: &Handler<GtkWidget>, name: const &char[],
            title: const &char[]) -> ViewStackPage {
-        let handle = adw_view_stack_add_titled(self.as_adw_view_stack(), child.get_handle(), name, title);
+        let handle = adw_view_stack_add_titled(self.get_adw_view_stack(), child.get_handle(), name, title);
         return ViewStackPage(handle);
     }
 
     fn add(&self, child: &Handler<GtkWidget>, name: const &char[],
            title: const &char[], icon_name: const &char[]) -> ViewStackPage {
-        let handle = adw_view_stack_add_titled_with_icon(self.as_adw_view_stack(), child.get_handle(), name, title, icon_name);
+        let handle = adw_view_stack_add_titled_with_icon(self.get_adw_view_stack(), child.get_handle(), name, title, icon_name);
         return ViewStackPage(handle);
     }
 }

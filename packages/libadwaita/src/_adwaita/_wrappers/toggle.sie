@@ -14,7 +14,7 @@ import {
     adw_toggle_get_enabled,
     adw_toggle_set_enabled,
     adw_toggle_get_index,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct Toggle: Handler<AdwToggle> {
     @private handle: AdwToggle*;

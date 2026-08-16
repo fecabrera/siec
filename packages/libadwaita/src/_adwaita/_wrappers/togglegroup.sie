@@ -14,7 +14,7 @@ import {
     adw_toggle_group_set_homogeneous,
     adw_toggle_group_get_can_shrink,
     adw_toggle_group_set_can_shrink,
-} from adwaita;
+} from _adwaita._bindings;
 import { Toggle } from toggle;
 
 struct ToggleGroup: Handler<GtkWidget> {

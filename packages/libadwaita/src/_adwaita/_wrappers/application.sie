@@ -17,7 +17,7 @@ import {
     g_signal_connect,
     g_object_unref,
 } from gobject;
-import { AdwApplication, adw_application_new } from adwaita;
+import { AdwApplication, adw_application_new } from _adwaita._bindings;
 
 struct Application: Handler<AdwApplication> {
     @private handle: AdwApplication*;

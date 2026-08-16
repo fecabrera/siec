@@ -19,7 +19,7 @@ import {
     adw_split_button_set_dropdown_tooltip,
     adw_split_button_popup,
     adw_split_button_popdown,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct SplitButton: Handler<GtkWidget> {
     @private handle: GtkWidget*;
@@ -41,63 +41,63 @@ struct SplitButton: Handler<GtkWidget> {
     }
 
     @private
-    fn as_adw_split_button(&self) -> AdwSplitButton* {
+    fn get_adw_split_button(&self) -> AdwSplitButton* {
         return ADW_SPLIT_BUTTON(self.handle);
     }
 
     fn set_label(&self, label: const &char[]) {
-        adw_split_button_set_label(self.as_adw_split_button(), label);
+        adw_split_button_set_label(self.get_adw_split_button(), label);
     }
     
     fn get_use_underline(&self) -> bool {
-        return adw_split_button_get_use_underline(self.as_adw_split_button()) as bool;
+        return adw_split_button_get_use_underline(self.get_adw_split_button()) as bool;
     }
     
     fn set_use_underline(&self, use_underline: bool) {
-        adw_split_button_set_use_underline(self.as_adw_split_button(), use_underline as gboolean);
+        adw_split_button_set_use_underline(self.get_adw_split_button(), use_underline as gboolean);
     }
 
     fn set_icon_name(&self, icon_name: const &char[]) {
-        adw_split_button_set_icon_name(self.as_adw_split_button(), icon_name);
+        adw_split_button_set_icon_name(self.get_adw_split_button(), icon_name);
     }
 
     fn set_child(&self, child: &Handler<GtkWidget>) {
-        adw_split_button_set_child(self.as_adw_split_button(), child.get_handle());
+        adw_split_button_set_child(self.get_adw_split_button(), child.get_handle());
     }
     
     fn get_can_shrink(&self) -> bool {
-        return adw_split_button_get_can_shrink(self.as_adw_split_button()) as bool;
+        return adw_split_button_get_can_shrink(self.get_adw_split_button()) as bool;
     }
     
     fn set_can_shrink(&self, can_shrink: bool) {
-        adw_split_button_set_can_shrink(self.as_adw_split_button(), can_shrink as gboolean);
+        adw_split_button_set_can_shrink(self.get_adw_split_button(), can_shrink as gboolean);
     }
 
     fn set_menu_model(&self, menu_model: &Handler<GMenuModel>) {
-        adw_split_button_set_menu_model(self.as_adw_split_button(), menu_model.get_handle());
+        adw_split_button_set_menu_model(self.get_adw_split_button(), menu_model.get_handle());
     }
 
     fn set_popover(&self, popover: &Handler<GtkPopover>) {
-        adw_split_button_set_popover(self.as_adw_split_button(), popover.get_handle());
+        adw_split_button_set_popover(self.get_adw_split_button(), popover.get_handle());
     }
 
     fn get_direction(&self) -> GtkArrowType {
-        return adw_split_button_get_direction(self.as_adw_split_button());
+        return adw_split_button_get_direction(self.get_adw_split_button());
     }
 
     fn set_direction(&self, direction: GtkArrowType) {
-        adw_split_button_set_direction(self.as_adw_split_button(), direction);
+        adw_split_button_set_direction(self.get_adw_split_button(), direction);
     }
 
     fn set_dropdown_tooltip(&self, tooltip: const &char[]) {
-        adw_split_button_set_dropdown_tooltip(self.as_adw_split_button(), tooltip);
+        adw_split_button_set_dropdown_tooltip(self.get_adw_split_button(), tooltip);
     }
     
     fn popup(&self) {
-        adw_split_button_popup(self.as_adw_split_button());
+        adw_split_button_popup(self.get_adw_split_button());
     }
     
     fn popdown(&self) {
-        adw_split_button_popdown(self.as_adw_split_button());
+        adw_split_button_popdown(self.get_adw_split_button());
     }
 }

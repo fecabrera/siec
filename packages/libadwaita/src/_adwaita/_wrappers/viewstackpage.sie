@@ -16,7 +16,7 @@ import {
     adw_view_stack_page_get_starts_section,
     adw_view_stack_page_set_starts_section,
     adw_view_stack_page_set_section_title,
-} from adwaita;
+} from _adwaita._bindings;
 
 struct ViewStackPage: Handler<AdwViewStackPage> {
     @private handle: AdwViewStackPage*;
