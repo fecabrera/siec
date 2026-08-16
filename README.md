@@ -1731,7 +1731,16 @@ fn main() -> i32 {
 
 #### Closures and nested functions
 
-An anonymous `() => { ... }` expression is a closure: it may use variables from the surrounding lexical scope without adding them to its declared parameter list. A named function declared inside another function behaves the same way. Parameters are typed inside the parentheses, and a return type goes before the arrow: `(value: i32) -> i32 => { return value; }`.
+An anonymous arrow expression is a closure: it may use variables from the surrounding lexical scope without adding them to its declared parameter list. A named function declared inside another function behaves the same way. Parameters are typed inside the parentheses, and a return type goes before the arrow: `(value: i32) -> i32 => { return value; }`.
+
+The body may be a block or a single expression. A block holds an ordinary statement list; the expression form is its compact one-statement counterpart:
+
+```
+let f = () => { ... };
+let f = () => ...;
+```
+
+With an explicit return type, the expression is returned directly: `let answer = () -> i32 => 42;`. Without one, it is evaluated as a statement, which is useful for short callbacks such as `let increment = () => value += 1;`.
 
 ```
 fn main() -> i32 {
