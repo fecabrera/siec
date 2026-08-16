@@ -1,10 +1,10 @@
 import { gboolean } from glib;
 import { GMenuModel } from gio;
+import { Handler } from handler;
 import {
     GTK_LABEL,
     GtkLabel,
     GtkWidget,
-    Handler,
     gtk_label_new,
     gtk_label_new_with_mnemonic,
     gtk_label_set_text,
@@ -31,7 +31,7 @@ import {
     gtk_label_get_yalign,
     gtk_label_set_extra_menu,
     gtk_label_get_extra_menu,
-} from gtk;
+} from _gtk._bindings;
 
 struct Label: Handler<GtkWidget> {
     @private handle: GtkWidget*;

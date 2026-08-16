@@ -1,9 +1,9 @@
 import { gboolean, GDateTime } from glib;
+import { Handler } from handler;
 import {
     GTK_CALENDAR,
     GtkCalendar,
     GtkWidget,
-    Handler,
     gtk_calendar_new,
     gtk_calendar_set_show_heading,
     gtk_calendar_get_show_heading,
@@ -16,7 +16,7 @@ import {
     gtk_calendar_set_year,
     gtk_calendar_get_year,
     gtk_calendar_set_date,
-} from gtk;
+} from _gtk._bindings;
 
 struct Calendar: Handler<GtkWidget> {
     @private handle: GtkWidget*;

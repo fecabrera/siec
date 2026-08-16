@@ -1,8 +1,8 @@
 import { gboolean } from glib;
+import { Handler } from handler;
 import {
     GtkWidget,
     GtkAlign,
-    Handler,
     gtk_widget_unparent,
     gtk_widget_show,
     gtk_widget_hide,
@@ -73,7 +73,7 @@ import {
     gtk_widget_set_margin_bottom,
     gtk_widget_is_ancestor,
     gtk_widget_contains,
-} from gtk;
+} from _gtk._bindings;
 
 struct Widget: Handler<GtkWidget> {
     @private handle: GtkWidget*;

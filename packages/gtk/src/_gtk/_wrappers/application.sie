@@ -7,11 +7,11 @@ import {
 import {
     GtkApplication,
     GtkWindow,
-    Handler,
     gtk_application_new,
     gtk_application_add_window,
     gtk_application_remove_window,
-} from gtk;
+} from _gtk._bindings;
+import { Handler } from handler;
 import {
     G_CALLBACK,
     g_signal_connect,

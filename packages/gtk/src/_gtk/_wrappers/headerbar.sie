@@ -1,9 +1,9 @@
 import { gboolean } from glib;
 import { Handler } from handler;
 import {
+    GTK_HEADER_BAR,
     GtkWidget,
     GtkHeaderBar,
-    GTK_HEADER_BAR,
     gtk_header_bar_new,
     gtk_header_bar_get_title_widget,
     gtk_header_bar_set_title_widget,
@@ -13,7 +13,7 @@ import {
     gtk_header_bar_set_show_title_buttons,
     gtk_header_bar_get_use_native_controls,
     gtk_header_bar_set_use_native_controls,
-} from gtk;
+} from _gtk._bindings;
 
 struct HeaderBar: Handler<GtkWidget> {
     @private handle: GtkWidget*;

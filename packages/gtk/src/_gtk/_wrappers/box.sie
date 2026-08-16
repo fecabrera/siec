@@ -1,9 +1,9 @@
 import { gboolean } from glib;
+import { Handler } from handler;
 import {
     GTK_BOX,
     GtkWidget,
     GtkBox,
-    Handler,
     GtkOrientation,
     GtkBaselinePosition,
     gtk_box_new,
@@ -16,7 +16,7 @@ import {
     gtk_box_get_baseline_position,
     gtk_box_set_spacing,
     gtk_box_get_spacing,
-} from gtk;
+} from _gtk._bindings;
 
 struct Box: Handler<GtkWidget> {
     @private handle: GtkWidget*;

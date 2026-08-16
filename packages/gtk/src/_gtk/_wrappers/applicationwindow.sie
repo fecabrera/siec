@@ -1,4 +1,5 @@
 import { Handler } from handler;
+import { Application } from application;
 import {
     GTK_APPLICATION_WINDOW,
     GTK_WINDOW,
@@ -6,7 +7,6 @@ import {
     GtkApplicationWindow,
     GtkWindow,
     GtkWidget,
-    Application,
     gtk_application_window_new,
     gtk_window_set_title,
     gtk_window_get_default_size,
@@ -22,7 +22,7 @@ import {
     gtk_window_fullscreen,
     gtk_window_unfullscreen,
     gtk_window_close,
-} from gtk;
+} from _gtk._bindings;
 
 
 struct ApplicationWindow: Handler<GtkWidget> {
