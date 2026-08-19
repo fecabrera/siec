@@ -779,10 +779,9 @@ class Include:
 @dataclass
 class Extend:
     """
-    An '@extend[<T: Bound>] Type: Iface, ...;' declaration: interface
-    claims added to an existing type outside its declaration - a struct's,
-    an alias's, or an array family. An optional body owns the methods
-    implementing those claims under the same generic receiver parameters.
+    An '@extend[<T: Bound>] Type[: Iface, ...] { ... }' declaration. It may
+    add interface claims to an existing type outside its declaration and/or
+    own methods under the same generic receiver parameters.
     """
     name: str
     interfaces: list[str]

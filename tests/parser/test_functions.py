@@ -245,6 +245,31 @@ def test_bounded_extension_block_supplies_method_receivers(ts):
     assert method.receiver_constraints == {"T": "Scalar"}
 
 
+def test_extension_block_does_not_need_an_interface_claim(ts):
+    """An extension may group receiver methods without claiming an interface."""
+    program = parse_program(ts("""
+    struct Number { value: i32; }
+
+    @extend Number {
+        fn get(const &self) -> i32 { return self.value; }
+    }
+    """))
+
+    ext = program.extends[0]
+    method = program.functions[0]
+    assert ext.name == "Number"
+    assert ext.interfaces == []
+    assert ext.actions == [method]
+    assert method.name == "Number::get"
+    assert method.receiver == "Number"
+
+
+def test_extension_without_claim_or_body_is_rejected(ts):
+    """The claim-free form must still contribute a method block."""
+    with pytest.raises(SyntaxError, match="needs a method body"):
+        parse_program(ts("@extend i32;"))
+
+
 def test_template_block_supplies_bounds_to_extensions_and_methods(ts):
     """A template block binds both implicit and separate method receivers."""
     program = parse_program(ts("""

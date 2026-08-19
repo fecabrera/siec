@@ -2573,7 +2573,15 @@ A claim's type argument may itself be an interface: `struct List<T>: Add<List<T>
 
 #### Extending types
 
-`@extend Type: Iface, ...;` adds interface claims to an existing type, outside its declaration. Its methods may stay separate, or live with the claims in an extension block. Inside a block each `fn` gets the extended type as its receiver:
+`@extend Type { ... }` adds methods to an existing type outside its declaration. Inside the block each `fn` gets the extended type as its receiver:
+
+```
+@extend Number {
+    fn doubled(const &self) -> Number { ... }
+}
+```
+
+Adding `: Iface, ...` also makes interface claims for the type. The methods implementing those claims may live in the same block:
 
 ```
 @extend Number: Formattable {
@@ -2589,7 +2597,7 @@ The separate spelling remains equivalent, and is useful when claims and methods 
 fn Number::format(const &self) -> String { ... }
 ```
 
-Either form checks the claims like the type declaration's own. The extended name may be a struct's, an enum's, a primitive's, or an alias's for any of them: whatever a method takes as its receiver extends. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
+Extension claims are checked like the type declaration's own. The extended name may be a struct's, an enum's, a primitive's, or an alias's for any of them: whatever a method takes as its receiver extends. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
 
 ```
 interface Formattable;

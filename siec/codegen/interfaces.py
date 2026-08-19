@@ -905,7 +905,7 @@ def collect_extensions(gen: CodeGenerator, program) -> None:
 
 def resolve_extensions(gen: CodeGenerator) -> None:
     """
-    Resolve every collected extension into canonical interface-claim facts.
+    Resolve every collected extension and its canonical interface-claim facts.
 
     This runs before struct fields instantiate bounded generics, making the
     complete resolved claim inventory available to bound checks.
@@ -941,7 +941,7 @@ def check_extensions(gen: CodeGenerator) -> None:
 
 
 def resolve_extension(gen: CodeGenerator, ext) -> None:
-    """Resolve one raw extension declaration into claim facts."""
+    """Validate one extension receiver and resolve any interface claims."""
     from siec.codegen.aliases import expand_alias
 
     if ext.params is not None and ext.name in ext.params:
@@ -954,8 +954,9 @@ def resolve_extension(gen: CodeGenerator, ext) -> None:
         elem = ext.name[:-2]
         if is_type_name(gen, elem):
             canonical = strip_const(expand_alias(gen, elem))
-            declare_implements(gen, f"{canonical}[]", ext.name,
-                               ext.interfaces, ext.line, ext.file)
+            if ext.interfaces:
+                declare_implements(gen, f"{canonical}[]", ext.name,
+                                   ext.interfaces, ext.line, ext.file)
         else:
             resolve_array_extend(gen, ext)
         return
@@ -981,8 +982,9 @@ def resolve_extension(gen: CodeGenerator, ext) -> None:
         raise TypeError(f"cannot extend {ext.name!r}: it does not "
                         "name a struct, an enum, or a primitive")
 
-    declare_implements(gen, canonical, ext.name, ext.interfaces,
-                       ext.line, ext.file)
+    if ext.interfaces:
+        declare_implements(gen, canonical, ext.name, ext.interfaces,
+                           ext.line, ext.file)
 
 
 def check_extension(gen: CodeGenerator, ext) -> None:
@@ -1031,8 +1033,9 @@ def resolve_type_family_extend(gen: CodeGenerator, ext) -> None:
             raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
                             "a blanket receiver carries no interface fields")
 
-    gen.generic_claims.append(
-        (ext.name, ext.interfaces, ext.constraints, ext.file))
+    if ext.interfaces:
+        gen.generic_claims.append(
+            (ext.name, ext.interfaces, ext.constraints, ext.file))
 
 
 def check_type_family_extend(gen: CodeGenerator, ext) -> None:
@@ -1084,6 +1087,9 @@ def resolve_template_extend(gen: CodeGenerator, ext, base: str,
         take = len(template.params)
         raise TypeError(f"generic struct {base!r} takes {take} type "
                         f"argument{'s' if take != 1 else ''}, got {len(args)}")
+
+    if not ext.interfaces:
+        return
 
     renaming = dict(zip(args, template.params))
     claims = [substitute(s, renaming) for s in ext.interfaces]

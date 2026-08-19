@@ -289,9 +289,10 @@ def parse_error(ts: TokenStream) -> CompileError:
 
 def parse_extend(ts: TokenStream) -> Extend:
     """
-    Parse an '@extend[<T: Bound>] Type: Iface, ...;' declaration:
-    interface claims added to an existing type. A block in place of the
-    semicolon holds methods on that receiver under the same type parameters.
+    Parse an '@extend[<T: Bound>] Type[: Iface, ...] { ... }' declaration.
+    The interface list may end in a semicolon, or a block may hold methods on
+    that receiver under the same type parameters. Without an interface list,
+    a method block is required.
     """
     line = ts.peek().line
     ts.expect("sym", "@")
@@ -299,14 +300,19 @@ def parse_extend(ts: TokenStream) -> Extend:
 
     params, constraints = parse_type_params(ts)
     name = parse_type(ts)
-    ts.expect("sym", ":")
 
-    interfaces = [parse_type(ts)]
-    while ts.peek().syntax == ",":
+    interfaces = []
+    if ts.peek().syntax == ":":
         ts.next()
         interfaces.append(parse_type(ts))
+        while ts.peek().syntax == ",":
+            ts.next()
+            interfaces.append(parse_type(ts))
 
     if ts.peek().syntax == ";":
+        if not interfaces:
+            raise SyntaxError(f"line {line}: an extension without interface "
+                              "claims needs a method body")
         ts.next()
         return Extend(name, interfaces, params=params,
                       constraints=constraints, line=line)

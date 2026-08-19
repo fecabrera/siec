@@ -43,6 +43,44 @@ def test_array_methods_stamp_per_element(run):
     assert run(source).returncode == 42
 
 
+def test_extension_block_can_only_add_methods(run):
+    """A concrete extension block does not need an interface claim."""
+    source = """
+    struct Number {
+        value: i32;
+    }
+
+    @extend Number {
+        fn doubled(const &self) -> i32 {
+            return self.value * 2;
+        }
+    }
+
+    fn main() -> i32 {
+        let number: Number = { 21 };
+        return number.doubled();
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_bounded_receiver_extension_can_only_add_methods(run):
+    """The claim-free form also works for a bounded receiver family."""
+    source = """
+    @extend<T: Scalar> T {
+        fn answer(const &self) -> i32 {
+            return 42;
+        }
+    }
+
+    fn main() -> i32 {
+        let value: i32 = 1;
+        return value.answer();
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_unbounded_array_extension_block_infers_its_placeholder(run):
     """
     An implicit method in '@extend T[]' binds T exactly like the separate
