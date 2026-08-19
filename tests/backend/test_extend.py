@@ -87,14 +87,16 @@ def test_extension_method_template_decorator_bounds_own_parameter(run):
     @extend T[] {
         @template<Result: AddAssign>
         fn sum<Result>(const &self,
-                       callback: closure fn(const &T) -> Result) -> Result {
-            return callback(self[0]);
+                       callback: closure fn(const &T) -> Result,
+                       start: Result) -> Result {
+            start.add_assign(callback(self[0]));
+            return start;
         }
     }
 
     fn main() -> i32 {
         let values = [42];
-        return values.sum((value: const &i32) -> i32 => value);
+        return values.sum((value: const &i32) -> i32 => value, 0);
     }
     """
     assert run(source).returncode == 42

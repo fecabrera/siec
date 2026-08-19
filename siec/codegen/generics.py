@@ -522,7 +522,11 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
 
     # literal arguments default like they do in any untyped context, so
     # 'pick(3, 9)' binds T to i32 the way 'let x = 3;' would
-    from siec.codegen.inference import infer_type, untyped_reason
+    from siec.codegen.inference import (
+        adapts_in_arithmetic,
+        infer_type,
+        untyped_reason,
+    )
 
     bindings: dict = {}
     if expected is not None and template.return_type is not None:
@@ -530,7 +534,7 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
 
     # arguments fill what the expected type left unbound; where both
     # speak, the declared type wins and the argument coerces to it
-    inferred: dict = {}
+    arguments = []
     for param, arg in zip(template.params, call.args):
         concrete = infer_type(gen, arg, scope)
         if concrete is None:
@@ -538,9 +542,22 @@ def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,
             # argument itself names nothing. Keep the primary diagnostic.
             if (reason := untyped_reason(gen, arg, scope)) is not None:
                 raise reason
+        arguments.append((param, arg, concrete))
+
+    # Declared arguments pin placeholders before adaptive numeric literals.
+    # Thus `same(typed_u64, 0)` infers u64 and checks the zero against it,
+    # while `same(0, 1)` still defaults its otherwise-unbound T to i32.
+    arguments.sort(key=lambda entry: adapts_in_arithmetic(
+        gen, entry[1], scope))
+
+    inferred: dict = {}
+    for param, arg, concrete in arguments:
+        adaptive = adapts_in_arithmetic(gen, arg, scope)
         try:
             unify(param.type, concrete, template.type_params, inferred)
         except TypeError:
+            if adaptive:
+                continue
             if not bindings:
                 raise
 
