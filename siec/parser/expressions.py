@@ -198,7 +198,7 @@ def parse_primary(ts: TokenStream) -> Expr:
 
     # 'true' and 'false' are boolean literals
     if tok.kind == "kw" and tok.value in ("true", "false"):
-        return BoolLiteral(tok.value == "true")
+        return parse_postfix(ts, BoolLiteral(tok.value == "true"))
 
     # '@asm' opens an inline assembly block
     if tok.syntax == "@" and ts.peek().value == "asm":
@@ -254,7 +254,7 @@ def parse_primary(ts: TokenStream) -> Expr:
 
     # 'null' is the pointer literal
     if tok.kind == "kw" and tok.value == "null":
-        return NullLiteral()
+        return parse_postfix(ts, NullLiteral())
 
     # '(' groups a full subexpression
     if tok.syntax == "(":
@@ -344,16 +344,16 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, ArrayLiteral(elements))
 
     if tok.kind == "int":
-        return IntLiteral(int_value(tok.value, tok.line))
+        return parse_postfix(ts, IntLiteral(int_value(tok.value, tok.line)))
 
     if tok.kind == "float":
-        return FloatLiteral(float(tok.value))
+        return parse_postfix(ts, FloatLiteral(float(tok.value)))
 
     if tok.kind == "str":
         return parse_postfix(ts, StrLiteral(tok.value))
 
     if tok.kind == "char":
-        return CharLiteral(tok.value)
+        return parse_postfix(ts, CharLiteral(tok.value))
 
     # an identifier is an enum member if followed by '::', a call if
     # followed by '(', and a variable otherwise

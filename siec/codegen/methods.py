@@ -464,6 +464,14 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
                 eligible.append((template, mapping))
 
         if not eligible:
+            intrinsic_numeric_family = all(
+                template.file == "<prelude>"
+                and set((template.receiver_constraints or {}).values())
+                == {"Numeric"}
+                for template in templates
+            )
+            if intrinsic_numeric_family:
+                return symbol if exact else None
             raise failure
 
         template_entries = eligible

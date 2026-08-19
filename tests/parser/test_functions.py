@@ -371,6 +371,23 @@ def test_nested_template_decorator_in_extension_body(ts):
     }
 
 
+def test_nested_template_decorator_can_bound_method_parameter(ts):
+    """A nested decorator recognizes a method's own generic parameter."""
+    program = parse_program(ts("""
+    @extend T[] {
+        @template<Result: AddAssign>
+        fn sum<Result>(const &self, value: Result) -> Result {
+            return value;
+        }
+    }
+    """))
+
+    method = program.functions[0]
+    assert method.type_params == ["Result"]
+    assert method.constraints == {"Result": "AddAssign"}
+    assert method.receiver_constraints == {}
+
+
 def test_forward_declaration_has_no_body(ts):
     """
     A signature ending in ';' parses as a declaration with body None.

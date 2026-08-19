@@ -2,6 +2,49 @@
 
 import pytest
 
+
+def test_numeric_operator_methods_lower_like_operator_syntax(run):
+    """Numeric interface methods expose the same native operations."""
+    source = """
+    fn main() -> i32 {
+        if (1.add(2) != 1 + 2) return 1;
+
+        let mixed = (40 as i64).add(2 as i32);
+        if (mixed != 42) return 2;
+
+        let value: i32 = 40;
+        value.add_assign(2);
+        if (value != 42) return 3;
+        if (not value.eq(42) or value.cmp(43) != -1) return 4;
+        return value;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_numeric_operator_interfaces_satisfy_generic_bounds(run):
+    """Native numeric methods also provide nominal operator conformance."""
+    source = """
+    fn add<T: Add<T, T>>(left: T, right: T) -> T {
+        return left.add(right);
+    }
+
+    fn accumulate<T: AddAssign<T>>(left: T, right: T) -> T {
+        left.add_assign(right);
+        return left;
+    }
+
+    fn ordered<T: Eq<T> & Ord<T>>(left: T, right: T) -> bool {
+        return not left.eq(right) and left.cmp(right) < 0;
+    }
+
+    fn main() -> i32 {
+        if (not ordered(1, 2)) return 1;
+        return accumulate(add(20, 20), 2);
+    }
+    """
+    assert run(source).returncode == 42
+
 MONEY = """
 struct Money : Add<Money, Money>, Add<Money, i64> {
     cents: i64;

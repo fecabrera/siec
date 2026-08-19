@@ -414,6 +414,10 @@ PRELUDE = """
 // unlike an ordinary interface, user declarations cannot claim it
 interface Scalar;
 
+// a sealed marker for the signed, unsigned, and floating primitive types;
+// the compiler supplies their operator-interface methods intrinsically
+interface Numeric;
+
 // a sealed marker implemented by the compiler's integer primitive types;
 // unlike an ordinary interface, user declarations cannot claim it
 interface Integer;
@@ -525,6 +529,35 @@ fn Eq<T>::eq(const &self, value: const T) -> bool;
 interface Ord<T>;
 
 fn Ord<T>::cmp(const &self, value: const T) -> i32;
+
+// Numeric operator methods are a compiler-owned receiver family. Each use
+// stamps for its concrete primitive, whose body follows the same intrinsic
+// lowering path as the corresponding operator syntax.
+@extend<T: Numeric> T: Add<T, T>, Sub<T, T>, Mul<T, T>, Div<T, T>, Rem<T, T>,
+                       AddAssign<T>, SubAssign<T>, MulAssign<T>, DivAssign<T>,
+                       RemAssign<T>, Eq<T>, Ord<T> {
+    @inline fn add(const &self, value: const T) -> T { return self + value; }
+    @inline fn sub(const &self, value: const T) -> T { return self - value; }
+    @inline fn mul(const &self, value: const T) -> T { return self * value; }
+    @inline fn div(const &self, value: const T) -> T { return self / value; }
+    @inline fn rem(const &self, value: const T) -> T { return self % value; }
+
+    @inline fn add_assign(&self, value: const T) { self += value; }
+    @inline fn sub_assign(&self, value: const T) { self -= value; }
+    @inline fn mul_assign(&self, value: const T) { self *= value; }
+    @inline fn div_assign(&self, value: const T) { self /= value; }
+    @inline fn rem_assign(&self, value: const T) { self %= value; }
+
+    @inline fn eq(const &self, value: const T) -> bool {
+        return self == value;
+    }
+
+    @inline fn cmp(const &self, value: const T) -> i32 {
+        if (self < value) return -1;
+        if (self > value) return 1;
+        return 0;
+    }
+}
 
 // indexed access: 'a[key]' is 'a.get_item(key)' on a struct, and
 // 'a[key] = value' is 'a.set_item(key, value)'; native arrays, pointers,

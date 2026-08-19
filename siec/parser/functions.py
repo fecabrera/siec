@@ -201,7 +201,7 @@ def apply_template_environment(program: Program, params: list[str],
             fn.constraints = merge_constraints(fn.constraints, constraints)
             continue
 
-        apply_method_template(fn, params, constraints)
+        apply_decorated_method_template(fn, params, constraints)
 
 
 def merge_constraints(left: dict | None, right: dict | None) -> dict:
@@ -231,6 +231,36 @@ def apply_method_template(fn: Function, params: list[str],
 
     fn.receiver_constraints = merge_constraints(
         fn.receiver_constraints, constraints)
+
+
+def apply_decorated_method_template(fn: Function, params: list[str],
+                                    constraints: dict | None) -> None:
+    """Apply decorated bounds to a method's own or receiver parameters.
+
+    A method may introduce generic parameters after its name. Those belong to
+    the callable rather than its receiver, including when the method lives in
+    an extension block. Any remaining decorated parameters specialize the
+    receiver family as before.
+    """
+    own = set(fn.type_params or ())
+    method_params = [param for param in params if param in own]
+    receiver_params = [param for param in params if param not in own]
+
+    if method_params:
+        method_constraints = {
+            param: constraints[param]
+            for param in method_params
+            if constraints is not None and param in constraints
+        }
+        fn.constraints = merge_constraints(fn.constraints, method_constraints)
+
+    if receiver_params:
+        receiver_constraints = {
+            param: constraints[param]
+            for param in receiver_params
+            if constraints is not None and param in constraints
+        }
+        apply_method_template(fn, receiver_params, receiver_constraints)
 
 
 def require_template_receiver(receiver: str, params: list[str],
@@ -369,7 +399,7 @@ def parse_receiver_template(ts: TokenStream, receiver: str,
         methods = [method]
 
     for method in methods:
-        apply_method_template(method, params, constraints)
+        apply_decorated_method_template(method, params, constraints)
     return methods
 
 

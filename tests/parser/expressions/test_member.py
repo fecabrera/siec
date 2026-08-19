@@ -11,6 +11,12 @@ def test_member_access(ts):
     assert parse_primary(ts("p.x")) == Member(Var("p"), "x")
 
 
+def test_numeric_literal_takes_method_call_postfix(ts):
+    """A numeric literal may directly receive an intrinsic method call."""
+    assert parse_primary(ts("1.add(2)")) == MethodCall(
+        IntLiteral(1), "add", [IntLiteral(2)])
+
+
 def test_member_access_chains(ts):
     """
     Consecutive '.field' accesses nest left to right.

@@ -29,7 +29,7 @@ IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # sealed markers the compiler owns for primitive categories; user code
 # cannot claim them, and conformance is structural membership
 SEALED_BUILTIN_INTERFACES = (
-    "Scalar", "Integer", "SignedInteger", "UnsignedInteger",
+    "Scalar", "Numeric", "Integer", "SignedInteger", "UnsignedInteger",
 )
 
 
@@ -725,6 +725,8 @@ def claimed_interfaces(gen: CodeGenerator, concrete: str,
 
     if concrete in SCALAR_TYPES and relevant("Scalar"):
         claims.add("Scalar")
+    if intrinsic_numeric(concrete) and relevant("Numeric"):
+        claims.add("Numeric")
     if concrete in INTEGER_TYPES and relevant("Integer"):
         claims.add("Integer")
     if concrete in SIGNED_TYPES and relevant("SignedInteger"):
@@ -769,6 +771,8 @@ def type_implements(gen: CodeGenerator, concrete: str, required: str) -> bool:
     # recursively.
     if required == "Scalar":
         return strip_const(concrete) in SCALAR_TYPES
+    if required == "Numeric":
+        return intrinsic_numeric(concrete)
     if required == "Integer":
         return strip_const(concrete) in INTEGER_TYPES
     if required == "SignedInteger":
@@ -806,6 +810,13 @@ def intrinsic_truthy(gen: CodeGenerator, concrete: str | None) -> bool:
         or name.endswith(("*", "[]"))
         or name.startswith("fn(")
     )
+
+
+def intrinsic_numeric(concrete: str | None) -> bool:
+    """Whether the compiler supplies native numeric operator methods."""
+    name = strip_const(concrete) if concrete is not None else ""
+    return (len(name) > 1 and name[0] in "iuf" and name[1:].isdigit()
+            and name in SCALAR_TYPES)
 
 
 def unify_spelling(gen: CodeGenerator, required: str, provided: str) -> bool:

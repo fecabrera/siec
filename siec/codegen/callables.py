@@ -72,7 +72,9 @@ def resolve_callables(gen: CodeGenerator) -> None:
     for fn in sorted(
             gen.callable_declarations,
             key=lambda declaration: declaration.is_override):
-        if fn.receiver is not None and fn.receiver in gen.interfaces:
+        if (fn.receiver is not None
+                and fn.receiver not in (fn.receiver_params or ())
+                and fn.receiver in gen.interfaces):
             resolve_callable_header(gen, fn, interface_action=True)
             resolve_action_declaration(gen, fn)
             continue

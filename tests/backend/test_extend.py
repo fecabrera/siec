@@ -81,6 +81,25 @@ def test_bounded_receiver_extension_can_only_add_methods(run):
     assert run(source).returncode == 42
 
 
+def test_extension_method_template_decorator_bounds_own_parameter(run):
+    """A nested template may constrain a method parameter, not its receiver."""
+    source = """
+    @extend T[] {
+        @template<Result: AddAssign>
+        fn sum<Result>(const &self,
+                       callback: closure fn(const &T) -> Result) -> Result {
+            return callback(self[0]);
+        }
+    }
+
+    fn main() -> i32 {
+        let values = [42];
+        return values.sum((value: const &i32) -> i32 => value);
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_unbounded_array_extension_block_infers_its_placeholder(run):
     """
     An implicit method in '@extend T[]' binds T exactly like the separate
@@ -780,24 +799,16 @@ def test_primitives_and_enums_extend(run):
     assert run(source).returncode == 0
 
 
-def test_extending_a_primitive_leaves_its_operators_alone(run):
-    """
-    A primitive's operators stay the machine's: claiming 'Eq<i64>' over
-    'i64' declares a callable 'eq' without '==' ever routing through it.
-    """
+def test_numeric_interface_method_agrees_with_its_operator(run):
+    """A numeric primitive's intrinsic 'eq' is the same operation as '=='."""
     source = """
-    @extend i64: Eq<i64>;
-
-    fn i64::eq(const &self, other: i64) -> bool {
-        return false;              // never consulted by '=='
-    }
-
     fn main() -> i32 {
         let n: i64 = 4;
 
         if (not (n == 4)) { return 1; }
         if (n == 5) { return 2; }
-        if (n.eq(4)) { return 3; }  // the method is still callable
+        if (not n.eq(4)) { return 3; }
+        if (n.eq(5)) { return 4; }
 
         return 0;
     }

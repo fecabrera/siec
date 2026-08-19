@@ -1020,6 +1020,8 @@ struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64>, AddAssign<i64>,
 
 The shorthand itself is structural, like `foreach` and `iterator()`: any struct with the method takes the operator, claimed or not. The interfaces are there to declare the contract and to bound generics.
 
+Numeric primitives implement these interfaces intrinsically so `1.add(2)` is equivalent to `1 + 2`, and `n.add_assign(2)` to `n += 2`. A narrower method argument widens to the receiver's type as usual.
+
 #### Indexed operators
 
 Indexing has the same shorthand for structs. `a[key]` is `a.get_item(key)`, while `a[key] = value` is `a.set_item(key, value)`. The key and value types come from the selected overload, and a compound assignment reads, applies the binary operator, then writes the result back: `a[key] += value` is `a.set_item(key, a.get_item(key) + value)`.
