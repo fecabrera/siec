@@ -658,6 +658,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     clobbers = []
     deprecated = None
     removed = None
+    template_environments = []
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
@@ -683,6 +684,15 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
             ts.expect("sym", "(")
             removed = ts.expect("str").value
             ts.expect("sym", ")")
+            continue
+
+        if decorator == "template":
+            params, constraints = parse_type_params(ts)
+            if params is None:
+                raise SyntaxError(
+                    f"line {at_line}: '@template' needs type parameters")
+            template_environments.append(
+                (params, constraints, at_line))
             continue
 
         if decorator not in DECORATORS:
@@ -881,19 +891,42 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         "line": line,
     }
 
+    def decorated(fn: Function) -> Function:
+        """Attach any '@template' found inside the decorator stack."""
+        for template_params, template_constraints, at_line in (
+                template_environments):
+            if fn.receiver is not None:
+                apply_decorated_method_template(
+                    fn, template_params, template_constraints)
+                continue
+
+            declared = set(fn.type_params or ())
+            missing = [param for param in template_params
+                       if param not in declared]
+            if missing:
+                shown = ", ".join(repr(param) for param in missing)
+                raise SyntaxError(
+                    f"line {at_line}: template parameter {shown} is not "
+                    f"declared by generic function {fn.name!r}")
+            fn.constraints = merge_constraints(
+                fn.constraints, template_constraints)
+        return fn
+
     # an '@asm' function's body is raw assembly, captured whole by the lexer
     if is_asm:
         if ts.peek().kind != "asm":
             raise SyntaxError(f"line {ts.peek().line}: an '@asm' function "
                               "needs an assembly body")
 
-        return Function(name, params, return_type, None,
-                        asm=ts.next().value, **options)
+        return decorated(Function(
+            name, params, return_type, None,
+            asm=ts.next().value, **options))
 
     # a ';' instead of a body makes this a forward declaration
     if ts.peek().value == ";":
         ts.next()
-        return Function(name, params, return_type, None, **options)
+        return decorated(Function(
+            name, params, return_type, None, **options))
 
     if is_extern:
         raise SyntaxError(f"line {ts.peek().line}: extern function {name!r} cannot have a body")
@@ -901,4 +934,4 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     # the body: statements between braces
     body = parse_block(ts)
 
-    return Function(name, params, return_type, body, **options)
+    return decorated(Function(name, params, return_type, body, **options))

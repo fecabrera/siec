@@ -388,6 +388,23 @@ def test_nested_template_decorator_can_bound_method_parameter(ts):
     assert method.receiver_constraints == {}
 
 
+def test_nested_template_may_follow_another_decorator(ts):
+    """Template environments keep their meaning anywhere in the stack."""
+    program = parse_program(ts("""
+    @extend T[] {
+        @inline
+        @template<Result: Numeric>
+        fn sum<Result>(const &self, value: Result) -> Result {
+            return value;
+        }
+    }
+    """))
+
+    method = program.functions[0]
+    assert method.is_inline
+    assert method.constraints == {"Result": "Numeric"}
+
+
 def test_forward_declaration_has_no_body(ts):
     """
     A signature ending in ';' parses as a declaration with body None.

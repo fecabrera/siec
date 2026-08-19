@@ -200,13 +200,10 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
                 gen.removed[f"{base}::{fn.name.partition('::')[2]}"] = fn.removed
                 return
 
-            # a generic struct's method may overload like any other, its
-            # templates stamped together per struct instantiation; only
-            # one may take type parameters of its own (an interface
-            # parameter's synthetic ones included), since a generic
-            # template registers whole, with no set to pick among; an
-            # array's ('T[]::m') registers under the one array family,
-            # whatever its element placeholder is called
+            # A generic struct's method may overload like any other, its
+            # templates stamped together per struct instantiation. An array's
+            # ('T[]::m') registers under the one array family, whatever its
+            # element placeholder is called.
             method = fn.name.partition("::")[2]
             if fn.receiver in fn.receiver_params:
                 templates = gen.generic_receiver_methods.setdefault(
@@ -214,11 +211,6 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
             else:
                 base = "[]" if fn.receiver.endswith("[]") else fn.receiver
                 templates = gen.generic_methods.setdefault((base, method), [])
-
-            if (fn.type_params is not None
-                    and any(t.type_params is not None for t in templates)):
-                raise TypeError(f"cannot overload method {fn.name!r} with "
-                                "more than one generic signature")
 
             same = [
                 template for template in templates
@@ -503,7 +495,9 @@ def resolve_method(gen: CodeGenerator, receiver_type: str | None,
         # one declares like any instantiation - either way its
         # substituted types mix files' names, so no view gates them
         if instance.type_params is not None:
-            gen.generic_functions[symbol] = instance
+            from siec.codegen.generics import resolve_generic_function
+
+            resolve_generic_function(gen, instance)
         else:
             from siec.codegen.worklist import resolve_function_instance
 
