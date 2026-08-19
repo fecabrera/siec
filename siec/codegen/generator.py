@@ -754,6 +754,22 @@ fn Error<E>(e: E) -> Result<E> {
     r.error = e;
     return r;
 }
+
+
+@extend T[] {
+    @template<ResultType: AddAssign>
+    fn sum<ResultType>(const &self, callback: closure fn(const &T) -> ResultType, start: ResultType) -> ResultType {
+        let result = start;
+        foreach (e : self) result += callback(e);
+        return result;
+    }
+
+    @inline
+    @template<ResultType: Numeric>
+    fn sum<ResultType>(const &self, callback: closure fn(const &T) -> ResultType) -> ResultType {
+        return self.sum(callback, 0);
+    }
+}
 """
 
 PRELUDE_FILE = "<prelude>"

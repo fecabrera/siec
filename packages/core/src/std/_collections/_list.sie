@@ -450,4 +450,16 @@ fn List<T>::grow(&self) {
     fn eq(const &self, lst: const &List<T>) -> bool {
         return self == lst.as_array();
     }
+    
+    /**
+     * Map the array to a new List.
+     *
+     * @param callback The callback to map the array to a new List.
+     * @return A new List with the mapped array.
+     */
+    fn map<ResultType>(const &self, callback: closure fn(const &T) -> ResultType) -> List<ResultType> {
+        let result = List<ResultType>();
+        foreach (e : self) result.push(callback(e));
+        return result;
+    }
 }
