@@ -1,0 +1,26 @@
+@include("_types/_base")
+@include("_types/_timespec")
+@include("_types/_s_ifmt")
+
+struct stat {
+    st_dev: dev_t;                      /* [XSI] ID of device containing file */ 
+    st_mode: mode_t;                    /* [XSI] Mode of file (see below) */ 
+    st_nlink: nlink_t;                  /* [XSI] Number of hard links */ 
+    st_ino: ino64_t;                    /* [XSI] File serial number */ 
+    st_uid: uid_t;                      /* [XSI] User ID of the file */ 
+    st_gid: gid_t;                      /* [XSI] Group ID of the file */ 
+    st_rdev: dev_t;                     /* [XSI] Device ID */ 
+	/* __DARWIN_STRUCT_STAT64_TIMES */
+    st_atimespec: timespec;             /* time of last access */ 
+	st_mtimespec: timespec;             /* time of last data modification */ 
+	st_ctimespec: timespec;             /* time of last status change */ 
+	st_birthtimespec: timespec;         /* time of file creation(birth) */
+	/*  */
+    st_size: off_t;                     /* [XSI] file size, in bytes */ 
+    st_blocks: blkcnt_t;                /* [XSI] blocks allocated for file */ 
+    st_blksize: blksize_t;              /* [XSI] optimal blocksize for I/O */ 
+    st_flags: u32;                      /* user defined flags for file */ 
+    st_gen: u32;                        /* file generation number */ 
+    st_lspare: i32;                     /* RESERVED: DO NOT USE! */ 
+    st_qspare: @raw<i64>[2];            /* RESERVED: DO NOT USE! */ 
+}

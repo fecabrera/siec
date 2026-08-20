@@ -5,6 +5,7 @@ import { strlen } from string;
 import { IOReadable, IOWritable, IOError } from std.io;
 import { String } from std.collections;
 import { Formattable } from std.format;
+import { mode_t, S_ISUID, S_IRWXU, S_IRWXG, S_IRWXO } from sys.types;
 
 enum FileMode: i32 {
     None        = 0,
@@ -96,7 +97,7 @@ fn File::open(&self) -> Result<OpenError> {
     if (self.open) return Error(OpenError::AlreadyOpen);
     
     let flags: i32 = 0;
-    let mode: unistd.mode_t = 0;
+    let mode: mode_t = 0;
     
     if (self.mode & FileMode::Read and self.mode & FileMode::Write)
         flags = unistd.O_RDWR;
@@ -110,7 +111,7 @@ fn File::open(&self) -> Result<OpenError> {
     if (self.mode & FileMode::Append) flags |= unistd.O_APPEND;
     if (self.mode & FileMode::Create) {
         flags |= unistd.O_CREAT;
-        mode |= unistd.S_ISUID | unistd.S_IRWXU | unistd.S_IRWXG | unistd.S_IRWXO;
+        mode |= S_ISUID | S_IRWXU | S_IRWXG | S_IRWXO;
     }
 
     let fd = mode ? unistd.open(self.path, flags, mode) : unistd.open(self.path, flags);

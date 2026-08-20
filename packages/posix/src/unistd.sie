@@ -1,4 +1,4 @@
-import { pid_t, useconds_t } from sys.types;
+import { pid_t, useconds_t, mode_t } from sys.types;
 
 /***************************************
  * ARGUMENTS
@@ -47,8 +47,6 @@ import { pid_t, useconds_t } from sys.types;
 @const SEEK_END = 2;       /* set file offset to EOF plus offset */
 @const SEEK_HOLE = 3;       /* set file offset to the start of the next hole greater than or equal to the supplied offset */
 @const SEEK_DATA = 4;       /* set file offset to the start of the next non-hole file region greater than or equal to the supplied offset */
-
-@include("sys/_types/_s_ifmt");
 
 @extern fn chdir(path: const char*) -> i32;
 @extern fn fchdir(fd: i32) -> i32;

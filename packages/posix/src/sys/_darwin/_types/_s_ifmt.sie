@@ -1,4 +1,4 @@
-@type mode_t = u16;
+import { mode_t } from _base;
 
 /*
  * [XSI] The symbolic names for file modes for use as values of mode_t

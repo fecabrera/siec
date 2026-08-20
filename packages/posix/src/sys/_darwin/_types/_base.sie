@@ -1,0 +1,15 @@
+@type nlink_t = u16;
+
+@type blkcnt_t = i64;       /* total blocks */
+@type blksize_t = i32;      /* preferred block size */
+@type gid_t = u32;          /* [???] process and group IDs */
+@type dev_t = i32;          /* dev_t */
+@type ino64_t = u64;        /* [???] Used for 64 bit inodes */
+@type ino_t = ino64_t;      /* [???] Used for inodes */
+@type mode_t = u16;         /* [???] Some file attributes */
+@type off_t = i64;          /* [???] Used for file sizes */
+@type sigset_t = u32;       /* [???] signal set */
+@type pid_t = i32;          /* [???] process and group IDs */
+@type suseconds_t = i32;    /* [???] microseconds */
+@type uid_t = u32;          /* [???] user IDs */
+@type useconds_t = u32;     /* [???] microseconds */

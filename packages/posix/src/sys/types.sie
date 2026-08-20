@@ -1,3 +1,7 @@
-@include("_types/_off_t")
-@include("_types/_pid_t")
-@include("_types/_useconds_t")
+@if (TARGET_OS == OS_DARWIN) {
+    @include("_darwin/types")
+} @else @if (TARGET_OS == OS_LINUX) {
+    @include("_linux/types")
+} @else {
+    @error("Unsupported platform")
+}
