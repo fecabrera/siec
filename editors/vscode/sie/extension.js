@@ -5,11 +5,42 @@
 const vscode = require("vscode");
 const { LanguageClient } = require("vscode-languageclient/node");
 const { indentationAfter } = require("./indentation");
+const { inactiveRanges } = require("./inactive");
 const { targetFor } = require("./run-debug");
 const fs = require("fs");
 const path = require("path");
 
 let client;
+let inactiveDecoration;
+const inactiveByDocument = new Map();
+
+function decorateInactiveDocument(document, encoded) {
+    const ranges = inactiveRanges(encoded).map(
+        ([startLine, startColumn, endLine, endColumn]) => new vscode.Range(
+            startLine, startColumn, endLine, endColumn,
+        ),
+    );
+    inactiveByDocument.set(document.uri.toString(), ranges);
+
+    for (const editor of vscode.window.visibleTextEditors) {
+        if (editor.document.uri.toString() === document.uri.toString()) {
+            editor.setDecorations(inactiveDecoration, ranges);
+        }
+    }
+}
+
+async function provideInactiveSemanticTokens(document, token, next) {
+    const semanticTokens = await next(document, token);
+    if (!semanticTokens) {
+        return semanticTokens;
+    }
+
+    // The server's semantic tokens describe only rejected @if regions. Use
+    // them as ranges for an opacity decoration, then hide the tokens from
+    // VS Code so their "comment" fallback does not replace syntax colors.
+    decorateInactiveDocument(document, semanticTokens.data);
+    return new vscode.SemanticTokens(new Uint32Array());
+}
 
 function expandSetting(value, workspaceFolder) {
     if (typeof value !== "string") {
@@ -228,11 +259,32 @@ function activate(context) {
         initializationOptions: {
             includePaths: config.get("includePaths") || [],
         },
+        middleware: {
+            provideDocumentSemanticTokens: provideInactiveSemanticTokens,
+        },
     };
+
+    inactiveDecoration = vscode.window.createTextEditorDecorationType({
+        opacity: "0.55",
+    });
 
     client = new LanguageClient("sie", "Sie Language Server",
                                 serverOptions, clientOptions);
     context.subscriptions.push(client);
+    context.subscriptions.push(inactiveDecoration);
+    context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(
+        (editors) => {
+            for (const editor of editors) {
+                const ranges = inactiveByDocument.get(editor.document.uri.toString());
+                if (ranges) {
+                    editor.setDecorations(inactiveDecoration, ranges);
+                }
+            }
+        },
+    ));
+    context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(
+        (document) => inactiveByDocument.delete(document.uri.toString()),
+    ));
     context.subscriptions.push(vscode.commands.registerCommand(
         "sie.insertLineBreak", insertLineBreak,
     ));

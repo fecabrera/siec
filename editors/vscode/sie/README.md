@@ -17,7 +17,8 @@ compiled and typed by the real compiler front end. Completion includes
 locals, visible declarations, builtins, keywords, imported modules, and a
 module's public exports after a dot (`import util; util.`) or inside a member
 import (`import { ... } from util;`). Branches rejected by compile-time `@if`
-conditions are dimmed through semantic highlighting.
+conditions are dimmed without replacing their normal syntax colors, matching
+the inactive-code treatment of VS Code's C/C++ support.
 
 The editor buttons, F5 / Ctrl+F5, and VS Code's Run and Debug view run the
 current program. Inside an `[app]` package they run or build the whole package;
