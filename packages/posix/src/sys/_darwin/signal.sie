@@ -1,0 +1,20 @@
+import { pid_t, uid_t } from types;
+
+union sigval {
+	/* Members as suggested by Annex C of POSIX 1003.1b. */
+	sival_int: i32 ;
+	sival_ptr: opaque*;
+}
+
+struct siginfo_t {
+	si_signo: i32;          /* signal number */
+	si_errno: i32;          /* errno association */
+	si_code: i32;           /* signal code */
+	si_pid: pid_t;          /* sending process */
+	si_uid: uid_t;          /* sender's ruid */
+	si_status: i32;         /* exit value */
+	si_addr: opaque*;       /* faulting instruction */
+	si_value: sigval;       /* signal value */
+	si_band: i64;           /* band event for SIGPOLL */
+	__pad: @raw<u64>[7];    /* Reserved for Future Use */
+} 

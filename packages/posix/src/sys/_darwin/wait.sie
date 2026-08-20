@@ -1,0 +1,14 @@
+import { pid_t, id_t } from types;
+import { siginfo_t } from signal;
+
+enum idtype_t {
+	P_ALL,
+	P_PID,
+	P_PGID,
+}
+
+@extern fn wait(wstatus: i32*) -> pid_t;
+@extern fn waitpid(pid: pid_t, wstatus: i32*, options: i32) -> pid_t;
+@extern fn waitid(idtype: idtype_t, id: id_t, infop: siginfo_t*, options: i32) -> i32;
+// @extern fn wait3(wstatus: i32*, options: i32, rusage: rusage*) -> pid_t;
+// @extern fn wait4(pid: pid_t, wstatus: i32*, options: i32, rusage: rusage*) -> pid_t;
