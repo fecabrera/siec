@@ -1059,6 +1059,34 @@ def complete(analysis: Analysis, text: str, line: int,
     access = re.search(
         member_receiver + r"\.([A-Za-z_][A-Za-z0-9_]*)?$", before)
 
+    expression_access = None
+    if access is None:
+        suffix = re.search(r"\.([A-Za-z_][A-Za-z0-9_]*)?$", before)
+        if suffix is not None:
+            from siec.parser.expressions import parse_expression
+            from siec.parser.stream import TokenStream
+
+            receiver_end = suffix.start()
+            prefix = before[:receiver_end]
+            starts = [0]
+            starts.extend(
+                index + 1
+                for index, char in enumerate(prefix)
+                if char.isspace() or char in "=,;{(["
+            )
+            for start in starts:
+                receiver = prefix[start:].strip()
+                if not receiver:
+                    continue
+                try:
+                    stream = TokenStream(lex(receiver))
+                    parse_expression(stream)
+                    if stream.peek().kind == "eof":
+                        expression_access = (receiver, suffix.group(1) or "")
+                        break
+                except (SyntaxError, IndexError):
+                    continue
+
     gen = analysis.gen
     gen.current_file = analysis.path
     sites = declaration_sites(analysis.program)
@@ -1108,6 +1136,11 @@ def complete(analysis: Analysis, text: str, line: int,
                 if name.isidentifier() and name.startswith(partial)
             ]
 
+        return complete_value_members(
+            analysis, sites, receiver, partial, line, col)
+
+    if expression_access is not None:
+        receiver, partial = expression_access
         return complete_value_members(
             analysis, sites, receiver, partial, line, col)
 

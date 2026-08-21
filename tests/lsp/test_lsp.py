@@ -1847,6 +1847,33 @@ fn main() -> i32 {
         "fn Box::answer(const &Box) -> i32"
 
 
+def test_complete_lists_methods_on_static_call_result(tmp_path):
+    """Dot completion parses a static call result as its receiver."""
+    analysis, _ = unit(tmp_path, """\
+struct Box {
+    value: i32;
+    fn init(&self, value: i32) { self.value = value; }
+    fn make() -> Box { return Box(42); }
+    fn answer(const &self) -> i32 { return self.value; }
+}
+
+fn main() -> i32 { return Box::make().answer(); }
+""")
+    edited = """\
+struct Box {
+    value: i32;
+    fn init(&self, value: i32) { self.value = value; }
+    fn make() -> Box { return Box(42); }
+    fn answer(const &self) -> i32 { return self.value; }
+}
+
+fn main() -> i32 { return Box::make().an }
+"""
+
+    items = complete(analysis, edited, 7, len(edited.splitlines()[7]) - 2)
+    assert [item.label for item in items] == ["answer"]
+
+
 def test_complete_lists_pointer_fields_and_methods(tmp_path):
     """Arrow completion after p-> offers the pointee's fields and methods."""
     analysis, _ = unit(tmp_path, """\
