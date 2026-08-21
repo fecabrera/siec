@@ -451,6 +451,9 @@ fn List<T>::grow(&self) {
         return self == lst.as_array();
     }
     
+}
+
+@extend T[] {
     /**
      * Map the array to a new List.
      *
