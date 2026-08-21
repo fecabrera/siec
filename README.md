@@ -1657,7 +1657,7 @@ let msg: char[] = "Hello";
 let inferred = "Hello";      // a char[] too
 ```
 
-A literal is a `char[]` everywhere: it carries its length, indexes, takes the [array methods](#array-methods), and the operator shorthands follow (`"a" + s`, `s == "a"`). Only an explicit `char*` context takes the bare pointer instead, C-style: `let p: char* = "Hello";`, or an `@extern` function's `char*` parameter.
+A literal is a `char[]` everywhere: it carries its length, indexes, takes the [builtin type methods](#builtin-type-methods), and the operator shorthands follow (`"a" + s`, `s == "a"`). Only an explicit `char*` context takes the bare pointer instead, C-style: `let p: char* = "Hello";`, or an `@extern` function's `char*` parameter.
 
 Just like any other array, they can initialized by a pair `{ptr, n}`:
 
@@ -2479,9 +2479,34 @@ fn S<A, B, ...>::method<X, Y, ...>(self: &S<A, B, ...>, x: X, y: Y, ...) {
 }
 ```
 
-#### Array methods
+#### Builtin type methods
 
-Methods declare over the builtin arrays too: `fn T[]::m(...)` acts on every `T[]`, the element name a placeholder. Like a generic struct's methods, each element type stamps its own instance on first use, and same-named declarations overload:
+Methods may be declared directly on builtin types in the same way as methods
+on structs:
+
+```
+fn i32::doubled(const &self) -> i32 {
+    return self * 2;
+}
+
+let answer = 21.doubled();
+```
+
+Use `@where` with a builtin bound to declare one method for a family of
+builtin types:
+
+```
+@where<T: Scalar>
+fn T::value(const &self) -> T {
+    return self;
+}
+```
+
+`Scalar` covers all primitive value types. `Integer`, `SignedInteger`, and
+`UnsignedInteger` provide narrower builtin families.
+
+Arrays support methods in the same way. Using `T` as the element type declares
+the method for every array type:
 
 ```
 fn T[]::count(&self, value: T) -> i32 {
@@ -2493,11 +2518,12 @@ fn T[]::count(&self, value: T) -> i32 {
     return n;
 }
 
-let hits = ints.count(3);      // i32[]'s instance
-let ls = text.count('l');      // char[]'s
+let hits = ints.count(3);
+let ls = text.count('l');
 ```
 
-`&self` spells `self: &T[]`. The [operator shorthands](#operator-overloading) follow: an array with an `eq` method takes `==` and `!=`, one with `add` takes `+`, like any struct.
+[Operator shorthands](#operator-overloading) also use array methods, so `eq`
+provides `==` and `!=`, while `add` provides `+`.
 
 ### Interfaces
 
