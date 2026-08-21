@@ -1105,6 +1105,31 @@ fn main() -> i32 {
     assert "Box<i32>::get" not in analysis.gen.instantiated_functions
 
 
+def test_method_hover_hides_colliding_module_type_identity(tmp_path):
+    """Compiler-private module identities never appear in method hover."""
+    write(tmp_path / "adw.sie", """\
+struct HeaderBar {
+    pad: i32;
+    fn init(&self) { self.pad = 0; }
+    fn pack_end(&self, child: i32) {}
+}
+""")
+    write(tmp_path / "gtk.sie", "struct HeaderBar { pad: i32; }\n")
+
+    analysis, src = unit(tmp_path, """\
+import adw;
+import gtk;
+
+fn main() {
+    let bar = adw.HeaderBar();
+    bar.pack_end(1);
+}
+""")
+
+    finding = probe(analysis, src, 5, 10)
+    assert finding.text == "fn HeaderBar::pack_end(&HeaderBar, child: i32)"
+
+
 def test_hover_in_generic_body_does_not_reopen_instantiation(tmp_path):
     """
     Hovering inside an unstamped generic method must not crash when a

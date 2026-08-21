@@ -850,7 +850,25 @@ def pattern_text(pattern: list) -> str:
     return f"({', '.join(parts)})"
 
 
-def signature_parts(fn: Function) -> tuple[str, tuple[str, ...], str]:
+def source_spelling(gen: CodeGenerator | None, spelling: str | None
+                    ) -> str | None:
+    """Replace collision-safe module identities with their source names."""
+    if gen is None or spelling is None:
+        return spelling
+
+    names = {
+        symbol: original
+        for (_module, original), symbol in gen.module_type_symbols.items()
+    }
+    return re.sub(
+        r"[A-Za-z_][A-Za-z0-9_]*",
+        lambda match: names.get(match.group(), match.group()),
+        spelling,
+    )
+
+
+def signature_parts(fn: Function, gen: CodeGenerator | None = None
+                    ) -> tuple[str, tuple[str, ...], str]:
     """
     A function's displayed name, parameters, and return suffix.
 
@@ -862,7 +880,8 @@ def signature_parts(fn: Function) -> tuple[str, tuple[str, ...], str]:
     from siec.codegen.generics import substitute
 
     def bound_text(value) -> str:
-        return " & ".join(value if isinstance(value, tuple) else (value,))
+        bounds = value if isinstance(value, tuple) else (value,)
+        return " & ".join(source_spelling(gen, bound) for bound in bounds)
 
     mapping = {}
     type_params = list(fn.type_params or ())
@@ -891,24 +910,26 @@ def signature_parts(fn: Function) -> tuple[str, tuple[str, ...], str]:
             for p in type_params
         )
         name += f"<{shown}>"
+    name = source_spelling(gen, name)
 
     def param_text(p) -> str:
         if p.name == "self" and is_reference(strip_const(p.type)):
-            return p.type
+            return source_spelling(gen, p.type)
 
-        type_name = substitute(p.type, mapping)
+        type_name = source_spelling(gen, substitute(p.type, mapping))
         if p.pattern is not None:
             return f"{pattern_text(p.pattern)}: {type_name}"
         return f"{p.name}: {type_name}"
 
     params = tuple(param_text(p) for p in fn.params)
-    ret = f" -> {fn.return_type}" if fn.return_type else ""
+    ret = (f" -> {source_spelling(gen, fn.return_type)}"
+           if fn.return_type else "")
     return name, params, ret
 
 
-def signature(fn: Function) -> str:
+def signature(fn: Function, gen: CodeGenerator | None = None) -> str:
     """A function's declaration in Sie syntax, its generic parameters kept."""
-    name, params, ret = signature_parts(fn)
+    name, params, ret = signature_parts(fn, gen)
     return f"fn {name}({', '.join(params)}){ret}"
 
 
@@ -1516,7 +1537,7 @@ def completion_for_name(analysis: Analysis, sites: dict, name: str,
     if kind == "function":
         details = []
         for _, fn in found:
-            if (shown := signature(fn)) not in details:
+            if (shown := signature(fn, gen)) not in details:
                 details.append(shown)
         detail = details[0]
         if len(details) > 1:
@@ -1672,9 +1693,10 @@ def macro_signature(node) -> CallSignature:
         f"@macro {name}({', '.join(parameters)})", parameters)
 
 
-def callable_signature(node, implicit_receiver: bool) -> CallSignature:
+def callable_signature(node, implicit_receiver: bool,
+                       gen: CodeGenerator | None = None) -> CallSignature:
     """Render a function declaration for one particular call spelling."""
-    name, parameters, ret = signature_parts(node)
+    name, parameters, ret = signature_parts(node, gen)
     if (implicit_receiver and node.params
             and node.params[0].name == "self"):
         parameters = parameters[1:]
@@ -1702,7 +1724,7 @@ def call_signature_help(analysis: Analysis, text: str, line: int,
                 continue
             if kind == "function":
                 declarations.append(
-                    callable_signature(node, implicit_receiver))
+                    callable_signature(node, implicit_receiver, analysis.gen))
             elif kind == "constant" and node.is_macro \
                     and node.params is not None:
                 declarations.append(macro_signature(node))
@@ -1837,7 +1859,7 @@ def resolve_name(analysis: Analysis, sites: dict, name: str,
         ]
         texts = []
         for _, decl in found:
-            if (sig := signature(decl)) not in texts:
+            if (sig := signature(decl, gen)) not in texts:
                 texts.append(sig)
 
         targets = [
@@ -2131,7 +2153,7 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
 
     texts = []
     for node in nodes:
-        if (sig := signature(node)) not in texts:
+        if (sig := signature(node, gen)) not in texts:
             texts.append(sig)
 
     # a resolved symbol with no declaration in sight still has its
@@ -2140,8 +2162,11 @@ def method_finding(analysis: Analysis, sites: dict, base: str,
         from siec.codegen.overloads import overload_candidates
 
         for sibling in overload_candidates(gen, symbol):
-            params = ", ".join(gen.param_types.get(sibling, []))
-            ret = gen.return_types.get(sibling)
+            params = ", ".join(
+                source_spelling(gen, param)
+                for param in gen.param_types.get(sibling, [])
+            )
+            ret = source_spelling(gen, gen.return_types.get(sibling))
             texts.append(f"fn {base}::{name}({params})"
                          + (f" -> {ret}" if ret else ""))
 
