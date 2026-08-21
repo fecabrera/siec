@@ -3,6 +3,7 @@ name = "libcurl"
 description = "Bindings for libcurl"
 version = "1.0.0"
 license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 keywords = ["bindings", "libcurl", "curl"]
 
 [library]
