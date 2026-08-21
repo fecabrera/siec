@@ -19,9 +19,9 @@ fn main(argc: i32, argv: char**) -> i32 {
         let page3 = content.add(Gtk.Label("Page 3"), "page-3", "Page 3");
         page3.set_starts_section(true);
         page3.set_section_title("Section");
+        content_header.set_show_title(false);
         content_view.add_top_bar(content_header);
         content_view.set_content(content);
-        content_header.set_show_title(false);
 
         // sidebar
         let sidebar_view = Adw.ToolbarView();

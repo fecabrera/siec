@@ -1,6 +1,5 @@
 import Adw;
 import Gtk;
-import { GtkWidget } from gtk_bindings;
 
 fn main(argc: i32, argv: char**) -> i32 {
     let app = Adw.Application("com.example.GtkApplication");
@@ -24,9 +23,9 @@ fn main(argc: i32, argv: char**) -> i32 {
         tab_bar.set_autohide(false);
         tab_bar.set_view(tab_view);
 
-        header_bar.set_title_widget(Gtk.Widget(tab_bar.get_gtk_widget()));
+        header_bar.set_title_widget(tab_bar.to_widget());
         toolbar_view.add_top_bar(header_bar);
-        toolbar_view.set_content(Gtk.Widget(tab_view.get_gtk_widget()));
+        toolbar_view.set_content(tab_view.to_widget());
         
         window.set_content(toolbar_view);
         window.present();

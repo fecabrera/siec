@@ -1,5 +1,5 @@
+import Gtk;
 import { gboolean } from glib;
-import { Handler } from Gtk;
 import { GTK_WIDGET, GtkWidget } from gtk_bindings;
 import {
     ADW_TAB_BAR,
@@ -11,7 +11,7 @@ import {
 } from adwaita;
 import { TabView } from tabview;
 
-struct TabBar: Handler<AdwTabBar> {
+struct TabBar: Gtk.Handler<AdwTabBar> {
     @private handle: AdwTabBar*;
 
     fn init(&self) {
@@ -32,6 +32,10 @@ struct TabBar: Handler<AdwTabBar> {
 
     fn get_gtk_widget(&self) -> GtkWidget* {
         return GTK_WIDGET(self.handle);
+    }
+
+    fn to_widget(&self) -> Gtk.Widget {
+        return Gtk.Widget(self.get_gtk_widget());
     }
 
     fn set_view(&self, view: &TabView) {
