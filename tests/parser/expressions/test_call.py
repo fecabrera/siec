@@ -28,6 +28,12 @@ def test_nested_calls(ts):
     assert parse_primary(ts("f(g(1))")) == Call("f", [Call("g", [IntLiteral(1)])])
 
 
+def test_module_qualified_static_method_call(ts):
+    """A dotted type can qualify a static method call."""
+    assert parse_expression(ts('Gtk.Button::from_icon("window-new")')) == Call(
+        "Gtk.Button::from_icon", [StrLiteral("window-new")])
+
+
 def test_call_arguments_may_be_comparisons(ts):
     """
     Full expressions, including comparisons, are allowed as call arguments.

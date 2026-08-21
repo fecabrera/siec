@@ -730,12 +730,29 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
     after a pure name chain calls it by its dotted name ('libc.stdio.printf(...)').
     """
     while True:
-        # '::' after a pure name chain reaches an enum's member through
-        # its module: 'shapes.Color::RED'
+        # '::' after a pure name chain reaches an enum member or a static
+        # method through its module: 'shapes.Color::RED' or
+        # 'ui.Button::from_icon(...)'.
         if (ts.peek().syntax == "::" and (names := ident_chain(expr)) is not None
                 and len(names) > 1):
             ts.next()
-            expr = EnumMember(".".join(names), ts.expect("ident").value)
+            receiver = ".".join(names)
+            member = ts.expect_name("drop").value
+            method_args = None
+            if ts.peek().syntax == "<":
+                method_args = parse_type_arguments(ts)
+
+            if method_args is not None or ts.peek().syntax == "(":
+                ts.next()
+                args = []
+                while ts.peek().syntax != ")":
+                    if args:
+                        ts.expect("sym", ",")
+                    args.append(parse_expression(ts))
+                ts.expect("sym", ")")
+                expr = Call(f"{receiver}::{member}", args, method_args)
+            else:
+                expr = EnumMember(receiver, member)
             continue
 
         if (ts.peek().syntax in ("(", "<") and (names := ident_chain(expr)) is not None
