@@ -118,6 +118,11 @@ function executeTask(task) {
 async function runSie() {
     try {
         const { folder, target } = await currentTarget("runArgs");
+        if (target.runBuild) {
+            await executeTask(taskFor(
+                folder, "Build Sie", target.runBuild, target.cwd,
+            ));
+        }
         await vscode.tasks.executeTask(taskFor(
             folder, "Run Sie", target.run, target.cwd,
         ));

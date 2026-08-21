@@ -78,10 +78,14 @@ function targetFor(source, workspace, options = {}) {
             package: packageInfo,
             cwd: packageInfo.directory,
             program: path.join(packageInfo.directory, "build", executableName(name)),
-            run: {
+            runBuild: {
                 command: options.packageCommand || "sie",
-                args: ["build", packageInfo.directory, "--run",
-                       ...(options.args || [])],
+                args: ["build", packageInfo.directory],
+            },
+            run: {
+                command: path.join(packageInfo.directory, "build",
+                                   executableName(name)),
+                args: options.args || [],
             },
             build: {
                 command: options.packageCommand || "sie",

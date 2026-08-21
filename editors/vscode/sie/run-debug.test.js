@@ -48,9 +48,13 @@ try {
         packageCommand: "test-sie",
         args: ["argument"],
     });
-    assert.deepStrictEqual(packageTarget.run, {
+    assert.deepStrictEqual(packageTarget.runBuild, {
         command: "test-sie",
-        args: ["build", root, "--run", "argument"],
+        args: ["build", root],
+    });
+    assert.deepStrictEqual(packageTarget.run, {
+        command: packageTarget.program,
+        args: ["argument"],
     });
     assert.deepStrictEqual(packageTarget.build, {
         command: "test-sie",
