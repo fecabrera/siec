@@ -63,6 +63,28 @@ def test_main_abi_types_resolve_across_imports(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run", "argument") == 2
 
 
+def test_qualified_enum_alias_members_use_the_target_type(
+        tmp_path, monkeypatch):
+    """An exported enum alias passes where the underlying enum is expected."""
+    (tmp_path / "types.sie").write_text("""
+        enum RawCode { ANSWER = 42 }
+        @type Code = RawCode;
+
+        fn value(code: RawCode) -> i32 { return code as i32; }
+    """)
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import types;
+
+        fn main() -> i32 {
+            return types.value(types.Code::ANSWER);
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_qualified_macro_access(tmp_path, monkeypatch):
     """Module qualification reaches both function-like and object macros."""
     (tmp_path / "macros.sie").write_text("""

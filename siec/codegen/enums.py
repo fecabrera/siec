@@ -232,16 +232,22 @@ def resolve_enum(gen: CodeGenerator, name: str) -> str:
         if member is None:
             raise NameError(f"undefined enum {name!r}")
 
-        return member
+        # A module may export a public alias for a private or low-level enum.
+        # Enum members carry the canonical target type just like values in
+        # annotations do, so calls see one type on both sides.
+        return expand_alias(gen, member, checked=False)
 
     bound = gen.member_bindings.get((gen.current_file, name))
-    if bound is not None and bound != name and bound in gen.enums:
-        return bound
+    if bound is not None and bound != name:
+        canonical = expand_alias(gen, bound, checked=False)
+        if canonical in gen.enums:
+            return canonical
 
-    if name in gen.enums and not gen.ungated_types and not gen.sees(name):
+    canonical = expand_alias(gen, name)
+    if canonical in gen.enums and not gen.ungated_types and not gen.sees(name):
         raise TypeError(f"unknown type {name!r}")
 
-    return name
+    return canonical
 
 
 def member_value(gen: CodeGenerator, expr: EnumMember) -> int:
