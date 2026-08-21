@@ -1,0 +1,82 @@
+import { gboolean } from glib;
+import { Handler } from Gtk;
+import { GtkWidget } from gtk_bindings;
+import {
+    AdwToggle,
+    adw_toggle_new,
+    adw_toggle_set_name,
+    adw_toggle_set_label,
+    adw_toggle_get_use_underline,
+    adw_toggle_set_use_underline,
+    adw_toggle_set_icon_name,
+    adw_toggle_set_tooltip,
+    adw_toggle_set_description,
+    adw_toggle_set_child,
+    adw_toggle_get_enabled,
+    adw_toggle_set_enabled,
+    adw_toggle_get_index,
+} from adwaita;
+
+struct Toggle: Handler<AdwToggle> {
+    @private handle: AdwToggle*;
+
+    fn init(&self) {
+        self.handle = adw_toggle_new();
+    }
+
+    fn init(&self, handle: AdwToggle*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> AdwToggle* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwToggle* {
+        return self.handle;
+    }
+
+    fn set_name(&self, name: const &char[]) {
+        adw_toggle_set_name(self.handle, name);
+    }
+
+    fn set_label(&self, label: const &char[]) {
+        adw_toggle_set_label(self.handle, label);
+    }
+    
+    fn get_use_underline(&self) -> bool {
+        return adw_toggle_get_use_underline(self.handle) as bool;
+    }
+    
+    fn set_use_underline(&self, use_underline: bool) {
+        adw_toggle_set_use_underline(self.handle, use_underline as gboolean);
+    }
+    
+    fn set_icon_name(&self, icon_name: const &char[]) {
+        adw_toggle_set_icon_name(self.handle, icon_name);
+    }
+    
+    fn set_tooltip(&self, tooltip: const &char[]) {
+        adw_toggle_set_tooltip(self.handle, tooltip);
+    }
+    
+    fn set_description(&self, description: const &char[]) {
+        adw_toggle_set_description(self.handle, description);
+    }
+    
+    fn set_child(&self, widget: &Handler<GtkWidget>) {
+        adw_toggle_set_child(self.handle, widget.get_handle());
+    }
+    
+    fn get_enabled(&self) -> bool {
+        return adw_toggle_get_enabled(self.handle) as bool;
+    }
+    
+    fn set_enabled(&self, enabled: bool) {
+        adw_toggle_set_enabled(self.handle, enabled as gboolean);
+    }
+    
+    fn get_index(&self) -> u32 {
+        return adw_toggle_get_index(self.handle);
+    }
+}

@@ -11,4 +11,4 @@ sources = ["src/"]
 libs = ["adwaita-1"]
 
 [dependencies]
-gtk = "*"
+gtk-bindings = "*"

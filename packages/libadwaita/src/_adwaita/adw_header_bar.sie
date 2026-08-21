@@ -1,0 +1,46 @@
+import { gboolean } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST } from gobject;
+import { GtkWidget } from gtk_bindings;
+
+enum AdwCenteringPolicy {
+    LOOSE,
+    STRICT,
+}
+
+@macro ADW_TYPE_HEADER_BAR = adw_header_bar_get_type();
+@macro ADW_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwHeaderBar>(obj, ADW_TYPE_HEADER_BAR);
+@macro ADW_IS_HEADER_BAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_HEADER_BAR);
+
+struct AdwHeaderBar {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_header_bar_get_type() -> GType;
+@extern fn adw_header_bar_new() -> GtkWidget*;
+@extern fn adw_header_bar_pack_start(header_bar: AdwHeaderBar*,
+                                     child: GtkWidget*);
+@extern fn adw_header_bar_pack_end(header_bar: AdwHeaderBar*,
+                                   child: GtkWidget*);
+@extern fn adw_header_bar_remove(header_bar: AdwHeaderBar*,
+                                 child: GtkWidget*);
+@extern fn adw_header_bar_get_title_widget(header_bar: AdwHeaderBar*) -> GtkWidget*;
+@extern fn adw_header_bar_set_title_widget(header_bar: AdwHeaderBar*,
+                                           title_widget: GtkWidget*);
+@extern fn adw_header_bar_get_show_start_title_buttons(header_bar: AdwHeaderBar*) -> gboolean;
+@extern fn adw_header_bar_set_show_start_title_buttons(header_bar: AdwHeaderBar*,
+                                                            setting: gboolean);
+@extern fn adw_header_bar_get_show_end_title_buttons(header_bar: AdwHeaderBar*) -> gboolean;
+@extern fn adw_header_bar_set_show_end_title_buttons(header_bar: AdwHeaderBar*,
+                                                     setting: gboolean);
+@extern fn adw_header_bar_get_show_back_button(header_bar: AdwHeaderBar*) -> gboolean;
+@extern fn adw_header_bar_set_show_back_button(header_bar: AdwHeaderBar*,
+                                               show_back_button: gboolean);
+@extern fn adw_header_bar_get_decoration_layout(header_bar: AdwHeaderBar*) -> const char*;
+@extern fn adw_header_bar_set_decoration_layout(header_bar: AdwHeaderBar*,
+                                                layout: const char*);
+@extern fn adw_header_bar_get_centering_policy(header_bar: AdwHeaderBar*) -> AdwCenteringPolicy;
+@extern fn adw_header_bar_set_centering_policy(header_bar: AdwHeaderBar*,
+                                               centering_policy: AdwCenteringPolicy);
+@extern fn adw_header_bar_get_show_title(header_bar: AdwHeaderBar*) -> gboolean;
+@extern fn adw_header_bar_set_show_title(header_bar: AdwHeaderBar*,
+                                         show_title: gboolean);

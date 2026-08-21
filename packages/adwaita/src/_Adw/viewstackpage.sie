@@ -1,0 +1,92 @@
+import { gboolean } from glib;
+import { Handler } from Gtk;
+import { GtkWidget } from gtk_bindings;
+import {
+    AdwViewStackPage,
+    adw_view_stack_page_set_name,
+    adw_view_stack_page_set_title,
+    adw_view_stack_page_set_icon_name,
+    adw_view_stack_page_get_use_underline,
+    adw_view_stack_page_set_use_underline,
+    adw_view_stack_page_get_needs_attention,
+    adw_view_stack_page_set_needs_attention,
+    adw_view_stack_page_get_badge_number,
+    adw_view_stack_page_set_badge_number,
+    adw_view_stack_page_get_visible,
+    adw_view_stack_page_set_visible,
+    adw_view_stack_page_get_starts_section,
+    adw_view_stack_page_set_starts_section,
+    adw_view_stack_page_set_section_title,
+} from adwaita;
+
+struct ViewStackPage: Handler<AdwViewStackPage> {
+    @private handle: AdwViewStackPage*;
+
+    fn init(&self, handle: AdwViewStackPage*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> AdwViewStackPage* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwViewStackPage* {
+        return self.handle;
+    }
+
+    fn set_name(&self, name: const &char[]) {
+        adw_view_stack_page_set_name(self.handle, name);
+    }
+
+    fn set_title(&self, title: const &char[]) {
+        adw_view_stack_page_set_title(self.handle, title);
+    }
+
+    fn set_icon_name(&self, icon_name: const &char[]) {
+        adw_view_stack_page_set_icon_name(self.handle, icon_name);
+    }
+    
+    fn get_use_underline(&self) -> bool {
+        return adw_view_stack_page_get_use_underline(self.handle) as bool;
+    }
+    
+    fn set_use_underline(&self, use_underline: bool) {
+        adw_view_stack_page_set_use_underline(self.handle, use_underline as gboolean);
+    }
+    
+    fn get_needs_attention(&self) -> bool {
+        return adw_view_stack_page_get_needs_attention(self.handle) as bool;
+    }
+    
+    fn set_needs_attention(&self, needs_attention: bool) {
+        adw_view_stack_page_set_needs_attention(self.handle, needs_attention as gboolean);
+    }
+    
+    fn get_badge_number(&self) -> u32 {
+        return adw_view_stack_page_get_badge_number(self.handle);
+    }
+    
+    fn set_badge_number(&self, badge_number: u32) {
+        adw_view_stack_page_set_badge_number(self.handle, badge_number);
+    }
+    
+    fn get_visible(&self) -> bool {
+        return adw_view_stack_page_get_visible(self.handle) as bool;
+    }
+    
+    fn set_visible(&self, visible: bool) {
+        adw_view_stack_page_set_visible(self.handle, visible as gboolean);
+    }
+    
+    fn get_starts_section(&self) -> bool {
+        return adw_view_stack_page_get_starts_section(self.handle) as bool;
+    }
+    
+    fn set_starts_section(&self, starts_section: bool) {
+        adw_view_stack_page_set_starts_section(self.handle, starts_section as gboolean);
+    }
+    
+    fn set_section_title(&self, section_title: const &char[]) {
+        adw_view_stack_page_set_section_title(self.handle, section_title);
+    }
+}

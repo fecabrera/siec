@@ -1,0 +1,58 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkWidget } from gtk_bindings;
+import { gboolean, guint } from glib;
+import { GMenuModel } from gio;
+import { AdwSidebarItem } from adw_sidebar_item;
+import { AdwSidebarSection } from adw_sidebar_section;
+
+struct AdwSidebarItem;
+struct AdwSidebarSection;
+
+enum AdwSidebarMode {
+    SIDEBAR = 0,
+    PAGE,
+}
+
+@macro ADW_TYPE_SIDEBAR = adw_sidebar_get_type();
+@macro ADW_SIDEBAR(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwSidebar>(obj, ADW_TYPE_SIDEBAR);
+@macro ADW_IS_SIDEBAR(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_SIDEBAR);
+
+struct AdwSidebar {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_sidebar_get_type() -> GType;
+@extern fn adw_sidebar_new() -> GtkWidget*;
+@extern fn adw_sidebar_get_mode(sidebar: AdwSidebar*) -> AdwSidebarMode;
+@extern fn adw_sidebar_set_mode(sidebar: AdwSidebar*,
+                                mode: AdwSidebarMode);
+@extern fn adw_sidebar_get_selected(sidebar: AdwSidebar*) -> guint;
+@extern fn adw_sidebar_set_selected(sidebar: AdwSidebar*,
+                                    selected: guint);
+@extern fn adw_sidebar_get_selected_item(sidebar: AdwSidebar*) -> AdwSidebarItem*;
+
+@extern fn adw_sidebar_get_placeholder(sidebar: AdwSidebar*) -> GtkWidget*;
+@extern fn adw_sidebar_set_placeholder(sidebar: AdwSidebar*,
+                                       placeholder: GtkWidget*);
+
+@extern fn adw_sidebar_get_item(sidebar: AdwSidebar*,
+                                index: guint) -> AdwSidebarItem*;
+@extern fn adw_sidebar_get_section(sidebar: AdwSidebar*,
+                                   index: guint) -> AdwSidebarSection*;
+@extern fn adw_sidebar_append(sidebar: AdwSidebar*,
+                              section: AdwSidebarSection*);
+@extern fn adw_sidebar_prepend(sidebar: AdwSidebar*,
+                               section: AdwSidebarSection*);
+@extern fn adw_sidebar_insert(sidebar: AdwSidebar*,
+                              section: AdwSidebarSection*,
+                              position: i32);
+@extern fn adw_sidebar_remove(sidebar: AdwSidebar*,
+                              section: AdwSidebarSection*);
+@extern fn adw_sidebar_remove_all(sidebar: AdwSidebar*);
+
+@extern fn adw_sidebar_get_drop_preload(sidebar: AdwSidebar*) -> gboolean;
+@extern fn adw_sidebar_set_drop_preload(sidebar: AdwSidebar*,
+                                        preload: gboolean);
+@extern fn adw_sidebar_get_menu_model(sidebar: AdwSidebar*) -> GMenuModel*;
+@extern fn adw_sidebar_set_menu_model(sidebar: AdwSidebar*,
+                                      menu_model: GMenuModel*);

@@ -1,0 +1,23 @@
+import { GApplicationFlags } from gio;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST } from gobject;
+import { GtkWidget } from gtk_bindings;
+
+@macro ADW_TYPE_TOOLBAR_VIEW = adw_toolbar_view_get_type();
+@macro ADW_TOOLBAR_VIEW(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwToolbarView>(obj, ADW_TYPE_TOOLBAR_VIEW);
+@macro ADW_IS_TOOLBAR_VIEW(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_TOOLBAR_VIEW);
+
+struct AdwToolbarView {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_toolbar_view_get_type() -> GType;
+@extern fn adw_toolbar_view_new() -> GtkWidget*;
+@extern fn adw_toolbar_view_get_content(toolbar_view: AdwToolbarView*) -> GtkWidget*;
+@extern fn adw_toolbar_view_set_content(toolbar_view: AdwToolbarView*,
+                                        content: GtkWidget*);
+@extern fn adw_toolbar_view_add_top_bar(toolbar_view: AdwToolbarView*,
+                                        widget: GtkWidget*);
+@extern fn adw_toolbar_view_add_bottom_bar(toolbar_view: AdwToolbarView*,
+                                           widget: GtkWidget*);
+@extern fn adw_toolbar_view_remove(toolbar_view: AdwToolbarView*,
+                                   widget: GtkWidget*);

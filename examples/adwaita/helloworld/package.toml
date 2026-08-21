@@ -1,0 +1,10 @@
+[package]
+name = "helloworld"
+description = "A simple hello world program"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+adwaita = "*"

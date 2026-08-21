@@ -1,0 +1,92 @@
+import { GObject, GType, G_TYPE_CHECK_INSTANCE_CAST } from gobject;
+import { gboolean, guint } from glib;
+import { GtkWidget, GtkSelectionModel } from gtk_bindings;
+
+@macro ADW_TYPE_VIEW_STACK_PAGE = adw_view_stack_page_get_type();
+@macro ADW_VIEW_STACK_PAGE(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwViewSwitcher>(obj, ADW_TYPE_VIEW_STACK_PAGE);
+@macro ADW_IS_VIEW_STACK_PAGE(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_VIEW_STACK_PAGE);
+
+struct AdwViewStackPage {
+    parent_instance: GObject;
+}
+
+@extern fn adw_view_stack_page_get_type() -> GType;
+@extern fn adw_view_stack_page_get_child(page: AdwViewStackPage*) -> GtkWidget*;
+@extern fn adw_view_stack_page_get_name(page: AdwViewStackPage*) -> const char*;
+@extern fn adw_view_stack_page_set_name(page: AdwViewStackPage*,
+                                        name: const char*);
+@extern fn adw_view_stack_page_get_title(page: AdwViewStackPage*) -> const char*;
+@extern fn adw_view_stack_page_set_title(page: AdwViewStackPage*,
+                                         title: const char*);
+@extern fn adw_view_stack_page_get_use_underline(page: AdwViewStackPage*) -> gboolean;
+@extern fn adw_view_stack_page_set_use_underline(page: AdwViewStackPage*,
+                                                 use_underline: gboolean);
+@extern fn adw_view_stack_page_get_icon_name(page: AdwViewStackPage*) -> const char*;
+@extern fn adw_view_stack_page_set_icon_name(page: AdwViewStackPage*,
+                                             icon_name: const char*);
+@extern fn adw_view_stack_page_get_needs_attention(page: AdwViewStackPage*) -> gboolean;
+@extern fn adw_view_stack_page_set_needs_attention(page: AdwViewStackPage*,
+                                                   needs_attention: gboolean);
+@extern fn adw_view_stack_page_get_badge_number(page: AdwViewStackPage*) -> guint;
+@extern fn adw_view_stack_page_set_badge_number(page: AdwViewStackPage*,
+                                                badge_number: guint);
+@extern fn adw_view_stack_page_get_visible(page: AdwViewStackPage*) -> gboolean;
+@extern fn adw_view_stack_page_set_visible(page: AdwViewStackPage*,
+                                           visible: gboolean);
+@extern fn adw_view_stack_page_get_starts_section(page: AdwViewStackPage*) -> gboolean;
+@extern fn adw_view_stack_page_set_starts_section(page: AdwViewStackPage*,
+                                                  starts_section: gboolean);
+@extern fn adw_view_stack_page_get_section_title(page: AdwViewStackPage*) -> const char*;
+@extern fn adw_view_stack_page_set_section_title(page: AdwViewStackPage*,
+                                                 section_title: const char*);
+
+@macro ADW_TYPE_VIEW_STACK = adw_view_stack_get_type();
+@macro ADW_VIEW_STACK(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwViewStack>(obj, ADW_TYPE_VIEW_STACK);
+@macro ADW_IS_VIEW_STACK(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_VIEW_STACK);
+
+struct AdwViewStack {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_view_stack_get_type() -> GType;
+@extern fn adw_view_stack_new() -> GtkWidget*;
+@extern fn adw_view_stack_add(stack: AdwViewStack*,
+                              child: GtkWidget*) -> AdwViewStackPage*;
+@extern fn adw_view_stack_add_named(stack: AdwViewStack*,
+                                    child: GtkWidget*,
+                                    name: const char*) -> AdwViewStackPage*;
+@extern fn adw_view_stack_add_titled(stack: AdwViewStack*,
+                                     child: GtkWidget*,
+                                     name: const char*,
+                                     title: const char*) -> AdwViewStackPage*;
+@extern fn adw_view_stack_add_titled_with_icon(stack: AdwViewStack*,
+                                               child: GtkWidget*,
+                                               name: const char*,
+                                               title: const char*,
+                                               icon_name: const char*) -> AdwViewStackPage*;
+@extern fn adw_view_stack_remove(stack: AdwViewStack*,
+                                 child: GtkWidget*);
+@extern fn adw_view_stack_get_page(stack: AdwViewStack*,
+                                   child: GtkWidget*) ->  AdwViewStackPage*;
+@extern fn adw_view_stack_get_child_by_name(stack: AdwViewStack*,
+                                            name: const char*) -> GtkWidget*;
+@extern fn adw_view_stack_get_visible_child(stack: AdwViewStack*) -> GtkWidget*;
+@extern fn adw_view_stack_set_visible_child(stack: AdwViewStack*,
+                                            child: GtkWidget*);
+@extern fn adw_view_stack_get_visible_child_name(stack: AdwViewStack*) -> const char*;
+@extern fn adw_view_stack_set_visible_child_name(stack: AdwViewStack*,
+                                                 name: const char*);
+@extern fn adw_view_stack_get_hhomogeneous(stack: AdwViewStack*) -> gboolean;
+@extern fn adw_view_stack_set_hhomogeneous(stack: AdwViewStack*,
+                                           hhomogeneous: gboolean);
+@extern fn adw_view_stack_get_vhomogeneous(stack: AdwViewStack*) -> gboolean;
+@extern fn adw_view_stack_set_vhomogeneous(stack: AdwViewStack*,
+                                           vhomogeneous: gboolean);
+@extern fn adw_view_stack_get_enable_transitions(stack: AdwViewStack*) -> gboolean;
+@extern fn adw_view_stack_set_enable_transitions(stack: AdwViewStack*,
+                                                 enable_transitions: gboolean);
+@extern fn adw_view_stack_get_transition_duration(stack: AdwViewStack*) -> guint;
+@extern fn adw_view_stack_set_transition_duration(stack: AdwViewStack*,
+                                                  duration: guint);
+@extern fn adw_view_stack_get_transition_running(stack: AdwViewStack*) -> gboolean;
+@extern fn adw_view_stack_get_pages(stack: AdwViewStack*) -> GtkSelectionModel*;

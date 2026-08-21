@@ -1,0 +1,62 @@
+import { Handler } from Gtk;
+import {
+    AdwSidebarSection,
+    adw_sidebar_section_new,
+    adw_sidebar_section_get_title,
+    adw_sidebar_section_set_title,
+    adw_sidebar_section_append,
+    adw_sidebar_section_prepend,
+    adw_sidebar_section_insert,
+    adw_sidebar_section_remove,
+    adw_sidebar_section_remove_all,
+} from adwaita;
+import { SidebarItem } from sidebaritem;
+
+struct SidebarSection: Handler<AdwSidebarSection> {
+    @private handle: AdwSidebarSection*;
+
+    fn init(&self) {
+        self.handle = adw_sidebar_section_new();
+    }
+
+    fn init(&self, handle: AdwSidebarSection*) {
+        self.handle = handle;
+    }
+
+    fn init(&self, title: const &char[]) {
+        self.init();
+        self.set_title(title);
+    }
+
+    fn get_handle(&self) -> AdwSidebarSection* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwSidebarSection* {
+        return self.handle;
+    }
+
+    fn set_title(&self, title: const &char[]) {
+        adw_sidebar_section_set_title(self.handle, title);
+    }
+
+    fn append(&self, item: &SidebarItem) {
+        adw_sidebar_section_append(self.handle, item.get_handle());
+    }
+
+    fn prepend(&self, item: &SidebarItem) {
+        adw_sidebar_section_prepend(self.handle, item.get_handle());
+    }
+
+    fn insert(&self, item: &SidebarItem, position: i32) {
+        adw_sidebar_section_insert(self.handle, item.get_handle(), position);
+    }
+
+    fn remove(&self, item: &SidebarItem) {
+        adw_sidebar_section_remove(self.handle, item.get_handle());
+    }
+
+    fn remove_all(&self) {
+        adw_sidebar_section_remove_all(self.handle);
+    }
+}

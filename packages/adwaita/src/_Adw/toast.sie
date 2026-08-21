@@ -1,0 +1,76 @@
+import { gboolean } from glib;
+import { Handler } from Gtk;
+import {
+    ADW_TOAST,
+    AdwToast,
+    AdwToastPriority,
+    adw_toast_new,
+    adw_toast_set_title,
+    adw_toast_set_button_label,
+    adw_toast_set_action_name,
+    adw_toast_get_priority,
+    adw_toast_set_priority,
+    adw_toast_get_timeout,
+    adw_toast_set_timeout,
+    adw_toast_get_use_markup,
+    adw_toast_set_use_markup,
+    adw_toast_dismiss,
+} from adwaita;
+
+@type ToastPriority = AdwToastPriority;
+
+struct Toast: Handler<AdwToast> {
+    @private handle: AdwToast*;
+
+    fn init(&self, title: const &char[]) {
+        self.handle = adw_toast_new(title);
+    }
+
+    fn get_handle(&self) -> AdwToast* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwToast* {
+        return self.handle;
+    }
+
+    fn set_title(&self, title: const &char[]) {
+        adw_toast_set_title(self.handle, title);
+    }
+
+    fn set_button_label(&self, label: const &char[]) {
+        adw_toast_set_button_label(self.handle, label);
+    }
+
+    fn set_action_name(&self, name: const &char[]) {
+        adw_toast_set_action_name(self.handle, name);
+    }
+    
+    fn get_priority(&self) -> ToastPriority {
+        return adw_toast_get_priority(self.handle);
+    }
+    
+    fn set_priority(&self, priority: ToastPriority) {
+        adw_toast_set_priority(self.handle, priority);
+    }
+    
+    fn get_timeout(&self) -> u32 {
+        return adw_toast_get_timeout(self.handle);
+    }
+    
+    fn set_timeout(&self, timeout: u32) {
+        adw_toast_set_timeout(self.handle, timeout);
+    }
+    
+    fn get_use_markup(&self) -> bool {
+        return adw_toast_get_use_markup(self.handle) as bool;
+    }
+    
+    fn set_use_markup(&self, use_markup: bool) {
+        adw_toast_set_use_markup(self.handle, use_markup as gboolean);
+    }
+    
+    fn dismiss(&self) {
+        adw_toast_dismiss(self.handle);
+    }
+}

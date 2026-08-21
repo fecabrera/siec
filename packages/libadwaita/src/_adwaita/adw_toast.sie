@@ -1,0 +1,51 @@
+import { GObject, GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GVariant, guint, gboolean } from glib;
+import { GtkWidget } from gtk_bindings;
+
+enum AdwToastPriority {
+    NORMAL,
+    HIGH,
+}
+
+@macro ADW_TYPE_TOAST = adw_toast_get_type();
+@macro ADW_TOAST(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwToast>(obj, ADW_TYPE_TOAST);
+@macro ADW_IS_TOAST(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_TOAST);
+
+struct AdwToast {
+    parent_instance: GObject;
+}
+
+@extern fn adw_toast_get_type() -> GType;
+@extern fn adw_toast_new(title: const char*) -> AdwToast*;
+@extern fn adw_toast_new_format(format: const char*,
+                                ...) -> AdwToast*;
+@extern fn adw_toast_get_title(toast: AdwToast*) -> const char*;
+@extern fn adw_toast_set_title(toast: AdwToast*,
+                               title: const char*);
+@extern fn adw_toast_get_button_label(toast: AdwToast*) -> const char*;
+@extern fn adw_toast_set_button_label(toast: AdwToast*,
+                                      button_label: const char*);
+@extern fn adw_toast_get_action_name(toast: AdwToast*) -> const char*;
+@extern fn adw_toast_set_action_name(toast: AdwToast*,
+                                     action_name: const char*);
+@extern fn adw_toast_get_action_target_value(toast: AdwToast*) -> GVariant*;
+@extern fn adw_toast_set_action_target_value(toast: AdwToast*,
+                                             action_target: GVariant*);
+@extern fn adw_toast_set_action_target(toast: AdwToast*,
+                                       format_string: const char*,
+                                       ...);
+@extern fn adw_toast_set_detailed_action_name(toast: AdwToast*,
+                                              detailed_action_name: const char*);
+@extern fn adw_toast_get_priority(toast: AdwToast*) -> AdwToastPriority;
+@extern fn adw_toast_set_priority(toast: AdwToast*,
+                                  priority: AdwToastPriority);
+@extern fn adw_toast_get_timeout(toast: AdwToast*) -> guint;
+@extern fn adw_toast_set_timeout(toast: AdwToast*,
+                                 timeout: guint);
+@extern fn adw_toast_get_custom_title(toast: AdwToast*) -> GtkWidget*;
+@extern fn adw_toast_set_custom_title(toast: AdwToast*,
+                                      widget: GtkWidget*);
+@extern fn adw_toast_get_use_markup(toast: AdwToast*) -> gboolean;
+@extern fn adw_toast_set_use_markup(toast: AdwToast*,
+                                    use_markup: gboolean);
+@extern fn adw_toast_dismiss(toast: AdwToast*);

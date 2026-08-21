@@ -1,0 +1,73 @@
+import { GtkWidget, GtkSelectionModel } from gtk_bindings;
+import { gboolean, guint } from glib;
+import { GObject, GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+
+@macro ADW_TYPE_TOGGLE = adw_toggle_get_type();
+@macro ADW_TOGGLE(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwToggle>(obj, ADW_TYPE_TOGGLE);
+@macro ADW_IS_TOGGLE(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_TOGGLE);
+
+struct AdwToggle {
+    parent_instance: GObject;
+}
+
+@extern fn adw_toggle_get_type() -> GType;
+@extern fn adw_toggle_new() -> AdwToggle*;
+@extern fn adw_toggle_get_name(toggle: AdwToggle*) -> const char*;
+@extern fn adw_toggle_set_name(toggle: AdwToggle*,
+                               name: const char*);
+@extern fn adw_toggle_get_label(toggle: AdwToggle*) -> const char*;
+@extern fn adw_toggle_set_label(toggle: AdwToggle*,
+                                label: const char*);
+@extern fn adw_toggle_get_use_underline(toggle: AdwToggle*) -> gboolean;
+@extern fn adw_toggle_set_use_underline(toggle: AdwToggle*,
+                                        use_underline: gboolean);
+@extern fn adw_toggle_get_icon_name(toggle: AdwToggle*) -> const char*;
+@extern fn adw_toggle_set_icon_name(toggle: AdwToggle*,
+                                    icon_name: const char*);
+@extern fn adw_toggle_get_tooltip(toggle: AdwToggle*) -> const char*;
+@extern fn adw_toggle_set_tooltip(toggle: AdwToggle*,
+                                  tooltip: const char*);
+@extern fn adw_toggle_get_description(toggle: AdwToggle*) -> const char*;
+@extern fn adw_toggle_set_description(toggle: AdwToggle*,
+                                      description: const char*);
+@extern fn adw_toggle_get_child(toggle: AdwToggle*) -> GtkWidget*;
+@extern fn adw_toggle_set_child(toggle: AdwToggle*,
+                                child: GtkWidget*);
+@extern fn adw_toggle_get_enabled(toggle: AdwToggle*) -> gboolean;
+@extern fn adw_toggle_set_enabled(toggle: AdwToggle*,
+                                  enabled: gboolean);
+@extern fn adw_toggle_get_index(toggle: AdwToggle*) -> guint;
+
+@macro ADW_TYPE_TOGGLE_GROUP = adw_toggle_group_get_type();
+@macro ADW_TOGGLE_GROUP(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwToggleGroup>(obj, ADW_TYPE_TOGGLE_GROUP);
+@macro ADW_IS_TOGGLE_GROUP(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_TOGGLE_GROUP);
+
+struct AdwToggleGroup {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_toggle_group_get_type() -> GType;
+@extern fn adw_toggle_group_new() -> GtkWidget*;
+@extern fn adw_toggle_group_add(toggle_group: AdwToggleGroup*,
+                                toggle: AdwToggle*);
+@extern fn adw_toggle_group_remove(toggle_group: AdwToggleGroup*,
+                                   toggle: AdwToggle*);
+@extern fn adw_toggle_group_remove_all(toggle_group: AdwToggleGroup*);
+@extern fn adw_toggle_group_get_toggle(toggle_group: AdwToggleGroup*,
+                                       index: guint) -> AdwToggle*;
+@extern fn adw_toggle_group_get_toggle_by_name(toggle_group: AdwToggleGroup*,
+                                               name: const char*) -> AdwToggle*;
+@extern fn adw_toggle_group_get_n_toggle(toggle_group: AdwToggleGroup*) -> guint;
+@extern fn adw_toggle_group_get_active(toggle_group: AdwToggleGroup*) -> guint;
+@extern fn adw_toggle_group_set_active(toggle_group: AdwToggleGroup*,
+                                       active: guint);
+@extern fn adw_toggle_group_get_active_name(toggle_group: AdwToggleGroup*) -> const char*;
+@extern fn adw_toggle_group_set_active_name(toggle_group: AdwToggleGroup*,
+                                            name: const char*);
+@extern fn adw_toggle_group_get_homogeneous(toggle_group: AdwToggleGroup*) -> gboolean;
+@extern fn adw_toggle_group_set_homogeneous(toggle_group: AdwToggleGroup*,
+                                            homogeneous: gboolean);
+@extern fn adw_toggle_group_get_can_shrink(toggle_group: AdwToggleGroup*) -> gboolean;
+@extern fn adw_toggle_group_set_can_shrink(toggle_group: AdwToggleGroup*,
+                                           can_shrink: gboolean);
+@extern fn adw_toggle_group_get_toggles(toggle_group: AdwToggleGroup*) -> GtkSelectionModel*;

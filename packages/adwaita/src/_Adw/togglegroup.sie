@@ -1,0 +1,83 @@
+import { gboolean } from glib;
+import { Handler } from Gtk;
+import { GtkWidget } from gtk_bindings;
+import {
+    ADW_TOGGLE_GROUP,
+    AdwToggleGroup,
+    adw_toggle_group_new,
+    adw_toggle_group_add,
+    adw_toggle_group_remove,
+    adw_toggle_group_remove_all,
+    adw_toggle_group_get_active,
+    adw_toggle_group_set_active,
+    adw_toggle_group_set_active_name,
+    adw_toggle_group_get_homogeneous,
+    adw_toggle_group_set_homogeneous,
+    adw_toggle_group_get_can_shrink,
+    adw_toggle_group_set_can_shrink,
+} from adwaita;
+import { Toggle } from toggle;
+
+struct ToggleGroup: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_toggle_group_new();
+    }
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_adw_toggle_group(&self) -> AdwToggleGroup* {
+        return ADW_TOGGLE_GROUP(self.handle);
+    }
+
+    fn add(&self, toggle: &Toggle) {
+        adw_toggle_group_add(self.get_adw_toggle_group(), toggle.get_handle());
+    }
+    
+    fn remove(&self, toggle: &Toggle) {
+        adw_toggle_group_remove(self.get_adw_toggle_group(), toggle.get_handle());
+    }
+    
+    fn remove_all(&self) {
+        adw_toggle_group_remove_all(self.get_adw_toggle_group());
+    }
+    
+    fn get_active(&self) -> u32 {
+        return adw_toggle_group_get_active(self.get_adw_toggle_group());
+    }
+    
+    fn set_active(&self, active: u32) {
+        adw_toggle_group_set_active(self.get_adw_toggle_group(), active);
+    }
+
+    fn set_active_name(&self, name: const &char[]) {
+        adw_toggle_group_set_active_name(self.get_adw_toggle_group(), name);
+    }
+    
+    fn get_homogeneous(&self) -> bool {
+        return adw_toggle_group_get_homogeneous(self.get_adw_toggle_group()) as bool;
+    }
+    
+    fn set_homogeneous(&self, homogeneous: bool) {
+        adw_toggle_group_set_homogeneous(self.get_adw_toggle_group(), homogeneous as gboolean);
+    }
+    
+    fn get_can_shrink(&self) -> bool {
+        return adw_toggle_group_get_can_shrink(self.get_adw_toggle_group()) as bool;
+    }
+    
+    fn set_can_shrink(&self, can_shrink: bool) {
+        adw_toggle_group_set_can_shrink(self.get_adw_toggle_group(), can_shrink as gboolean);
+    }
+}

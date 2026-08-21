@@ -1,0 +1,57 @@
+import { G_CALLBACK, g_signal_connect } from gobject;
+import { guint } from glib;
+import { Handler } from Gtk;
+import { GtkWidget } from gtk_bindings;
+import {
+    ADW_SIDEBAR,
+    AdwSidebar,
+    adw_sidebar_new,
+    adw_sidebar_append,
+    adw_sidebar_prepend,
+    adw_sidebar_insert,
+} from adwaita;
+import { SidebarSection } from sidebarsection;
+
+struct Sidebar: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_sidebar_new();
+    }
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn as_sidebar(&self) -> AdwSidebar* {
+        return ADW_SIDEBAR(self.handle);
+    }
+
+    fn append(&self, section: &SidebarSection) {
+        adw_sidebar_append(self.as_sidebar(), section.get_handle());
+    }
+
+    fn prepend(&self, section: &SidebarSection) {
+        adw_sidebar_prepend(self.as_sidebar(), section.get_handle());
+    }
+
+    fn insert(&self, section: &SidebarSection, position: i32) {
+        adw_sidebar_insert(self.as_sidebar(), section.get_handle(), position);
+    }
+
+    fn connect_activated(&self, callback: closure fn(u32)) {
+        let handle_activated = (sidebar: AdwSidebar*, index: guint) => callback(index);
+        let cb = G_CALLBACK<fn(AdwSidebar*, guint, opaque*)>(handle_activated);
+        let cb_data = handle_activated.env;
+        g_signal_connect(self.handle, "activated", cb, cb_data);
+    }
+}

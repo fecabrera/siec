@@ -1,0 +1,36 @@
+import { Handler } from Gtk;
+import { G_CALLBACK, g_signal_connect } from gobject;
+import {
+    AdwSidebarItem,
+    adw_sidebar_item_new,
+    adw_sidebar_item_set_title,
+    adw_sidebar_item_set_subtitle,
+} from adwaita;
+
+struct SidebarItem: Handler<AdwSidebarItem> {
+    @private handle: AdwSidebarItem*;
+
+    fn init(&self, handle: AdwSidebarItem*) {
+        self.handle = handle;
+    }
+
+    fn init(&self, title: const &char[]) {
+        self.handle = adw_sidebar_item_new(title);
+    }
+
+    fn get_handle(&self) -> AdwSidebarItem* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const AdwSidebarItem* {
+        return self.handle;
+    }
+
+    fn set_title(&self, title: const &char[]) {
+        adw_sidebar_item_set_title(self.handle, title);
+    }
+
+    fn set_subtitle(&self, subtitle: const &char[]) {
+        adw_sidebar_item_set_subtitle(self.handle, subtitle);
+    }
+}

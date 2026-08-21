@@ -1,0 +1,45 @@
+import { Handler } from Gtk;
+import { GtkWidget } from gtk_bindings;
+import {
+    ADW_VIEW_SWITCHER,
+    AdwViewSwitcher,
+    AdwViewSwitcherPolicy,
+    adw_view_switcher_new,
+    adw_view_switcher_get_policy,
+    adw_view_switcher_set_policy,
+} from adwaita;
+
+@type ViewSwitcherPolicy = AdwViewSwitcherPolicy;
+
+struct ViewSwitcher: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_view_switcher_new();
+    }
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn get_adw_view_switcher(&self) -> AdwViewSwitcher* {
+        return ADW_VIEW_SWITCHER(self.handle);
+    }
+
+    fn get_policy(&self) -> ViewSwitcherPolicy {
+        return adw_view_switcher_get_policy(self.get_adw_view_switcher());
+    }
+
+    fn set_policy(&self, policy: ViewSwitcherPolicy) {
+        adw_view_switcher_set_policy(self.get_adw_view_switcher(), policy);
+    }
+}

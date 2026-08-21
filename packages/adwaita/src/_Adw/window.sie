@@ -1,0 +1,89 @@
+import { Handler } from Gtk;
+import {
+    GTK_APPLICATION,
+    GTK_WINDOW,
+    GtkWidget,
+    gtk_window_set_title,
+    gtk_window_set_default_size,
+    gtk_window_get_default_size,
+    gtk_window_set_child,
+    gtk_window_present,
+    gtk_window_minimize,
+    gtk_window_unminimize,
+    gtk_window_maximize,
+    gtk_window_unmaximize,
+    gtk_window_fullscreen,
+    gtk_window_unfullscreen,
+    gtk_window_close,
+} from gtk_bindings;
+import { adw_window_new } from adwaita;
+
+struct Window: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_window_new();
+    }
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    fn set_title(&self, title: const &char[]) {
+        gtk_window_set_title(GTK_WINDOW(self.handle), title);
+    }
+
+    fn set_default_size(&self, x: i32, y: i32) {
+        gtk_window_set_default_size(GTK_WINDOW(self.handle), x, y);
+    }
+
+    fn get_default_size(&self) -> Tuple<i32, i32> {
+        let size: Tuple<i32, i32>;
+        gtk_window_get_default_size(GTK_WINDOW(self.handle), &size[0], &size[1]);
+        return size;
+    }
+
+    fn set_child(&self, obj: &Handler<GtkWidget>) {
+        gtk_window_set_child(GTK_WINDOW(self.handle), obj.get_handle());
+    }
+
+    fn present(&self) {
+        gtk_window_present(GTK_WINDOW(self.handle));
+    }
+
+    fn minimize(&self) {
+        gtk_window_minimize(GTK_WINDOW(self.handle));
+    }
+
+    fn unminimize(&self) {
+        gtk_window_unminimize(GTK_WINDOW(self.handle));
+    }
+
+    fn maximize(&self) {
+        gtk_window_maximize(GTK_WINDOW(self.handle));
+    }
+    
+    fn unmaximize(&self) {
+        gtk_window_unmaximize(GTK_WINDOW(self.handle));
+    }
+
+    fn fullscreen(&self) {
+        gtk_window_fullscreen(GTK_WINDOW(self.handle));
+    }
+
+    fn unfullscreen(&self) {
+        gtk_window_unfullscreen(GTK_WINDOW(self.handle));
+    }
+
+    fn close(&self) {
+        gtk_window_close(GTK_WINDOW(self.handle));
+    }
+}

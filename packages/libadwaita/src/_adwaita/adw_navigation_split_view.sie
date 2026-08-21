@@ -1,0 +1,41 @@
+import { gboolean } from glib;
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkWidget } from gtk_bindings;
+import { AdwNavigationPage } from adw_navigation_view;
+import { AdwLengthUnit } from adw_length_unit;
+
+@macro ADW_TYPE_NAVIGATION_SPLIT_VIEW = adw_navigation_split_view_get_type();
+@macro ADW_NAVIGATION_SPLIT_VIEW(obj) = G_TYPE_CHECK_INSTANCE_CAST<AdwNavigationSplitView>(obj, ADW_TYPE_NAVIGATION_SPLIT_VIEW);
+@macro ADW_IS_NAVIGATION_SPLIT_VIEW(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, ADW_TYPE_NAVIGATION_SPLIT_VIEW);
+
+struct AdwNavigationSplitView {
+    parent_instance: GtkWidget;
+}
+
+@extern fn adw_navigation_split_view_get_type() -> GType;
+@extern fn adw_navigation_split_view_new() -> GtkWidget*;
+@extern fn adw_navigation_split_view_get_sidebar(split_view: AdwNavigationSplitView*) -> AdwNavigationPage*;
+@extern fn adw_navigation_split_view_set_sidebar(split_view: AdwNavigationSplitView*,
+                                                 sidebar: AdwNavigationPage*);
+@extern fn adw_navigation_split_view_get_content(split_view: AdwNavigationSplitView*) -> AdwNavigationPage*;
+@extern fn adw_navigation_split_view_set_content(split_view: AdwNavigationSplitView*,
+                                                 content: AdwNavigationPage*);
+
+@extern fn adw_navigation_split_view_get_collapsed(split_view: AdwNavigationSplitView*) -> gboolean;
+@extern fn adw_navigation_split_view_set_collapsed(split_view: AdwNavigationSplitView*,
+                                                   collapsed: gboolean);
+@extern fn adw_navigation_split_view_get_show_content(split_view: AdwNavigationSplitView*) -> gboolean;
+@extern fn adw_navigation_split_view_set_show_content(split_view: AdwNavigationSplitView*,
+                                                      show_content: gboolean);
+@extern fn adw_navigation_split_view_get_min_sidebar_width(split_view: AdwNavigationSplitView*) -> f64;
+@extern fn adw_navigation_split_view_set_min_sidebar_width(split_view: AdwNavigationSplitView*,
+                                                           width: f64);
+@extern fn adw_navigation_split_view_get_max_sidebar_width(split_view: AdwNavigationSplitView*) -> f64;
+@extern fn adw_navigation_split_view_set_max_sidebar_width(split_view: AdwNavigationSplitView*,
+                                                           width: f64);
+@extern fn adw_navigation_split_view_get_sidebar_width_fraction(split_view: AdwNavigationSplitView*) -> f64;
+@extern fn adw_navigation_split_view_set_sidebar_width_fraction(split_view: AdwNavigationSplitView*,
+                                                                fraction: f64);
+@extern fn adw_navigation_split_view_get_sidebar_width_unit(split_view: AdwNavigationSplitView*) -> AdwLengthUnit;
+@extern fn adw_navigation_split_view_set_sidebar_width_unit(split_view: AdwNavigationSplitView*,
+                                                            unit: AdwLengthUnit*);
