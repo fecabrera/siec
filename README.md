@@ -2527,41 +2527,14 @@ provides `==` and `!=`, while `add` provides `+`.
 
 ### Interfaces
 
-Sie has no inheritance: interfaces are its only mechanism for abstract typing. They define an abstract object: a set of fields and actions that any struct implementing them must provide. They're declared through the `interface` keyword followed by their name, fields spelled like a struct's and actions as `fn` signatures, `&self` naming the interface:
+Interfaces define the fields and methods a type must provide:
 
 ```
 interface Named {
     name: char[];
     fn greet(&self) -> char[];
 }
-```
 
-They can be used as types, standing for any struct that implements them:
-
-```
-fn f(n: Named); // a function that receives any struct implementing Named
-```
-
-An interface can only type a parameter. There is no runtime dispatch: like [generic functions](#generic-functions), `f` compiles once per concrete argument type, and each call checks that its argument's type implements the interface. Each interface parameter is independent, so `fn both(a: Named, b: Named)` takes two different implementers. The body can use the interface's fields and actions, and a function cannot return an interface value: it returns the concrete type.
-
-An action in the body is sugar for the same signature declared outside it, the way struct methods are spelled, with the interface as the receiver's type and no body:
-
-```
-fn Named::greet(self: &Named) -> char[];
-```
-
-Either spelling declares a required signature, and takes the [`&self` sugar](#methods) like any method declaration. An action's name may overload: each signature is its own requirement, so an implementer must provide every one:
-
-```
-interface IOReadable {
-    fn read(&self, buf: &u8[], count: u64) -> Result<i64, IOError>;
-    fn read(&self, buf: &u8[]) -> Result<i64, IOError>;
-}
-```
-
-Interface conformance is nominal: a struct only implements an interface when it says so, through `: I` after the struct's name. Since there's no inheritance, `:` in that position always introduces interfaces. Implementing one still requires declaring its fields (with the declared types) and providing its actions (with the declared signatures); each claim is checked once every declaration is in, and a generic struct's instances check with their arguments substituted, so `struct List<T>: Iterable<T>` makes each `List<i32>` implement `Iterable<i32>`:
-
-```
 struct Person: Named {
     name: char[];
 }
@@ -2569,15 +2542,17 @@ struct Person: Named {
 fn Person::greet(self: &Person) -> char[] {
     return self.name;
 }
+
+fn welcome(person: Named) { person.greet(); }
 ```
 
-A struct can implement more than one interface, separated by commas:
+A type implements an interface by listing it after `:` and providing every
+required field and method. Multiple interfaces are separated by commas, as in
+`struct Person: Named, Aged`. Required methods may also be declared outside
+the interface body as `fn Named::greet(&self) -> char[];`.
 
-```
-struct Person: Named, Aged {
-    // ...
-}
-```
+Interfaces may be used only as parameter types. Calls are compiled for each
+concrete argument type, with no runtime interface object or dispatch.
 
 #### Generic interfaces
 
