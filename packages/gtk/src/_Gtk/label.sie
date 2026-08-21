@@ -1,3 +1,4 @@
+import { String } from std.collections;
 import { gboolean } from glib;
 import { GMenuModel } from gio;
 import { Handler } from handler;
@@ -36,12 +37,24 @@ import {
 struct Label: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
     fn init(&self, str: const &char[]) {
         self.handle = gtk_label_new(str);
     }
 
+    fn init(&self, str: &String) {
+        self.handle = gtk_label_new(String::null_terminated(str).as_const_array());
+    }
+
     fn with_mnemonic(str: const &char[]) -> Label {
-        return { gtk_label_new_with_mnemonic(str) };
+        return Label(gtk_label_new_with_mnemonic(str));
+    }
+
+    fn with_mnemonic(str: const &String) -> Label {
+        return Label(gtk_label_new_with_mnemonic(String::null_terminated(str).as_const_array()));
     }
 
     fn get_handle(&self) -> GtkWidget* {
@@ -61,12 +74,24 @@ struct Label: Handler<GtkWidget> {
         gtk_label_set_text(self.as_gtk_label(), str);
     }
 
+    fn set_text(&self, str: const &String) {
+        gtk_label_set_text(self.as_gtk_label(), String::null_terminated(str).as_const_array());
+    }
+
     fn set_label(&self, str: const &char[]) {
         gtk_label_set_label(self.as_gtk_label(), str);
+    }
+
+    fn set_label(&self, str: const &String) {
+        gtk_label_set_label(self.as_gtk_label(), String::null_terminated(str).as_const_array());
     }
     
     fn gtk_label_set_markup(&self, str: const &char[]) {
         gtk_label_set_markup(self.as_gtk_label(), str);
+    }
+    
+    fn gtk_label_set_markup(&self, str: const &String) {
+        gtk_label_set_markup(self.as_gtk_label(),  String::null_terminated(str).as_const_array());
     }
     
     fn gtk_label_set_use_markup(&self, use_markup: bool) {

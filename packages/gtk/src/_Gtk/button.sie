@@ -8,6 +8,7 @@ import {
     GtkWidget,
     GtkAlign,
     gtk_button_new_with_label,
+    gtk_button_new_from_icon_name,
     gtk_button_set_has_frame,
     gtk_button_get_has_frame,
     gtk_button_set_label,
@@ -25,8 +26,20 @@ import { G_CALLBACK, g_signal_connect } from gobject;
 struct Button: Handler<GtkWidget> {
     @private handle: GtkWidget*;
 
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
     fn init(&self, label: const char[]) {
         self.handle = gtk_button_new_with_label(label);
+    }
+
+    fn init(&self, label: const &String) {
+        self.handle = gtk_button_new_with_label(String::null_terminated(label).as_const_array());
+    }
+
+    fn from_icon(label: const char[]) -> Button {
+        return Button(gtk_button_new_from_icon_name(label));
     }
 
     fn get_handle(&self) -> GtkWidget* {
@@ -54,9 +67,8 @@ struct Button: Handler<GtkWidget> {
         gtk_button_set_label(self.as_gtk_button(), label);
     }
 
-    fn set_label(&self, label: &String) {
-        label.null_terminate();
-        self.set_label(label.as_const_array());
+    fn set_label(&self, label: const &String) {
+        self.set_label(String::null_terminated(label).as_const_array());
     }
     
     fn set_use_underline(&self, use_underline: bool) {
@@ -69,6 +81,10 @@ struct Button: Handler<GtkWidget> {
     
     fn set_icon_name(&self, icon_name: const &char[]) {
         gtk_button_set_icon_name(self.as_gtk_button(), icon_name);
+    }
+    
+    fn set_icon_name(&self, icon_name: const &String) {
+        gtk_button_set_icon_name(self.as_gtk_button(), String::null_terminated(icon_name).as_const_array());
     }
     
     fn set_child(&self, child: &Handler<GtkWidget>) {

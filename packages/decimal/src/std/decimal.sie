@@ -168,9 +168,7 @@ fn Decimal::assign_from(&self, value: const &char[]) {
  * @param value The value to set the Decimal to.
  */
 fn Decimal::assign_from(&self, value: const &String) {
-    let str = String(value);
-    str.null_terminate();
-    mpdecimal.mpd_set_string(self.mpd, str.as_const_array(), self.ctx);
+    mpdecimal.mpd_set_string(self.mpd, String::null_terminated(value).as_const_array(), self.ctx);
 }
 
 /**

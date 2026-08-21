@@ -18,6 +18,12 @@ import { Formattable } from std.format;
         self.append(arr);
     }
 
+    fn null_terminated(src: const &Iterable<char>) -> String {
+        let str = String(src);
+        str.null_terminate();
+        return str;
+    }
+
     /**
     * Add the given null-terminated array to the String.
     *

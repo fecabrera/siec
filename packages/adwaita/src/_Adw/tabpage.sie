@@ -1,3 +1,4 @@
+import { String } from std.collections;
 import { gboolean } from glib;
 import { Handler } from Gtk;
 import {
@@ -27,8 +28,16 @@ struct TabPage: Handler<AdwTabPage> {
         adw_tab_page_set_title(self.handle, title);
     }
 
+    fn set_title(&self, title: const &String) {
+        adw_tab_page_set_title(self.handle, String::null_terminated(title).as_const_array());
+    }
+
     fn set_tooltip(&self, tooltip: const &char[]) {
         adw_tab_page_set_tooltip(self.handle, tooltip);
+    }
+
+    fn set_tooltip(&self, tooltip: const &String) {
+        adw_tab_page_set_tooltip(self.handle, String::null_terminated(tooltip).as_const_array());
     }
     
     fn get_loading(&self) -> bool {
