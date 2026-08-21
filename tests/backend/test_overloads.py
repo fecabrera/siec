@@ -225,6 +225,22 @@ def test_undefined_argument_is_not_an_overload_ambiguity(compile_source):
         """)
 
 
+def test_undefined_call_argument_is_not_an_overload_ambiguity(compile_source):
+    """An unknown nested call reports itself before overload ranking."""
+    with pytest.raises(NameError, match="undefined function 'missing'"):
+        compile_source("""
+        struct Box {
+            fn init(&self, n: i64) {}
+            fn init(&self, f: f64) {}
+        }
+
+        fn main() -> i32 {
+            let box = Box(missing());
+            return 0;
+        }
+        """)
+
+
 def test_same_signature_twice_is_still_a_conflict(compile_source):
     """
     Overloading needs distinct parameter lists; repeating one is the same

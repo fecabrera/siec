@@ -175,10 +175,16 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
         return entry[0][1]
 
     arg_types = [rank_type(gen, arg, scope) for arg in args]
-    # Surface an undefined name before ranking: without a type it used
-    # to match every candidate as an implicit conversion and report an
-    # ambiguity instead of the missing binding.
+    # Surface the precise reason an argument has no type before ranking:
+    # otherwise an undefined name or call matches every candidate as an
+    # adaptable expression and reports an unrelated overload ambiguity.
     for arg, arg_type in zip(args, arg_types):
+        if arg_type is None:
+            from siec.codegen.inference import untyped_reason
+
+            if (reason := untyped_reason(gen, arg, scope)) is not None:
+                raise reason
+
         if arg_type is None and isinstance(arg, Var):
             from siec.codegen.checking import check_expression
 
