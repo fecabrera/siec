@@ -766,6 +766,35 @@ def test_types_resolve_through_module_bindings(tmp_path, monkeypatch):
     assert run_cli(monkeypatch, src, "--run") == 42
 
 
+def test_qualified_generic_interface_parameter_adapts(tmp_path, monkeypatch):
+    """A module-qualified interface parameter keeps its whole type name."""
+    (tmp_path / "contracts.sie").write_text("""
+        interface Handler<T> {
+            fn get(&self) -> T;
+        }
+    """)
+
+    src = tmp_path / "main.sie"
+    src.write_text("""
+        import contracts;
+
+        struct Number: contracts.Handler<i32> { value: i32; }
+        fn Number::get(&self) -> i32 { return self.value; }
+
+        fn read(value: contracts.Handler<i32>) -> i32 {
+            return value.get();
+        }
+
+        fn main() -> i32 {
+            let number: Number = { 42 };
+            return read(number);
+        }
+    """)
+
+    monkeypatch.chdir(tmp_path)
+    assert run_cli(monkeypatch, src, "--run") == 42
+
+
 def test_qualified_struct_constructor_uses_resolved_type(tmp_path,
                                                          monkeypatch):
     """A qualified constructor keeps the type its module lookup resolved."""

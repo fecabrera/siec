@@ -24,7 +24,8 @@ from siec.codegen.types import (
     strip_reference,
 )
 
-IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+IDENT = re.compile(
+    r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
 
 # sealed markers the compiler owns for primitive categories; user code
 # cannot claim them, and conformance is structural membership
@@ -55,8 +56,15 @@ def find_interface_spelling(gen: CodeGenerator, text: str | None,
         return None
 
     for match in IDENT.finditer(text):
-        if (match.group() in shadowed
-                or match.group() not in gen.interfaces):
+        written = match.group()
+        if "." in written:
+            resolved = gen.resolve_qualified(written.split("."))
+        else:
+            if written in shadowed:
+                continue
+            resolved = gen.resolve_type_symbol(written)
+
+        if resolved not in gen.interfaces:
             continue
 
         end = match.end()
@@ -193,6 +201,10 @@ def canonical_interface(gen: CodeGenerator, spelling: str) -> str:
     interface - it only ever lands in an action's parameter, where an
     interface is allowed - so arguments expand laxly.
     """
+    from siec.codegen.headers import imported_base
+
+    head, angle, rest = spelling.partition("<")
+    spelling = imported_base(gen, head) + angle + rest
     if (parts := split_generic(spelling)) is None:
         return spelling
 
@@ -209,7 +221,8 @@ def declare_implements(gen: CodeGenerator, name: str, template_base: str,
     checked. They join the same worklist as source declarations instead of
     initiating a conformance check from type resolution.
     """
-    canonical = [canonical_interface(gen, s) for s in spellings]
+    with declaration_view(gen, file):
+        canonical = [canonical_interface(gen, s) for s in spellings]
     gen.implements.setdefault(name, set()).update(canonical)
 
     entry = (name, template_base, canonical, line, file)
