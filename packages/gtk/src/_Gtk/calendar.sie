@@ -16,7 +16,7 @@ import {
     gtk_calendar_set_year,
     gtk_calendar_get_year,
     gtk_calendar_set_date,
-} from _gtk._bindings;
+} from gtk_bindings;
 
 struct Calendar: Handler<GtkWidget> {
     @private handle: GtkWidget*;

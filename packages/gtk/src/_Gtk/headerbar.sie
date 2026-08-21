@@ -13,7 +13,7 @@ import {
     gtk_header_bar_set_show_title_buttons,
     gtk_header_bar_get_use_native_controls,
     gtk_header_bar_set_use_native_controls,
-} from _gtk._bindings;
+} from gtk_bindings;
 
 struct HeaderBar: Handler<GtkWidget> {
     @private handle: GtkWidget*;

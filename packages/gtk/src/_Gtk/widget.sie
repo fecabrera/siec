@@ -73,7 +73,7 @@ import {
     gtk_widget_set_margin_bottom,
     gtk_widget_is_ancestor,
     gtk_widget_contains,
-} from _gtk._bindings;
+} from gtk_bindings;
 
 struct Widget: Handler<GtkWidget> {
     @private handle: GtkWidget*;

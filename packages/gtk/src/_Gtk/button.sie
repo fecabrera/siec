@@ -1,6 +1,7 @@
 import { String } from std.collections;
 import { gboolean } from glib;
 import { Handler } from handler;
+import { Align } from align;
 import {
     GTK_BUTTON,
     GtkButton,
@@ -18,7 +19,7 @@ import {
     gtk_button_get_can_shrink,
     gtk_widget_set_halign,
     gtk_widget_set_valign,
-} from _gtk._bindings;
+} from gtk_bindings;
 import { G_CALLBACK, g_signal_connect } from gobject;
 
 struct Button: Handler<GtkWidget> {
@@ -82,11 +83,11 @@ struct Button: Handler<GtkWidget> {
         return gtk_button_get_can_shrink(self.as_gtk_button()) as bool;
     }
 
-    fn set_halign(&self, align: GtkAlign) {
+    fn set_halign(&self, align: Align) {
         gtk_widget_set_halign(self.handle, align);
     }
 
-    fn set_valign(&self, align: GtkAlign) {
+    fn set_valign(&self, align: Align) {
         gtk_widget_set_valign(self.handle, align);
     }
 

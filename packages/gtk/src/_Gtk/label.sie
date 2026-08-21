@@ -31,7 +31,7 @@ import {
     gtk_label_get_yalign,
     gtk_label_set_extra_menu,
     gtk_label_get_extra_menu,
-} from _gtk._bindings;
+} from gtk_bindings;
 
 struct Label: Handler<GtkWidget> {
     @private handle: GtkWidget*;

@@ -16,7 +16,7 @@ import {
     gtk_box_get_baseline_position,
     gtk_box_set_spacing,
     gtk_box_get_spacing,
-} from _gtk._bindings;
+} from gtk_bindings;
 
 struct Box: Handler<GtkWidget> {
     @private handle: GtkWidget*;

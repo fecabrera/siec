@@ -10,7 +10,7 @@ import {
     gtk_application_new,
     gtk_application_add_window,
     gtk_application_remove_window,
-} from _gtk._bindings;
+} from gtk_bindings;
 import { Handler } from handler;
 import {
     G_CALLBACK,

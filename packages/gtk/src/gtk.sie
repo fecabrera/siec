@@ -1,2 +1,13 @@
-@include("_gtk/_bindings")
-@include("_gtk/_wrappers")
+@include("_Gtk/handler");
+@include("_Gtk/align");
+@include("_Gtk/application");
+@include("_Gtk/applicationwindow");
+@include("_Gtk/box");
+@include("_Gtk/button");
+@include("_Gtk/calendar");
+@include("_Gtk/headerbar");
+@include("_Gtk/label");
+@include("_Gtk/menubutton");
+@include("_Gtk/popover");
+@include("_Gtk/widget");
+@include("_Gtk/window");

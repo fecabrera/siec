@@ -28,7 +28,7 @@ import {
     gtk_menu_button_get_active,
     gtk_menu_button_set_can_shrink,
     gtk_menu_button_get_can_shrink,
-} from _gtk._bindings;
+} from gtk_bindings;
 
 struct MenuButton: Handler<GtkWidget> {
     @private handle: GtkWidget*;

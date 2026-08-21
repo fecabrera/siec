@@ -1,0 +1,3 @@
+import { GtkAlign } from gtk_bindings;
+
+@type Align = GtkAlign;
