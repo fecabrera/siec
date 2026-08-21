@@ -106,13 +106,13 @@ def test_intersection_bounds_support_direct_and_template_forms(
 
     fn direct<T: I1 & I2>(value: T) -> i32 { return 10; }
 
-    @template<T: I1 & I2>
+    @where<T: I1 & I2>
     fn decorated<T>(value: T) -> i32 { return 10; }
 
-    @template<T: I1 & I2>
+    @where<T: I1 & I2>
     fn T::separate(const &self) -> i32 { return 6; }
 
-    @template<T: I1 & I2> {
+    @where<T: I1 & I2> {
         fn grouped<T>(value: T) -> i32 { return 10; }
         fn T::grouped_method(const &self) -> i32 { return 6; }
     }
@@ -226,10 +226,10 @@ def test_bounded_receiver_methods_overload_by_constraints(run):
     struct L: Left {}
     struct R: Right {}
 
-    @template<T: Left>
+    @where<T: Left>
     fn T::tag(const &self) -> i32 { return 40; }
 
-    @template<T: Right>
+    @where<T: Right>
     fn T::tag(const &self) -> i32 { return 2; }
 
     fn main() -> i32 {

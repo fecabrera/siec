@@ -58,10 +58,10 @@ def test_nested_methods_inherit_struct_bounds(ts):
 
 
 def test_nested_receiver_template_constrains_an_override(ts):
-    """A nested '@template' decorates a method on the enclosing family."""
+    """A nested '@where' decorates a method on the enclosing family."""
     struct = parse_struct(ts("""
         struct S<A, B> {
-            @template<A: Iface>
+            @where<A: Iface>
             @override
             fn f(const &self) -> B;
         }

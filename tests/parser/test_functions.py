@@ -25,6 +25,12 @@ def test_unknown_decorator_is_an_error(ts):
         parse_function(ts("@wrong fn f() {}"))
 
 
+def test_template_spelling_is_no_longer_a_decorator(ts):
+    """The bounded environment is spelled '@where', with no old alias."""
+    with pytest.raises(SyntaxError, match="unknown decorator '@template'"):
+        parse_function(ts("@template<T: Iface> fn f<T>();"))
+
+
 def test_static_decorator(ts):
     """
     '@static fn' marks the function file-local.
@@ -205,10 +211,10 @@ def test_explicit_intersection_bounds(ts):
 def test_template_environment_applies_to_generic_functions(ts):
     """Decorator and group forms add bounds to declared function parameters."""
     program = parse_program(ts("""
-    @template<T: I1 & I2>
+    @where<T: I1 & I2>
     fn decorated<T>(value: T) -> T { return value; }
 
-    @template<T: I1 & I2> {
+    @where<T: I1 & I2> {
         fn grouped<T>(value: T) -> T { return value; }
         fn T::method(const &self) -> i32 { return 42; }
     }
@@ -273,7 +279,7 @@ def test_extension_without_claim_or_body_is_rejected(ts):
 def test_template_block_supplies_bounds_to_extensions_and_methods(ts):
     """A template block binds both implicit and separate method receivers."""
     program = parse_program(ts("""
-    @template<T: Scalar> {
+    @where<T: Scalar> {
         @extend T[]: Hashable {
             fn hash(const &self) -> u64 { return 0; }
         }
@@ -297,12 +303,12 @@ def test_template_block_supplies_bounds_to_extensions_and_methods(ts):
 def test_template_decorator_supplies_one_declaration(ts):
     """The unbraced form decorates one extension or method at a time."""
     program = parse_program(ts("""
-    @template<T: Scalar>
+    @where<T: Scalar>
     @extend T[]: Hashable {
         fn hash(const &self) -> u64 { return 0; }
     }
 
-    @template<T: Scalar>
+    @where<T: Scalar>
     fn T[]::other(const &self) -> u64 { return 1; }
     """))
 
@@ -317,7 +323,7 @@ def test_template_decorator_supplies_one_declaration(ts):
 def test_template_decorator_bounds_subset_of_generic_receiver(ts):
     """A decorator keeps unconstrained receiver parameters in the family."""
     program = parse_program(ts("""
-    @template<K: Hashable>
+    @where<K: Hashable>
     @override
     fn Map<K, V>::hash(const &self) -> u64 { return 42; }
     """))
@@ -333,7 +339,7 @@ def test_template_decorator_parameter_must_belong_to_receiver(ts):
     """A decorator cannot introduce an unrelated receiver parameter."""
     with pytest.raises(SyntaxError, match="parameter 'T'.*not occur"):
         parse_program(ts("""
-        @template<T: Hashable>
+        @where<T: Hashable>
         fn Map<K, V>::hash(const &self) -> u64 { return 42; }
         """))
 
@@ -341,7 +347,7 @@ def test_template_decorator_parameter_must_belong_to_receiver(ts):
 def test_template_decorator_intersects_existing_receiver_bound(ts):
     """Repeated bounds on one receiver parameter form an intersection."""
     program = parse_program(ts("""
-    @template<K: Hashable>
+    @where<K: Hashable>
     fn Map<K: Scalar, V>::hash(const &self) -> u64 { return 42; }
     """))
 
@@ -353,11 +359,11 @@ def test_template_decorator_intersects_existing_receiver_bound(ts):
 def test_nested_template_decorator_in_extension_body(ts):
     """A nested method template adds to its extension environment."""
     program = parse_program(ts("""
-    @template<T: Formattable> {
+    @where<T: Formattable> {
         @extend T[]: Formattable {
             fn format(const &self) -> i32 { return 1; }
 
-            @template<T: Iterable<char>>
+            @where<T: Iterable<char>>
             @override
             fn format(const &self) -> i32 { return 42; }
         }
@@ -375,7 +381,7 @@ def test_nested_template_decorator_can_bound_method_parameter(ts):
     """A nested decorator recognizes a method's own generic parameter."""
     program = parse_program(ts("""
     @extend T[] {
-        @template<Result: AddAssign>
+        @where<Result: AddAssign>
         fn sum<Result>(const &self, value: Result) -> Result {
             return value;
         }
@@ -393,7 +399,7 @@ def test_nested_template_may_follow_another_decorator(ts):
     program = parse_program(ts("""
     @extend T[] {
         @inline
-        @template<Result: Numeric>
+        @where<Result: Numeric>
         fn sum<Result>(const &self, value: Result) -> Result {
             return value;
         }

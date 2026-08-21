@@ -39,10 +39,10 @@ Bounded extension blocks
             (integer_literal)))))))
 
 ========================
-Template declaration block
+Where declaration block
 ========================
 
-@template<T: Scalar> {
+@where<T: Scalar> {
   @extend T[]: Hashable {
     fn hash(const &self) -> u64 {
       return 0;
@@ -100,17 +100,17 @@ Template declaration block
             (integer_literal)))))))
 
 ========================
-Template declaration decorators
+Where declaration decorators
 ========================
 
-@template<T: Scalar>
+@where<T: Scalar>
 @extend T[]: Hashable {
   fn hash(const &self) -> u64 {
     return 0;
   }
 }
 
-@template<T: Scalar>
+@where<T: Scalar>
 fn T[]::other(const &self) -> u64 {
   return 1;
 }

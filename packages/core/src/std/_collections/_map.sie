@@ -23,7 +23,7 @@ struct KeyValuePair<K, V>: Formattable {
         return format("{}: {}", self.key, self.value);
     }
 
-    @template<K: Iterable<char>>
+    @where<K: Iterable<char>>
     @override
     fn format(const &self, modifiers: const &char[]) -> String {
         return format("\"{}\": {}", self.key, self.value);

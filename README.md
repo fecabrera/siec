@@ -277,6 +277,7 @@ let second = Resource();
 ```
 
 Moving, returning, or passing the value by ownership transfers that cleanup. `destroy` is responsible for the whole value, including owned fields; the compiler does not destroy fields for you. `drop place;` and `value.destroy()` do the same for a mutable place and disarm automatic cleanup.
+
 #### Raw storage slots
 
 `Slot<T>` has `T`'s size and alignment but no automatic lifetime: you mark each transition yourself. It does not implement `Destroy`.
@@ -322,14 +323,14 @@ Each module keeps its own constants: two modules may both declare a `SEEK_SET`, 
 
 The compiler defines constants for the compilation target, taken from the target triple (the host's, or the one `--target` names). `TARGET_OS`, `TARGET_ARCH`, and `TARGET_ENV` hold the current target's families; one constant names each family they can match:
 
-| OS           | Architecture   | Environment  |
-| ------------ | -------------- | ------------ |
-| `OS_DARWIN`  | `ARCH_X86_64`  | `ENV_GNU`    |
-| `OS_LINUX`   | `ARCH_AARCH64` | `ENV_MUSL`   |
-| `OS_WINDOWS` | `ARCH_RISCV64` | `ENV_MSVC`   |
-| `OS_NONE`    | `ARCH_UNKNOWN` | `ENV_ANDROID`|
-| `OS_UNKNOWN` |                | `ENV_ELF`    |
-|              |                | `ENV_UNKNOWN`|
+| OS           | Architecture   | Environment   |
+| ------------ | -------------- | ------------- |
+| `OS_DARWIN`  | `ARCH_X86_64`  | `ENV_GNU`     |
+| `OS_LINUX`   | `ARCH_AARCH64` | `ENV_MUSL`    |
+| `OS_WINDOWS` | `ARCH_RISCV64` | `ENV_MSVC`    |
+| `OS_NONE`    | `ARCH_UNKNOWN` | `ENV_ANDROID` |
+| `OS_UNKNOWN` |                | `ENV_ELF`     |
+|              |                | `ENV_UNKNOWN` |
 
 `OS_NONE` marks bare-metal targets (a triple like `riscv64-unknown-none-elf`). `TARGET_ENV` is the optional fourth field of the triple (`gnu`, `musl`, `msvc`, `android`, `elf`, …); triples without one leave it `ENV_UNKNOWN`. The unknowns catch anything else the compiler doesn't classify.
 
@@ -378,6 +379,7 @@ swap(p.x, p.y); // writes through the members
 ```
 
 The expansion is type-checked. Names in the body resolve where the macro was written; argument expressions resolve at the call.
+
 ### Conditional compilation
 
 `@if` compiles a group of top-level declarations only when a compile-time condition holds, with an optional `@else`:
@@ -977,7 +979,7 @@ A bounded template is a conditional override. It wins where its bound holds and 
 ```
 fn T[]::f(const &self) -> i32 { return 1; }
 
-@template<T: Formattable>
+@where<T: Formattable>
 @override
 fn T[]::f(const &self) -> i32 { return 42; }
 ```
@@ -1082,7 +1084,7 @@ fn word<T: u64>(value: T) -> T;
 fn ordered<T: Hashable & Comparable<T>>(value: T) -> T;
 ```
 
-`&` forms an explicit intersection: the argument must satisfy every listed type-like bound. Intersections work wherever bounds do, including generic functions, structs, aliases, interfaces, receiver methods, extensions, and `@template` environments. They are unordered (`I1 & I2` and `I2 & I1` describe the same bound), and each additional member makes an otherwise matching overload or override more specific.
+`&` forms an explicit intersection: the argument must satisfy every listed type-like bound. Intersections work wherever bounds do, including generic functions, structs, aliases, interfaces, receiver methods, extensions, and `@where` environments. They are unordered (`I1 & I2` and `I2 & I1` describe the same bound), and each additional member makes an otherwise matching overload or override more specific.
 
 An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the third declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
 
@@ -2293,7 +2295,7 @@ struct S<A> {
 
 The struct's type parameters and bounds are in scope throughout a nested
 method. A method may also declare generic parameters of its own after its
-name. A nested `@template` may further constrain the enclosing receiver
+name. A nested `@where` may further constrain the enclosing receiver
 family, including for an `@override`, in the same form as an out-of-line
 method.
 
@@ -2575,15 +2577,8 @@ A claim's type argument may itself be an interface: `struct List<T>: Add<List<T>
 
 #### Extending types
 
-`@extend Type { ... }` adds methods to an existing type outside its declaration. Inside the block each `fn` gets the extended type as its receiver:
-
-```
-@extend Number {
-    fn doubled(const &self) -> Number { ... }
-}
-```
-
-Adding `: Iface, ...` also makes interface claims for the type. The methods implementing those claims may live in the same block:
+`@extend` adds methods and interface claims to an existing type. Methods in
+the block use that type as their receiver:
 
 ```
 @extend Number: Formattable {
@@ -2591,7 +2586,8 @@ Adding `: Iface, ...` also makes interface claims for the type. The methods impl
 }
 ```
 
-The separate spelling remains equivalent, and is useful when claims and methods belong in different places:
+An interface claim may be written separately when its methods are defined
+elsewhere:
 
 ```
 @extend Number: Formattable;
@@ -2599,168 +2595,64 @@ The separate spelling remains equivalent, and is useful when claims and methods 
 fn Number::format(const &self) -> String { ... }
 ```
 
-Extension claims are checked like the type declaration's own. The extended name may be a struct's, an enum's, a primitive's, or an alias's for any of them: whatever a method takes as its receiver extends. A generic struct extends over its own placeholders, spelled fresh: `@extend Box<E>: Eq<E>;` carries the claim to every instantiation.
+Extensions work with structs, enums, primitives, aliases, and generic type
+families. A concrete receiver extends only that type; a receiver containing a
+placeholder, such as `T[]`, extends every matching type.
+
+`@where<T: Bound>` restricts a generic function, method, or extension to types
+that satisfy `Bound`. Braces apply the same bound to a group, and nested
+`@where` bounds combine:
 
 ```
-interface Formattable;
-
-fn Formattable::format(const &self) -> String;
-
-@extend i64: Formattable;
-
-fn i64::format(const &self) -> String { ... }
-
-fn show(v: const Formattable) -> String { return v.format(); }
-
-show(count);   // an i64 passes where the interface is required
-```
-
-A primitive's operators stay the machine's: claiming `Eq<i64>` over `i64` declares a callable `eq` without `==` ever routing through it. The shorthands only reach structs and arrays, whose operators have nowhere else to come from.
-
-`@template<T: Bound>` supplies one generic environment to extensions, generic functions, and methods. Braces apply it to a group, so declarations share the same bounds:
-
-```
-@template<T: Scalar> {
-    @extend T[]: Hashable {
-        fn hash(const &self) -> u64 {
-            let value: u64 = 0;
-            foreach (element : self)
-                value += element as u64;
-            return value;
-        }
-    }
-
-    fn T[]::first(const &self) -> T { return self[0]; }
+@where<T: Scalar> {
+    @extend T[]: Hashable;
+    fn T[]::hash(const &self) -> u64 { ... }
 }
 ```
 
-Without braces it decorates the one extension, generic function, or method following it. Repeat the decorator when separately placed declarations need the same environment:
-
-```
-@template<T: Scalar>
-@extend T[]: Hashable {
-    fn hash(const &self) -> u64 { ... }
-}
-
-@template<T: Scalar>
-fn T[]::first(const &self) -> T { return self[0]; }
-
-@template<T: Hashable & Formattable>
-fn show_key<T>(key: T) -> String { ... }
-```
-
-Every receiver-template parameter must occur in the receiver type. A free function in a template environment declares those same parameters on `fn`; a method's own independent generic parameters remain on `fn` as well. A bare receiver blankets the matching types themselves (`@extend T: Hashable`); a constructed receiver such as `T[]` blankets that family. The bound gates both the claims and methods. In the examples `i32[]` gets `Hashable`, `hash`, and `first`, while a struct's array gets none of them. The older compact header, `@extend<T: Scalar> T[]: Hashable`, remains accepted as the declaration-wise equivalent.
-
-A decorator may constrain only part of an already-generic receiver. `@template<K: Hashable> @override fn Map<K, V>::hash(...)` applies the bound to `K` while `V` remains an unconstrained parameter of the `Map<K, V>` receiver family. Parameters written on the receiver are preserved; the decorator adds bounds rather than replacing the receiver's parameter list.
-
-Templates may also decorate methods inside an extension block. Their bounds intersect with the enclosing environment: inside `@template<T: Formattable> @extend T[]: Formattable { ... }`, a method decorated with `@template<T: Iterable<char>>` applies only when `T` implements both interfaces. This is useful for a bounded `@override` that specializes one method without narrowing the extension's other methods or claims.
-
-Arrays still extend without a bound in two ways, told apart by the element. A real type claims for exactly that array: `@extend char[]: Eq<char[]>;` covers `char[]` and no other. A placeholder claims for the family: `@extend T[]: Eq<T[]>;` covers every element type, each action answered by an [array method](#array-methods) template. The block and separate spellings are interchangeable:
-
-```
-@extend T[]: Eq<T[]>;
-
-fn T[]::eq(&self, arr: const T[]) -> bool { ... }
-
-if (word == "hello") { ... }   // char[]'s eq
-```
+Extending a primitive makes the claimed interface methods available but does
+not change the primitive's built-in operators.
 
 #### The iteration interfaces
 
-`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are builtin, visible everywhere without an import:
+`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are builtin and available
+without an import:
 
 ```
-interface Iterator<T>;
+interface Iterator<T> {
+    fn has_next(&self) -> bool;
+    fn next(&self) -> &T;
+}
 
-fn Iterator<T>::has_next(&self) -> bool;
-fn Iterator<T>::next(&self) -> &T;
+interface ConstIterator<T> {
+    fn has_next(&self) -> bool;
+    fn next(&self) -> const &T;
+}
 
-interface ConstIterator<T>;
-
-fn ConstIterator<T>::has_next(&self) -> bool;
-fn ConstIterator<T>::next(&self) -> const &T;
-
-interface Iterable<T>;
-
-fn Iterable<T>::iterator(&self) -> Iterator<T>;
-fn Iterable<T>::const_iterator(const &self) -> ConstIterator<T>;
-```
-
-A struct claiming `: Iterator<T>` provides both actions, `next` handing back a [reference](#references) to the element. `ConstIterator<T>` is the read-only half: its `next` hands back a `const &T`, so the elements carry the contract and the collection stays untouched.
-
-A collection claims `: Iterable<T>` and provides both getters, whose declared interface returns are satisfied by any implementing type; that is the general rule when an action declares an interface return. Which getter runs follows the value: iterating a mutable collection goes to `iterator()`, a `const` one to `const_iterator()`, so the same `foreach` reads or writes according to what it was handed. Any `Iterator<T>` parameter then walks the elements:
-
-```
-fn sum(it: Iterator<i32>) -> i32 {
-    let total = 0;
-    while (it.has_next()) {
-        total += it.next();
-    }
-    return total;
+interface Iterable<T> {
+    fn iterator(&self) -> Iterator<T>;
+    fn const_iterator(const &self) -> ConstIterator<T>;
 }
 ```
 
-[Arrays](#arrays) come iterable by definition: the prelude declares their getters and claims the interface for the whole family, exactly as any code would. A `T[]` therefore passes to an `Iterable<T>` parameter and answers both getters directly, through the builtin `ArrayIterator<T>` and `ConstArrayIterator<T>`:
+`Iterator<T>` returns mutable element references, while `ConstIterator<T>`
+returns read-only references. `Iterable<T>` provides both forms. A `foreach`
+uses `iterator()` for a mutable value and `const_iterator()` for a `const`
+value.
 
-```
-struct ArrayIterator<T>: Iterator<T> {
-    arr: T[];
-    index: u64;
-}
-
-fn T[]::iterator(&self) -> ArrayIterator<T> { ... }
-fn T[]::const_iterator(const &self) -> ConstArrayIterator<T> { ... }
-
-@extend T[]: Iterable<T>;
-
-let it = nums.iterator();   // an ArrayIterator over the array
-it.next() = 5;              // the references reach the array itself
-```
-
-An aggregate literal has no type of its own; offered to an `Iterable<T>` parameter it takes the family's array reading, so `{ptr, len}` passes as the `T[]` it spells.
+[Arrays](#arrays) implement `Iterable<T>` automatically, so they work with
+`foreach` and may be passed anywhere an `Iterable<T>` is expected. Iterator
+references point to the original elements, allowing mutable iteration to
+update the collection.
 
 ### Error handling
 
-Errors are handled through `Result<V, E>`, a builtin struct that contains a return value or an error; and `Result<E>`, a builtin struct that only contains an error value. Both are visible everywhere without an import, and the argument count picks between them.
+Sie uses the builtin `Result<V, E>` when an operation returns either a value
+or an error. `Result<E>` represents success without a value. Create results
+with `Ok` and `Error`; their types are usually inferred from the surrounding
+return type or annotation.
 
-```
-struct Result<V, E>: Truthy {
-    ok: bool;
-    union {
-        value: V;
-        error: E;
-    };
-}
-
-struct Result<E>: Truthy {
-    ok: bool;
-    error: E;
-}
-```
-
-`ok` tags which member holds: in `Result<V, E>`, `value` and `error` share one storage through the [unnamed union](#unnamed-structs-and-unions), so the whole result costs one tag plus the larger of the two.
-
-Both result shapes implement `Truthy` through `ok`, so a result can be tested directly. A true result holds its value; a false one holds its error:
-
-```
-let result = divide(10, 2);
-if (not result) {
-    report(result.error);
-} else {
-    use(result.value);
-}
-```
-
-Results are built through the builtin `Ok` and `Error` functions, one pair per `Result` shape:
-
-```
-fn Ok<V, E>(v: V) -> Result<V, E>;   // ok = true, value = v
-fn Ok<E>() -> Result<E>;             // ok = true
-fn Error<V, E>(e: E) -> Result<V, E>; // ok = false, error = e
-fn Error<E>(e: E) -> Result<E>;      // ok = false, error = e
-```
-
-Their type arguments usually come from the expected type (the declared return type, an annotated `let`, or a parameter), since the arguments alone cannot name both `V` and `E`; anywhere else they're spelled explicitly:
+A result is true on success and false when it holds an error:
 
 ```
 fn divide(a: i32, b: i32) -> Result<i32, MathError> {
@@ -2770,142 +2662,70 @@ fn divide(a: i32, b: i32) -> Result<i32, MathError> {
     return Ok(a / b);
 }
 
-let r = divide(10, 2);
-if (r.ok) {
-    // r.value holds the quotient; r.error is meaningless here
+let result = divide(10, 2);
+if (result) {
+    use(result.value);
+} else {
+    report(result.error);
 }
-
-let e = Error<i32, MathError>(MathError::OVERFLOW); // no context: spelled out
 ```
 
 #### Checking the tag
 
-Only one member of a result ever holds, so reading the other one reads storage nobody wrote. The compiler tracks what the code has established about each result's `ok` and rejects any read that doesn't stand on it: `value` reads only where the tag is known true, `error` only where it is known false, and neither where it was never checked.
-
-```
-let res = divide(10, 2);
-
-res.value;  // error: 'res.ok' is unchecked, so the result may hold an error
-res.error;  // error: 'res.ok' is unchecked, so the result may hold a value
-```
-
-A condition testing the tag settles it for the branches it decides: the body of an `if (res.ok)` stands where the value holds, its `else` where the error does, and `not`, `and`, `or`, a ternary's arms, a `case` armed on `true` and `false`, and a comparison against `true` or `false` all read the same way.
+Only one result member is valid at a time. The compiler allows `value` only
+after a successful result check and `error` only after a failed one:
 
 ```
 if (res.ok) {
     use(res.value);
-    res.error;      // error: 'res.ok' is true here, so the result holds a value
 } else {
     report(res.error);
-    res.value;      // error: 'res.ok' is false here, so the result holds an error
 }
 ```
 
-What a branch settles reaches past it only when the other side cannot arrive there. A branch that leaves (returning, breaking, continuing, or calling an [`@noreturn`](#noreturn) function) hands its knowledge to everything after, which is what makes the early-out shape work; two paths that both fall through meet knowing nothing, and the tag has to be checked again.
-
-```
-if (not res.ok) {
-    report(res.error);
-    return 1;
-}
-
-use(res.value);     // the branch left, so the tag is true from here
-```
-
-```
-if (not res.ok) { report(res.error); }
-
-res.value;          // error: both paths arrive, so 'res.ok' is unchecked again
-```
-
-A check speaks about the storage it named, and only until that storage changes: assigning over the result, or handing out its address, forgets what was known, as does a loop whose passes write it. Copying a result copies what is known about it, `Ok` and `Error` settle the tag as they build it, and writing the tag settles it directly, so a result built right here reads its members as its own writes left them.
-
-```
-let res: Result<i32, MathError>;
-res.ok = true;
-res.value = 42;
-
-use(res.value);     // the tag was written true here
-```
-
-A result no name holds cannot have been checked, so it has to be named first: `divide(1, 0).error` is an error, while binding it and testing `ok` is not. Reading only the tag, `if (divide(1, 0).ok)`, is always fine.
+The check also remains known after a branch that returns, breaks, or otherwise
+leaves. Assigning to the result or exposing its address invalidates what was
+known, so it must be checked again.
 
 #### Unwrapping with try
 
-`try <result> except (<name>) { ... }` is the check written as one expression: the result is taken once, and the whole thing becomes the value it carried. Where it carried an error instead, the arm runs with the error bound to the name it asked for.
+`try <result> except (<name>) { ... }` unwraps a successful result. On failure,
+the `except` block runs with the error bound to `name`:
 
 ```
-let value = try divide(10, 2) except (error) { std.io.panic("{}", error); }
 let value = try divide(10, 2) except (error) { return 1; }
-let value = try divide(10, 2) except (error) { emit 0; }
-```
-
-The arm owes the value the ok path would have had, and has none of its own to fall out with, so it must do one of two things: leave, through `return`, `break`, `continue`, or an [`@noreturn`](#noreturn) call; or produce a stand-in with `emit`, exactly as a [block used as a value](#blocks) does. Falling off its end is an error.
-
-What a `try` unwraps is the result, not the call: any expression carrying one stands there, a call's return and a stored result alike.
-
-```
-let res = divide(10, 2);
-
-try res;                                        // hands the error back
-let value = try res ?? 0;
-let value = try res except (error) { return 1; }
-let value = try held.results[i] ?? 0;
-```
-
-The result binds as tightly as a name or a call does, so an operator around a `try` applies to the value it gives back rather than joining what it takes: `try res + 1` adds one to the unwrapped value.
-
-Over a result the code named, the `try` _is_ the check: what continues past it took the ok path, so `res.value` reads there, and its arm stands where the tag is false, so `res.error` reads inside. A fallback hands control back too, though, and those two paths meet knowing nothing.
-
-```
-let res = divide(10, 2);
-try res except (error) { return -1; }
-
-use(res.value);     // the arm left, so the tag is true from here
-```
-
-A `Result<E>` carries only an error, so there is nothing to take and nothing for its arm to emit: its `try` stands on its own as a statement. Nothing is owed there, so its arm may simply fall out.
-
-```
-try file.open() except (error) {
-    std.io.println(std.io.stderr, "{}: {}", path, error);
-    return Error(OpenFailed);
+let value = try divide(10, 2) except (error) {
+    report(error);
+    emit 0;
 }
 ```
 
-The arm's `}` closes the statement, the way an if's body does, so no `;` follows it.
+For `Result<V, E>`, the block must leave the current control flow or use
+`emit` to provide a replacement value. A `Result<E>` has no value to replace,
+so its block may finish normally.
 
 #### The fallback shorthand
 
-`try <call> ?? <fallback>` is the same arm with no error to name: the fallback is what the `try` takes where the call came back with one.
+`try <result> ?? <fallback>` unwraps the result or uses the fallback on error.
+The fallback is evaluated only when needed:
 
 ```
 let value = try divide(10, 2) ?? 0;
-let value = try divide(10, 2) ?? low + high;
-let value = try divide(10, 2) ?? recover();   // only called where the tag is false
+let value = try divide(10, 2) ?? recover();
 ```
 
-The fallback is evaluated only on that path, never on the way to a value the call already had.
-
-Braces make it the arm itself, free to do whatever an arm does: run statements first, `emit` the stand-in, or leave instead.
+Use a block to run statements before producing the fallback:
 
 ```
 let value = try divide(10, 2) ?? { report(); emit 0; };
-let value = try divide(10, 2) ?? { std.io.panic("no"); };
 ```
 
-Where the result carries no value to stand in for, the fallback is simply run:
-
-```
-try file.close() ?? warn("could not close");
-try file.close() ?? { warn("could not close"); attempts += 1; };
-```
-
-Unlike the `except` arm, a `??` fallback is part of the expression rather than a body closing it, so a statement built on one still takes its `;`, exactly as one built on a block expression does.
+For `Result<E>`, the fallback runs only for its side effects.
 
 #### Error propagation
 
-A `try` with no arm at all hands the error to the caller: where the call came back with one, the function returns it, and where it came back with a value the `try` is that value.
+A bare `try` unwraps a successful result or immediately returns its error to
+the caller:
 
 ```
 fn read_config(path: char*) -> Result<Config, IOError> {
@@ -2916,23 +2736,8 @@ fn read_config(path: char*) -> Result<Config, IOError> {
 }
 ```
 
-The error travels on as it is, so the function must return a `Result` carrying the same error type. Which shape it carries is free: a `Result<E>` call propagates into a `Result<E>` or a `Result<V, E>` just the same, since only the error crosses over.
-
-```
-fn f() -> Result<E> { try g(); return Ok(); }
-fn f() -> Result<T, E> { try g(); return Ok(value); }   // both fine
-fn g() -> Result<E>;
-```
-
-Anything else is a compile-time error: a function returning no `Result` has nowhere to hand it, and one carrying a different error type would have to convert, which a bare `try` never does.
-
-```
-fn main() -> i32 {
-    try open(path);   // error: 'main' must return a Result; it returns 'i32'
-}
-```
-
-Nothing braced closed it, so a bare `try` takes its `;` like any other expression statement.
+The enclosing function must return a `Result` with the same error type. A
+bare `try` used as a statement ends with `;`.
 
 ## Copyright
 

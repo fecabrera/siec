@@ -93,7 +93,7 @@ def parse_declarations(ts: TokenStream, top_level: bool = False) -> Program:
             program.enums.append(parse_enum(ts, is_private=True))
         elif ts.peek().value == "@" and ts.peek(1).value == "type":
             program.aliases.append(parse_alias(ts))
-        elif ts.peek().value == "@" and ts.peek(1).value == "template":
+        elif ts.peek().value == "@" and ts.peek(1).value == "where":
             merge_declarations(program, parse_template(ts))
         elif ts.peek().value == "@" and ts.peek(1).value == "extend":
             ext = parse_extend(ts)
@@ -132,16 +132,16 @@ def parse_template(ts: TokenStream) -> Program:
     """
     Parse a generic declaration environment.
 
-    A braced '@template<T: Bound> { ... }' applies to every extension and
+    A braced '@where<T: Bound> { ... }' applies to every extension and
     method inside it; without braces it decorates the one extension or
     method following it.
     """
     line = ts.peek().line
     ts.expect("sym", "@")
-    ts.expect("ident", "template")
+    ts.expect("ident", "where")
     params, constraints = parse_type_params(ts)
     if params is None:
-        raise SyntaxError(f"line {line}: '@template' needs type parameters")
+        raise SyntaxError(f"line {line}: '@where' needs type parameters")
 
     if ts.peek().syntax == "{":
         ts.next()
@@ -162,7 +162,7 @@ def parse_template(ts: TokenStream) -> Program:
 
 def apply_template_environment(program: Program, params: list[str],
                                constraints: dict | None, line: int) -> None:
-    """Attach one '@template' environment to extensions and callables."""
+    """Attach one '@where' environment to extensions and callables."""
     unsupported = (
         program.includes or program.structs or program.consts
         or program.enums or program.globals or program.aliases
@@ -170,14 +170,14 @@ def apply_template_environment(program: Program, params: list[str],
         or program.asserts
     )
     if unsupported:
-        raise SyntaxError(f"line {line}: an '@template' block may contain "
+        raise SyntaxError(f"line {line}: an '@where' block may contain "
                           "only extensions and functions or methods")
 
     actions = {id(action) for ext in program.extends for action in ext.actions}
     for ext in program.extends:
         if ext.params is not None:
             raise SyntaxError(f"line {ext.line}: an extension inside "
-                              "'@template' cannot declare type parameters")
+                              "'@where' cannot declare type parameters")
 
         require_template_receiver(ext.name, params, ext.line)
         ext.params = list(params)
@@ -225,7 +225,7 @@ def apply_method_template(fn: Function, params: list[str],
 
     # A spelled generic receiver introduces all of its placeholders. The
     # environment may constrain only some of them, as in
-    # '@template<K: I> fn Map<K, V>::f'. Keep V in the receiver family.
+    # '@where<K: I> fn Map<K, V>::f'. Keep V in the receiver family.
     if not receiver_params:
         fn.receiver_params = list(params)
 
@@ -364,7 +364,7 @@ def parse_method_body(ts: TokenStream, receiver: str,
     ts.expect("sym", "{")
     methods = []
     while ts.peek().syntax != "}":
-        if ts.peek().value == "@" and ts.peek(1).value == "template":
+        if ts.peek().value == "@" and ts.peek(1).value == "where":
             methods.extend(parse_receiver_template(
                 ts, receiver, receiver_params, receiver_constraints))
             continue
@@ -384,10 +384,10 @@ def parse_receiver_template(ts: TokenStream, receiver: str,
     """Parse a template decorator or group nested in a receiver body."""
     line = ts.peek().line
     ts.expect("sym", "@")
-    ts.expect("ident", "template")
+    ts.expect("ident", "where")
     params, constraints = parse_type_params(ts)
     if params is None:
-        raise SyntaxError(f"line {line}: '@template' needs type parameters")
+        raise SyntaxError(f"line {line}: '@where' needs type parameters")
 
     if ts.peek().syntax == "{":
         methods = parse_method_body(
@@ -686,11 +686,11 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
             ts.expect("sym", ")")
             continue
 
-        if decorator == "template":
+        if decorator == "where":
             params, constraints = parse_type_params(ts)
             if params is None:
                 raise SyntaxError(
-                    f"line {at_line}: '@template' needs type parameters")
+                    f"line {at_line}: '@where' needs type parameters")
             template_environments.append(
                 (params, constraints, at_line))
             continue
@@ -892,7 +892,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     }
 
     def decorated(fn: Function) -> Function:
-        """Attach any '@template' found inside the decorator stack."""
+        """Attach any '@where' found inside the decorator stack."""
         for template_params, template_constraints, at_line in (
                 template_environments):
             if fn.receiver is not None:

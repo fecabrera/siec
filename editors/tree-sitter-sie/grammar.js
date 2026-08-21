@@ -180,7 +180,7 @@ module.exports = grammar({
 
     template_declaration: ($) =>
       seq(
-        "@template",
+        "@where",
         field("type_parameters", $.type_parameters),
         choice(
           field("body", $.template_body),

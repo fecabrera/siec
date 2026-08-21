@@ -23,10 +23,10 @@ struct List<T>
 
 // A List can clone only when copying one of its elements is defined. Scalars
 // copy directly; owned elements delegate to their own Clone implementation.
-@template<T: Scalar>
+@where<T: Scalar>
 @extend List<T>: Clone;
 
-@template<T: Clone>
+@where<T: Clone>
 @extend List<T>: Clone;
     
 /**
@@ -390,7 +390,7 @@ fn List<T>::grow(&self) {
     self.capacity = capacity;
 }
 
-@template<T: Scalar>
+@where<T: Scalar>
 @extend List<T>: Hashable {
     /**
      * Hash the List.

@@ -160,7 +160,7 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
 
     with source_location(line=fn.line, file=fn.file):
         # A template environment may decorate an already-spelled generic
-        # receiver, as in '@template<T> fn List<T>::f'. Normalize it to the
+        # receiver, as in '@where<T> fn List<T>::f'. Normalize it to the
         # same family identity as the standalone 'fn List<T>::f' syntax.
         parts = split_generic(fn.receiver)
         if (fn.receiver_params is not None and parts is not None

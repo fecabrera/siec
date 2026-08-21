@@ -741,7 +741,7 @@
       "members": [
         {
           "type": "STRING",
-          "value": "@template"
+          "value": "@where"
         },
         {
           "type": "FIELD",

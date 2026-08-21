@@ -77,7 +77,7 @@
   "@const"
   "@macro"
   "@type"
-  "@template"
+  "@where"
   "@extend"
   "@error"
   "@static_assert"

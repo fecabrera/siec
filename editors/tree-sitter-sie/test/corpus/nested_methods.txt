@@ -54,11 +54,11 @@ struct S<A> {
               field: (identifier))))))))
 
 ===============================
-Nested receiver template method
+Nested receiver where method
 ===============================
 
 struct S<A> {
-  @template<A: Iface>
+  @where<A: Iface>
   @override
   fn f(const &self);
 }

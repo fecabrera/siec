@@ -114,7 +114,7 @@ def parse_struct(ts: TokenStream) -> Struct:
                 parse_receiver_template,
             )
 
-            if ts.peek().value == "@" and ts.peek(1).value == "template":
+            if ts.peek().value == "@" and ts.peek(1).value == "where":
                 nested = parse_receiver_template(
                     ts, name, params, constraints)
             else:

@@ -190,7 +190,7 @@ def test_when_interface_covers_a_bounded_array_claim(run):
         fn format(const &self) -> i32 { return self as i32; }
     }
 
-    @template<T: Formattable>
+    @where<T: Formattable>
     @extend T[]: Formattable {
         fn format(const &self) -> i32 { return self.length as i32; }
     }

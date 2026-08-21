@@ -3,7 +3,7 @@
 @include("_hashing/_splitmix64")
 @include("_hashing/_hashable");
 
-@template<T: Scalar> {
+@where<T: Scalar> {
     @extend T: Hashable {
         /**
         * Calculate the hash of the scalar.

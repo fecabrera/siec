@@ -40,12 +40,12 @@ import std.io;
     return self as i128;
 }
 
-@template <T: UnsignedInteger>
+@where <T: UnsignedInteger>
 fn T::abs(const &self) -> T {
     return self;
 }
 
-@template <T: SignedInteger>
+@where <T: SignedInteger>
 fn T::abs(const &self) -> T {
     if (self >= 0)
         return self;
@@ -54,7 +54,7 @@ fn T::abs(const &self) -> T {
     return num.to_signed();
 }
 
-@template <T: Integer>
+@where <T: Integer>
 fn T::digits(const &self, base: u8 = 10) -> u64 {
     let num = self.abs();
     let n: u64 = 0;

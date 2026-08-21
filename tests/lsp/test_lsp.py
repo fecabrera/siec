@@ -1228,7 +1228,7 @@ interface Special;
 
 fn T[]::answer(const &self) -> i32 { return 1; }
 
-@template<T: Special>
+@where<T: Special>
 @override
 fn T[]::answer(const &self) -> i32 { return 42; }
 
@@ -1277,7 +1277,7 @@ interface Hashable {
     fn hash(const &self) -> u64;
 }
 
-@template<T: Scalar> {
+@where<T: Scalar> {
     @extend T[]: Hashable {
         fn hash(const &self) -> u64 { return self.length; }
     }
@@ -1305,7 +1305,7 @@ interface Formattable {
     fn format(const &self, modifiers: const &char[]) -> i32;
 }
 
-@template<T: Formattable>
+@where<T: Formattable>
 @extend T[]: Formattable {
     fn format(const &self, modifiers: const &char[]) -> i32 {
         return self.length as i32;

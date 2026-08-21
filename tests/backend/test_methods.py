@@ -56,7 +56,7 @@ def test_nested_generic_struct_methods_inherit_parameters_and_bounds(run):
 
 
 def test_nested_receiver_template_override(run):
-    """A nested '@template' can specialize the enclosing method family."""
+    """A nested '@where' can specialize the enclosing method family."""
     source = """
     interface Special;
     @extend i32: Special;
@@ -64,7 +64,7 @@ def test_nested_receiver_template_override(run):
     struct Box<T> {
         fn answer(const &self) -> i32 { return 1; }
 
-        @template<T: Special>
+        @where<T: Special>
         @override
         fn answer(const &self) -> i32 { return 42; }
     }

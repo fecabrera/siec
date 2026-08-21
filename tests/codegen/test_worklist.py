@@ -166,7 +166,7 @@ def test_recursive_generic_instance_reuses_checked_work():
 def test_bounded_receiver_family_uses_the_worklist():
     """A bounded receiver specialization follows resolve then check."""
     gen = compile_with_state("""
-    @template<T: Scalar>
+    @where<T: Scalar>
     fn T::answer(const &self) -> i32 { return 42; }
 
     fn main() -> i32 {

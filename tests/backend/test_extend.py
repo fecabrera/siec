@@ -85,7 +85,7 @@ def test_extension_method_template_decorator_bounds_own_parameter(run):
     """A nested template may constrain a method parameter, not its receiver."""
     source = """
     @extend T[] {
-        @template<Result: AddAssign>
+        @where<Result: AddAssign>
         fn fold<Result>(const &self,
                         callback: closure fn(const &T) -> Result,
                         start: Result) -> Result {
@@ -93,7 +93,7 @@ def test_extension_method_template_decorator_bounds_own_parameter(run):
             return start;
         }
 
-        @template<Result: Numeric>
+        @where<Result: Numeric>
         @inline fn fold<Result>(const &self,
                                 callback: closure fn(const &T) -> Result)
                                 -> Result {
@@ -161,7 +161,7 @@ def test_template_decorator_accepts_spelled_generic_receiver(run):
         value: T;
     }
 
-    @template<T: Scalar>
+    @where<T: Scalar>
     @extend List<T>: Hashable {
         fn hash(const &self) -> u64 {
             return self.value as u64;
@@ -191,7 +191,7 @@ def test_alias_resolution_sees_collected_array_family_claims(run):
 
     @type Table = Map<char[], i32>;
 
-    @template<T: Scalar>
+    @where<T: Scalar>
     @extend T[]: Hashable {
         fn hash(const &self) -> u64 {
             return self.length;
@@ -231,7 +231,7 @@ def test_template_block_bounds_an_extension_and_sibling_method(run):
         fn hash(const &self) -> u64;
     }
 
-    @template<T: Scalar> {
+    @where<T: Scalar> {
         @extend T[]: Hashable {
             fn hash(const &self) -> u64 {
                 let total: u64 = 0;
@@ -276,7 +276,7 @@ def test_bounded_extension_claim_is_available_to_struct_fields(run):
         box: Box<char[]>;
     }
 
-    @template<T: Scalar> {
+    @where<T: Scalar> {
         @extend T[]: Hashable {
             fn hash(const &self) -> u64 {
                 return self.length;
@@ -300,12 +300,12 @@ def test_template_decorator_bounds_extensions_and_methods(run):
         fn hash(const &self) -> u64;
     }
 
-    @template<T: Scalar>
+    @where<T: Scalar>
     @extend T[]: Hashable {
         fn hash(const &self) -> u64 { return self[0] as u64; }
     }
 
-    @template<T: Scalar>
+    @where<T: Scalar>
     fn T[]::last(const &self) -> T {
         return self[self.length - 1];
     }
@@ -329,7 +329,7 @@ def test_template_extension_accepts_an_interface_bound(run):
 
     struct Item: Element {}
 
-    @template<T: Element> {
+    @where<T: Element> {
         @extend T[]: Counted {
             fn count(const &self) -> u64 { return self.length; }
         }
@@ -361,7 +361,7 @@ def test_exact_array_method_precedes_an_ineligible_bounded_family(run):
         fn format(const &self) -> i32 { return 42; }
     }
 
-    @template<T: Formattable>
+    @where<T: Formattable>
     @extend T[]: Formattable {
         fn format(const &self) -> i32 { return self.length as i32; }
     }
@@ -384,7 +384,7 @@ def test_bounded_extension_block_supports_bare_receiver_families(run):
         fn hash(const &self) -> u64;
     }
 
-    @template<T: Scalar>
+    @where<T: Scalar>
     @extend T: Hashable {
         fn hash(const &self) -> u64 {
             return self as u64;

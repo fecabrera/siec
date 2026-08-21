@@ -217,7 +217,7 @@ interface Formattable {
  * @param modifiers The modifiers to format the array with.
  * @return A String containing the formatted array.
  */
-@template<T: Formattable> {
+@where<T: Formattable> {
     @extend T[]: Formattable {
         fn format(const &self, modifiers: const &char[]) -> String {
             let result = String();
@@ -239,7 +239,7 @@ interface Formattable {
  * @param modifiers The modifiers to format the iterable of characters with.
  * @return A String containing the formatted iterable of characters.
  */
-@template<T: Iterable<char>>
+@where<T: Iterable<char>>
 @override
 fn T[]::format(const &self, modifiers: const &char[]) -> String {
     let result = String();

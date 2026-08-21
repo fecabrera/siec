@@ -757,7 +757,7 @@ fn Error<E>(e: E) -> Result<E> {
 
 
 @extend T[] {
-    @template<ResultType: AddAssign>
+    @where<ResultType: AddAssign>
     fn sum<ResultType>(const &self, callback: closure fn(const &T) -> ResultType, start: ResultType) -> ResultType {
         let result = start;
         foreach (e : self) result += callback(e);
@@ -765,7 +765,7 @@ fn Error<E>(e: E) -> Result<E> {
     }
 
     @inline
-    @template<ResultType: Numeric>
+    @where<ResultType: Numeric>
     fn sum<ResultType>(const &self, callback: closure fn(const &T) -> ResultType) -> ResultType {
         return self.sum(callback, 0);
     }

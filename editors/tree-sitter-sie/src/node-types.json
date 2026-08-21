@@ -10093,10 +10093,6 @@
     "named": false
   },
   {
-    "type": "@template",
-    "named": false
-  },
-  {
     "type": "@type",
     "named": false
   },
@@ -10110,6 +10106,10 @@
   },
   {
     "type": "@typeof",
+    "named": false
+  },
+  {
+    "type": "@where",
     "named": false
   },
   {

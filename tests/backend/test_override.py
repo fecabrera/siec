@@ -41,7 +41,7 @@ def test_concrete_override_matches_a_bounded_family_through_aliases(run):
     interface Special;
     @extend char: Special;
 
-    @template<T: Special>
+    @where<T: Special>
     @extend T[]: Special {
         fn answer(const &self) -> Answer { return 1; }
     }
@@ -101,7 +101,7 @@ def test_bounded_array_override_falls_back_outside_its_bound(run):
 
     fn T[]::answer(const &self) -> i32 { return 1; }
 
-    @template<T: Special>
+    @where<T: Special>
     @override
     fn T[]::answer(const &self) -> i32 { return 42; }
 
@@ -128,7 +128,7 @@ def test_bounded_override_constrains_subset_of_receiver_parameters(run):
 
     fn Map<K, V>::answer(const &self) -> i32 { return 1; }
 
-    @template<K: Special>
+    @where<K: Special>
     @override
     fn Map<K, V>::answer(const &self) -> i32 { return 42; }
 
@@ -157,9 +157,9 @@ def test_nested_template_override_intersects_extension_bounds(run):
 
     fn Box<T>::answer(const &self) -> i32 { return 1; }
 
-    @template<T: Outer> {
+    @where<T: Outer> {
         @extend Box<T>: Outer {
-            @template<T: Inner<char>>
+            @where<T: Inner<char>>
             @override
             fn answer(const &self) -> i32 { return 42; }
         }
@@ -256,9 +256,9 @@ def test_equally_specific_method_overrides_are_ambiguous(compile_source):
         @extend char: Right;
 
         fn T[]::answer(const &self) -> i32 { return 1; }
-        @template<T: Left>
+        @where<T: Left>
         @override fn T[]::answer(const &self) -> i32 { return 2; }
-        @template<T: Right>
+        @where<T: Right>
         @override fn T[]::answer(const &self) -> i32 { return 3; }
 
         fn main() -> i32 {
