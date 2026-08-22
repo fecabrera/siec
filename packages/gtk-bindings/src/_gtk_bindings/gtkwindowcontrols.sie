@@ -1,0 +1,25 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { gboolean } from glib;
+import { GtkWidget } from gtkwidget;
+import { GtkPackType } from gtkenums;
+
+@macro GTK_TYPE_WINDOW_CONTROLS = gtk_window_controls_get_type();
+@macro GTK_WINDOW_CONTROLS(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkWindowControls>(obj, GTK_TYPE_WINDOW_CONTROLS);
+@macro GTK_IS_WINDOW_CONTROLS(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_WINDOW_CONTROLS);
+
+struct GtkWindowControls {
+    parent_instance: GtkWidget;
+}
+
+@extern fn gtk_window_controls_get_type() -> GType;
+@extern fn gtk_window_controls_new(side: GtkPackType) -> GtkWidget*;
+@extern fn gtk_window_controls_get_side(window_controls: GtkWindowControls*) -> GtkPackType;
+@extern fn gtk_window_controls_set_side(window_controls: GtkWindowControls*,
+                                        side: GtkPackType);
+@extern fn gtk_window_controls_get_decoration_layout(window_controls: GtkWindowControls*) -> const char*;
+@extern fn gtk_window_controls_set_decoration_layout(window_controls: GtkWindowControls*,
+                                                     layout: const char*);
+@extern fn gtk_window_controls_get_use_native_controls(window_controls: GtkWindowControls*) -> gboolean;
+@extern fn gtk_window_controls_set_use_native_controls(window_controls: GtkWindowControls*,
+                                                       setting: gboolean);
+@extern fn gtk_window_controls_get_empty(window_controls: GtkWindowControls*) -> gboolean;

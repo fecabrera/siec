@@ -1,0 +1,4 @@
+@include("_gdk_bindings/gdkclipboard")
+@include("_gdk_bindings/gdkdevice")
+@include("_gdk_bindings/gdkdisplay")
+@include("_gdk_bindings/gdktypes")

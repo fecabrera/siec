@@ -1,0 +1,57 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkTextDirection } from gtkenums;
+import { GQuark, gboolean } from glib;
+import { GIcon } from gio;
+import { GdkDisplay } from gdk_bindings;
+
+@macro GTK_TYPE_ICON_THEME = gtk_icon_theme_get_type();
+@macro GTK_ICON_THEME(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkIconTheme>(obj, GTK_TYPE_ICON_THEME);
+@macro GTK_IS_ICON_THEME(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_ICON_THEME);
+
+struct GtkIconTheme;
+
+enum GtkIconLookupFlags {
+    NONE           = 0,
+    FORCE_REGULAR  = 1 << 0,
+    FORCE_SYMBOLIC = 1 << 1,
+    PRELOAD        = 1 << 2,
+}
+
+@extern fn gtk_icon_theme_error_quark() -> GQuark;
+@extern fn gtk_icon_theme_get_type() -> GType;
+@extern fn gtk_icon_theme_new() -> GtkIconTheme*;
+@extern fn gtk_icon_theme_get_for_display(display: GdkDisplay*) -> GtkIconTheme*;
+@extern fn gtk_icon_theme_get_display(theme: GtkIconTheme*) -> GdkDisplay*;
+@extern fn gtk_icon_theme_set_search_path(theme: GtkIconTheme*,
+                                          path: const char**);
+@extern fn gtk_icon_theme_get_search_path(theme: GtkIconTheme*) -> char**;
+@extern fn gtk_icon_theme_add_search_path(theme: GtkIconTheme*,
+                                          path: const char*);
+@extern fn gtk_icon_theme_set_resource_path(theme: GtkIconTheme*,
+                                            path: const char**);
+@extern fn gtk_icon_theme_get_resource_path(theme: GtkIconTheme*) -> char**;
+@extern fn gtk_icon_theme_add_resource_path(theme: GtkIconTheme*,
+                                            path: const char*);
+@extern fn gtk_icon_theme_set_theme_name(theme: GtkIconTheme*,
+                                         theme_name: const char*);
+@extern fn gtk_icon_theme_get_theme_name(theme: GtkIconTheme*) -> char*;
+@extern fn gtk_icon_theme_has_icon(theme: GtkIconTheme*,
+                                   icon_name: const char*) -> gboolean;
+@extern fn gtk_icon_theme_has_gicon(theme: GtkIconTheme*,
+                                    gicon: GIcon*) -> gboolean;
+@extern fn gtk_icon_theme_get_icon_sizes(theme: GtkIconTheme*,
+                                         icon_name: const char*) -> i32*;
+// @extern fn gtk_icon_theme_lookup_icon(theme: GtkIconTheme*,
+//                                       icon_name: const char*,
+//                                       fallbacks: const char*[],
+//                                       size: i32,
+//                                       scale: i32,
+//                                       direction: GtkTextDirection,
+//                                       flags: GtkIconLookupFlags) -> GtkIconPaintable*;
+// @extern fn gtk_icon_theme_lookup_by_gicon(theme: GtkIconTheme*,
+//                                           icon: GIcon*,
+//                                           size: i32,
+//                                           scale: i32,
+//                                           direction: GtkTextDirection,
+//                                           flags: GtkIconLookupFlags) -> GtkIconPaintable*;
+@extern fn gtk_icon_theme_get_icon_names(theme: GtkIconTheme*) -> char**;

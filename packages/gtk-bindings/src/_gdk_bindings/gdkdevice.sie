@@ -1,0 +1,9 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+
+@macro GDK_TYPE_DEVICE = gdk_device_get_type();
+@macro GDK_DEVICE(o) = G_TYPE_CHECK_INSTANCE_CAST<GdkDevice>(o, GDK_TYPE_DEVICE);
+@macro GDK_IS_DEVICE(o) = G_TYPE_CHECK_INSTANCE_TYPE(o, GDK_TYPE_DEVICE);
+
+struct GdkDevice;
+
+@extern fn gdk_device_get_type() -> GType;

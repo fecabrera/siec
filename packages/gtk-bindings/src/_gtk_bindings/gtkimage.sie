@@ -1,0 +1,44 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GtkWidget } from gtkwidget;
+import { GtkIconSize } from gtkenums;
+import { GIcon } from gio;
+
+@macro GTK_TYPE_IMAGE = gtk_image_get_type();
+@macro GTK_IMAGE(obj) = G_TYPE_CHECK_INSTANCE_CAST<GtkImage>(obj, GTK_TYPE_IMAGE);
+@macro GTK_IS_IMAGE(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_IMAGE);
+
+struct GtkImage;
+
+@extern fn gtk_image_get_type() -> GType;
+@extern fn gtk_image_new() -> GtkWidget*;
+@extern fn gtk_image_new_from_file(filename: const char*) -> GtkWidget*;
+@extern fn gtk_image_new_from_resource(resource_path: const char*) -> GtkWidget*;
+// @deprecated("use gtk_image_new_from_paintable")
+// @extern fn gtk_image_new_from_pixbuf(pixbuf: GdkPixbuf*) -> GtkWidget*;
+// @extern fn gtk_image_new_from_paintable(paintable: GdkPaintable*) -> GtkWidget*;
+@extern fn gtk_image_new_from_icon_name(icon_name: const char*) -> GtkWidget*;
+@extern fn gtk_image_new_from_gicon(icon: GIcon*) -> GtkWidget*;
+@extern fn gtk_image_clear(image: GtkImage*);
+@extern fn gtk_image_set_from_file(image: GtkImage*,
+                                   filename: const char*);
+@extern fn gtk_image_set_from_resource(image: GtkImage*,
+                                       resource_path: const char*);
+// @deprecated("use gtk_image_set_from_paintable")
+// @extern fn gtk_image_set_from_pixbuf(image: GtkImage*,
+//                                      pixbuf: GdkPixbuf*);
+// @extern fn gtk_image_set_from_paintable(image: GtkImage*,
+//                                         paintable: GdkPaintable*);
+@extern fn gtk_image_set_from_icon_name(image: GtkImage*,
+                                        icon_name: const char*);
+@extern fn gtk_image_set_from_gicon(image: GtkImage*,
+                                    icon: GIcon*);
+@extern fn gtk_image_set_pixel_size(image: GtkImage*,
+                                    pixel_size: i32);
+@extern fn gtk_image_set_icon_size(image: GtkImage*,
+                                   icon_size: GtkIconSize);
+// @extern fn gtk_image_get_storage_type(image: GtkImage*) -> GtkImageType;
+// @extern fn gtk_image_get_paintable(image: GtkImage*) -> GdkPaintable*;
+@extern fn gtk_image_get_icon_name(image: GtkImage*) -> const char*;
+@extern fn gtk_image_get_gicon(image: GtkImage*) -> GIcon*;
+@extern fn gtk_image_get_pixel_size(image: GtkImage*) -> i32;
+@extern fn gtk_image_get_icon_size(image: GtkImage*) -> GtkIconSize;
