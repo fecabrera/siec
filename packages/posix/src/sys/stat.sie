@@ -1,0 +1,7 @@
+@if (TARGET_OS == OS_DARWIN) {
+    @include("_darwin/stat")
+} @else @if (TARGET_OS == OS_LINUX) {
+    @include("_linux/stat")
+} @else {
+    @error("Unsupported platform")
+}

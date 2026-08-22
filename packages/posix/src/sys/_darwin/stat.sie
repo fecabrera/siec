@@ -19,3 +19,12 @@
 @extern fn mknodat(dirfd: i32, path: const char*, mode: mode_t, dev: dev_t) -> i32;
 
 @extern fn umask(mode: mode_t) -> mode_t;
+
+@macro S_ISBLK(m) = ((m) & S_IFMT) == S_IFBLK;     /* block special */
+@macro S_ISCHR(m) = ((m) & S_IFMT) == S_IFCHR;     /* char special */
+@macro S_ISDIR(m) = ((m) & S_IFMT) == S_IFDIR;     /* directory */
+@macro S_ISFIFO(m) = ((m) & S_IFMT) == S_IFIFO;     /* fifo or socket */
+@macro S_ISREG(m) = ((m) & S_IFMT) == S_IFREG;     /* regular file */
+@macro S_ISLNK(m) = ((m) & S_IFMT) == S_IFLNK;     /* symbolic link */
+@macro S_ISSOCK(m) = ((m) & S_IFMT) == S_IFSOCK;    /* socket */
+@macro S_ISWHT(m) = ((m) & S_IFMT) == S_IFWHT;     /* OBSOLETE: whiteout */
