@@ -2,7 +2,7 @@
 
 import pytest
 
-from siec.ast import BinaryOp, Call, IntLiteral, StrLiteral, Var
+from siec.ast import BinaryOp, Call, Index, IntLiteral, StrLiteral, Var
 from siec.parser.expressions import parse_expression, parse_primary
 
 
@@ -26,6 +26,12 @@ def test_nested_calls(ts):
     A call may appear as another call's argument.
     """
     assert parse_primary(ts("f(g(1))")) == Call("f", [Call("g", [IntLiteral(1)])])
+
+
+def test_array_type_qualified_method_call(ts):
+    """An unsized array receiver can qualify a static method call."""
+    assert parse_primary(ts("char[]::from_c_str(args[1])")) == Call(
+        "char[]::from_c_str", [Index(Var("args"), IntLiteral(1))])
 
 
 def test_module_qualified_static_method_call(ts):

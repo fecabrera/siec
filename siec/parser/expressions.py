@@ -365,31 +365,18 @@ def parse_primary(ts: TokenStream) -> Expr:
             raise SyntaxError(f"line {tok.line}: a size is spelled "
                               "'@sizeof(T)', a compile-time function")
 
-        if ts.peek().syntax == "::":
+        # An unsized array type may qualify a method just like a bare or
+        # generic receiver: 'char[]::from_c_str(p)'. Recognize the empty
+        # brackets before ordinary 'arr[index]' postfix parsing sees them.
+        if (ts.peek().syntax == "[" and ts.peek(1).syntax == "]"
+                and ts.peek(2).syntax == "::"):
             ts.next()
-            member = ts.expect_name("drop").value
+            ts.next()
+            return parse_postfix(
+                ts, parse_qualified_tail(ts, f"{tok.value}[]"))
 
-            # a call after '::' is a method's fully qualified form,
-            # 'S::method(s)', optionally with explicit type arguments
-            method_args = None
-            if ts.peek().syntax == "<":
-                method_args = parse_type_arguments(ts)
-
-            if method_args is not None or ts.peek().syntax == "(":
-                ts.next()
-
-                args = []
-                while ts.peek().syntax != ")":
-                    if args:
-                        ts.expect("sym", ",")
-
-                    args.append(parse_expression(ts))
-                ts.expect("sym", ")")
-
-                return parse_postfix(
-                    ts, Call(f"{tok.value}::{member}", args, method_args))
-
-            return parse_postfix(ts, EnumMember(tok.value, member))
+        if ts.peek().syntax == "::":
+            return parse_postfix(ts, parse_qualified_tail(ts, tok.value))
 
         # '<A, B>(' spells a generic call's type arguments; '<A, B>::' a
         # generic type's qualified method; landing on an expression
@@ -459,6 +446,28 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def parse_qualified_tail(ts: TokenStream, receiver: str) -> Expr:
+    """Parse the member or method call after a qualified receiver type."""
+    ts.expect("sym", "::")
+    member = ts.expect_name("drop").value
+
+    method_args = None
+    if ts.peek().syntax == "<":
+        method_args = parse_type_arguments(ts)
+
+    if method_args is None and ts.peek().syntax != "(":
+        return EnumMember(receiver, member)
+
+    ts.expect("sym", "(")
+    args = []
+    while ts.peek().syntax != ")":
+        if args:
+            ts.expect("sym", ",")
+        args.append(parse_expression(ts))
+    ts.expect("sym", ")")
+    return Call(f"{receiver}::{member}", args, method_args)
 
 
 def parse_typed_param(ts: TokenStream, index: int) -> Param:
