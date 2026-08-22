@@ -1,24 +1,29 @@
 import Adw;
 import Gtk;
+import { format } from std.format;
 
 fn main(argc: i32, argv: char**) -> i32 {
     let app = Adw.Application("com.example.GtkApplication");
+    let tab_index: i32 = 0;
     
     app.connect_activate(() => {
         let window = Adw.ApplicationWindow(app);
         window.set_title("TabBar");
-        window.set_default_size(800, 600);
+        window.set_default_size(600, 400);
 
         let toolbar_view = Adw.ToolbarView();
         let tab_bar = Adw.TabBar();
         let tab_view = Adw.TabView();
         let header_bar = Adw.HeaderBar();
         
-        let tab1 = tab_view.append(Gtk.Label("Tab 1"));
-        tab1.set_title("Tab 1");
-
-        let tab2 = tab_view.append(Gtk.Label("Tab 2"));
-        tab2.set_title("Tab 2");
+        let new_tab_button = Gtk.Button("New");
+        new_tab_button.connect_clicked(() => {
+            tab_index += 1;
+            let text = format("Tab {}", tab_index);
+            let tab = tab_view.append(Gtk.Label(text));
+            tab.set_title(text);
+        });
+        header_bar.pack_end(new_tab_button);
         
         tab_bar.set_autohide(false);
         tab_bar.set_view(tab_view);

@@ -6,10 +6,21 @@ fn main(argc: i32, argv: char**) -> i32 {
     app.connect_activate(() => {
         let window = Gtk.ApplicationWindow(app);
         window.set_title("Hello");
-        window.set_default_size(800, 600);
+        window.set_default_size(600, 400);
+
+        let button = Gtk.Button("Hello, World!");
+        button.set_halign(Gtk.Align::CENTER);
+        button.set_valign(Gtk.Align::CENTER);
+
+        button.connect_clicked(() => {
+            window.close();
+        });
 
         let titlebar = Gtk.HeaderBar();
+        titlebar.set_use_native_controls(true);
+
         window.set_titlebar(titlebar);
+        window.set_child(button);
 
         window.present();
     });
