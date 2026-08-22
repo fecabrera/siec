@@ -59,6 +59,13 @@ def test_decorators_stack(ts):
     assert fn.is_inline
 
 
+def test_deprecated_accepts_bare_and_advised_forms(ts):
+    """Deprecation advice is optional; an empty string marks the bare form."""
+    assert parse_function(ts("@deprecated fn old() {}")).deprecated == ""
+    assert parse_function(
+        ts('@deprecated("use new") fn old() {}')).deprecated == "use new"
+
+
 def test_override_decorator_marks_functions_and_methods(ts):
     """'@override' marks the declaration whose implementation takes precedence."""
     fn = parse_function(ts("@override fn f() {}"))

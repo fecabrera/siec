@@ -38,6 +38,18 @@ def test_reachable_use_warns(compile_source):
     assert warned.count("warning") == 1
 
 
+def test_bare_deprecated_warns_without_advice(compile_source):
+    """A bare decorator warns without appending an empty advice suffix."""
+    warned = warnings_of(compile_source, """
+    @deprecated fn old() -> i32 { return 1; }
+
+    fn main() -> i32 { return old() - 1; }
+    """)
+
+    assert "warning: 'old' is deprecated" in warned
+    assert "deprecated:" not in warned
+
+
 def test_transitive_uses_warn(compile_source):
     """
     Reachability follows the call graph: a use inside a function 'main'

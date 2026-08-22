@@ -1267,22 +1267,21 @@ Since it hands nothing back, an `@noreturn` function cannot declare a return typ
 
 #### Deprecated
 
-Functions and methods can be decorated with `@deprecated("advice")` to mark them as on their way out. Every use the program can reach warns at its own line, quoting the advice:
+`@deprecated` marks a function or method as deprecated. Using it produces a warning without failing the build. An optional string adds advice to the warning:
 
 ```
-fn new_func() { }
+@deprecated fn old_func() { }
 
 @deprecated("use new_func")
-fn old_func() { }
+fn older_func() { }
 
 fn main() {
-    old_func(); // warning: 'old_func' is deprecated: use new_func
+    old_func();   // warning: 'old_func' is deprecated
+    older_func(); // warning: 'older_func' is deprecated: use new_func
 }
 ```
 
-A warning describes code that compiles: the build goes through. Which uses report follows the call graph from `main`, so a use inside a function nothing reaches stays quiet, and a use inside a `@deprecated` function does too, an old implementation being free to lean on its own generation. Handing the function around as a [reference](#function-references) counts as a use, and reaches it just the same. A unit compiled without a `main` of its own ([separate compilation](#imports)) has no entry to walk from, so every use in it reports.
-
-Generic functions and methods deprecate like any other, each warning naming what the call stamped (`'scale<i32>' is deprecated: ...`). The decorator stacks with the others, `@extern` included, since it describes the name rather than the body.
+Programs warn only about uses reachable from `main`. A library unit without a `main` warns about every use. Function [references](#function-references) count as uses, while uses inside another deprecated function stay quiet. Generic functions and methods can be deprecated the same way, and the decorator combines with others such as `@extern`.
 
 #### Remove
 

@@ -675,9 +675,11 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
             continue
 
         if decorator == "deprecated":
-            ts.expect("sym", "(")
-            deprecated = ts.expect("str").value
-            ts.expect("sym", ")")
+            deprecated = ""
+            if ts.peek().syntax == "(":
+                ts.next()
+                deprecated = ts.expect("str").value
+                ts.expect("sym", ")")
             continue
 
         if decorator == "remove":
