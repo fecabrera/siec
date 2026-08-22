@@ -1,5 +1,6 @@
 import unistd;
 import errno;
+import { fstat, stat } from sys.stat;
 import { errno } from errno;
 import { strlen } from string;
 import { IOReadable, IOWritable, IOError } from std.io;
@@ -64,6 +65,17 @@ struct File: IOReadable, IOWritable {
     @private fd: i32 = -1;
     @private mode: FileMode = FileMode::None;
     @private open: bool = false;
+}
+
+/**
+ * Open a file.
+ * 
+ * @param path The path to the file.
+ * @param mode The mode to open the file in.
+ * @return The result of the operation.
+ */
+fn File::open(path: const &Iterable<char>, mode: FileMode) -> Result<File, OpenError> {
+    return File::open(String::null_terminated(path).as_const_array(), mode);
 }
 
 /**
@@ -239,4 +251,24 @@ fn File::seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
     }
 
     return Ok(res);
+}
+
+fn File::get_size(const &self) -> Result<u64, IOError> {
+    if (not self.open) return Error(IOError::NotOpen);
+
+    let st: stat;
+    let res = fstat(self.fd, &st);
+    if (res < 0) {
+        let errsv = errno();
+        case (errsv) {
+        when errno.EINVAL:
+            return Error(IOError::InvalidOffset);
+        when errno.EBADF:
+            return Error(IOError::NotOpen);
+        else:
+            return Error(IOError::SystemError);
+        }
+    }
+
+    return Ok(st.st_size as u64);
 }
