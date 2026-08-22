@@ -1,0 +1,19 @@
+import { GType } from gobject;
+
+@macro GDK_TYPE_CONTENT_FORMATS = gdk_content_formats_get_type();
+
+struct GdkContentFormats;
+
+@extern fn gdk_content_formats_get_type() -> GType;
+
+@macro GDK_TYPE_CONTENT_FORMATS_BUILDER = gdk_content_formats_builder_get_type();
+
+struct GdkContentFormatsBuilder;
+
+@extern fn gdk_content_formats_builder_get_type() -> GType;
+
+@macro GDK_TYPE_FILE_LIST = gdk_file_list_get_type();
+
+struct GdkFileList;
+
+@extern fn gdk_file_list_get_type() -> GType;

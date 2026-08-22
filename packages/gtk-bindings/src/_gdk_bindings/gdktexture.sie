@@ -1,0 +1,42 @@
+import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GQuark, GError, GBytes, gsize, gboolean } from glib;
+
+@macro GDK_TYPE_TEXTURE = gdk_texture_get_type();
+@macro GDK_TEXTURE(obj) = G_TYPE_CHECK_INSTANCE_CAST<GdkTexture>(obj, GDK_TYPE_TEXTURE);
+@macro GDK_IS_TEXTURE(obj) = G_TYPE_CHECK_INSTANCE_TYPE(obj, GDK_TYPE_TEXTURE);
+
+struct GdkTexture;
+struct GdkTextureClass;
+
+enum GdkTextureError {
+    TOO_LARGE,
+    CORRUPT_IMAGE,
+    UNSUPPORTED_CONTENT,
+    UNSUPPORTED_FORMAT,
+}
+
+@macro GDK_TEXTURE_ERROR = gdk_texture_error_quark();
+
+@extern fn gdk_texture_error_quark() -> GQuark;
+@extern fn gdk_texture_get_type() -> GType;
+// @extern fn gdk_texture_new_for_pixbuf(pixbuf: GdkPixbuf*) -> GdkTexture*;
+@extern fn gdk_texture_new_from_resource(resource_path: const char*) -> GdkTexture*;
+// @extern fn gdk_texture_new_from_file(file: GFile*,
+//                                      error: GError**) -> GdkTexture*;
+@extern fn gdk_texture_new_from_filename(path: const char*,
+                                         error: GError**) -> GdkTexture*;
+@extern fn gdk_texture_new_from_bytes(bytes: GBytes*,
+                                      error: GError**) -> GdkTexture*;
+@extern fn gdk_texture_get_width(texture: GdkTexture*) -> i32;
+@extern fn gdk_texture_get_height(texture: GdkTexture*) -> i32;
+// @extern fn gdk_texture_get_format(texture: GdkTexture*) -> GdkMemoryFormat;
+// @extern fn gdk_texture_get_color_state(texture: GdkTexture*) -> GdkColorState*;
+@extern fn gdk_texture_download(texture: GdkTexture*,
+                                data: char*,
+                                stride: gsize);
+@extern fn gdk_texture_save_to_png(texture: GdkTexture*,
+                                   filename: const char*) -> gboolean;
+@extern fn gdk_texture_save_to_png_bytes(texture: GdkTexture*) -> GBytes*;
+@extern fn gdk_texture_save_to_tiff(texture: GdkTexture*,
+                                    filename: const char*) -> gboolean;
+@extern fn gdk_texture_save_to_tiff_bytes(texture: GdkTexture*) -> GBytes*;

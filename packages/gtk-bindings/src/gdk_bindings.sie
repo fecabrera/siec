@@ -1,6 +1,8 @@
 @include("_gdk_bindings/gdkapplaunchcontext")
 @include("_gdk_bindings/gdkclipboard")
+@include("_gdk_bindings/gdkcontentformats")
 @include("_gdk_bindings/gdkdevice")
 @include("_gdk_bindings/gdkdisplay")
 @include("_gdk_bindings/gdkseat")
+@include("_gdk_bindings/gdktexture")
 @include("_gdk_bindings/gdktypes")

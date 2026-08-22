@@ -1,4 +1,8 @@
-import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GValue, GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from gobject;
+import { GError, gboolean, gpointer } from glib;
+import { GdkDisplay } from gdkdisplay;
+import { GdkTexture } from gdktexture;
+import { GdkContentFormats } from gdkcontentformats;
 
 @macro GDK_TYPE_CLIPBOARD = gdk_clipboard_get_type();
 @macro GDK_CLIPBOARD(obj) = G_TYPE_CHECK_INSTANCE_CAST<GdkClipboard>(obj, GDK_TYPE_CLIPBOARD);
@@ -7,3 +11,62 @@ import { GType, G_TYPE_CHECK_INSTANCE_CAST, G_TYPE_CHECK_INSTANCE_TYPE } from go
 struct GdkClipboard;
 
 @extern fn gdk_clipboard_get_type() -> GType;
+@extern fn gdk_clipboard_get_display(clipboard: GdkClipboard*) -> GdkDisplay*;
+@extern fn gdk_clipboard_get_formats(clipboard: GdkClipboard*) -> GdkContentFormats*;
+@extern fn gdk_clipboard_is_local(clipboard: GdkClipboard*) -> gboolean;
+// @extern fn gdk_clipboard_get_content(clipboard: GdkClipboard*) -> GdkContentProvider*;
+// @extern fn gdk_clipboard_store_async(clipboard: GdkClipboard*,
+//                                      io_priority: i32,
+//                                      cancellable: GCancellable*,
+//                                      callback: GAsyncReadyCallback,
+//                                      user_data: gpointer);
+// @extern fn gdk_clipboard_store_finish(clipboard: GdkClipboard*,
+//                                       result: GAsyncResult*,
+//                                       error: GError**) -> gboolean;
+// @extern fn gdk_clipboard_read_async(clipboard: GdkClipboard*,
+//                                     mime_types: const char**,
+//                                     io_priority: i32,
+//                                     cancellable: GCancellable*,
+//                                     callback: GAsyncReadyCallback,
+//                                     user_data: gpointer);
+// @extern fn gdk_clipboard_read_finish(clipboard: GdkClipboard*,
+//                                      result: GAsyncResult*,
+//                                      out_mime_type: const char**,
+//                                      error: GError**) -> GInputStream*;
+// @extern fn gdk_clipboard_read_value_async(clipboard: GdkClipboard*,
+//                                           type: GType,
+//                                           io_priority: i32,
+//                                           cancellable: GCancellable*,
+//                                           callback: GAsyncReadyCallback,
+//                                           user_data: gpointer);
+// @extern fn gdk_clipboard_read_value_finish(clipboard: GdkClipboard*,
+//                                            result: GAsyncResult*,
+//                                            error: GError**) -> const GValue*;
+// @extern fn gdk_clipboard_read_texture_async(clipboard: GdkClipboard*,
+//                                             cancellable: GCancellable*,
+//                                             callback: GAsyncReadyCallback,
+//                                             user_data: gpointer);
+// @extern fn gdk_clipboard_read_texture_finish(clipboard: GdkClipboard*,
+//                                              result: GAsyncResult*,
+//                                              error: GError**) -> GdkTexture*;
+// @extern fn gdk_clipboard_read_text_async(clipboard: GdkClipboard*,
+//                                          cancellable: GCancellable*,
+//                                          callback: GAsyncReadyCallback,
+//                                          user_data: gpointer);
+// @extern fn gdk_clipboard_read_text_finish(clipboard: GdkClipboard*,
+//                                           result: GAsyncResult*,
+//                                           error: GError**) -> char*;
+// @extern fn gdk_clipboard_set_content(clipboard: GdkClipboard*,
+//                                      provider: GdkContentProvider*) -> gboolean;
+@extern fn gdk_clipboard_set(clipboard: GdkClipboard*,
+                             type: GType,
+                             ...);
+// @extern fn gdk_clipboard_set_valist(clipboard: GdkClipboard*,
+//                                     type: GType,
+//                                     args: va_list);
+@extern fn gdk_clipboard_set_value(clipboard: GdkClipboard*,
+                                   value: const GValue*);
+@extern fn gdk_clipboard_set_text(clipboard: GdkClipboard*,
+                                  text: const char*);
+@extern fn gdk_clipboard_set_texture(clipboard: GdkClipboard*,
+                                     texture: GdkTexture*);
