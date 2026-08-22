@@ -1,0 +1,15 @@
+@const ZIP_INT8_MIN     = (-ZIP_INT8_MAX-1);
+@const ZIP_INT8_MAX     = 0x7f;
+@const ZIP_UINT8_MAX    = 0xff;
+
+@const ZIP_INT16_MIN    = (-ZIP_INT16_MAX-1);
+@const ZIP_INT16_MAX    = 0x7fff;
+@const ZIP_UINT16_MAX   = 0xffff;
+
+@const ZIP_INT32_MIN    = (-ZIP_INT32_MAX-1);
+@const ZIP_INT32_MAX    = 0x7fffffff;
+@const ZIP_UINT32_MAX   = 0xffffffff;
+
+@const ZIP_INT64_MIN    = (-ZIP_INT64_MAX-1);
+@const ZIP_INT64_MAX    = 0x7fffffffffffffff;
+@const ZIP_UINT64_MAX   = 0xffffffffffffffff;
