@@ -2,8 +2,7 @@ import { File, FileMode } from std.fs;
 import { panic } from std;
 
 fn random_seed(buffer: &u8[]) {
-    let file = File("/dev/urandom", FileMode::Read);
-    try file.open() except (error) {
+    let file = try File::open("/dev/urandom", FileMode::Read) except (error) {
         panic("Cannot initialize random: {}", error);
     }
     defer file.close();

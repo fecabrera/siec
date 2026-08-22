@@ -63,58 +63,36 @@ enum SeekOrigin {
 struct File: IOReadable, IOWritable {
     @private fd: i32 = -1;
     @private mode: FileMode = FileMode::None;
-    @private path: const char[];
     @private open: bool = false;
-}
-
-/**
- * Initialize a file object with a path and mode.
- * 
- * @param path The path to the file.
- * @param mode The mode to open the file in.
- */
-fn File::init(&self, path: const char[], mode: FileMode) {
-    self = { path = path, mode = mode };
-}
-
-/**
- * Initialize a file object with a path and mode.
- * 
- * @param path The path to the file.
- * @param mode The mode to open the file in.
- */
-fn File::init(&self, path: const char*, mode: FileMode) {
-    self = { path = {path, strlen(path)}, mode = mode };
 }
 
 /**
  * Open a file.
  * 
- * @param self The file object to open.
+ * @param path The path to the file.
+ * @param mode The mode to open the file in.
  * @return The result of the operation.
  */
-fn File::open(&self) -> Result<OpenError> {
-    if (self.open) return Error(OpenError::AlreadyOpen);
-    
+fn File::open(path: const char*, mode: FileMode) -> Result<File, OpenError> {
     let flags: i32 = 0;
-    let mode: mode_t = 0;
+    let m: mode_t = 0;
     
-    if (self.mode & FileMode::Read and self.mode & FileMode::Write)
+    if (mode & FileMode::Read and mode & FileMode::Write)
         flags = unistd.O_RDWR;
-    else if (self.mode & FileMode::Read)
+    else if (mode & FileMode::Read)
         flags = unistd.O_RDONLY;
-    else if (self.mode & FileMode::Write)
+    else if (mode & FileMode::Write)
         flags = unistd.O_WRONLY;
     else
         return Error(OpenError::InvalidMode);
 
-    if (self.mode & FileMode::Append) flags |= unistd.O_APPEND;
-    if (self.mode & FileMode::Create) {
+    if (mode & FileMode::Append) flags |= unistd.O_APPEND;
+    if (mode & FileMode::Create) {
         flags |= unistd.O_CREAT;
-        mode |= S_ISUID | S_IRWXU | S_IRWXG | S_IRWXO;
+        m |= S_ISUID | S_IRWXU | S_IRWXG | S_IRWXO;
     }
 
-    let fd = mode ? unistd.open(self.path, flags, mode) : unistd.open(self.path, flags);
+    let fd = m ? unistd.open(path, flags, m) : unistd.open(path, flags);
     if (fd < 0) {
         let errsv = errno();
         case (errsv) {
@@ -126,11 +104,8 @@ fn File::open(&self) -> Result<OpenError> {
             return Error(OpenError::SystemError);
         }
     }
-    
-    self.fd = fd;
-    self.open = true;
 
-    return Ok();
+    return Ok({fd, mode, true});
 }
 
 /**

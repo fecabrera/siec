@@ -79,15 +79,13 @@ fn main(argc: i32, argv: char**) -> i32 {
     let input_path = argv[unistd.optind];
     let output_path = argv[unistd.optind + 1];
 
-    let input = File(input_path, FileMode::Read);
-    try input.open() except (err) {
+    let input = try File::open(input_path, FileMode::Read) except (err) {
         std.io.println(std.io.stderr, "{}: {}", input_path, err);
         return 1;
     }
     defer input.close();
     
-    let output = File(output_path, FileMode::Write | FileMode::Create);
-    try output.open() except (err) {
+    let output = try File::open(output_path, FileMode::Write | FileMode::Create) except (err) {
         std.io.println(std.io.stderr, "{}: {}", output_path, err);
         return 1;
     }

@@ -7,9 +7,7 @@ fn main(args: char*[]) -> i32 {
         return 1;
     }
     
-    let file = File(args[1], FileMode::Read);
-    
-    try file.open() except (err) {
+    let file = try File::open(args[1], FileMode::Read) except (err) {
         std.io.println(std.io.stderr, "{}: {}", args[1], err);
         return 1;
     }
