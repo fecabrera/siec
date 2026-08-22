@@ -1,0 +1,39 @@
+import { off_t } from sys.types;
+
+@include("sys/dirent")
+
+struct DIR;
+
+@const DIRBLKSIZ = 1024;
+
+/* flags for opendir2 */
+@const DTF_HIDEW = 0x0001;	    /* hide whiteout entries */
+@const DTF_NODUP = 0x0002;	    /* don't return duplicate names */
+@const DTF_REWIND = 0x0004;	    /* rewind after reading union stack */
+@const __DTF_READALL = 0x0008;	/* everything has been read */
+@const __DTF_SKIPREAD = 0x0010; /* assume internal buffer is populated */
+@const __DTF_ATEND = 0x0020;    /* there's nothing more to read in the kernel */
+
+@extern fn opendir(name: const char*) -> DIR*;
+@extern fn fdopendir(fd: i32) -> DIR*;
+
+@extern fn closedir(dirp: DIR*) -> i32;
+
+@extern fn readdir(dirp: DIR*) -> dirent*;
+@deprecated("This function cannot be used safely as it does not take into account the variability of {NAME_MAX}.  It is highly recommended that you use readdir(3) instead.")
+@extern fn readdir_r(dirp: DIR*, entry: dirent*, result: dirent**) -> i32;
+
+@extern fn rewinddir(dirp: DIR*);
+@extern fn seekdir(dirp: DIR*, loc: i64);
+@extern fn telldir(dirp: DIR*) -> i64;
+
+@extern fn scandir(dirp: const char*,
+                   namelist: dirent*** ,
+                   filter: fn(const dirent*) -> i32,
+                   compar: fn(const dirent**, const dirent**) -> i32) -> i32;
+@extern fn scandirat(dirfd: i32,
+                     namelist: dirent*** ,
+                     filter: fn(const dirent*) -> i32,
+                     compar: fn(const dirent**, const dirent**) -> i32) -> i32;
+
+@extern fn getdirentries(size: i64, fd: i32, buf: opaque*, size: i64, basep: off_t*) -> i64;

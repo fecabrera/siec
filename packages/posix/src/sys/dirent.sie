@@ -1,0 +1,7 @@
+@if (TARGET_OS == OS_DARWIN) {
+    @include("_darwin/dirent")
+} @else @if (TARGET_OS == OS_LINUX) {
+    @include("_linux/dirent")
+} @else {
+    @error("Unsupported platform")
+}

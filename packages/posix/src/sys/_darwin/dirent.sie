@@ -1,0 +1,29 @@
+import { ino_t } from types;
+
+@const __DARWIN_MAXNAMLEN = 255;
+@const __DARWIN_MAXPATHLEN = 1024;
+@const MAXNAMLEN = __DARWIN_MAXNAMLEN;
+
+struct dirent {
+	d_ino: u64;      					/* file number of entry */ 
+	d_seekoff: u64;  					/* seek offset (optional, used by servers) */ 
+	d_reclen: u16;   					/* length of this record */ 
+	d_namlen: u16;   					/* length of string in d_name */ 
+	d_type: DT;     					/* file type, see below */ 
+	d_name: @raw<char>[__DARWIN_MAXPATHLEN]; 	/* entry name (up to MAXPATHLEN bytes) */ 
+}
+
+/*
+ * File types
+ */
+enum DT: u8 {
+	UNKNOWN	= 0,
+	FIFO	= 1,
+	CHR		= 2,
+	DIR		= 4,
+	BLK		= 6,
+	REG		= 8,
+	LNK		= 10,
+	SOCK	= 12,
+	WHT		= 14,
+}
