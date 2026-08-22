@@ -110,4 +110,24 @@ import { Formattable } from std.format;
     fn as_const_bytes(const &self) -> const u8[] {
         return {self.data as const u8*, self.length};
     }
+
+    /**
+    * Convert the String to a C string.
+    *
+    * @return The C string.
+    */
+    fn c_str(&self) -> char* {
+        self.null_terminate();
+        return self.data as char*;
+    }
+
+    /**
+    * Get the List as a null-terminated array.
+    *
+    * @return The List as a null-terminated array.
+    */
+    fn as_null_terminated_array(&self) -> char[] {
+        self.null_terminate();
+        return {self.data as char*, self.length};
+    }
 }

@@ -2,7 +2,11 @@ import { strlen } from string;
 import { List } from collections;
 
 @extend char[] {
-    fn from_c_str(str: const char*) -> const char[] {
+    fn from_c_str(str: char*) -> char[] {
+        return {str, strlen(str)};
+    }
+
+    fn from_const_c_str(str: const char*) -> const char[] {
         return {str, strlen(str)};
     }
 }
@@ -67,7 +71,11 @@ import { List } from collections;
         return result;
     }
 
-    fn from_c_arr(arr: const T*, len: u64) -> const T[] {
+    fn from_c_arr(arr: T*, len: u64) -> T[] {
+        return {arr, len};
+    }
+
+    fn from_const_c_arr(arr: const T*, len: u64) -> const T[] {
         return {arr, len};
     }
 }
