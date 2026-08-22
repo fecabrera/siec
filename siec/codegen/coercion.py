@@ -28,6 +28,7 @@ from siec.codegen.types import (
     is_aliasing,
     is_array_struct,
     is_const,
+    raw_array,
     resolve_type,
     strip_const,
     strip_reference,
@@ -148,7 +149,8 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         return builder.load(typed, name="any.value")
 
     if (is_const(operand_name) and not is_const(expr.type)
-            and is_aliasing(strip_const(operand_name))):
+            and (is_aliasing(strip_const(operand_name))
+                 or raw_array(strip_const(operand_name)) is not None)):
         raise TypeError(f"cannot cast away 'const': {operand_name!r} to {expr.type!r}")
 
     # enums convert through their backing representation. Other LLVM integer
@@ -160,6 +162,19 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
         target = "u", target_type.width
 
     if target is None:
+        # An inline raw array decays to a pointer to its first element. Unlike
+        # a fat array, its value carries no data pointer to extract, so take
+        # the array place and GEP to element zero.
+        raw = raw_array(strip_const(operand_name))
+        if (raw is not None and not raw[2]
+                and isinstance(target_type, ir.PointerType)
+                and target_type.pointee == resolve_type(raw[0], gen.structs)):
+            from siec.codegen.expressions import emit_lvalue
+
+            address = emit_lvalue(gen, builder, expr.operand, scope)
+            zero = ir.Constant(ir.IntType(32), 0)
+            return builder.gep(address, [zero, zero], name="raw.decay")
+
         # an array casts to its element pointer: 'arr as X*' extracts the data field
         value = emit_expression(gen, builder, expr.operand, None, scope)
 

@@ -144,6 +144,23 @@ def test_pointer_casts_between_pointer_types(run):
     assert run(source).returncode == 0
 
 
+def test_inline_raw_array_cast_decays_to_element_pointer(run):
+    """A raw local or field casts to a pointer at its first inline element."""
+    source = """
+    struct Buffer {
+        data: @raw<char>[2];
+    }
+
+    fn main() -> i32 {
+        let buffer: Buffer;
+        buffer.data[0] = '*';
+        let data: char* = buffer.data as char*;
+        return data[0] as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_function_reference_casts_reinterpret_the_signature(run):
     """
     An explicit cast may erase and restore a function signature for a C API;
