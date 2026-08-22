@@ -63,6 +63,40 @@ def test_const_variable_cannot_be_assigned(compile_source):
         compile_source("fn main() -> i32 { let x: const i32 = 1; x = 2; return x; }")
 
 
+def test_uninitialized_const_variable_may_be_initialized_once(run):
+    """A bare const local accepts its initial value through plain assignment."""
+    source = """
+    fn main() -> i32 {
+        let x: const i32;
+        if (true) { x = 42; } else { x = 7; }
+        return x;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_possibly_initialized_const_cannot_be_assigned_again(compile_source):
+    """A later store is unsafe when an earlier path may have initialized it."""
+    with pytest.raises(TypeError, match="cannot assign to const variable 'x'"):
+        compile_source("""
+        fn f(condition: bool) -> i32 {
+            let x: const i32;
+            if (condition) { x = 1; }
+            x = 2;
+            return x;
+        }
+        """)
+
+
+def test_default_initialized_const_cannot_be_assigned(compile_source):
+    """Struct field defaults initialize a bare const declaration immediately."""
+    with pytest.raises(TypeError, match="cannot assign to const variable 's'"):
+        compile_source("""
+        struct S { value: i32 = 1; }
+        fn f() { let s: const S; s = {2}; }
+        """)
+
+
 def test_cannot_write_through_a_const_pointer(compile_source):
     """
     Index assignment through a const pointer is a mutation and is rejected.

@@ -97,9 +97,10 @@ def check_member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[i
     return index, field_type
 
 
-def checked_variable(type_name: str, *, moved: bool = False) -> Variable:
+def checked_variable(type_name: str, *, moved: bool = False,
+                     initialized: bool = True) -> Variable:
     """A scope entry carrying only its semantic type."""
-    return Variable(None, type_name, moved=moved)
+    return Variable(None, type_name, moved=moved, initialized=initialized)
 
 
 def check_function(gen: CodeGenerator, fn: Function) -> None:
@@ -179,9 +180,17 @@ def merge_moved(parent: dict, paths: list[dict]) -> None:
     """Conservatively merge ownership states from continuing CFG paths."""
     for name, variable in list(parent.items()):
         states = [path[name].moved for path in paths if name in path]
+        initialized = [
+            path[name].initialized for path in paths if name in path
+        ]
         if states:
             parent[name] = checked_variable(
-                variable.type, moved=any(states))
+                variable.type,
+                moved=any(states),
+                # "May be initialized" is the safe merge for const locals:
+                # another store could otherwise mutate it on one path.
+                initialized=any(initialized),
+            )
 
 
 def check_owned_cleanup(gen: CodeGenerator, name: str, scope: dict) -> None:
@@ -258,11 +267,13 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             if is_reference(type_name):
                 raise TypeError("a reference cannot type a variable")
             validate_type(type_name, gen.structs)
+            implicitly_initialized = False
             if (sized := sized_array(type_name)) is not None:
                 from siec.codegen.enums import evaluate_size
 
                 evaluate_size(gen, sized[1])
                 type_name = sized[0]
+                implicitly_initialized = True
 
             if stmt.value is not None:
                 context = (
@@ -283,7 +294,11 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     gen, stmt.value, ownership_type, scope)
             else:
                 check_type_defaults(gen, type_name)
-            scope[stmt.name] = checked_variable(type_name)
+                implicitly_initialized = type_has_defaults(gen, type_name)
+            scope[stmt.name] = checked_variable(
+                type_name,
+                initialized=(stmt.value is not None or implicitly_initialized),
+            )
             check_owned_cleanup(gen, stmt.name, scope)
             return False
 
@@ -294,7 +309,15 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
 
         if isinstance(stmt, (Assign, MemberAssign, RefAssign, IndexAssign)):
             target = assignment_target(stmt)
-            target_type = mutable_lvalue_type(gen, target, scope)
+            const_init = (
+                isinstance(target, Var)
+                and target.name in scope
+                and is_const(scope[target.name].type)
+                and not scope[target.name].initialized
+            )
+            target_type = mutable_lvalue_type(
+                gen, target, scope, allow_const_init=const_init)
+            stmt.const_init = const_init
             from siec.codegen.assignment import assignment_action
 
             action = assignment_action(
@@ -307,7 +330,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             if isinstance(target, Var) and target.name in scope:
                 variable = scope[target.name]
                 scope[target.name] = checked_variable(
-                    variable.type, moved=False)
+                    variable.type, moved=False, initialized=True)
             return False
 
         if isinstance(stmt, CompoundAssign):
@@ -603,7 +626,8 @@ def lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str:
     return type_name
 
 
-def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str:
+def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict, *,
+                        allow_const_init: bool = False) -> str:
     """Resolve an lvalue and reject each form of const mutation precisely."""
     from siec.codegen.lvalues import reject_const_base
     from siec.codegen.macros import macro_place, macro_view
@@ -617,12 +641,13 @@ def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str:
                 raise TypeError(
                     f"macro {name!r} does not expand to an "
                     "assignable place") from None
-            return mutable_lvalue_type(gen, expansion, scope)
+            return mutable_lvalue_type(
+                gen, expansion, scope, allow_const_init=allow_const_init)
 
     if isinstance(expr, Var):
         if expr.name in scope:
             declared = scope[expr.name].type
-            if is_const(declared):
+            if is_const(declared) and not allow_const_init:
                 raise TypeError(
                     f"cannot assign to const variable {expr.name!r}")
             return strip_reference(declared)
@@ -1234,6 +1259,25 @@ def check_type_defaults(gen: CodeGenerator, type_name: str | None) -> None:
     gen.checked_default_types.add(canonical)
     for field in info.fields:
         check_field_default(gen, field)
+
+
+def type_has_defaults(gen: CodeGenerator, type_name: str | None,
+                      seen: set[str] | None = None) -> bool:
+    """Whether a bare declaration receives a recursive struct default."""
+    canonical = strip_const(type_name)
+    info = gen.structs.get(canonical)
+    if info is None or info.fields is None or info.is_union:
+        return False
+
+    seen = set() if seen is None else seen
+    if canonical in seen:
+        return False
+    seen.add(canonical)
+    return any(
+        field.default is not None
+        or type_has_defaults(gen, field.type, seen)
+        for field in info.fields
+    )
 
 
 def check_field_default(gen: CodeGenerator, field) -> None:

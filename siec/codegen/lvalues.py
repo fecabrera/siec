@@ -201,7 +201,8 @@ class ItemLValue:
 
 
 def resolve_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, target,
-                   scope: dict, *, item_mode: str = "store") -> LValue:
+                   scope: dict, *, item_mode: str = "store",
+                   allow_const_init: bool = False) -> LValue:
     """
     Resolve one assignment target without evaluating it.
 
@@ -232,7 +233,7 @@ def resolve_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, target,
         else:
             raise NameError(f"undefined variable {target.name!r}")
 
-        if is_const(declared_type):
+        if is_const(declared_type) and not allow_const_init:
             raise TypeError(f"cannot assign to const variable {target.name!r}")
 
     elif isinstance(target, Member):

@@ -49,6 +49,9 @@ class Variable:
     type: str
     volatile: bool = False
     moved: bool = False
+    # Whether this binding has received a value. A const local declared
+    # without an initializer may be stored once, but never reassigned.
+    initialized: bool = True
     # runtime ownership bit for a value whose type implements Destroy
     drop_flag: ir.Instruction | None = None
     # a closure may replace the original stack slot with stable heap storage;

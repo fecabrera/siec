@@ -481,7 +481,9 @@ def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
             gen, builder, name, expansion, stmt.value, stmt.line, scope)
         return
 
-    place = resolve_lvalue(gen, builder, target, scope)
+    place = resolve_lvalue(
+        gen, builder, target, scope,
+        allow_const_init=getattr(stmt, "const_init", False))
     from siec.codegen.assignment import assignment_action
 
     action = assignment_action(gen, target, place.type, stmt.value, scope)
