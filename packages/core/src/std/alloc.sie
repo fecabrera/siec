@@ -1,4 +1,5 @@
 import stdlib;
+import array;
 
 @include("_alloc/_allocator");
 @include("_alloc/_stdlib");

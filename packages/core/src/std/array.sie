@@ -1,0 +1,73 @@
+import { strlen } from string;
+import { List } from collections;
+
+@extend char[] {
+    fn from_c_str(str: const char*) -> const char[] {
+        return {str, strlen(str)};
+    }
+}
+
+@extend T[]
+    : Add<List<T>, T[]>,
+      Add<List<T>, List<T>>,
+      Eq<T[]>,
+      Eq<List<T>> {
+    /**
+    * Concatenate the given iterable to the array.
+    *
+    * @param it The iterable to concatenate to the array.
+    * @return A new array with the given array concatenated.
+    */
+    fn add(&self, it: const &Iterable<T>) -> List<T> {
+        let result = List<T>(self);
+        result.append(it);
+        return result;
+    }
+
+    /**
+    * Check if the array is equal to the given array.
+    *
+    * @param arr The array to check if the array is equal to.
+    * @return True if the array is equal to the given array, false otherwise.
+    */
+    fn eq(const &self, arr: const &T[]) -> bool {
+        if (self.length != arr.length)
+            return false;
+
+        for (let i: u64 = 0; i < arr.length; i += 1) {
+            if (self[i] != arr[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    /**
+    * Check if the array is equal to the given List.
+    *
+    * @param lst The List to check if the array is equal to.
+    * @return True if the array is equal to the given List, false otherwise.
+    */
+    fn eq(const &self, lst: const &List<T>) -> bool {
+        return self == lst.as_array();
+    }
+    
+}
+
+@extend T[] {
+    /**
+     * Map the array to a new List.
+     *
+     * @param callback The callback to map the array to a new List.
+     * @return A new List with the mapped array.
+     */
+    fn map<ResultType>(const &self, callback: closure fn(const &T) -> ResultType) -> List<ResultType> {
+        let result = List<ResultType>();
+        foreach (e : self) result.push(callback(e));
+        return result;
+    }
+
+    fn from_c_arr(arr: const T*, len: u64) -> const T[] {
+        return {arr, len};
+    }
+}
