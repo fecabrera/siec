@@ -1,7 +1,7 @@
 @if (TARGET_OS == OS_DARWIN) {
-    @include("_darwin/types")
+    @include("_darwin/signal")
 } @else @if (TARGET_OS == OS_LINUX) {
-    @include("_linux/types")
+    @include("_linux/signal")
 } @else {
     @error("Unsupported platform")
 }

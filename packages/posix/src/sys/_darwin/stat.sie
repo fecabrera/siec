@@ -1,25 +1,5 @@
 @include("types")
 
-@extern fn chmod(path: const char*, mode: mode_t) -> i32;
-@extern fn fchmod(fd: i32, mode: mode_t) -> i32;
-@extern fn fchmodat(dirfd: i32, path: const char*, mode: mode_t, flags: i32) -> i32;
-
-@extern fn stat(path: const char*, statbuf: stat*) -> i32;
-@extern fn fstat(fd: i32, statbuf: stat*) -> i32;
-@extern fn lstat(path: const char*, statbuf: stat*) -> i32;
-@extern fn fstatat(dirfd: i32, path: const char*, statbuf: stat*, flags: i32) -> i32;
-
-@extern fn mkdir(path: const char*, mode: mode_t) -> i32;
-@extern fn mkdirat(dirfd: i32, path: const char*, mode: mode_t) -> i32;
-
-@extern fn mkfifo(path: const char*, mode: mode_t) -> i32;
-@extern fn mkfifoat(dirfd: i32, path: const char*, mode: mode_t) -> i32;
-
-@extern fn mknod(path: const char*, mode: mode_t, dev: dev_t) -> i32;
-@extern fn mknodat(dirfd: i32, path: const char*, mode: mode_t, dev: dev_t) -> i32;
-
-@extern fn umask(mode: mode_t) -> mode_t;
-
 @macro S_ISBLK(m) = ((m) & S_IFMT) == S_IFBLK;      /* block special */
 @macro S_ISCHR(m) = ((m) & S_IFMT) == S_IFCHR;      /* char special */
 @macro S_ISDIR(m) = ((m) & S_IFMT) == S_IFDIR;      /* directory */
