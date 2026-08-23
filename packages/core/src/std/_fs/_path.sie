@@ -1,0 +1,103 @@
+import { stat, S_ISDIR, S_ISREG } from sys.stat;
+import { errno, ENOENT, EACCES } from errno;
+import { basename, dirname } from libgen;
+import { String } from std.collections;
+import { StatError } from _enums;
+
+/**
+ * A path to a file or directory.
+ *
+ * @param path The path to the file or directory.
+ */
+struct Path: Destroy {
+    @private path: String;
+
+    /**
+     * Initialize the path with the given iterable.
+     *
+     * @param path The iterable to initialize the path with.
+     */
+    fn init(&self, path: const &Iterable<char>) {
+        self.path = String(path);
+    }
+
+    /**
+     * Initialize the path with the given null-terminated array.
+     *
+     * @param path The null-terminated array to initialize the path with.
+     */
+    fn init(&self, path: const char*) {
+        self.path = String(path);
+    }
+
+    /**
+     * Destroy the path.
+     */
+    fn destroy(&self) {
+        drop self.path;
+    }
+
+    /**
+     * Get the basename of the path.
+     *
+     * @return The basename of the path.
+     */
+    fn basename(&self) -> String {
+        return String(basename(self.path.as_null_terminated_array()));
+    }
+
+    /**
+     * Get the dirname of the path.
+     *
+     * @return The dirname of the path.
+     */
+    fn dirname(&self) -> String {
+        return String(dirname(self.path.as_null_terminated_array()));
+    }
+
+    /**
+     * Check if the path is a directory.
+     *
+     * @return The result of the check.
+     */
+    fn is_dir(&self) -> Result<bool, StatError> {
+        let st: stat;
+        
+        if (stat(self.path.as_null_terminated_array(), &st) < 0) {
+            let errsv = errno;
+            case(errsv) {
+            when ENOENT:
+                return Error(StatError::NotFound);
+            when EACCES:
+                return Error(StatError::PermissionDenied);
+            else:
+                return Error(StatError::SystemError);
+            }
+        }
+
+        return Ok(S_ISDIR(st.st_mode));
+    }
+
+    /**
+     * Check if the path is a regular file.
+     *
+     * @return The result of the check.
+     */
+    fn is_regular(&self) -> Result<bool, StatError> {
+        let st: stat;
+        
+        if (stat(self.path.as_null_terminated_array(), &st) < 0) {
+            let errsv = errno;
+            case(errsv) {
+            when ENOENT:
+                return Error(StatError::NotFound);
+            when EACCES:
+                return Error(StatError::PermissionDenied);
+            else:
+                return Error(StatError::SystemError);
+            }
+        }
+
+        return Ok(S_ISREG(st.st_mode));
+    }
+}

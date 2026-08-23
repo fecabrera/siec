@@ -2,273 +2,225 @@ import unistd;
 import errno;
 import { fstat, stat } from sys.stat;
 import { errno } from errno;
-import { strlen } from string;
 import { IOReadable, IOWritable, IOError } from std.io;
-import { String } from std.collections;
 import { Formattable } from std.format;
 import { mode_t, S_ISUID, S_IRWXU, S_IRWXG, S_IRWXO } from sys.types;
+import { FileMode, OpenError, CloseError, SeekOrigin, StatError } from _enums;
 
-enum FileMode: i32 {
-    None        = 0,
-    Read        = 1,
-    Write       = 2,
-    ReadWrite   = FileMode::Read | FileMode::Write,
-    Append      = 4,
-    Create      = 8,
-}
-
-enum OpenError {
-    SystemError,
-    AlreadyOpen,
-    InvalidMode,
-    NotFound,
-    PermissionDenied,
-}
-
-@extend OpenError: Formattable {
-    /**
-    * Format the OpenError.
-    *
-    * @param modifiers The modifiers to format the OpenError with.
-    * @return The formatted OpenError.
-    */
-    fn format(const &self, modifiers: const &char[]) -> String {
-        case (self) {
-        when OpenError::SystemError:
-            return String("System error");
-        when OpenError::AlreadyOpen:
-            return String("Already open");
-        when OpenError::InvalidMode:
-            return String("Invalid mode");
-        when OpenError::NotFound:
-            return String("Not found");
-        when OpenError::PermissionDenied:
-            return String("Permission denied");
-        else:
-            return String("Unknown error");
-        }
-    }
-}
-
-enum CloseError {
-    SystemError,
-    AlreadyClosed,
-}
-
-enum SeekOrigin {
-    Start,
-    Current,
-    End,
-}
-
+/**
+ * A file.
+ *
+ * @param fd The file descriptor.
+ * @param mode The mode the file was opened in.
+ * @param open Whether the file is open.
+ */
 struct File: IOReadable, IOWritable {
     @private fd: i32 = -1;
     @private mode: FileMode = FileMode::None;
     @private open: bool = false;
-}
 
-/**
- * Open a file.
- * 
- * @param path The path to the file.
- * @param mode The mode to open the file in.
- * @return The result of the operation.
- */
-fn File::open(path: const &Iterable<char>, mode: FileMode) -> Result<File, OpenError> {
-    return File::open(String::null_terminated(path).as_const_array(), mode);
-}
-
-/**
- * Open a file.
- * 
- * @param path The path to the file.
- * @param mode The mode to open the file in.
- * @return The result of the operation.
- */
-fn File::open(path: const char*, mode: FileMode) -> Result<File, OpenError> {
-    let flags: i32 = 0;
-    let m: mode_t = 0;
-    
-    if (mode & FileMode::Read and mode & FileMode::Write)
-        flags = unistd.O_RDWR;
-    else if (mode & FileMode::Read)
-        flags = unistd.O_RDONLY;
-    else if (mode & FileMode::Write)
-        flags = unistd.O_WRONLY;
-    else
-        return Error(OpenError::InvalidMode);
-
-    if (mode & FileMode::Append) flags |= unistd.O_APPEND;
-    if (mode & FileMode::Create) {
-        flags |= unistd.O_CREAT;
-        m |= S_ISUID | S_IRWXU | S_IRWXG | S_IRWXO;
+    /**
+    * Open a file.
+    * 
+    * @param path The path to the file.
+    * @param mode The mode to open the file in.
+    * @return The result of the operation.
+    */
+    fn open(path: const &Iterable<char>, mode: FileMode) -> Result<File, OpenError> {
+        return File::open(String::null_terminated(path).as_const_array(), mode);
     }
 
-    let fd = m ? unistd.open(path, flags, m) : unistd.open(path, flags);
-    if (fd < 0) {
-        let errsv = errno();
-        case (errsv) {
-        when errno.ENOENT:
-            return Error(OpenError::NotFound);
-        when errno.EACCES:
-            return Error(OpenError::PermissionDenied);
-        else:
-            return Error(OpenError::SystemError);
+    /**
+    * Open a file.
+    * 
+    * @param path The path to the file.
+    * @param mode The mode to open the file in.
+    * @return The result of the operation.
+    */
+    fn open(path: const char*, mode: FileMode) -> Result<File, OpenError> {
+        let flags: i32 = 0;
+        let u_mode: mode_t = 0;
+        
+        // build unix file mode
+        if (mode & FileMode::Read and mode & FileMode::Write)
+            flags = unistd.O_RDWR;
+        else if (mode & FileMode::Read)
+            flags = unistd.O_RDONLY;
+        else if (mode & FileMode::Write)
+            flags = unistd.O_WRONLY;
+        else
+            return Error(OpenError::InvalidMode);
+
+        if (mode & FileMode::Append) flags |= unistd.O_APPEND;
+        if (mode & FileMode::Create) {
+            flags |= unistd.O_CREAT;
+            u_mode |= S_ISUID | S_IRWXU | S_IRWXG | S_IRWXO;
         }
-    }
 
-    return Ok({fd, mode, true});
-}
-
-/**
- * Close a file.
- * 
- * @param self The file object to close.
- * @return The result of the operation.
- */
-fn File::close(&self) -> Result<CloseError> {
-    if (not self.open) return Error(CloseError::AlreadyClosed);
-    
-    let res = unistd.close(self.fd);
-    if (res < 0) return Error(CloseError::SystemError);
-
-    self.fd = -1;
-    self.open = false;
-
-    return Ok();
-}
-
-/**
- * Read from a file.
- * 
- * @param self The file object to read from.
- * @param buf The buffer to read into.
- * @return The result of the operation.
- */
-fn File::read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
-    if (not self.open) return Error(IOError::NotOpen);
-    if (not self.mode & FileMode::Read) return Error(IOError::PermissionDenied);
-    if (buf.length < count) return Error(IOError::InvalidBuffer);
-
-    let res = unistd.read(self.fd, buf, count);
-    if (res < 0) {
-        let errsv = errno();
-        case (errsv) {
-        when errno.EACCES:
-            return Error(IOError::PermissionDenied);
-        when errno.EINVAL:
-            return Error(IOError::InvalidBuffer);
-        when errno.EBADF:
-            self.fd = -1;
-            self.open = false;
-            return Error(IOError::NotOpen);
-        else:
-            return Error(IOError::SystemError);
+        // open file
+        let fd = u_mode ? unistd.open(path, flags, u_mode) : unistd.open(path, flags);
+        if (fd < 0) {
+            let errsv = errno;
+            case (errsv) {
+            when errno.ENOENT:
+                return Error(OpenError::NotFound);
+            when errno.EACCES:
+                return Error(OpenError::PermissionDenied);
+            else:
+                return Error(OpenError::SystemError);
+            }
         }
+
+        return Ok({fd, mode, true});
     }
-    
-    return Ok(res);
-}
 
-/**
- * Read the given number of bytes from the file.
- *
- * @param buf The buffer to read the bytes into.
- * @return The number of bytes read.
- */
-@inline
-fn File::read(&self, buf: &u8[]) -> Result<i64, IOError> {
-    return self.read(buf, buf.length);
-}
+    /**
+    * Close a file.
+    * 
+    * @param self The file object to close.
+    * @return The result of the operation.
+    */
+    fn close(&self) -> Result<CloseError> {
+        if (not self.open) return Error(CloseError::AlreadyClosed);
+        
+        let res = unistd.close(self.fd);
+        if (res < 0) return Error(CloseError::SystemError);
 
-/**
- * Write the given buffer to the file.
- *
- * @param buf The buffer to write.
- * @param count The number of bytes to write.
- * @return The number of bytes written.
- */
-fn File::write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
-    if (not self.open) return Error(IOError::NotOpen);
-    if (not self.mode & FileMode::Write) return Error(IOError::PermissionDenied);
-    if (buf.length < count) return Error(IOError::InvalidBuffer);
+        self.fd = -1;
+        self.open = false;
 
-    let res = unistd.write(self.fd, buf, count);
-    if (res < 0) {
-        let errsv = errno();
-        case (errsv) {
-        when errno.EINVAL:
-            return Error(IOError::InvalidBuffer);
-        when errno.EACCES:
-            return Error(IOError::PermissionDenied);
-        when errno.EBADF:
-            self.fd = -1;
-            self.open = false;
-            return Error(IOError::NotOpen);
-        else:
-            self.open = false;
-            return Error(IOError::SystemError);
+        return Ok();
+    }
+
+    /**
+    * Read from a file.
+    * 
+    * @param self The file object to read from.
+    * @param buf The buffer to read into.
+    * @return The result of the operation.
+    */
+    fn read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
+        if (not self.open) return Error(IOError::NotOpen);
+        if (not self.mode & FileMode::Read) return Error(IOError::PermissionDenied);
+        if (buf.length < count) return Error(IOError::InvalidBuffer);
+
+        let res = unistd.read(self.fd, buf, count);
+        if (res < 0) {
+            let errsv = errno;
+            case (errsv) {
+            when errno.EACCES:
+                return Error(IOError::PermissionDenied);
+            when errno.EINVAL:
+                return Error(IOError::InvalidBuffer);
+            when errno.EBADF:
+                self.fd = -1;
+                self.open = false;
+                return Error(IOError::NotOpen);
+            else:
+                return Error(IOError::SystemError);
+            }
         }
+        
+        return Ok(res);
     }
 
-    return Ok(res);
-}
+    /**
+    * Read the given number of bytes from the file.
+    *
+    * @param buf The buffer to read the bytes into.
+    * @return The number of bytes read.
+    */
+    @inline
+    fn read(&self, buf: &u8[]) -> Result<i64, IOError> {
+        return self.read(buf, buf.length);
+    }
 
-/**
- * Write the given buffer to the file.
- *
- * @param buf The buffer to write.
- * @return The number of bytes written.
- */
-@inline
-fn File::write(&self, buf: const &u8[]) -> Result<i64, IOError> {
-    return self.write(buf, buf.length);
-}
+    /**
+    * Write the given buffer to the file.
+    *
+    * @param buf The buffer to write.
+    * @param count The number of bytes to write.
+    * @return The number of bytes written.
+    */
+    fn write(&self, buf: const &u8[], count: u64) -> Result<i64, IOError> {
+        if (not self.open) return Error(IOError::NotOpen);
+        if (not self.mode & FileMode::Write) return Error(IOError::PermissionDenied);
+        if (buf.length < count) return Error(IOError::InvalidBuffer);
 
-/**
- * Seek to the given offset from the given origin.
- *
- * @param offset The offset to seek to.
- * @param origin The origin to seek from.
- * @return The result of the operation.
- */
-fn File::seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
-    if (not self.open) return Error(IOError::NotOpen);
-    
-    let res = unistd.lseek(self.fd, offset, origin);
-    if (res < 0) {
-        let errsv = errno();
-        case (errsv) {
-        when errno.EINVAL:
-            return Error(IOError::InvalidOffset);
-        when errno.EBADF:
-            self.fd = -1;
-            self.open = false;
-            return Error(IOError::NotOpen);
-        else:
-            return Error(IOError::SystemError);
+        let res = unistd.write(self.fd, buf, count);
+        if (res < 0) {
+            let errsv = errno();
+            case (errsv) {
+            when errno.EINVAL:
+                return Error(IOError::InvalidBuffer);
+            when errno.EACCES:
+                return Error(IOError::PermissionDenied);
+            when errno.EBADF:
+                self.fd = -1;
+                self.open = false;
+                return Error(IOError::NotOpen);
+            else:
+                self.open = false;
+                return Error(IOError::SystemError);
+            }
         }
+
+        return Ok(res);
     }
 
-    return Ok(res);
-}
+    /**
+    * Write the given buffer to the file.
+    *
+    * @param buf The buffer to write.
+    * @return The number of bytes written.
+    */
+    @inline
+    fn write(&self, buf: const &u8[]) -> Result<i64, IOError> {
+        return self.write(buf, buf.length);
+    }
 
-fn File::get_size(const &self) -> Result<u64, IOError> {
-    if (not self.open) return Error(IOError::NotOpen);
-
-    let st: stat;
-    let res = fstat(self.fd, &st);
-    if (res < 0) {
-        let errsv = errno();
-        case (errsv) {
-        when errno.EINVAL:
-            return Error(IOError::InvalidOffset);
-        when errno.EBADF:
-            return Error(IOError::NotOpen);
-        else:
-            return Error(IOError::SystemError);
+    /**
+    * Seek to the given offset from the given origin.
+    *
+    * @param offset The offset to seek to.
+    * @param origin The origin to seek from.
+    * @return The result of the operation.
+    */
+    fn seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
+        if (not self.open) return Error(IOError::NotOpen);
+        
+        let res = unistd.lseek(self.fd, offset, origin);
+        if (res < 0) {
+            let errsv = errno();
+            case (errsv) {
+            when errno.EINVAL:
+                return Error(IOError::InvalidOffset);
+            when errno.EBADF:
+                self.fd = -1;
+                self.open = false;
+                return Error(IOError::NotOpen);
+            else:
+                return Error(IOError::SystemError);
+            }
         }
+
+        return Ok(res);
     }
 
-    return Ok(st.st_size as u64);
+    fn get_size(const &self) -> Result<u64, StatError> {
+        if (not self.open) return Error(StatError::NotOpen);
+
+        let st: stat;
+        if (fstat(self.fd, &st) < 0) {
+            let errsv = errno;
+            case (errsv) {
+            when errno.EBADF:
+                return Error(StatError::NotOpen);
+            else:
+                return Error(StatError::SystemError);
+            }
+        }
+
+        return Ok(st.st_size as u64);
+    }
 }

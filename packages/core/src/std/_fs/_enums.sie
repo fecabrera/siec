@@ -1,0 +1,101 @@
+import { String } from std.collections;
+
+enum FileMode: i32 {
+    None        = 0,
+    Read        = 1,
+    Write       = 2,
+    ReadWrite   = FileMode::Read | FileMode::Write,
+    Append      = 4,
+    Create      = 8,
+}
+
+enum SeekOrigin {
+    Start,
+    Current,
+    End,
+}
+
+enum OpenError {
+    SystemError,
+    AlreadyOpen,
+    InvalidMode,
+    NotFound,
+    PermissionDenied,
+}
+
+@extend OpenError: Formattable {
+    /**
+    * Format the OpenError.
+    *
+    * @param modifiers Unused.
+    * @return The formatted OpenError.
+    */
+    fn format(const &self, modifiers: const &char[]) -> String {
+        case (self) {
+        when OpenError::SystemError:
+            return String("System error");
+        when OpenError::AlreadyOpen:
+            return String("Already open");
+        when OpenError::InvalidMode:
+            return String("Invalid mode");
+        when OpenError::NotFound:
+            return String("Not found");
+        when OpenError::PermissionDenied:
+            return String("Permission denied");
+        else:
+            return String("Unknown error");
+        }
+    }
+}
+
+enum CloseError {
+    SystemError,
+    AlreadyClosed,
+}
+
+@extend CloseError: Formattable {
+    /**
+    * Format the CloseError.
+    *
+    * @param modifiers Unused.
+    * @return The formatted CloseError.
+    */
+    fn format(const &self, modifiers: const &char[]) -> String {
+        case (self) {
+        when CloseError::SystemError:
+            return String("System error");
+        when CloseError::AlreadyClosed:
+            return String("Already closed");
+        else:
+            return String("Unknown error");
+        }
+    }
+}
+
+enum StatError {
+    SystemError,
+    NotFound,
+    NotOpen,
+    PermissionDenied,
+}
+
+@extend StatError: Formattable {
+    /**
+    * Format the StatError.
+    *
+    * @param modifiers Unused.
+    * @return The formatted StatError.
+    */
+    fn format(const &self, modifiers: const &char[]) -> String {
+        case (self) {
+        when StatError::SystemError:
+            return String("System error");
+        when StatError::NotFound:
+            return String("Not found");
+        when StatError::PermissionDenied:
+            return String("Permission denied");
+        else:
+            return String("Unknown error");
+        }
+    }
+}
