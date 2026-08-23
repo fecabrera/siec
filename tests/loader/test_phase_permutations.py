@@ -205,3 +205,44 @@ def test_entry_sources_do_not_form_separate_type_namespaces(tmp_path):
 
     with pytest.raises(TypeError, match="declared more than once"):
         compile_files((first, second))
+
+
+def test_imported_modules_namespace_same_named_aliases(tmp_path):
+    """Independent modules may expose aliases with the same public name."""
+    write(tmp_path / "left.sie", "@type Word = i64;")
+    write(tmp_path / "right.sie", "@type Word = u8;")
+    root = write(tmp_path / "main.sie", """
+        import left;
+        import right;
+        fn use(a: left.Word, b: right.Word) {}
+        fn main() -> i32 { use(1, 2); return 0; }
+    """)
+
+    aliases = dict(compile_files((root,), (tmp_path,))[0])
+    module_aliases = {
+        name: target
+        for name, target in aliases.items()
+        if name.startswith("__module_")
+    }
+    assert sorted(module_aliases.values()) == ["i64", "u8"]
+
+
+def test_imported_modules_namespace_same_named_enums(tmp_path):
+    """Independent modules may expose enums with the same public name."""
+    write(tmp_path / "left.sie", "enum Value { NUMBER = 40 }")
+    write(tmp_path / "right.sie", "enum Value { NUMBER = 2 }")
+    root = write(tmp_path / "main.sie", """
+        import left;
+        import right;
+        fn main() -> i32 {
+            return (left.Value::NUMBER + right.Value::NUMBER) as i32;
+        }
+    """)
+
+    state = compile_files((root,), (tmp_path,))
+    module_enums = {
+        name: members
+        for name, _, members in state[1]
+        if name.startswith("__module_")
+    }
+    assert sorted(dict(members)["NUMBER"] for members in module_enums.values()) == [2, 40]

@@ -528,9 +528,10 @@ def discover_program(sources: list[Path], include_paths: list[Path],
 
     # Imported modules are separate namespaces. Most declarations can retain
     # their public spelling internally, but two textual modules may export the
-    # same concrete struct name (gtk.Application and adwaita.Application, for
-    # example). Give only those collisions stable private identities, keeping
-    # imports and diagnostics expressed through the original module members.
+    # same type name (gtk.Application and adwaita.Application, or independent
+    # C libraries' time_t aliases). Give only those collisions stable private
+    # identities, keeping imports and diagnostics expressed through the
+    # original module members.
     entry_unit_files = set()
     for source in sources:
         resolved = str(source.resolve())
@@ -548,15 +549,13 @@ def discover_program(sources: list[Path], include_paths: list[Path],
             roots.add("<entry>")
         return roots or {file}
 
-    structs_by_name = {}
-    for struct in structs:
-        if struct.is_interface or struct.params is not None:
-            continue
-        structs_by_name.setdefault(struct.name, []).append(struct)
+    types_by_name = {}
+    for declaration in (*structs, *enums, *aliases):
+        types_by_name.setdefault(declaration.name, []).append(declaration)
 
     local_type_symbols = {}
     module_type_symbols = {}
-    for name, declarations in structs_by_name.items():
+    for name, declarations in types_by_name.items():
         # A declaration can belong to several module surfaces: an imported
         # aggregate may @include a file which is also reached by an import
         # cycle inside that aggregate. Same-named declarations sharing any
