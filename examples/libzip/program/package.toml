@@ -1,0 +1,10 @@
+[package]
+name = "program"
+description = "A simple example program"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+libzip = "*"

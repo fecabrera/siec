@@ -1,0 +1,107 @@
+import zip;
+import std.io;
+import std.array;
+import { String } from std.collections;
+import { format } from std.format;
+import { alloc, free } from std.alloc;
+import { File, FileMode, SeekOrigin } from std.fs;
+import { errno } from errno;
+import { stat, S_ISDIR } from sys.stat;
+import { opendir, closedir, dirent, readdir } from dirent;
+
+fn main(args: const char*[]) -> i32 {
+    if (args.length < 2) {
+        std.io.println(std.io.stderr, "usage: {} <input_dir> <output_file>", args[0]);
+        return 1;
+    }
+
+    let input = String(args[1]);
+    input.null_terminate();
+
+    let output: String;
+    if (args.length < 3) {
+        output = String("archive.zip");
+    } else {
+        output = String(args[2]);
+    }
+    output.null_terminate();
+
+    let errorp: zip.ZIP_ER;
+
+    // open zip archive from source
+    let archive = zip.zip_open(output.as_const_array(), zip.ZIP::CREATE | zip.ZIP::EXCL, &errorp);
+    if (archive == null) {
+        // initialize error
+        let error: zip.zip_error;
+        zip.zip_error_init_with_code(&error, errorp);
+        defer zip.zip_error_fini(&error);
+
+        std.io.println(std.io.stderr, "can't open archive: {}", zip.zip_error_strerror(&error));
+        return 1;
+    }
+    defer zip.zip_close(archive);
+
+    try walk_directory(input, String::null_terminated(""), archive) except (err) {
+        std.io.println(std.io.stderr, "error");
+        return 1;
+    }
+
+    return 0;
+}
+
+fn walk_directory(dirname: const &String, base: const String, archive: zip.zip*) -> Result<i32> {
+    let dp = opendir(dirname.as_const_array());
+    if (dp == null) {
+        std.io.println(std.io.stderr, "can't open directory {}: {}", dirname, errno);
+        return Error(1);
+    }
+    defer closedir(dp);
+
+    let dirp: dirent*;
+    while (true) {
+        dirp = readdir(dp);
+        if (dirp == null) break;
+
+        let name = char[]::from_c_arr(dirp->d_name as char*, dirp->d_namlen as u64);
+        if (name == "." or name == "..") continue;
+
+        let fullname = format("{}/{}", dirname, name);
+        fullname.null_terminate();
+
+        let path = base.get_length() == 0 ? String(name) : format("{}/{}", base, name);
+        path.null_terminate();
+
+        let st: stat;
+        if (stat(fullname.as_const_array(), &st) < 0) {
+            std.io.println(std.io.stderr, "can't stat {}: {}", fullname, errno);
+            return Error(1);
+        }
+
+        std.io.println("{} -> {}", fullname, path);
+        if (S_ISDIR(st.st_mode)) {
+
+            let res = zip.zip_dir_add(archive, path.as_const_array(), zip.ZIP_FL::ENC_UTF_8);
+            if (res < 0) {
+                std.io.println(std.io.stderr, "can't add directory {}: {}", fullname, zip.zip_strerror(archive));
+                return Error(1);
+            }
+
+            try walk_directory(fullname, path, archive);
+        } else {
+            let source = zip.zip_source_file(archive, fullname.as_const_array(), 0, 0);
+            if (source == null) {
+                std.io.println(std.io.stderr, "can't create file {}: {}", fullname, zip.zip_strerror(archive));
+                return Error(1);
+            }
+
+            let res = zip.zip_file_add(archive, path.as_const_array(), source, zip.ZIP_FL::ENC_UTF_8);
+            if (res < 0) {
+                zip.zip_source_free(source);
+                std.io.println(std.io.stderr, "can't add file {}: {}", fullname, zip.zip_strerror(archive));
+                return Error(1);
+            }
+        }
+    }
+
+    return Ok();
+}
