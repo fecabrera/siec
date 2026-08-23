@@ -27,7 +27,7 @@
             foreach (k : self) {
                 h.ingest(k as u64);
             }
-            return h.hash;
+            return h.get_value();
         }
     }
 }

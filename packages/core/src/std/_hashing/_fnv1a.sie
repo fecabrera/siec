@@ -1,35 +1,47 @@
 @private @const FNV1A_OFFSET = 14695981039346656037;
 @private @const FNV1A_PRIME = 1099511628211;
 
+/**
+ * FNV-1a hash algorithm.
+ */
 struct FNV1a {
-    hash: u64;
-}
+    @private hash: u64;
 
-/**
- * Initializes the FNV-1a hash to the FNV offset basis.
- */
-fn FNV1a::init(&self) {
-    self.hash = FNV1A_OFFSET; 
-}
+    /**
+    * Initializes the FNV-1a hash to the FNV offset basis.
+    */
+    fn init(&self) {
+        self.hash = FNV1A_OFFSET; 
+    }
 
-/**
- * Folds one element into a running FNV-1a hash: XORs the element in, then
- * multiplies by the FNV prime.
- *
- * @param k:    element to fold in
- */
-fn FNV1a::ingest(&self, k: u64) {
-    self.hash ^= k;
-    self.hash *= FNV1A_PRIME; 
-}
+    /**
+    * Folds one element into a running FNV-1a hash: XORs the element in, then
+    * multiplies by the FNV prime.
+    *
+    * @param k:    element to fold in
+    */
+    fn ingest(&self, k: u64) {
+        self.hash ^= k;
+        self.hash *= FNV1A_PRIME; 
+    }
 
-/**
- * Folds multiple elements into a running FNV-1a hash.
- *
- * @param data: iterable of elements to fold in
- */
-fn FNV1a::ingest(&self, data: const &Iterable<u64>) {
-    foreach (k : data) {
-        self.ingest(k);
+    /**
+    * Folds multiple elements into a running FNV-1a hash.
+    *
+    * @param data: iterable of elements to fold in
+    */
+    fn ingest(&self, data: const &Iterable<u64>) {
+        foreach (k : data) {
+            self.ingest(k);
+        }
+    }
+
+    /**
+    * Get the current hash value.
+    *
+    * @return The current hash value.
+    */
+    fn get_value(const &self) -> const u64 {
+        return self.hash;
     }
 }

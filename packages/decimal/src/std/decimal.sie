@@ -61,6 +61,11 @@ fn Decimal::init(&self) {
     self.mpd = mpdecimal.mpd_new(self.ctx);
 }
 
+/**
+ * Initialize the Decimal with the default context and the given value.
+ *
+ * @param value The value to copy from.
+ */
 fn Decimal::init(&self, value: const &Decimal) {
     self.init();
     self.assign_from(value);
@@ -686,7 +691,7 @@ fn Decimal::hash(const &self) -> u64 {
     h.ingest(eff_exp as u64);
     h.ingest({tmp.mpd->data, tmp.mpd->length as u64});
     
-    return h.hash;
+    return h.get_value();
 }
 
 /**
