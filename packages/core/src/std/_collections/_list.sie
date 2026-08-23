@@ -42,6 +42,16 @@ fn List<T>::init(&self, capacity: u64 = 0) {
 }
 
 /**
+ * Initialize the List with the given array.
+ *
+ * @param arr The array to initialize the List with.
+ */
+fn List<T>::init(&self, arr: const T[]) {
+    self.init(arr.length);
+    self.append(arr);
+}
+
+/**
  * Initialize the List with the given iterable.
  *
  * @param arr The iterable to initialize the List with.
