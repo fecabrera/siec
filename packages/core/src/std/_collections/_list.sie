@@ -6,7 +6,6 @@ import { Formattable } from std.format;
 struct List<T>
     : Destroy,
       Iterable<T>,
-      GetSlice<u64, List<T>>,
       GetItem<u64, T>,
       SetItem<u64, T>,
       Add<List<T>, Iterable<T>>,
@@ -25,10 +24,10 @@ struct List<T>
 // A List can clone only when copying one of its elements is defined. Scalars
 // copy directly; owned elements delegate to their own Clone implementation.
 @where<T: Scalar>
-@extend List<T>: Clone;
+@extend List<T>: Clone, GetSlice<u64, List<T>>;
 
 @where<T: Clone>
-@extend List<T>: Clone;
+@extend List<T>: Clone, GetSlice<u64, List<T>>;
     
 /**
  * Initialize the List.
@@ -188,7 +187,7 @@ fn List<T>::get(&self, index: const u64) -> &T {
  */
 @inline
 fn List<T>::get_slice(const &self) -> List<T> {
-    return self.clone();
+    return self.get_slice(0, self.length);
 }
 
 /**
