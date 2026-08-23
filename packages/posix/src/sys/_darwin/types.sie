@@ -11,10 +11,14 @@ struct stat {
     st_gid: gid_t;                      /* [XSI] Group ID of the file */ 
     st_rdev: dev_t;                     /* [XSI] Device ID */ 
 	/* __DARWIN_STRUCT_STAT64_TIMES */
-    st_atimespec: timespec;             /* time of last access */ 
-	st_mtimespec: timespec;             /* time of last data modification */ 
-	st_ctimespec: timespec;             /* time of last status change */ 
-	st_birthtimespec: timespec;         /* time of file creation(birth) */
+    st_atime: time_t;                   /* [XSI] Time of last access */
+	st_atimensec: i64;                 /* nsec of last access */
+	st_mtime: time_t;                   /* [XSI] Last data modification time */
+	st_mtimensec: i64;                 /* last data modification nsec */
+	st_ctime: time_t;                   /* [XSI] Time of last status change */
+	st_ctimensec: i64;                 /* nsec of last status change */
+	st_birthtime: time_t;               /*  File creation time(birth)  */
+	st_birthtimensec: i64;             /* nsec of File creation time */
 	/*  */
     st_size: off_t;                     /* [XSI] file size, in bytes */ 
     st_blocks: blkcnt_t;                /* [XSI] blocks allocated for file */ 

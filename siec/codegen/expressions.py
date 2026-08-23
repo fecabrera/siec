@@ -401,6 +401,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return load
 
     if isinstance(expr, Slice):
+        from siec.codegen.inference import slice_call
+
+        if (rewritten := slice_call(gen, expr, scope)) is not None:
+            return emit_expression(gen, builder, rewritten, expected_type, scope)
         return emit_slice(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, Member):

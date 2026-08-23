@@ -573,6 +573,14 @@ interface SetItem<K, V>;
 
 fn SetItem<K, V>::set_item(&self, key: const K, value: V);
 
+// slicing: each placement of the optional bounds has a distinct action
+interface GetSlice<K, V> {
+    fn get_slice(const &self) -> V;
+    fn get_slice_from(const &self, start: const K) -> V;
+    fn get_slice_to(const &self, finish: const K) -> V;
+    fn get_slice(const &self, start: const K, finish: const K) -> V;
+}
+
 /**
  * Raw storage with T's layout and no automatic initialized lifetime.
  */
@@ -889,7 +897,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
                               "Truthy",
                               "AssignFrom", "Assign", "Destroy",
                               "Iterator", "Iterable",
-                              "ConstIterator", "GetItem", "SetItem",
+                              "ConstIterator", "GetItem", "SetItem", "GetSlice",
                               "ArrayIterator", "ConstArrayIterator",
                               "Enumerated", "ConstEnumerated",
                               "EnumerateIterator", "ConstEnumerateIterator",

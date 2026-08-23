@@ -198,6 +198,36 @@ def item_call(gen: "CodeGenerator", expr: Index, scope: dict,
         expr, MethodCall(expr.base, method, args))
 
 
+def slice_call(gen: "CodeGenerator", expr: Slice,
+               scope: dict) -> MethodCall | None:
+    """Rewrite a struct slice through the matching GetSlice action."""
+    name = strip_const(strip_reference(
+        expr_sie_type(gen, expr.base, scope) or ""))
+    if (not name or raw_array(name) is not None
+            or name.endswith("[]") or name.endswith("*")
+            or name not in gen.structs):
+        return None
+
+    if expr.start is None and expr.stop is None:
+        method, args = "get_slice", []
+    elif expr.stop is None:
+        method, args = "get_slice_from", [expr.start]
+    elif expr.start is None:
+        method, args = "get_slice_to", [expr.stop]
+    else:
+        method, args = "get_slice", [expr.start, expr.stop]
+
+    from siec.codegen.methods import resolve_method
+
+    if resolve_method(gen, name, method) is None:
+        return None
+
+    from siec.codegen.ownership import inherit_expression_identity
+
+    return inherit_expression_identity(
+        expr, MethodCall(expr.base, method, args))
+
+
 def is_float(type_: ir.Type) -> bool:
     """
     Whether an LLVM type is a floating-point scalar.
@@ -532,6 +562,8 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
 
     # a slice is a view with its base's array type
     if isinstance(expr, Slice):
+        if (rewritten := slice_call(gen, expr, scope)) is not None:
+            return expr_sie_type(gen, rewritten, scope)
         return expr_sie_type(gen, expr.base, scope)
 
     # '&' yields a pointer to its operand's type; an address rooted in

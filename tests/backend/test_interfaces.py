@@ -635,6 +635,36 @@ def test_interface_body_actions_overload(run):
     assert run(source).returncode == 0
 
 
+def test_builtin_get_slice_requires_both_overloads(run):
+    """The builtin GetSlice contract carries its full and bounded actions."""
+    source = """
+    struct Range: GetSlice<u64, u64> { length: u64; }
+
+    fn Range::get_slice(const &self) -> u64 {
+        return self.length;
+    }
+
+    fn Range::get_slice_from(const &self, start: const u64) -> u64 {
+        return self.length - start;
+    }
+
+    fn Range::get_slice_to(const &self, finish: const u64) -> u64 {
+        return finish;
+    }
+
+    fn Range::get_slice(const &self, start: const u64,
+                        finish: const u64) -> u64 {
+        return finish - start;
+    }
+
+    fn main() -> i32 {
+        let range: Range = {42};
+        return (range.get_slice() + range.get_slice(10, 32)) as i32 - 64;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_interface_body_requires_every_overload(compile_source):
     """
     An implementer missing one of an overloaded action's signatures does

@@ -1155,6 +1155,12 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 gen, expr, scope, "get_item")) is not None:
             return check_expression(gen, rewritten, scope, expected)
 
+    if isinstance(expr, Slice):
+        from siec.codegen.inference import slice_call
+
+        if (rewritten := slice_call(gen, expr, scope)) is not None:
+            return check_expression(gen, rewritten, scope, expected)
+
     if isinstance(expr, UnaryOp) and expr.op == "&":
         lvalue_type(gen, expr.operand, scope)
         actual = expr_sie_type(gen, expr, scope)
