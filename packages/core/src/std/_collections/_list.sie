@@ -6,6 +6,7 @@ import { Formattable } from std.format;
 struct List<T>
     : Destroy,
       Iterable<T>,
+      GetSlice<u64, List<T>>,
       GetItem<u64, T>,
       SetItem<u64, T>,
       Add<List<T>, Iterable<T>>,
@@ -168,6 +169,59 @@ fn List<T>::get(&self, index: const u64) -> &T {
         panic("List index is out of bounds");
 
     return self.data[index].get_mut();
+}
+
+/**
+ * Get a clone of the List.
+ *
+ * @return The clone of the List.
+ */
+@inline
+fn List<T>::get_slice(const &self) -> List<T> {
+    return self.clone();
+}
+
+/**
+ * Get a slice of the List from the given start index to the end of the List.
+ *
+ * @param start The start index of the slice.
+ * @return The slice of the List.
+ */
+@inline
+fn List<T>::get_slice_from(const &self, start: const u64) -> List<T> {
+    return self.get_slice(start, self.length);
+}
+
+/**
+ * Get a slice of the List from the given start index to the end of the List.
+ *
+ * @param start The start index of the slice.
+ * @return The slice of the List.
+ */
+@inline
+fn List<T>::get_slice_to(const &self, finish: const u64) -> List<T> {
+    return self.get_slice(0, finish);
+}
+
+/**
+ * Get a slice of the List from the given start index to the given finish index.
+ *
+ * If the finish index is greater than the length of the List, the slice will be
+ * truncated to the length of the List. If the start index is greater than the 
+ * finish index, or if the start index is greater than the length of the List,
+ * the slice will be empty.
+ *
+ * @param start The start index of the slice.
+ * @param finish The finish index of the slice.
+ * @return The slice of the List.
+ */
+fn List<T>::get_slice(const &self, start: const u64, finish: const u64) -> List<T> {
+    if (start < self.length) return List<T>();
+    
+    let end = finish > self.length ? self.length : finish;
+    if (start > end) return List<T>();
+    
+    return List<T>({self.data as const T* + start, end - start});
 }
 
 /**
