@@ -18,6 +18,24 @@ import { Formattable } from std.format;
         self.append(arr);
     }
 
+    /**
+    * Create a new String from the given null-terminated array.
+    *
+    * @param src The null-terminated array to create the String from.
+    * @return The new String.
+    */
+    fn null_terminated(src: const char*) -> String {
+        let str = String(src);
+        str.null_terminate();
+        return str;
+    }
+
+    /**
+    * Create a new String from the given iterable.
+    *
+    * @param src The iterable to create the String from.
+    * @return The new String.
+    */
     fn null_terminated(src: const &Iterable<char>) -> String {
         let str = String(src);
         str.null_terminate();
@@ -116,6 +134,7 @@ import { Formattable } from std.format;
     *
     * @return The C string.
     */
+    @inline
     fn c_str(&self) -> char* {
         self.null_terminate();
         return self.data as char*;
@@ -126,6 +145,7 @@ import { Formattable } from std.format;
     *
     * @return The List as a null-terminated array.
     */
+    @inline
     fn as_null_terminated_array(&self) -> char[] {
         self.null_terminate();
         return {self.data as char*, self.length};
