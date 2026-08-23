@@ -83,6 +83,34 @@ def test_ternary_chains_right(run):
     assert run(source).returncode == 123
 
 
+def test_owned_ternary_result_transfers_without_destroying_arms(run):
+    """Only the joined owner destroys the selected arm's returned value."""
+    source = """
+    @static let destroyed: i32;
+
+    struct Owned: Destroy { value: i32; }
+
+    fn Owned::destroy(&self) { destroyed += 1; }
+    fn make(value: i32) -> Owned { return {value}; }
+
+    fn pick(condition: bool) -> i32 {
+        let chosen = condition ? make(42) : make(7);
+        if (destroyed != 0) { return 100; }
+        return chosen.value;
+    }
+
+    fn main() -> i32 {
+        if (pick(true) != 42 or destroyed != 1) { return 1; }
+        destroyed = 0;
+        let second = pick(false);
+        if (second != 7) { return 2; }
+        if (destroyed != 1) { return 3; }
+        return 0;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_disagreeing_arms_are_an_error(compile_source):
     """
     Both arms must produce the same type.

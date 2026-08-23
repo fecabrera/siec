@@ -966,17 +966,42 @@ def emit_ternary(gen: CodeGenerator, builder: ir.IRBuilder, expr: Ternary,
 
     builder.cbranch(cond, then_block, else_block)
 
+    def emit_arm(arm, context):
+        """
+        Let the selected arm's owned result escape to the join, while
+        destroying any other temporaries inside that same branch. Keeping
+        arm cleanups in the outer frame would run both branches' cleanups
+        after the join, including one whose storage was never initialized.
+        """
+        from siec.codegen.ownership import (consume_temporary,
+                                           emit_temporary_drop)
+
+        frame = (gen.borrowed_temporary_frames[-1]
+                 if gen.borrowed_temporary_frames else None)
+        prior = {id(cleanup) for cleanup in frame} if frame is not None else set()
+        value = emit_expression(gen, builder, arm, context, scope)
+        if frame is None:
+            return value
+
+        consume_temporary(gen, arm)
+        leftovers = [cleanup for cleanup in frame if id(cleanup) not in prior]
+        if leftovers:
+            frame[:] = [cleanup for cleanup in frame
+                        if id(cleanup) in prior]
+            for cleanup in reversed(leftovers):
+                emit_temporary_drop(gen, builder, cleanup)
+        return value
+
     # each arm may open blocks of its own; the phi needs its exit block
     builder.position_at_end(then_block)
-    then_value = emit_expression(gen, builder, expr.then, expected_type, scope)
+    then_value = emit_arm(expr.then, expected_type)
     then_exit = builder.block
     builder.branch(end_block)
 
     # without a context, the else arm adopts the then arm's type, so
     # literals on either side adapt to the declared one
     builder.position_at_end(else_block)
-    else_value = emit_expression(gen, builder, expr.orelse,
-                                 expected_type or then_value.type, scope)
+    else_value = emit_arm(expr.orelse, expected_type or then_value.type)
     else_exit = builder.block
     builder.branch(end_block)
 
@@ -987,7 +1012,13 @@ def emit_ternary(gen: CodeGenerator, builder: ir.IRBuilder, expr: Ternary,
     result = builder.phi(then_value.type, name="ternary")
     result.add_incoming(then_value, then_exit)
     result.add_incoming(else_value, else_exit)
-    return result
+
+    # The chosen arm's value is now one owned result. Track that result once;
+    # an enclosing let/return/call may consume it normally.
+    from siec.codegen.ownership import track_value_temporary
+
+    return track_value_temporary(
+        gen, builder, expr, result, expr_sie_type(gen, expr, scope))
 
 
 def emit_logical(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp, scope: dict):
