@@ -67,7 +67,8 @@ jobs:
             libvala-0.56-dev \
             libvaladoc-0.56-dev \
             meson \
-            ninja-build
+            ninja-build \
+            libzip-dev
 
           curl -LO https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz
           echo "96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8  mpdecimal-4.0.1.tar.gz" | sha256sum -c
@@ -165,7 +166,7 @@ jobs:
       - name: Install libraries
         if: matrix.os == 'macos-latest'
         run: |
-          brew install gtk4 mpdecimal libadwaita
+          brew install gtk4 mpdecimal libadwaita libzip
           echo "LIBRARY_PATH=$(brew --prefix)/lib:$(brew --prefix mpdecimal)/lib" >> "$GITHUB_ENV"
 
       - name: Build examples and wheel
