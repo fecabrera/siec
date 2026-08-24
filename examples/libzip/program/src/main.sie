@@ -83,7 +83,7 @@ fn zip_dir(archive: zip.zip*, dirname: const &String, dirpath: const &String) ->
         dirp = readdir(dp);
         if (dirp == null) break;
 
-        let name = char[]::from_c_arr(dirp->d_name as char*, dirp->d_namlen as u64);
+        let name = String::null_terminated(dirp->d_name as char*);
         if (name == "." or name == "..") continue;
 
         let fullname = format("{}/{}", dirname, name);
