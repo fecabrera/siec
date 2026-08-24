@@ -15,16 +15,8 @@ fn main(args: const char*[]) -> i32 {
         return 1;
     }
 
-    let input = String(args[1]);
-    input.null_terminate();
-
-    let output: String;
-    if (args.length < 3) {
-        output = format("archive.zip");
-    } else {
-        output = String(args[2]);
-    }
-    output.null_terminate();
+    let input = String::null_terminated(args[1]);
+    let output = String::null_terminated(args.length < 3 ? "archive.zip" : args[2]);
 
     // stat input
     let st: stat;
@@ -47,6 +39,7 @@ fn main(args: const char*[]) -> i32 {
     }
     defer zip.zip_close(archive);
 
+    // zip input
     if (S_ISDIR(st.st_mode)) {
         try zip_dir(archive, input, String::null_terminated("")) except (err) {
             std.io.println(std.io.stderr, "can't zip directory: {}", input);

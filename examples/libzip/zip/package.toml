@@ -1,6 +1,6 @@
 [package]
-name = "program"
-description = "A simple example program"
+name = "zip"
+description = "Zip files and folders"
 
 [app]
 sources = ["src/"]
