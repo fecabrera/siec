@@ -3,6 +3,7 @@ name = "libzip"
 description = "A library for reading, creating, and modifying zip archives."
 version = "1.0.0"
 license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 keywords = ["libzip", "zip", "archive", "compression", "decompression"]
 
 [library]
