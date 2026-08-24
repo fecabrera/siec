@@ -1,7 +1,8 @@
 @type nlink_t = u64;
 @type time_t = i64;
 
-@type blkcnt_t = i64;
+@type blkcnt64_t = i64;
+@type blkcnt_t = blkcnt64_t;
 @type blksize_t = i64;
 @type dev_t = u64;
 @type fsblkcnt_t = u64;
@@ -17,3 +18,83 @@
 @type suseconds_t = i64;
 @type uid_t = u32;
 @type useconds_t = u32;
+
+/* Note stat64 has the same shape as stat for x86-64.  */
+struct stat {
+    st_dev: dev_t;		            /* Device.  */
+    st_ino: ino64_t;		        /* File serial number.  */
+    st_nlink: nlink_t;		        /* Link count.  */
+    st_mode: mode_t;		        /* File mode.  */
+    st_uid: uid_t;		            /* User ID of the file's owner.	*/
+    st_gid: gid_t;		            /* Group ID of the file's group.*/
+    __pad0: i32;
+    st_rdev: dev_t;		            /* Device number, if device.  */
+    st_size: off_t;		            /* Size of file, in bytes.  */
+    st_blksize: blksize_t;	        /* Optimal block size for I/O.  */
+    st_blocks: blkcnt64_t;	        /* Nr. 512-byte blocks allocated.  */
+    st_atime: time_t;			    /* Time of last access.  */
+    st_atimensec: u64;	            /* Nscecs of last access.  */
+    st_mtime: time_t;			    /* Time of last modification.  */
+    st_mtimensec: u64;	            /* Nsecs of last modification.  */
+    st_ctime: time_t;			    /* Time of last status change.  */
+    st_ctimensec: u64;	            /* Nsecs of last status change.  */
+    __glibc_reserved: @raw<i64>[3];
+}
+
+/* Encoding of the file mode.  */
+
+@const __S_IFMT = 0170000;	/* These bits determine file type.  */
+
+/* File types.  */
+@const __S_IFDIR = 0x4000;     /* Directory.  */
+@const __S_IFCHR = 0x2000;     /* Character device.  */
+@const __S_IFBLK = 0x6000;     /* Block device.  */
+@const __S_IFREG = 0x8000;     /* Regular file.  */
+@const __S_IFIFO = 0x1000;     /* FIFO.  */
+@const __S_IFLNK = 0xA000;     /* Symbolic link.  */
+@const __S_IFSOCK = 0xC000;    /* Socket.  */
+
+/* POSIX.1b objects.  Note that these macros always evaluate to zero.  But
+   they do it by enforcing the correct use of the macros.  */
+@macro __S_TYPEISMQ(buf) = ((buf)->st_mode - (buf)->st_mode);
+@macro __S_TYPEISSEM(buf) = ((buf)->st_mode - (buf)->st_mode);
+@macro __S_TYPEISSHM(buf) = ((buf)->st_mode - (buf)->st_mode);
+   
+/* Protection bits.  */
+
+@const __S_ISUID: mode_t = 0x0800;   /* Set user ID on execution.  */
+@const __S_ISGID: mode_t = 0x0400;   /* Set group ID on execution.  */
+@const __S_ISVTX: mode_t = 0x0200;   /* Save swapped text after use (sticky).  */
+@const __S_IREAD: mode_t = 0x0100;    /* Read by owner.  */
+@const __S_IWRITE: mode_t = 0x0080;   /* Write by owner.  */
+@const __S_IEXEC: mode_t = 0x0040;    /* Execute by owner.  */
+
+/* Protection bits.  */
+
+@const S_ISUID = __S_ISUID;         /* Set user ID on execution.  */
+@const S_ISGID = __S_ISGID;         /* Set group ID on execution.  */
+
+/* Save swapped text after use (sticky bit).  This is pretty well obsolete.  */
+@const S_ISVTX = __S_ISVTX;
+
+@const S_IRUSR = __S_IREAD;         /* Read by owner.  */
+@const S_IWUSR = __S_IWRITE;        /* Write by owner.  */
+@const S_IXUSR = __S_IEXEC;         /* Execute by owner.  */
+/* Read, write, and execute by owner.  */
+@const S_IRWXU = (__S_IREAD|__S_IWRITE|__S_IEXEC);
+
+@const S_IREAD = S_IRUSR;
+@const S_IWRITE = S_IWUSR;
+@const S_IEXEC = S_IXUSR;
+
+@const S_IRGRP = (S_IRUSR >> 3);    /* Read by group.  */
+@const S_IWGRP = (S_IWUSR >> 3);    /* Write by group.  */
+@const S_IXGRP = (S_IXUSR >> 3);    /* Execute by group.  */
+/* Read, write, and execute by group.  */
+@const S_IRWXG = (S_IRWXU >> 3);
+
+@const S_IROTH = (S_IRGRP >> 3);    /* Read by others.  */
+@const S_IWOTH = (S_IWGRP >> 3);    /* Write by others.  */
+@const S_IXOTH = (S_IXGRP >> 3);    /* Execute by others.  */
+/* Read, write, and execute by others.  */
+@const S_IRWXO = (S_IRWXG >> 3);

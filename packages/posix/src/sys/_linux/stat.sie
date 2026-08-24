@@ -1,0 +1,21 @@
+@include("types")
+
+/* Test macros for file types.	*/
+
+@macro __S_ISTYPE(mode, mask) = ((mode) & __S_IFMT) == (mask);
+
+@macro S_ISDIR(mode) = __S_ISTYPE((mode), __S_IFDIR);
+@macro S_ISCHR(mode) = __S_ISTYPE((mode), __S_IFCHR);
+@macro S_ISBLK(mode) = __S_ISTYPE((mode), __S_IFBLK);
+@macro S_ISREG(mode) = __S_ISTYPE((mode), __S_IFREG);
+@macro S_ISFIFO(mode) = __S_ISTYPE((mode), __S_IFIFO);
+@macro S_ISLNK(mode) = __S_ISTYPE((mode), __S_IFLNK);
+@macro S_ISSOCK(mode) = __S_ISTYPE((mode), __S_IFSOCK);
+
+/* These are from POSIX.1b.  If the objects are not implemented using separate
+   distinct file types, the macros always will evaluate to zero.  Unlike the
+   other S_* macros the following three take a pointer to a `struct stat'
+   object as the argument.  */
+@macro S_TYPEISMQ(buf) = __S_TYPEISMQ(buf);
+@macro S_TYPEISSEM(buf) = __S_TYPEISSEM(buf);
+@macro S_TYPEISSHM(buf) = __S_TYPEISSHM(buf);
