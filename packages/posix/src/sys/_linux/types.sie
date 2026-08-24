@@ -43,7 +43,7 @@ struct stat {
 
 /* Encoding of the file mode.  */
 
-@const __S_IFMT = 0170000;	/* These bits determine file type.  */
+@const __S_IFMT = 0xF000;	/* These bits determine file type.  */
 
 /* File types.  */
 @const __S_IFDIR = 0x4000;     /* Directory.  */

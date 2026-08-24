@@ -1,0 +1,22 @@
+import { ino_t, off_t } from types;
+
+struct dirent {
+    d_ino: ino_t;
+    d_off: off_t;
+    d_reclen: u16;
+    d_type: DT;
+    d_name: @raw<char>[256];
+};
+
+/* File types for `d_type'.  */
+enum DT: u8 {
+    UNKNOWN = 0,
+    FIFO = 1,
+    CHR = 2,
+    DIR = 4,
+    BLK = 6,
+    REG = 8,
+    LNK = 10,
+    SOCK = 12,
+    WHT = 14,
+}
