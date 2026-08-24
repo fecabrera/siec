@@ -1,3 +1,19 @@
-@include("_types/_off_t")
-@include("_types/_pid_t")
-@include("_types/_useconds_t")
+@type nlink_t = u64;
+@type time_t = i64;
+
+@type blkcnt_t = i64;
+@type blksize_t = i64;
+@type dev_t = u64;
+@type fsblkcnt_t = u64;
+@type fsfilcnt_t = u64;
+@type gid_t = u32;
+@type id_t = u32;
+@type ino64_t = u64;
+@type ino_t = ino64_t;
+@type mode_t = u32;
+@type off_t = i64;
+@type sigset_t = @raw<u64>[16];
+@type pid_t = i32;
+@type suseconds_t = i64;
+@type uid_t = u32;
+@type useconds_t = u32;
