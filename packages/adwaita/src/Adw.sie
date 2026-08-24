@@ -6,6 +6,7 @@
 @include("_Adw/navigationpage")
 @include("_Adw/navigationview")
 @include("_Adw/navigationsplitview")
+@include("_Adw/preferencesrow")
 @include("_Adw/sidebar")
 @include("_Adw/sidebaritem")
 @include("_Adw/sidebarsection")
