@@ -1,6 +1,7 @@
 @include("_Adw/application")
 @include("_Adw/applicationwindow")
 @include("_Adw/avatar")
+@include("_Adw/buttonrow")
 @include("_Adw/headerbar")
 @include("_Adw/navigationpage")
 @include("_Adw/navigationview")

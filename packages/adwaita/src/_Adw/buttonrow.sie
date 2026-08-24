@@ -1,0 +1,42 @@
+import { Handler } from Gtk;
+import { GtkWidget } from gtk_bindings;
+import {
+    ADW_BUTTON_ROW,
+    AdwButtonRow,
+    adw_button_row_new,
+    adw_button_row_set_start_icon_name,
+    adw_button_row_set_end_icon_name,
+} from adwaita;
+
+struct ButtonRow: Handler<GtkWidget> {
+    @private handle: GtkWidget*;
+
+    fn init(&self) {
+        self.handle = adw_button_row_new();
+    }
+
+    fn init(&self, handle: GtkWidget*) {
+        self.handle = handle;
+    }
+
+    fn get_handle(&self) -> GtkWidget* {
+        return self.handle;
+    }
+
+    fn get_const_handle(const &self) -> const GtkWidget* {
+        return self.handle;
+    }
+
+    @private
+    fn get_adw_button_row(&self) -> AdwButtonRow* {
+        return ADW_BUTTON_ROW(self.handle);
+    }
+    
+    fn set_start_icon_name(&self, icon_name: const &char[]) {
+        adw_button_row_set_start_icon_name(self.get_adw_button_row(), icon_name);
+    }
+    
+    fn set_end_icon_name(&self, icon_name: const &char[]) {
+        adw_button_row_set_end_icon_name(self.get_adw_button_row(), icon_name);
+    }
+}
