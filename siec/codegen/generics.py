@@ -800,6 +800,17 @@ def generic_fit(gen: CodeGenerator, template, type_args: list, call,
 
     mapping = dict(zip(template.type_params, type_args))
     params = [substitute(p.type, mapping) for p in template.params]
+
+    required = len(template.params)
+    while required and template.params[required - 1].default is not None:
+        required -= 1
+    if template.variadic:
+        required = min(required, len(params) - 1)
+    if (len(call.args) < required
+            or (len(call.args) > len(params)
+                and not template.var_arg and not template.variadic)):
+        return None
+
     if template.variadic:
         params = params[:-1]
 
@@ -823,6 +834,78 @@ def generic_fit(gen: CodeGenerator, template, type_args: list, call,
         return fit
     finally:
         gen.ungated_types -= 1
+
+
+def pick_call_candidate(gen: CodeGenerator, symbol: str, call, scope: dict,
+                        expected: str | None = None, *,
+                        module: str | None = None,
+                        receiver: str | None = None,
+                        generic_call=None,
+                        generic_scope: dict | None = None) -> tuple[str, object]:
+    """
+    Arbitrate concrete and generic overloads by their actual fit strength.
+
+    Exact beats implicit, and implicit beats literal adoption.  A concrete
+    candidate wins a tie, preserving the more specific non-template choice,
+    but merely being concrete no longer lets an implicit array decay bypass
+    an exact constrained/interface match.
+
+    ``receiver`` supplies a constructor's not-yet-materialized receiver to
+    concrete ranking.  Its ``generic_call`` counterpart carries the synthetic
+    receiver expression used to infer and rank a generic constructor.
+    """
+    from siec.codegen.overloads import pick_overload_fit
+
+    concrete = None
+    concrete_error = None
+
+    # Explicit type arguments request a generic spelling; a same-named
+    # concrete overload must not intercept it, exact or otherwise.
+    explicit_call = generic_call or call
+    if explicit_call.type_args is None and symbol in gen.overloads:
+        try:
+            concrete_symbol, concrete_fit = pick_overload_fit(
+                gen, symbol, call.args, scope,
+                receiver=receiver, module=module)
+            concrete = (concrete_symbol, concrete_fit)
+        except TypeError as error:
+            concrete_error = error
+
+    # Nothing can outrank an exact concrete overload, so avoid resolving
+    # irrelevant templates (which may intentionally be uninferable here).
+    if concrete is not None and concrete[1] == "exact":
+        return "concrete", concrete[0]
+
+    generic = None
+    generic_error = None
+    if gen.generic_functions.get(symbol) is not None:
+        ranked_call = generic_call or call
+        ranked_scope = generic_scope if generic_scope is not None else scope
+        try:
+            template, type_args = pick_generic_call(
+                gen, symbol, ranked_call, ranked_scope, expected)
+            fit = generic_fit(
+                gen, template, type_args, ranked_call, ranked_scope)
+            generic = (template, type_args, fit)
+        except TypeError as error:
+            generic_error = error
+
+    if concrete is not None and generic is not None:
+        strength = {"exact": 0, "implicit": 1, "adopt": 2, None: 3}
+        if strength[generic[2]] < strength[concrete[1]]:
+            return "generic", generic[:2]
+        return "concrete", concrete[0]
+
+    if concrete is not None:
+        return "concrete", concrete[0]
+    if generic is not None:
+        return "generic", generic[:2]
+
+    if generic_error is not None:
+        raise generic_error
+    if concrete_error is not None:
+        raise concrete_error
+    return "plain", symbol
 
 
 def instantiate_function(gen: CodeGenerator, template, type_args: list) -> str:

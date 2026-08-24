@@ -1310,9 +1310,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                expected: str | None = None, *,
                resolved: str | None = None) -> str | None:
     """Resolve and check a call without emitting its instruction."""
-    from siec.codegen.generics import instantiate_function, pick_generic_call
+    from siec.codegen.generics import instantiate_function, pick_call_candidate
     from siec.codegen.methods import constructor_type, method_call, qualified_method
-    from siec.codegen.overloads import pick_overload
     from siec.codegen.worklist import activate_function_instance
 
     written_call = call
@@ -1386,26 +1385,14 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
     check_removed(gen, symbol)
 
-    picked = False
-    if symbol in gen.overloads:
-        try:
-            symbol = pick_overload(
-                gen, symbol, call.args, scope, module=module)
-            picked = True
-        except TypeError:
-            if gen.generic_functions.get(symbol) is None:
-                raise
-
-    activate_function_instance(gen, symbol)
-    if not picked and gen.generic_functions.get(symbol) is not None:
-        template, type_args = pick_generic_call(
-            gen,
-            symbol,
-            call,
-            scope,
-            expected,
-        )
+    kind, candidate = pick_call_candidate(
+        gen, symbol, call, scope, expected, module=module)
+    if kind == "generic":
+        template, type_args = candidate
         symbol = instantiate_function(gen, template, type_args)
+    else:
+        symbol = candidate
+    activate_function_instance(gen, symbol)
 
     if symbol not in gen.return_types:
         if (ctor := constructor_type(gen, call, symbol)) is not None:
@@ -1422,38 +1409,26 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                     f"a static 'init' cannot construct {ctor!r}: the "
                     "constructor passes the instance as its receiver")
 
-            # an overloaded 'init' resolves to the candidate the arguments
-            # pick, the instance's type standing in for the receiver they
-            # lack; a call no concrete candidate takes falls through to a
-            # generic template
-            init_picked = False
-            if init in gen.overloads:
-                from siec.codegen.overloads import pick_overload
+            # Rank constructor overloads the same way as ordinary calls. The
+            # concrete side knows the receiver's type directly; the generic
+            # side receives an equivalent synthetic borrowed expression.
+            inner = dict(scope)
+            inner[".ctor"] = checked_variable(f"&{ctor}")
+            generic_call = Call(init, [Var(".ctor"), *call.args])
+            init_kind, init_candidate = pick_call_candidate(
+                gen, init, call, scope, receiver=ctor,
+                generic_call=generic_call, generic_scope=inner)
 
-                try:
-                    init = pick_overload(
-                        gen,
-                        init,
-                        call.args,
-                        scope,
-                        receiver=ctor,
-                    )
-                    init_picked = True
-                except TypeError:
-                    if gen.generic_functions.get(init) is None:
-                        raise
-
-            activate_function_instance(gen, init)
-            if not init_picked and init in gen.generic_functions:
-                inner = dict(scope)
-                inner[".ctor"] = checked_variable(f"&{ctor}")
+            if init_kind == "generic":
                 check_call(
                     gen,
-                    Call(init, [Var(".ctor"), *call.args]),
+                    generic_call,
                     inner,
                     resolved=init,
                 )
             else:
+                init = init_candidate
+                activate_function_instance(gen, init)
                 params = gen.param_types[init]
                 default_offset = 0
                 if takes_receiver(gen, init):
@@ -1474,7 +1449,7 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
             raise TypeError(f"function {call.name!r} is not generic")
         raise NameError(f"undefined function {call.name!r}")
 
-    if call.type_args is not None and "<" not in symbol:
+    if call.type_args is not None and kind != "generic":
         raise TypeError(f"function {call.name!r} is not generic")
 
     params = gen.param_types[symbol]

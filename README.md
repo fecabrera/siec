@@ -937,7 +937,17 @@ fn Decimal::add(&self, n: i64) -> Decimal { ... }
 fn Decimal::add(&self, f: f64) -> Decimal { ... }
 ```
 
-Each call picks the overload its argument types select. An exact match wins. Otherwise the arguments must reach exactly one candidate through the implicit conversions calls already apply: widening, array decay, `opaque*`, `null`. No reachable candidate, or a tie between two, is a compile-time error.
+Each call ranks every matching overload together, including generic and interface-bound ones. Exact matches come first; a concrete overload wins when it is just as exact as a generic one. Only when there is no exact match does the call consider implicit conversions such as widening, array decay, `opaque*`, and `null`. No reachable candidate, or a tie at the winning rank, is a compile-time error.
+
+An interface match keeps the argument's type, so it wins over a concrete overload that would have to convert it:
+
+```
+fn kind(value: i64) -> i32 { return 1; }
+fn kind<T: SignedInteger>(value: T) -> i32 { return 2; }
+
+let value: i32 = 0;
+kind(value); // the SignedInteger overload; value stays an i32
+```
 
 An untyped integer literal counts as its first fitting signed type: `i32`,
 `i64`, then `i128`. From there it converts like any other value:

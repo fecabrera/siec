@@ -6,10 +6,9 @@ from siec.ast import Block, BlockExpr, Call, Expr, Var
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
-from siec.codegen.generics import instantiate_function, pick_generic_call
+from siec.codegen.generics import instantiate_function, pick_call_candidate
 from siec.codegen.methods import method_call, qualified_method
 from siec.codegen.inference import expr_sie_type
-from siec.codegen.overloads import pick_overload
 from siec.codegen.types import (
     fn_type_parts,
     is_const,
@@ -191,34 +190,23 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     if receiver is not None:
         call = Call(call.name, [receiver, *call.args], call.type_args)
 
-    # an overloaded name resolves to the candidate its arguments pick; a
-    # fit bypasses a generic template sharing the name, while a call no
-    # concrete candidate takes falls through to it. A module-qualified
-    # call only considers that module's candidates, so 'stdlib.free'
-    # stays the '@extern' when another module also defines 'free'.
-    picked = False
-    if symbol in gen.overloads:
-        try:
-            symbol = pick_overload(
-                gen, symbol, call.args, scope, module=module)
-            picked = True
-        except TypeError:
-            if gen.generic_functions.get(symbol) is None:
-                raise
+    # Concrete and generic overloads share one strength ordering: exact,
+    # implicit, then literal adoption. Concrete wins only an equal-strength
+    # tie, rather than every viable concrete conversion winning up front.
+    kind, candidate = pick_call_candidate(
+        gen, symbol, call, scope, expected, module=module)
+    if kind == "generic":
+        template, type_args = candidate
+        symbol = instantiate_function(gen, template, type_args)
+    else:
+        symbol = candidate
 
     # a stamped overload's body waits for its first picked call
     from siec.codegen.worklist import activate_function_instance
 
     activate_function_instance(gen, symbol)
 
-    # a generic callee instantiates for this call's type arguments,
-    # explicit, inferred, or driven by the expected result type; the
-    # call's shape picks among arity overloads
-    if not picked and gen.generic_functions.get(symbol) is not None:
-        template, type_args = pick_generic_call(gen, symbol, call, scope,
-                                                expected)
-        symbol = instantiate_function(gen, template, type_args)
-    elif not isinstance(gen.module.globals.get(symbol), ir.Function):
+    if not isinstance(gen.module.globals.get(symbol), ir.Function):
         # no function by this name: 'S(...)' may construct a struct
         from siec.codegen.methods import constructor_type, emit_constructor
 
@@ -227,7 +215,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
         if call.type_args is not None:
             raise TypeError(f"function {call.name!r} is not generic")
-    elif call.type_args is not None:
+    elif call.type_args is not None and kind != "generic":
         raise TypeError(f"function {call.name!r} is not generic")
 
     # look up the callee among the module's declared functions

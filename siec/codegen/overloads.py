@@ -161,18 +161,41 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
     set to that module's declarations, so 'stdlib.free' stays the
     '@extern' when 'std.alloc' also defines a 'free'.
     """
+    return pick_overload_fit(
+        gen, symbol, args, scope, receiver=receiver, module=module)[0]
+
+
+def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
+                      receiver: str | None = None,
+                      module: str | None = None) -> tuple[str, str]:
+    """
+    Pick a concrete overload and also return its conversion-strength tier.
+
+    Call arbitration uses the tier to compare this candidate with a generic
+    one.  Keeping that comparison outside the concrete overload set prevents
+    an implicit concrete conversion from bypassing an exact generic match.
+    """
     entry = overload_entries(gen, symbol, module)
     if entry is None:
-        return symbol
+        return symbol, "exact"
     if not entry:
         # This module has no mangled sibling; keep the base symbol
         # ('@extern free' beside another module's 'free(opaque*)').
-        return symbol
+        return symbol, "exact"
 
     # a lone candidate resolves as ever, unless a generic template shares
     # the name and the arguments must decide between the two
     if len(entry) == 1 and gen.generic_functions.get(symbol) is None:
-        return entry[0][1]
+        candidate = entry[0][1]
+        arg_types = [rank_type(gen, arg, scope) for arg in args]
+        ranked_args = [adapting_value(gen, arg, scope) for arg in args]
+        if receiver is not None:
+            ranked_args = [None, *ranked_args]
+            arg_types = [receiver, *arg_types]
+        fit = candidate_fit(gen, candidate, ranked_args, arg_types)
+        # Arity/type diagnostics are emitted later for a lone declaration,
+        # matching the historical behavior of returning it unconditionally.
+        return candidate, fit or "exact"
 
     arg_types = [rank_type(gen, arg, scope) for arg in args]
     # Surface the precise reason an argument has no type before ranking:
@@ -217,7 +240,15 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
             f"({', '.join(gen.param_types.get(c, ()))})" for c in pool)
         raise TypeError(f"call to {name!r} is ambiguous between {signatures}")
 
-    return pool[0]
+    return pool[0], fit_for_pool(tiers, pool)
+
+
+def fit_for_pool(tiers: dict[str, list[str]], pool: list[str]) -> str:
+    """Return the tier whose candidate list supplied an overload pool."""
+    for fit in ("exact", "implicit", "adopt"):
+        if pool is tiers[fit]:
+            return fit
+    raise AssertionError("overload pool does not belong to a fit tier")
 
 
 def candidate_fit(gen: CodeGenerator, symbol: str, args: list,

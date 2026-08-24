@@ -408,6 +408,139 @@ def test_concrete_overload_beside_an_interface_one(run):
     assert run(source).returncode == 42
 
 
+def test_exact_interface_overload_beats_implicit_array_decay(run):
+    """
+    A concrete overload is not automatically strongest: preserving a slice
+    through its Iterable claim beats decaying it to a pointer.
+    """
+    source = """
+    struct Buffer {}
+
+    fn Buffer::append(&self, chars: const char*) -> i32 { return 1; }
+
+    fn Buffer::append<T>(
+        &self, chars: const &Iterable<T>
+    ) -> i32 {
+        return 2;
+    }
+
+    fn main() -> i32 {
+        let buffer: Buffer;
+        let chars: const char[] = "sixteen-byte-view";
+        return buffer.append(chars);
+    }
+    """
+    assert run(source).returncode == 2
+
+
+def test_exact_constrained_numeric_beats_implicit_widening(run):
+    """
+    An i32 satisfies SignedInteger exactly, which is stronger than widening
+    it into a concrete i64 overload.
+    """
+    source = """
+    fn pick(value: i64) -> i32 { return 1; }
+    fn pick<T: SignedInteger>(value: T) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let value: i32 = 0;
+        return pick(value);
+    }
+    """
+    assert run(source).returncode == 2
+
+
+def test_exact_concrete_beats_exact_generic(run):
+    """An equally exact concrete candidate remains more specific."""
+    source = """
+    fn pick(value: i32) -> i32 { return 1; }
+    fn pick<T: SignedInteger>(value: T) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let value: i32 = 0;
+        return pick(value);
+    }
+    """
+    assert run(source).returncode == 1
+
+
+def test_equally_implicit_concrete_beats_generic(run):
+    """A concrete candidate wins a tie at the same conversion tier."""
+    source = """
+    fn pick(left: i64, right: i64) -> i32 { return 1; }
+    fn pick<T>(left: T, right: T) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let left: i64 = 0;
+        return pick(left, 1);
+    }
+    """
+    assert run(source).returncode == 1
+
+
+def test_invalid_generic_arity_does_not_displace_implicit_concrete(run):
+    """An exact-looking generic with the wrong arity is not rankable."""
+    source = """
+    fn pick(value: i64) -> i32 { return 1; }
+    fn pick<T>(left: T, right: T) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let value: i32 = 0;
+        return pick(value);
+    }
+    """
+    assert run(source).returncode == 1
+
+
+def test_adaptable_ternary_ranks_at_its_declared_arm(run):
+    """
+    A string literal arm adopts the other arm's pointer type before overload
+    ranking; it must not make an incompatible Iterable candidate look exact.
+    """
+    source = """
+    fn pick(value: const char*) -> i32 { return 1; }
+    fn pick<T>(value: const &Iterable<T>) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let pointer: const char* = "pointer";
+        return pick(true ? "literal" : pointer);
+    }
+    """
+    assert run(source).returncode == 1
+
+
+def test_explicit_type_arguments_select_generic_over_concrete(run):
+    """A written type-argument list explicitly requests the template."""
+    source = """
+    fn pick(value: i32) -> i32 { return 1; }
+    fn pick<T>(value: T) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let value: i32 = 0;
+        return pick<i32>(value);
+    }
+    """
+    assert run(source).returncode == 2
+
+
+def test_constructor_ranks_exact_generic_before_implicit_concrete(run):
+    """Constructor init overloads use the same cross-family ordering."""
+    source = """
+    struct Choice { selected: i32; }
+
+    fn Choice::init(&self, value: i64) { self.selected = 1; }
+    fn Choice::init<T: SignedInteger>(&self, value: T) {
+        self.selected = 2;
+    }
+
+    fn main() -> i32 {
+        let value: i32 = 0;
+        return Choice(value).selected;
+    }
+    """
+    assert run(source).returncode == 2
+
+
 def test_constructor_picks_among_init_overloads(run):
     """
     'S(...)' resolves an overloaded 'init' like any call, the instance

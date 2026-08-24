@@ -407,33 +407,20 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
                         call = Call(expr.name, [receiver, *expr.args],
                                     expr.type_args)
 
-        # an overloaded name's return type follows the candidate its
-        # arguments pick; a fit bypasses a generic template sharing the
-        # name, while a call no concrete candidate takes falls through
-        # to it, or has no type yet
-        picked = False
-        if symbol in gen.overloads:
-            from siec.codegen.overloads import pick_overload
+        # Concrete and generic candidates use the same exact/implicit/adopt
+        # ordering here as checking and emission. A generic return can be
+        # inferred from its type arguments without instantiating its body.
+        from siec.codegen.generics import pick_call_candidate, substitute
 
-            try:
-                symbol = pick_overload(
-                    gen, symbol, call.args, scope, module=module)
-                picked = True
-            except TypeError:
-                if gen.generic_functions.get(symbol) is None:
-                    return None
+        try:
+            kind, candidate = pick_call_candidate(
+                gen, symbol, call, scope,
+                getattr(expr, "expected_type", None), module=module)
+        except TypeError:
+            return None
 
-        # a generic call's return type comes from its resolved arguments,
-        # without instantiating; an unresolvable call has no type yet
-        if not picked and gen.generic_functions.get(symbol) is not None:
-            from siec.codegen.generics import pick_generic_call, substitute
-
-            try:
-                template, type_args = pick_generic_call(
-                    gen, symbol, call, scope,
-                    getattr(expr, "expected_type", None))
-            except TypeError:
-                return None
+        if kind == "generic":
+            template, type_args = candidate
 
             if template.return_type is None:
                 return None
@@ -447,6 +434,8 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
                     expand_alias(gen, substitute(template.return_type, mapping)))
             finally:
                 gen.ungated_types -= 1
+        else:
+            symbol = candidate
 
         # 'S(...)' constructs and types as the S it builds
         if symbol not in gen.return_types:
@@ -627,10 +616,17 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
 
         return expand_alias(gen, f"Tuple<{','.join(elements)}>", checked=False)
 
-    # a ternary carries its arms' type; either arm may pin it down
+    # A declared ternary arm pins a string literal's adaptable char[] view.
+    # This lets `cond ? "x" : pointer` rank as the pointer it must become,
+    # rather than claiming an exact array fit that the other arm cannot make.
     if isinstance(expr, Ternary):
-        return (expr_sie_type(gen, expr.then, scope)
-                or expr_sie_type(gen, expr.orelse, scope))
+        then = expr_sie_type(gen, expr.then, scope)
+        otherwise = expr_sie_type(gen, expr.orelse, scope)
+        if isinstance(expr.then, StrLiteral) and otherwise is not None:
+            return otherwise
+        if isinstance(expr.orelse, StrLiteral) and then is not None:
+            return then
+        return then or otherwise
 
     # a struct operand's binary operator types as the method call it
     # desugars to: 'a + b' is 'a.add(b)'
@@ -787,8 +783,13 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 
     # a ternary takes its arms' type, a declared arm winning over a literal
     if isinstance(expr, Ternary):
-        return (infer_type(gen, expr.then, scope)
-                or infer_type(gen, expr.orelse, scope))
+        then = infer_type(gen, expr.then, scope)
+        otherwise = infer_type(gen, expr.orelse, scope)
+        if isinstance(expr.then, StrLiteral) and otherwise is not None:
+            return otherwise
+        if isinstance(expr.orelse, StrLiteral) and then is not None:
+            return then
+        return then or otherwise
 
     return None
 

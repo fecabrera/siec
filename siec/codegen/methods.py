@@ -837,40 +837,34 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
         raise TypeError(f"a static 'init' cannot construct {type_name!r}: "
                         "the constructor passes the instance as its receiver")
 
-    # an overloaded 'init' resolves to the candidate the arguments pick,
-    # the instance's type standing in for the receiver they lack; a call
-    # no concrete candidate takes falls through to a generic template
-    picked = False
-    if symbol in gen.overloads:
-        from siec.codegen.overloads import pick_overload
+    # Rank constructor overloads together. The generic call carries the
+    # materialized receiver while concrete ranking can use its type directly.
+    from siec.codegen.generics import pick_call_candidate
+    from siec.codegen.generator import Variable
 
-        try:
-            symbol = pick_overload(gen, symbol, call.args, scope,
-                                   receiver=type_name)
-            picked = True
-        except TypeError:
-            if gen.generic_functions.get(symbol) is None:
-                raise
+    inner = dict(scope)
+    inner[".ctor.self"] = Variable(slot, type_name)
+    generic_call = Call(
+        f"{type_name}::init", [Var(".ctor.self"), *call.args])
+    kind, candidate = pick_call_candidate(
+        gen, symbol, call, scope, receiver=type_name,
+        generic_call=generic_call, generic_scope=inner)
+
+    # a generic 'init' instantiates through the ordinary call path, with the
+    # fresh instance supplied as its explicit receiver.
+    if kind == "generic":
+        from siec.codegen.calls import emit_call
+
+        emit_call(gen, builder, generic_call, inner)
+
+        return slot if as_address else builder.load(slot)
+
+    symbol = candidate
 
     # a stamped overload's body waits for its first picked call
     from siec.codegen.worklist import activate_function_instance
 
     activate_function_instance(gen, symbol)
-
-    # a generic 'init' (one taking an interface parameter, say)
-    # instantiates like any generic call, the fresh instance joining
-    # through a hidden scope name as its receiver
-    if not picked and symbol in gen.generic_functions:
-        from siec.codegen.calls import emit_call
-        from siec.codegen.generator import Variable
-
-        inner = dict(scope)
-        inner[".ctor.self"] = Variable(slot, type_name)
-        emit_call(gen, builder,
-                  Call(f"{type_name}::init", [Var(".ctor.self"), *call.args]),
-                  inner)
-
-        return slot if as_address else builder.load(slot)
 
     func = gen.module.globals[symbol]
     sie_params = gen.param_types[func.name]
