@@ -147,7 +147,7 @@ fn List<T>::assign_from(&self, str: const &Iterable<T>) {
  *
  * @return The first element.
  */
-fn List<T>::first() -> &T {
+fn List<T>::first(&self) -> &T {
     if (not self.length)
         panic("List is empty");
 
@@ -159,11 +159,11 @@ fn List<T>::first() -> &T {
  *
  * @return The last element.
  */
-fn List<T>::last() -> &T {
+fn List<T>::last(&self) -> &T {
     if (not self.length)
         panic("List is empty");
 
-    return self.data[self.length].get_mut();
+    return self.data[self.length - 1].get_mut();
 }
 
 /**
