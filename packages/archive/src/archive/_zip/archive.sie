@@ -11,7 +11,10 @@ import {
     zip_close,
     zip_get_name,
     zip_get_num_entries,
+    zip_fopen,
+    zip_fopen_index,
 } from zip;
+import { File } from file;
 
 /**
  * A ZIP archive.
@@ -108,6 +111,7 @@ struct Archive {
      */
     fn get_entry_name(&self, index: u64) -> Result<String, StatError> {
         if (self.handle == null) return Error(StatError::NotOpen);
+
         let str = zip_get_name(self.handle, index, 0);
         if (str == null) {
             let error = zip_get_error(self.handle);
@@ -120,6 +124,32 @@ struct Archive {
                 return Error(StatError::SystemError);
             }
         }
+
         return Ok(String(str));
+    }
+
+    /**
+     * Gets a file from the archive.
+     *
+     * @param index The index of the file to open.
+     * @return The result of the operation.
+     */
+    fn get_file(&self, index: u64) -> Result<File, OpenError> {
+        if (self.handle == null) return Error(OpenError::InvalidFilesystem);
+
+        let file = zip_fopen_index(self.handle, index, 0);
+        if (file == null) {
+            let error = zip_get_error(self.handle);
+            case (error->zip_err) {
+            when ZIP_ER::NOPASSWD:
+                return Error(OpenError::Encrypted);
+            when ZIP_ER::INVAL:
+                return Error(OpenError::InvalidFile);
+            else:
+                return Error(OpenError::SystemError);
+            }
+        }
+
+        return Ok(File(file));
     }
 }

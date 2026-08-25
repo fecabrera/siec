@@ -1,9 +1,13 @@
+import { CloseError } from std.fs;
 import { IOReadable, IOWritable, IOError, SeekOrigin, IOSeekable } from std.io;
 import {
     ZIP_ER,
+    zip,
     zip_error,
+    zip_get_error,
     zip_file_get_error,
     zip_file,
+    zip_fclose,
     zip_fread,
     zip_fseek,
 } from zip;
@@ -13,6 +17,29 @@ import {
  */
 struct File: IOReadable, IOSeekable {
     @private handle: zip_file* = null; /* The underlying zip handle. */
+
+    /**
+     * Initialize the file object.
+     *
+     * @param handle The underlying zip file handle.
+     */
+    fn init(&self, handle: zip_file*) {
+        self.handle = handle;
+    }
+
+    /**
+     * Close the file.
+     *
+     * @return The result of the operation.
+     */
+    fn close(&self) -> Result<CloseError> {
+        if (self.handle == null) return Error(CloseError::AlreadyClosed);
+
+        if (zip_fclose(self.handle) < 0) {
+            return Error(CloseError::SystemError);
+        }
+        return Ok();
+    }
 
     /**
     * Read from a file.
