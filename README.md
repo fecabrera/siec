@@ -2129,7 +2129,7 @@ fn close(h: Handle*);
 
 #### Field defaults
 
-A field may declare a default value after its type, taken wherever the field is left unfilled:
+A field can have a default after its type:
 
 ```
 struct List<T> {
@@ -2139,25 +2139,26 @@ struct List<T> {
 }
 ```
 
-The type may be left out when the default determines it:
+A bare struct declaration uses its defaults, including defaults in nested structs, and zeroes the other fields. A named literal does the same for fields it leaves out. A positional literal must fill every field. A struct with no defaults remains uninitialized when declared bare.
+
+Defaults cannot use local names. They may use literals, constants, enum members, and `@sizeof`. Union fields cannot have defaults. Globals remain zero-initialized.
+
+#### Field type inference
+
+A field's type can be inferred from its default:
 
 ```
 struct State {
     mode = Mode::None;
     open = false;
-    retries = 3;
 }
 ```
 
-Enum members keep their enum type, and literals use their usual defaults such as `bool`, `i32`, and `f64`. Keep the annotation when the default needs a specific context, such as `handle: Handle* = null`.
-
-A bare declaration of a struct with any default starts from its defaults, the undefaulted fields zeroed (`let l: List<i32>;` holds `{null, 0, 8}`), and defaults of nested struct fields cascade. A named aggregate literal fills what it names and defaults the rest (`{ length = 2 }` keeps `data = null`); a positional literal still fills every field. A struct with no defaults anywhere stays uninitialized on a bare declaration, as ever.
-
-Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `@sizeof` are the natural fits. Union fields take no default, since their fields share one storage, and module-level globals keep their zero initialization.
+Here, `mode` is a `Mode` and `open` is a `bool`. Keep the annotation when the default needs a specific type, as in `handle: Handle* = null`.
 
 #### Generic structs
 
-Structs can be generic when their name is followed by `<X, Y, ...>`, where `X` and `Y` are arbitrary types.
+A struct is generic when type parameters follow its name:
 
 ```
 struct List<T> {
@@ -2167,17 +2168,27 @@ struct List<T> {
 }
 ```
 
-To use a concrete version of a generic struct you have to use the struct's name plus `<A>`, where `A` is a concrete type.
+Type arguments are written after the struct name:
 
 ```
-fn f(lst: List<i32>); // a function that receives a param of type List<i32>
-fn f() -> List<i32>; // a function that returns a value of type List<i32>
-let lst: List<i32>; // lst is a variable that holds a value of type List<i32>
+let list: List<i32>;
+fn first(list: List<i32>) -> i32;
 ```
 
-Each argument list stamps out one concrete struct at compile time, shared by every use spelling the same arguments; arguments may be any concrete type, including other instantiations (`Box<Box<i32>>`), and a field may name its own instantiation through a pointer (`next: Node<T>*`). A modifier-carrying argument (`const T`, `&T`) is rejected: substituted into a derived position like `T*`, the modifier would silently move where it applies.
+Each set of type arguments creates one concrete struct at compile time. The same arguments always refer to the same type. Type arguments may include other instantiations, such as `List<List<i32>>`.
 
-Struct parameters take the same [bounds as generic functions](#generic-functions). This is the usual way to make a capability part of a container's type:
+A field may refer to its own instantiation through a pointer:
+
+```
+struct Node<T> {
+    value: T;
+    next: Node<T>*;
+}
+```
+
+Modifiers such as `const` and `&` cannot be used in type arguments because their meaning could change when substituted into a type such as `T*`.
+
+Struct parameters use the same [bounds as generic functions](#generic-functions):
 
 ```
 struct Map<K: Hashable, V> {
@@ -2185,7 +2196,7 @@ struct Map<K: Hashable, V> {
 }
 ```
 
-The bound is checked whenever a concrete `Map<K, V>` is formed, before its fields or methods instantiate. Unions and generic interfaces use the same parameter syntax.
+The bound is checked when a concrete `Map<K, V>` is formed, before its fields or methods are instantiated. Unions and generic interfaces use the same parameter syntax.
 
 #### Tuples
 
