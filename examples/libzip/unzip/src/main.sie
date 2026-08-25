@@ -1,0 +1,38 @@
+import zip;
+import std.io;
+import { String } from std.collections;
+import { Archive, ArchiveMode } from archive.zip;
+
+fn main(args: const char*[]) -> i32 {
+    if (args.length < 2) {
+        std.io.println(std.io.stderr, "usage: {} <input> [output]", args[0]);
+        return 1;
+    }
+
+    let input = String::null_terminated(args[1]);
+    let output = args.length < 3 ? String::null_terminated(".") : String::null_terminated(args[2]);
+
+    // open zip archive from path
+    let archive = try Archive::open(input.as_const_array(), ArchiveMode::Read) except (error) {
+        std.io.println(std.io.stderr, "{}: {}", input, error);
+        return 1;
+    }
+    defer archive.close();
+
+    let n = try archive.get_total_entries() except (error) {
+        std.io.println(std.io.stderr, "{}: {}", input, error);
+        return 1;
+    }
+
+    for (let i: u64 = 0; i < n; i += 1) {
+        let name = try archive.get_entry_name(i) except (error) {
+            std.io.println(std.io.stderr, "can't fetch entry at index {}:", i, error);
+            continue;
+        }
+
+        let is_dir = name.last() == '/';
+        std.io.println("{}", name);
+    }
+
+    return 0;
+}

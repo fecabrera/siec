@@ -1,0 +1,10 @@
+[package]
+name = "unzip"
+description = "Unzip files and folders"
+
+[app]
+sources = ["src/"]
+
+[dependencies]
+core = "*"
+archive = "~1"
