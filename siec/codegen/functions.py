@@ -207,12 +207,15 @@ def resolve_function_body(gen: CodeGenerator, fn: Function) -> str:
         fn.var_arg,
         fn.is_extern,
         main_takes_args(fn),
+        fn.returns_self,
     )
     existing = gen.function_signatures.get(symbol)
     if existing is not None and existing != signature:
         raise TypeError(f"conflicting declarations for function {fn.name!r}")
 
     gen.function_signatures[symbol] = signature
+    if fn.returns_self:
+        gen.self_returns.add(symbol)
     gen.resolved_functions.setdefault(symbol, fn)
     return symbol
 
@@ -456,6 +459,8 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
             # forever, so an open end block cannot actually be reached
             if fn.noreturn:
                 builder.unreachable()
+            elif fn.returns_self:
+                builder.ret(scope["self"].slot)
             elif isinstance(ret_type, ir.VoidType):
                 builder.ret_void()
             elif fn.name == "main" and fn.return_type is None:

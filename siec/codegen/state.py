@@ -82,6 +82,7 @@ class SymbolTable:
     callable_inventory_complete: bool = False
     callables_resolved: bool = False
     noreturns: set[str] = field(default_factory=set)
+    self_returns: set[str] = field(default_factory=set)
     overloads: dict[str, list[tuple[tuple, str]]] = field(default_factory=dict)
     deferred_overloads: dict[str, object] = field(default_factory=dict)
     generic_overloads: dict[str, list] = field(default_factory=dict)

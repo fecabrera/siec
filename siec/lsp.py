@@ -922,8 +922,9 @@ def signature_parts(fn: Function, gen: CodeGenerator | None = None
         return f"{p.name}: {type_name}"
 
     params = tuple(param_text(p) for p in fn.params)
-    ret = (f" -> {source_spelling(gen, fn.return_type)}"
-           if fn.return_type else "")
+    shown_return = "self" if fn.returns_self else fn.return_type
+    ret = (f" -> {source_spelling(gen, shown_return)}"
+           if shown_return else "")
     return name, params, ret
 
 

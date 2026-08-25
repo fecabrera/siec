@@ -2394,6 +2394,55 @@ s.method();
 
 The receiver may be any expression, not just a name: a field chain, an indexed element, or another call's result: `self.items.get(i).init(n)` chains through a [reference return](#references).
 
+#### Builder methods
+
+A method that mutates its receiver and returns it can use `self` as its
+return type:
+
+```
+fn String::null_terminate(&self) -> self {
+    self.push('\0');
+}
+```
+
+The return is implicit. A bare `return` or `return self` may be used to
+leave early. Returning any other value is an error. Only a method with a
+mutable `&self` receiver can return `self`.
+
+Calling a builder method on a named value mutates that value, then copies
+the result:
+
+```
+let str = String("text");
+let str2 = str.null_terminate();
+```
+
+Both `str` and `str2` have the same contents and are null-terminated, but they have different buffers.
+An owned type that implements
+[`Destroy`](#destruction-and-raii) must also implement
+[`Clone`](#assignment-and-ownership) to make this copy.
+
+`String::null_terminated` uses the builder method to create a new value:
+
+```
+fn String::null_terminated(src: const char*) -> String {
+    return String(src).null_terminate();
+}
+```
+
+Calling the same method on a temporary keeps that temporary as the result:
+
+```
+let str = String("text").null_terminate();
+```
+
+This is equivalent to constructing `str` first and then calling the method:
+
+```
+let str = String("text");
+str.null_terminate();
+```
+
 #### Constructors
 
 For a struct `S` with an `init` method, calling `S(args)` builds an instance in place: stack space, the struct's [field defaults](#field-defaults), then `S::init(self, args...)`. It is the expression form of:

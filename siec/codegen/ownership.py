@@ -197,6 +197,28 @@ def expression_returns_reference(gen: CodeGenerator, expr) -> bool:
     return symbol is not None and is_reference(gen.return_types.get(symbol))
 
 
+def mark_self_returned_temporary(gen: CodeGenerator, expr) -> None:
+    """Mark a builder call whose owned receiver can remain the result."""
+    from siec.ast import Call, MethodCall
+
+    if not isinstance(expr, MethodCall):
+        return
+    if getattr(expr, "resolved_symbol", None) not in gen.self_returns:
+        return
+
+    receiver = expr.receiver
+    owns_receiver = (
+        getattr(receiver, "self_transfer", False)
+        or (isinstance(receiver, (Call, MethodCall))
+            and not expression_returns_reference(gen, receiver))
+    )
+    if not owns_receiver:
+        return
+
+    expr.self_transfer = True
+    expr.ownership_identity = expression_identity(receiver)
+
+
 def manually_destroyed_local(expr) -> str | None:
     """The whole local consumed by a direct ``local.destroy()`` call."""
     from siec.ast import Call, MethodCall, Var

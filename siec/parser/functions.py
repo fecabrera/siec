@@ -861,6 +861,19 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         ts.next()
         return_type = parse_type(ts)
 
+    # A self return is a builder contract, not an ordinary type alias. Its
+    # ABI is the receiver reference, while the marker preserves the stronger
+    # promise that every exit returns that exact receiver.
+    returns_self = return_type == "self"
+    if returns_self:
+        if receiver is None:
+            raise SyntaxError(f"line {line}: only a method can return self")
+        if (not params or params[0].name != "self"
+                or not params[0].type.startswith("&")):
+            raise SyntaxError(f"line {line}: a self-returning method needs "
+                              "a mutable '&self' receiver")
+        return_type = params[0].type
+
     # an '@noreturn' function hands nothing back: there is no return to type
     if noreturn and return_type is not None:
         raise SyntaxError(f"line {line}: an '@noreturn' function cannot "
@@ -890,6 +903,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         "removed": removed,
         "is_private": is_private,
         "is_override": is_override,
+        "returns_self": returns_self,
         "line": line,
     }
 

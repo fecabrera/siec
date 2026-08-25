@@ -144,7 +144,7 @@ def check_function(gen: CodeGenerator, fn: Function) -> None:
         check_results(gen, fn, params)
 
         if (fn.return_type is not None and not fn.noreturn
-                and not terminates):
+                and not fn.returns_self and not terminates):
             raise TypeError(f"function {fn.name!r} must return a value")
 
         gen.checked_functions.add(symbol)
@@ -228,6 +228,8 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
     if isinstance(expr, Move):
         return
     if not destroyable(gen, type_name):
+        return
+    if getattr(expr, "self_transfer", False):
         return
     if expression_returns_reference(gen, expr):
         value_type = strip_const(strip_reference(type_name))
@@ -387,6 +389,13 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             if fn.noreturn:
                 raise TypeError(f"'@noreturn' function {fn.name!r} "
                                 "cannot return")
+            if fn.returns_self:
+                if (stmt.value is not None
+                        and not (isinstance(stmt.value, Var)
+                                 and stmt.value.name == "self")):
+                    raise TypeError("a self-returning method can only return "
+                                    "self")
+                return True
             if stmt.value is None:
                 return True
             return_type = (
@@ -928,6 +937,9 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             method_receiver=expr.receiver,
         )
         expr.resolved_symbol = getattr(call, "resolved_symbol", symbol)
+        from siec.codegen.ownership import mark_self_returned_temporary
+
+        mark_self_returned_temporary(gen, expr)
         return result
 
     if isinstance(expr, Member):

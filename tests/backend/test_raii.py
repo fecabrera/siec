@@ -37,7 +37,7 @@ fn Buffer::init(&self, value: i32) {
 }
 
 fn Buffer::clone(const &self) -> Buffer {
-    return Buffer(self.data[0] + 100);
+    return Buffer(self.data[0]);
 }
 
 fn Buffer::destroy(&self) {
@@ -48,6 +48,10 @@ fn Buffer::destroy(&self) {
 fn Buffer::touch(&self) -> &Buffer {
     self.data[0] += 1;
     return self;
+}
+
+fn Buffer::null_terminate(&self) -> self {
+    self.data[0] = 1;
 }
 
 fn borrow(value: &Buffer) -> &Buffer {
@@ -62,6 +66,10 @@ fn read(value: Buffer) -> i32 {
     return value.data[0];
 }
 
+fn terminated() -> Buffer {
+    return Buffer(0).null_terminate();
+}
+
 fn main() -> i32 {
     let chained = Buffer(40).touch();
     let copied = borrow(chained);
@@ -69,11 +77,24 @@ fn main() -> i32 {
     let assigned = Buffer(0);
     assigned = borrow(chained);
     let argument = read(borrow(chained));
-    if (chained.data[0] != 141) { return 1; }
-    if (copied.data[0] != 241) { return 2; }
-    if (returned.data[0] != 241) { return 3; }
-    if (assigned.data[0] != 241) { return 4; }
-    if (argument != 241) { return 5; }
+    let named = Buffer(0);
+    let named_copy = named.null_terminate();
+    let built = Buffer(0).null_terminate().null_terminate();
+    let built_returned = terminated();
+    let built_assigned = Buffer(9);
+    built_assigned = Buffer(0).null_terminate();
+    let built_argument = read(Buffer(0).null_terminate());
+    if (chained.data[0] != 41) { return 1; }
+    if (copied.data[0] != 41 or copied.data == chained.data) { return 2; }
+    if (returned.data[0] != 41 or returned.data == chained.data) { return 3; }
+    if (assigned.data[0] != 41 or assigned.data == chained.data) { return 4; }
+    if (argument != 41) { return 5; }
+    if (named.data[0] != 1) { return 6; }
+    if (named_copy.data[0] != 1 or named_copy.data == named.data) { return 7; }
+    if (built.data[0] != 1) { return 8; }
+    if (built_returned.data[0] != 1) { return 9; }
+    if (built_assigned.data[0] != 1) { return 10; }
+    if (built_argument != 1) { return 11; }
     return 42;
 }
 """
@@ -390,6 +411,84 @@ def test_owned_reference_result_requires_clone(compile_source):
             return copy.value;
         }
         """)
+
+
+def test_self_return_requires_a_mutable_receiver(compile_source):
+    """The self contract is available only to mutable instance methods."""
+    with pytest.raises(SyntaxError, match="only a method can return self"):
+        compile_source("fn make() -> self {}")
+
+    with pytest.raises(SyntaxError, match="mutable '&self' receiver"):
+        compile_source(r"""
+        struct S {}
+        fn S::view(const &self) -> self {}
+        """)
+
+
+def test_self_return_cannot_return_another_value(compile_source):
+    """Every explicit exit from a self-returning method returns its receiver."""
+    with pytest.raises(TypeError, match="can only return self"):
+        compile_source(r"""
+        struct S {}
+        fn S::replace(&self, other: &S) -> self { return other; }
+        """)
+
+
+def test_self_returned_temporary_does_not_require_clone(run):
+    """A temporary receiver keeps its one owner through a builder call."""
+    result = run(r"""
+    struct Value: Destroy { number: i32; }
+
+    fn Value::init(&self, number: i32) { self.number = number; }
+    fn Value::destroy(&self) {}
+    fn Value::add(&self, amount: i32) -> self {
+        self.number += amount;
+    }
+
+    fn main() -> i32 {
+        let value = Value(40).add(2);
+        return value.number;
+    }
+    """)
+    assert result.returncode == 42
+
+
+def test_self_returned_named_receiver_still_requires_clone(compile_source):
+    """A named receiver remains owned, so a second owner needs Clone."""
+    with pytest.raises(TypeError, match="cannot copy owned 'Value'.*Clone"):
+        compile_source(r"""
+        struct Value: Destroy { number: i32; }
+
+        fn Value::destroy(&self) {}
+        fn Value::add(&self, amount: i32) -> self {
+            self.number += amount;
+        }
+
+        fn main() -> i32 {
+            let first: Value = {40};
+            let second = first.add(2);
+            return second.number;
+        }
+        """)
+
+
+def test_generic_self_return_keeps_the_instantiated_receiver(run):
+    """Generic builder methods return their concrete receiver instance."""
+    result = run(r"""
+    struct Box<T>: Destroy { value: T; }
+
+    fn Box<T>::init(&self, value: T) { self.value = value; }
+    fn Box<T>::destroy(&self) {}
+    fn Box<T>::replace(&self, value: T) -> self {
+        self.value = value;
+    }
+
+    fn main() -> i32 {
+        let box = Box<i32>(1).replace(42);
+        return box.value;
+    }
+    """)
+    assert result.returncode == 42
 
 
 def test_nested_borrowed_temporary_lives_through_outer_call(run):

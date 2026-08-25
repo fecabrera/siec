@@ -357,6 +357,13 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         if gen.flushing_defers:
             raise TypeError("a deferred statement cannot return")
 
+        # A self return always yields the receiver address. The checker only
+        # permits a bare return or an explicit `return self` here.
+        if builder.function.name in gen.self_returns:
+            flush_defers(gen, builder, gen.defer_frames)
+            builder.ret(scope["self"].slot)
+            return
+
         if stmt.value is None:
             flush_defers(gen, builder, gen.defer_frames)
 

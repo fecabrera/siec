@@ -645,6 +645,8 @@ class Function:
     is_private: bool = False  # '@private': visible textually, never through import
     # '@override': deliberately replaces a matching declaration
     is_override: bool = False
+    # '-> self': returns the mutable receiver, implicitly on every exit
+    returns_self: bool = False
     line: int = _line()
     file: str = _file()
 
