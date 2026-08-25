@@ -2409,6 +2409,19 @@ The return is implicit. A bare `return` or `return self` may be used to
 leave early. Returning any other value is an error. Only a method with a
 mutable `&self` receiver can return `self`.
 
+Chaining builder methods does not copy the receiver by itself:
+
+```
+s.a().b();
+
+fn S::c(&self) -> &S {
+    return self.a().b();
+}
+```
+
+Both chains keep acting on `s`. A copy is made only when the result is used
+as a new owned value, as in `let result = s.c();`.
+
 Calling a builder method on a named value mutates that value, then copies
 the result:
 
@@ -2417,7 +2430,8 @@ let str = String("text");
 let str2 = str.null_terminate();
 ```
 
-Both `str` and `str2` have the same contents and are null-terminated, but they have different buffers.
+Both `str` and `str2` have the same contents and are null-terminated, but
+they have different buffers.
 An owned type that implements
 [`Destroy`](#destruction-and-raii) must also implement
 [`Clone`](#assignment-and-ownership) to make this copy.
