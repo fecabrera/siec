@@ -46,7 +46,7 @@ siec main.sie --run arg1 arg2
 
 ### Compilation phases
 
-Compilation is declaration-order independent: moving a type or extension before or after the code that uses it does not change meaning. The loader builds the unit, then the compiler runs four phases:
+Compilation is declaration-order independent: moving a type or extension before or after the code that uses it does not change meaning. The loader builds the unit, then the compiler runs five phases:
 
 0. **Discover and select.** Recursively find imports and includes from the requested sources. A condition guarding an include uses only the [loader-safe constant environment](#conditional-compilation).
 1. **Parse.** Every selected file has a syntax tree before types are asked about.
@@ -164,9 +164,7 @@ building helloworld
 built examples/helloworld/build/helloworld
 ```
 
-Pass `--run` to JIT-run the resolved package without writing a binary. As with
-`siec --run`, everything after the flag is passed to the program and the command
-returns the program's exit status:
+Pass `--run` to JIT-run the resolved package without writing a binary. As with `siec --run`, everything after the flag is passed to the program and the command returns the program's exit status:
 
 ```
 $ sie build examples/helloworld --run arg1 arg2
@@ -394,11 +392,7 @@ The expansion is type-checked. Names in the body resolve where the macro was wri
 
 The condition is a constant expression: literals, `@const` names, enum members, `@sizeof`, arithmetic, comparisons, and `and`/`or`/`not`. The unchosen branch is skipped entirely, never parsed into the program, so its declarations may collide with the chosen one's:
 
-Constant integer arithmetic follows run-time signed division and remainder:
-division truncates toward zero, and a remainder has the dividend's sign.
-`and` and `or` short-circuit here exactly as they do at run time. Division by
-zero, negative or out-of-range shifts, and results wider than every Sie integer
-type are compile-time errors rather than Python or backend failures.
+Constant integer arithmetic follows run-time signed division and remainder: division truncates toward zero, and a remainder has the dividend's sign. `and` and `or` short-circuit here exactly as they do at run time. Division by zero, negative or out-of-range shifts, and results wider than every Sie integer type are compile-time errors rather than Python or backend failures.
 
 ```
 @if (TARGET_OS == OS_DARWIN) {
@@ -894,11 +888,7 @@ fn main(args: char*[]) {
 
 Any of these forms may also return `i32` explicitly, in which case the returned value becomes the program's exit code instead of `0`.
 
-Entry-point types may use aliases and may carry an outer `const`; they are
-checked after aliases resolve, including aliases imported from another module.
-The entry must remain one public external definition, so `main` cannot be
-`@extern`, `@inline`, `@static`, `@private`, `@override`, `@remove`, or
-`@symbol`. A matching forward declaration may still precede its definition.
+Entry-point types may use aliases and may carry an outer `const`; they are checked after aliases resolve, including aliases imported from another module. The entry must remain one public external definition, so `main` cannot be `@extern`, `@inline`, `@static`, `@private`, `@override`, `@remove`, or `@symbol`. A matching forward declaration may still precede its definition.
 
 #### Const parameters
 
@@ -949,8 +939,7 @@ let value: i32 = 0;
 kind(value); // the SignedInteger overload; value stays an i32
 ```
 
-An untyped integer literal counts as its first fitting signed type: `i32`,
-`i64`, then `i128`. From there it converts like any other value:
+An untyped integer literal counts as its first fitting signed type: `i32`, `i64`, then `i128`. From there it converts like any other value:
 
 ```
 dec.add(5);            // an i32, widened into the i64 overload
@@ -1063,24 +1052,13 @@ Native arrays, raw arrays, pointers, and tuples keep their built-in storage inde
 
 #### Generic functions
 
-Functions are generic when their name is followed by an arbitrary number of placeholder types `A`, `B`, etc. enclosed by `<>` and separated by commas.
+Functions are generic when their name is followed by placeholder types such as `T` or `U`. The types are enclosed by `<>` and separated by commas. The compiler replaces each placeholder with a concrete type at compile time.
 
 ```
-fn f<T>(t: T); // a generic function that receives a parameter of type T,
-               // where T is a generic type that can be replaced by any
-               // concrete type at compile time
-
-fn f<T>() -> T; // a generic function that returns a value of type T
-                // where T is a generic type that can be replaced by any
-                // concrete type at compile time
-
-fn f<T, U>(t: T, u: U); // a generic function that receives parameters of type T and U,
-                        // where T and U are generic types that can be replaced by any
-                        // concrete types at compile time
-
-fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T and
-                       // returns a value of type U, where T and U are generic types
-                       // that can be replaced by any concrete types at compile time
+fn f<T>(t: T);
+fn f<T>() -> T;
+fn f<T, U>(t: T, u: U);
+fn f<T, U>(t: T) -> U;
 ```
 
 A type parameter has lexical scope. Inside its template, it has precedence over an external type or interface with the same name. A template can be a function, method, receiver family, struct, interface, or alias. The rule applies to derived and nested forms such as `T[]`, `Box<T>`, and `fn(T) -> T`. Outside the template, the global declaration keeps its normal meaning.
@@ -1234,10 +1212,7 @@ fn bump() -> i32 {
 
 #### Private
 
-`@private` keeps a declaration out of its module's import surface without
-changing its symbol or textual visibility. The defining file and files joined
-to it through `@include` may still use it. Qualified imports and member imports
-cannot.
+`@private` keeps a declaration out of its module's import surface without changing its symbol or textual visibility. The defining file and files joined to it through `@include` may still use it. Qualified imports and member imports cannot.
 
 ```
 @private @const DEFAULT = 0;
@@ -1246,9 +1221,7 @@ cannot.
 @private struct State;
 ```
 
-This differs from `@static`. A static function has file-local linkage and is
-visible only in its own file. A private declaration remains shared across a
-textual include module.
+This differs from `@static`. A static function has file-local linkage and is visible only in its own file. A private declaration remains shared across a textual include module.
 
 #### Noreturn
 
@@ -1308,9 +1281,9 @@ fn main() {
 }
 ```
 
-Unlike a deprecation, a removal is not gated by reachability: the code cannot compile at all, so a use anywhere fails, references included. A tombstone nothing uses compiles fine, which is the point of leaving it: callers get the advice instead of `undefined function`.
+Unlike a deprecation, a removal is not gated by reachability. A use anywhere fails, including a function reference. An unused removed declaration compiles so that future callers get the removal advice instead of an `undefined function` error.
 
-Methods, generic functions, and a generic struct's or an array's methods all remove the same way. A removed generic never registers a template, so nothing can stamp it, and the name answers for the advice on its own:
+Methods, generic functions, and methods of generic structs or arrays use the same removal syntax. A removed generic does not register a template or create instances. A use of its name reports the removal advice:
 
 ```
 @remove("use scale2") fn scale<T>(v: T) -> T;
@@ -1381,11 +1354,9 @@ Integer literals may also be written in hexadecimal with the `0x` prefix:
 let mask: u32 = 0xFF00;
 ```
 
-One integer token may contain at most 4096 digits. This parser boundary keeps
-malformed or generated source from exhausting the host integer converter.
+One integer token may contain at most 4096 digits. This parser boundary keeps malformed or generated source from exhausting the host integer converter.
 
-Without a type context, an integer literal defaults to the first signed type
-it fits: `i32`, then `i64`, then `i128`.
+Without a type context, an integer literal defaults to the first signed type it fits: `i32`, then `i64`, then `i128`.
 
 Float literals are written with a `.` between their digits, adopting the float type of their context like integer literals do:
 
@@ -1424,10 +1395,7 @@ The reverse direction never happens implicitly: an `opaque*` only becomes a type
 let values: i32* = malloc(12) as i32*;
 ```
 
-Comparisons are the exception: an `opaque*` can be compared with any pointer
-type, on either side and with any comparison operator. Two typed pointers must
-still have the same type; for example, comparing a `u8*` with an unrelated
-`S*` is rejected.
+Comparisons are the exception: an `opaque*` can be compared with any pointer type, on either side and with any comparison operator. Two typed pointers must still have the same type; for example, comparing a `u8*` with an unrelated `S*` is rejected.
 
 An explicit `as` also reinterprets any typed pointer as any other, C-style: `text.data as u8*` reads a `char*`'s bytes. Only the spelling converts; a `const` contract stays put, so casting one away is rejected.
 
@@ -1571,10 +1539,7 @@ let buf: u8[64];              // buf.data -> 64 stack bytes, buf.length == 64
 let body: u8[64 - HEADER];    // sized by a constant expression
 ```
 
-A sized struct field owns fixed inline storage in its containing struct.
-Therefore, moving the struct does not leave an internal pointer behind. Reading
-the field produces an ordinary `X[]` view. Its `data` points to the inline
-storage, and its `length` is `N`. Indexing accesses the storage directly.
+A sized struct field owns fixed inline storage in its containing struct. Therefore, moving the struct does not leave an internal pointer behind. Reading the field produces an ordinary `X[]` view. Its `data` points to the inline storage, and its `length` is `N`. Indexing accesses the storage directly.
 
 ```
 struct State {
@@ -1812,7 +1777,7 @@ fn Application::connect_activate(
 }
 ```
 
-Captured variables move to stable shared storage when the closure is formed. The original scope and every closure that captures the variable observe the same value. The `callback.env` value remains valid if a foreign callback retains it after the creating function returns. The storage currently remains allocated for the process lifetime. Future release support can permit safe library wrappers to reclaim it. A wrapper can use a foreign API destroy notification or an owned connection that disconnects before it releases the environment.
+Captured variables move to stable shared storage when the closure is formed. The original scope and every closure that captures the variable observe the same value. The `callback.env` value remains valid if a foreign callback retains it after the creating function returns. The storage remains allocated for the process lifetime.
 
 #### Type aliases
 
@@ -1851,11 +1816,7 @@ Alias parameters take the same [bounds as generic functions](#generic-functions)
 
 #### Type casting
 
-Any represented value can be explicitly viewed as another type through the
-`as` keyword. Reading that view produces a value copy. Scalar representations
-convert at their LLVM width even when the Sie type is not arithmetic, so
-`char` and `bool` cast like their underlying integers. Addressable aggregate
-values reinterpret the same storage through the target representation.
+Any represented value can be explicitly viewed as another type through the `as` keyword. Reading that view produces a value copy. Scalar representations convert at their LLVM width even when the Sie type is not arithmetic, so `char` and `bool` cast like their underlying integers. Addressable aggregate values reinterpret the same storage through the target representation.
 
 ```
 x as Y
@@ -2036,9 +1997,7 @@ Every enum and member name is collected before those values resolve, so an expre
 
 Members are assigned values automatically, starting at 0 and increasing by 1 for each subsequent member. Setting a specific value for a member changes the counter for the following ones, which then keep increasing from there.
 
-Both explicit values and automatic increments must fit the enum's backing type.
-They never silently wrap; an overflow or a shift count outside the backing
-width is reported at that member.
+Both explicit values and automatic increments must fit the enum's backing type. They never silently wrap; an overflow or a shift count outside the backing width is reported at that member.
 
 ```
 enum name {
@@ -2303,12 +2262,9 @@ r.value = 42; // reaches the unnamed union's field directly
 
 ### Methods
 
-Structs can have methods. A method is a function that acts on a specific
-struct type.
+Structs can have methods. A method is a function that acts on a specific struct type.
 
-Methods are declared through the `fn` keyword.
-They may live inside the struct body, where the enclosing struct supplies
-their receiver type:
+Methods are declared through the `fn` keyword. They may live inside the struct body, where the enclosing struct supplies their receiver type:
 
 ```
 struct S<A> {
@@ -2324,16 +2280,9 @@ struct S<A> {
 }
 ```
 
-The struct's type parameters and bounds are in scope throughout a nested
-method. A method may also declare generic parameters of its own after its
-name. A nested `@where` may further constrain the enclosing receiver
-family, including for an `@override`, in the same form as an out-of-line
-method.
+The struct's type parameters and bounds are in scope throughout a nested method. A method may also declare generic parameters of its own after its name. A nested `@where` may further constrain the enclosing receiver family, including for an `@override`, in the same form as an out-of-line method.
 
-The out-of-line spelling prefixes the method name with `S::`, where `S` is
-the struct it belongs to. Both spellings declare the same method and may be
-used together, so a struct can present a method's signature while keeping
-its body elsewhere:
+The out-of-line spelling prefixes the method name with `S::`, where `S` is the struct it belongs to. Both spellings declare the same method and may be used together, so a struct can present a method's signature while keeping its body elsewhere:
 
 ```
 struct S<A> {
@@ -2350,11 +2299,9 @@ fn S<A>::get(const &self) -> A {
 }
 ```
 
-A body may be nested or out of line independently for each method. Fields
-and methods may appear in either order inside the struct.
+A body may be nested or out of line independently for each method. Fields and methods may appear in either order inside the struct.
 
-The first parameter is the receiver and is always a reference. The method
-therefore acts on the instance and not on a copy.
+The first parameter is the receiver and is always a reference. The method therefore acts on the instance and not on a copy.
 
 ```
 fn S::method(self: &S) {
@@ -2395,8 +2342,7 @@ The receiver may be any expression, not just a name: a field chain, an indexed e
 
 #### Builder methods
 
-A method that mutates its receiver and returns it can use `self` as its
-return type:
+A method that mutates its receiver and returns it can use `self` as its return type:
 
 ```
 fn String::null_terminate(&self) -> self {
@@ -2404,9 +2350,7 @@ fn String::null_terminate(&self) -> self {
 }
 ```
 
-The return is implicit. A bare `return` or `return self` may be used to
-leave early. Returning any other value is an error. Only a method with a
-mutable `&self` receiver can return `self`.
+The return is implicit. A bare `return` or `return self` may be used to leave early. Returning any other value is an error. Only a method with a mutable `&self` receiver can return `self`.
 
 Chaining builder methods does not copy the receiver by itself:
 
@@ -2418,22 +2362,16 @@ fn S::c(&self) -> &S {
 }
 ```
 
-Both chains keep acting on `s`. A copy is made only when the result is used
-as a new owned value, as in `let result = s.c();`.
+Both chains keep acting on `s`. A copy is made only when the result is used as a new owned value, as in `let result = s.c();`.
 
-Calling a builder method on a named value mutates that value, then copies
-the result:
+Calling a builder method on a named value mutates that value, then copies the result:
 
 ```
 let str = String("text");
 let str2 = str.null_terminate();
 ```
 
-Both `str` and `str2` have the same contents and are null-terminated, but
-they have different buffers.
-An owned type that implements
-[`Destroy`](#destruction-and-raii) must also implement
-[`Clone`](#assignment-and-ownership) to make this copy.
+Both `str` and `str2` have the same contents and are null-terminated, but they have different buffers. An owned type that implements [`Destroy`](#destruction-and-raii) must also implement [`Clone`](#assignment-and-ownership) to make this copy.
 
 `String::null_terminated` uses the builder method to create a new value:
 
@@ -2575,8 +2513,7 @@ fn S<A, B, ...>::method<X, Y, ...>(self: &S<A, B, ...>, x: X, y: Y, ...) {
 
 #### Built-in type methods
 
-Methods may be declared directly on built-in types in the same way as methods
-on structs:
+Methods may be declared directly on built-in types in the same way as methods on structs:
 
 ```
 fn i32::doubled(const &self) -> i32 {
@@ -2586,8 +2523,7 @@ fn i32::doubled(const &self) -> i32 {
 let answer = 21.doubled();
 ```
 
-Use `@where` with a built-in bound to declare one method for a family of
-built-in types:
+Use `@where` with a built-in bound to declare one method for a family of built-in types:
 
 ```
 @where<T: Scalar>
@@ -2596,11 +2532,9 @@ fn T::value(const &self) -> T {
 }
 ```
 
-`Scalar` covers all primitive value types. `Integer`, `SignedInteger`, and
-`UnsignedInteger` provide narrower built-in families.
+`Scalar` covers all primitive value types. `Integer`, `SignedInteger`, and `UnsignedInteger` provide narrower built-in families.
 
-Arrays support methods in the same way. Using `T` as the element type declares
-the method for every array type:
+Arrays support methods in the same way. Using `T` as the element type declares the method for every array type:
 
 ```
 fn T[]::count(&self, value: T) -> i32 {
@@ -2616,8 +2550,7 @@ let hits = ints.count(3);
 let ls = text.count('l');
 ```
 
-[Operator shorthands](#operator-overloading) also use array methods, so `eq`
-provides `==` and `!=`, while `add` provides `+`.
+[Operator shorthands](#operator-overloading) also use array methods, so `eq` provides `==` and `!=`, while `add` provides `+`.
 
 ### Interfaces
 
@@ -2640,13 +2573,9 @@ fn Person::greet(self: &Person) -> char[] {
 fn welcome(person: Named) { person.greet(); }
 ```
 
-A type implements an interface by listing it after `:` and providing every
-required field and method. Multiple interfaces are separated by commas, as in
-`struct Person: Named, Aged`. Required methods may also be declared outside
-the interface body as `fn Named::greet(&self) -> char[];`.
+A type implements an interface by listing it after `:` and providing every required field and method. Multiple interfaces are separated by commas, as in `struct Person: Named, Aged`. Required methods may also be declared outside the interface body as `fn Named::greet(&self) -> char[];`.
 
-Interfaces may be used only as parameter types. Calls are compiled for each
-concrete argument type, with no run-time interface object or dispatch.
+Interfaces may be used only as parameter types. Calls are compiled for each concrete argument type, with no run-time interface object or dispatch.
 
 #### Generic interfaces
 
@@ -2672,8 +2601,7 @@ A claim type argument can be an interface. For example, `struct List<T>: Add<Lis
 
 #### Extending types
 
-`@extend` adds methods and interface claims to an existing type. Methods in
-the block use that type as their receiver:
+`@extend` adds methods and interface claims to an existing type. Methods in the block use that type as their receiver:
 
 ```
 @extend Number: Formattable {
@@ -2681,8 +2609,7 @@ the block use that type as their receiver:
 }
 ```
 
-An interface claim may be written separately when its methods are defined
-elsewhere:
+An interface claim may be written separately when its methods are defined elsewhere:
 
 ```
 @extend Number: Formattable;
@@ -2690,13 +2617,9 @@ elsewhere:
 fn Number::format(const &self) -> String { ... }
 ```
 
-Extensions work with structs, enums, primitives, aliases, and generic type
-families. A concrete receiver extends only that type; a receiver containing a
-placeholder, such as `T[]`, extends every matching type.
+Extensions work with structs, enums, primitives, aliases, and generic type families. A concrete receiver extends only that type; a receiver containing a placeholder, such as `T[]`, extends every matching type.
 
-`@where<T: Bound>` restricts a generic function, method, or extension to types
-that satisfy `Bound`. Braces apply the same bound to a group, and nested
-`@where` bounds combine:
+`@where<T: Bound>` restricts a generic function, method, or extension to types that satisfy `Bound`. Braces apply the same bound to a group, and nested `@where` bounds combine:
 
 ```
 @where<T: Scalar> {
@@ -2705,13 +2628,11 @@ that satisfy `Bound`. Braces apply the same bound to a group, and nested
 }
 ```
 
-Extending a primitive makes the claimed interface methods available but does
-not change the primitive's built-in operators.
+Extending a primitive makes the claimed interface methods available but does not change the primitive's built-in operators.
 
 #### The iteration interfaces
 
-`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are built-in and available
-without an import:
+`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are built-in and available without an import:
 
 ```
 interface Iterator<T> {
@@ -2730,22 +2651,13 @@ interface Iterable<T> {
 }
 ```
 
-`Iterator<T>` returns mutable element references, while `ConstIterator<T>`
-returns read-only references. `Iterable<T>` provides both forms. A `foreach`
-uses `iterator()` for a mutable value and `const_iterator()` for a `const`
-value.
+`Iterator<T>` returns mutable element references, while `ConstIterator<T>` returns read-only references. `Iterable<T>` provides both forms. A `foreach` uses `iterator()` for a mutable value and `const_iterator()` for a `const` value.
 
-[Arrays](#arrays) implement `Iterable<T>` automatically, so they work with
-`foreach` and may be passed anywhere an `Iterable<T>` is expected. Iterator
-references point to the original elements, allowing mutable iteration to
-update the collection.
+[Arrays](#arrays) implement `Iterable<T>` automatically, so they work with `foreach` and may be passed anywhere an `Iterable<T>` is expected. Iterator references point to the original elements, allowing mutable iteration to update the collection.
 
 ### Error handling
 
-Sie uses the built-in `Result<V, E>` when an operation returns either a value
-or an error. `Result<E>` represents success without a value. Create results
-with `Ok` and `Error`; their types are usually inferred from the surrounding
-return type or annotation.
+Sie uses the built-in `Result<V, E>` when an operation returns either a value or an error. `Result<E>` represents success without a value. Create results with `Ok` and `Error`; their types are usually inferred from the surrounding return type or annotation.
 
 A result is true on success and false when it holds an error:
 
@@ -2767,8 +2679,7 @@ if (result) {
 
 #### Checking the tag
 
-Only one result member is valid at a time. The compiler allows `value` only
-after a successful result check and `error` only after a failed one:
+Only one result member is valid at a time. The compiler allows `value` only after a successful result check and `error` only after a failed one:
 
 ```
 if (res.ok) {
@@ -2778,14 +2689,11 @@ if (res.ok) {
 }
 ```
 
-The check also remains known after a branch that returns, breaks, or otherwise
-leaves. Assigning to the result or exposing its address invalidates what was
-known, so it must be checked again.
+The check also remains known after a branch that returns, breaks, or otherwise leaves. Assigning to the result or exposing its address invalidates what was known, so it must be checked again.
 
 #### Unwrapping with try
 
-`try <result> except (<name>) { ... }` unwraps a successful result. On failure,
-the `except` block runs with the error bound to `name`:
+`try <result> except (<name>) { ... }` unwraps a successful result. On failure, the `except` block runs with the error bound to `name`:
 
 ```
 let value = try divide(10, 2) except (error) { return 1; }
@@ -2795,14 +2703,11 @@ let value = try divide(10, 2) except (error) {
 }
 ```
 
-For `Result<V, E>`, the block must leave the current control flow or use
-`emit` to provide a replacement value. A `Result<E>` has no value to replace,
-so its block may finish normally.
+For `Result<V, E>`, the block must leave the current control flow or use `emit` to provide a replacement value. A `Result<E>` has no value to replace, so its block may finish normally.
 
 #### The fallback shorthand
 
-`try <result> ?? <fallback>` unwraps the result or uses the fallback on error.
-The fallback is evaluated only when needed:
+`try <result> ?? <fallback>` unwraps the result or uses the fallback on error. The fallback is evaluated only when needed:
 
 ```
 let value = try divide(10, 2) ?? 0;
@@ -2819,8 +2724,7 @@ For `Result<E>`, the fallback runs only for its side effects.
 
 #### Error propagation
 
-A bare `try` unwraps a successful result or immediately returns its error to
-the caller:
+A bare `try` unwraps a successful result or immediately returns its error to the caller:
 
 ```
 fn read_config(path: char*) -> Result<Config, IOError> {
@@ -2831,8 +2735,7 @@ fn read_config(path: char*) -> Result<Config, IOError> {
 }
 ```
 
-The enclosing function must return a `Result` with the same error type. A
-bare `try` used as a statement ends with `;`.
+The enclosing function must return a `Result` with the same error type. A bare `try` used as a statement ends with `;`.
 
 ## Copyright
 
