@@ -1,6 +1,6 @@
 # sielang
 
-Sie is a modern C-flavored language with minimal syntax, a strong type system and type inference. The main goal of this project is to simplify the coding experience for system programming by implementing modern features like defer statements and error handling via tagged unions, plus features from higher-level languages like generics, typed variadics, Any and foreach loops; all while still providing full low-level control of the hardware.
+Sie is a C-flavored language for systems programming. It has minimal syntax, a strong type system, and type inference. It provides low-level hardware control together with defer statements, tagged unions, generics, typed variadics, `Any`, and `foreach` loops.
 
 ## Hello world
 
@@ -21,7 +21,7 @@ Programs are compiled through `siec`, which takes one or more source files and l
 siec main.sie -o main
 ```
 
-Precompiled object files and static libraries may be given alongside the sources; they skip compilation and link into the executable (and `--run` resolves their symbols too, unpacking an archive's members into the JIT):
+Precompiled object files and static libraries can be given with the sources. They skip compilation and link into the executable. With `--run`, their symbols are resolved in the just-in-time (JIT) compiler. The JIT compiler also unpacks members from static libraries.
 
 ```
 siec main.sie file1.o file2.o -o main
@@ -29,13 +29,13 @@ siec main.sie libfoo.a -o main
 ```
 
 - `-o <path>` names the output executable, `a.out` by default.
-- `-c` compiles to an object file without linking, named after the source (`main.sie` → `main.o`) unless `-o` says otherwise. The object defines the named sources and their includes; an imported module joins as declarations only, its definitions coming from its own `-c` object at link. See [Imports](#imports).
+- `-c` compiles to an object file without linking. The object file uses the source name (`main.sie` → `main.o`) unless `-o` specifies a different name. The object defines the named sources and their includes. An imported module supplies declarations only. Its definitions come from its own `-c` object during linking. See [Imports](#imports).
 - `-I <dir>` adds a directory to the include search path. The `lib/` directory next to each source file is always searched.
 - `-O <n>` sets the optimization level, cc-style: `-O0` (the default) emits code as generated, and `-O1` through `-O3` run LLVM's standard optimization pipeline. It applies to every output form, including executables, objects, `--emit-llvm`, `--emit-asm`, and `--run`.
-- `-g` emits DWARF debug info, cc-style: every instruction maps to its source line, and every function, parameter, and variable is described with its type. A `-g` build debugs at source level in lldb or gdb: breakpoints by file and line, stepping, `bt` with Sie lines, and `frame variable` showing struct fields, arrays as their `{data, length}` pair, and unions. Debug at `-O0`, where nothing is reordered; on macOS, keep the `.o` the build leaves next to the executable, since the debugger reads the DWARF from it.
+- `-g` emits DWARF debugging information. Each instruction maps to its source line. Each function, parameter, and variable includes its type. This permits source-level debugging in LLDB or GDB. The debugger supports file and line breakpoints, stepping, Sie lines in `bt`, and values in `frame variable`. Use `-O0` for debugging so that instructions keep their source order. On macOS, keep the `.o` file next to the executable because the debugger reads DWARF information from it.
 - `-l <lib>` links against a library, passed through to the linker: `-l m` links the C math library. Under `--run`, the library is loaded into the isolated JIT worker instead, its symbols resolvable the same way.
 - `-L <dir>` adds a directory to the library search path.
-- `--target <triple>` compiles for a target triple instead of the host (`x86_64-unknown-linux-gnu`, say). It aims everything at the target: the object code, the [target constants](#target-constants), and every `@sizeof`. Cross-built objects are best taken out with `-c`, since linking still runs the host's `cc`; `--run` only accepts the host's own triple, as its isolated JIT worker executes native code for the current machine.
+- `--target <triple>` compiles for a target triple instead of the host, for example `x86_64-unknown-linux-gnu`. The target applies to object code, [target constants](#target-constants), and every `@sizeof`. Use `-c` to produce cross-compiled objects because linking still uses the host `cc`. The `--run` option accepts only the host triple because the isolated JIT worker executes native code.
 - `--emit-llvm` prints the LLVM IR and exits, without building.
 - `--emit-asm` prints the target's assembly and exits, without building.
 - `--run` JIT-compiles and runs the program in place of building it, exiting with the program's own exit code. Anything after the flag is passed along as its arguments:
@@ -54,11 +54,11 @@ Compilation is declaration-order independent: moving a type or extension before 
 3. **Resolve.** Resolve aliases, fields, signatures, generic arguments, and bounds against that inventory.
 4. **Check.** Check bodies, conformance, and assertions once resolution is done.
 
-So an extension declared later, or imported from another module, still applies where its bound holds. Generic instances follow the same order on a worklist until nothing new remains; LLVM emission starts only after that fixed point, and cannot invent further instances while lowering.
+An extension applies where its bound holds, even if it is declared later or imported from another module. Generic instances use the same phase order. The compiler processes them until the worklist is empty. LLVM emission starts after this point and does not create more instances.
 
 ### Editor support
 
-`sie-lsp` is a language server on the compiler's front end. It recompiles open buffers as they change and serves diagnostics, outline, completion, signature help, hover, and go-to-definition from what the compiler knows. Inside a function, method, or macro call, signature help lists its parameters and follows the active one as commas are entered.
+`sie-lsp` is a Language Server Protocol (LSP) server on the compiler front end. It recompiles open buffers when they change. It provides diagnostics, an outline, completion, signature help, hover information, and go-to-definition. In a function, method, or macro call, signature help lists the parameters and identifies the active parameter.
 
 ```
 pip install -e '.[lsp]'
@@ -68,9 +68,9 @@ pip install -e '.[lsp]'
 
 ## The package manager
 
-`sie` is the project-level tool. Where `siec` compiles a list of sources, `sie` works from a package: a directory holding a `package.toml` manifest that names it and says what it is made of.
+`sie` is the project-level tool. Where `siec` compiles a list of sources, `sie` works from a package. A package is a directory that contains a `package.toml` manifest. The manifest defines the package name and contents.
 
-`[package]` says who a package is, and one of `[app]` or `[library]` says what it is. A **library** is installed, for other packages to build against:
+`[package]` identifies the package. One of `[app]` or `[library]` defines the package type. A **library** is installed so that other packages can use it:
 
 ```
 [package]
@@ -98,9 +98,9 @@ sources = ["src/"]
 core = "*"
 ```
 
-The two are exclusive, and one of them is required: a library has no entry point to build, an app is the end of the line and nothing builds against it, and a manifest declaring both says nothing about which it is. `sources` and `libs` belong to whichever it is, since they describe what the package is made of rather than who it is.
+The two package types are mutually exclusive, and one is required. A library has no entry point to build. An app produces the final executable and cannot be a dependency. A manifest that declares both types is invalid. The `sources` and `libs` fields belong to the selected package type because they define its contents.
 
-With no command `sie` takes the package to act on as its argument, a directory holding a manifest, defaulting to the working directory, and prints what that manifest says:
+With no command, `sie` takes a package directory as its argument and prints the manifest information. The package directory defaults to the working directory:
 
 ```
 sie                 # the package here
@@ -148,7 +148,7 @@ openssl@1.0.0    Bindings for OpenSSL
 zlib@1.0.0       Bindings for zlib
 ```
 
-Packages are ordered by name and then by version, versions comparing as numbers so `9.0.0` comes before `10.0.0`. The directory name is the identity, so a package whose manifest has gone missing is still listed, without a description: it is installed, and that is how anyone finds out. Nothing installed is not a failure, and the listing stays empty while the note goes to standard error.
+Packages are ordered by name and then by version. Version components are compared as numbers, so `9.0.0` comes before `10.0.0`. The directory name identifies the package. A package with no manifest is still listed but has no description. An empty install root is not an error. In this case, the list is empty and a note is written to standard error.
 
 ### Building
 
@@ -177,7 +177,7 @@ running helloworld
 
 An app needs a `name` for the binary, but no `version`. Pointing `build` at a `[library]` is an error: it is installed, not built.
 
-`[dependencies]` names packages and which versions will do (`*`, `~1`, `^1.2.3`, comparisons, or a bare version). They resolve from the install root, newest first when several fit, and their sources and `libs` join the build. Library search directories come from `LIBRARY_PATH`, as for any C build. `-O` and `-g` pass through to the compiler.
+`[dependencies]` names packages and the accepted versions (`*`, `~1`, `^1.2.3`, comparisons, or a bare version). Dependencies resolve from the install root. When multiple versions match, the newest version is selected. Their sources and `libs` are included in the build. Library search directories come from `LIBRARY_PATH`, as in a C build. The `-O` and `-g` options pass through to the compiler.
 
 ## The language
 
@@ -239,7 +239,7 @@ a = move b;  // consumes b; using b afterward is an error
 a = make();  // consumes the unnamed temporary
 ```
 
-`move` takes an owned local as a whole. After a move, the variable cannot be read until it is reassigned. Three builtin interfaces customize the store:
+`move` takes an owned local as a whole. After a move, the variable cannot be read until it is reassigned. Three built-in interfaces customize the store:
 
 ```
 interface Clone {
@@ -259,7 +259,7 @@ interface Assign<T> {
 
 #### Destruction and RAII
 
-Types that claim the builtin `Destroy` interface get deterministic cleanup:
+Sie uses resource acquisition is initialization (RAII) for deterministic cleanup. Types enable this behavior when they claim the built-in `Destroy` interface:
 
 ```
 interface Destroy {
@@ -276,11 +276,11 @@ let second = Resource();
 // second.destroy(), log(), first.destroy()
 ```
 
-Moving, returning, or passing the value by ownership transfers that cleanup. `destroy` is responsible for the whole value, including owned fields; the compiler does not destroy fields for you. `drop place;` and `value.destroy()` do the same for a mutable place and disarm automatic cleanup.
+Moving, returning, or passing the value by ownership transfers that cleanup. `destroy` is responsible for the whole value, including owned fields. The compiler does not destroy the fields separately. `drop place;` and `value.destroy()` destroy a mutable place and disable its automatic cleanup.
 
 #### Raw storage slots
 
-`Slot<T>` has `T`'s size and alignment but no automatic lifetime: you mark each transition yourself. It does not implement `Destroy`.
+`Slot<T>` has the size and alignment of `T`, but it has no automatic lifetime. The caller must mark each state transition. `Slot<T>` does not implement `Destroy`.
 
 ```
 let slot: Slot<Resource>;
@@ -310,14 +310,14 @@ Automatic destruction follows structured control flow only. Process exit, signal
 
 ### Constants
 
-Constants are compile-time constant expressions declared through `@const`. Unlike a `let` variable, a constant has no storage of its own: it's substituted with its value at compile time, similar to a type-safe version of C's `#define`. They must be initialized and cannot be reassigned. The type annotation is optional, inferred from the value when omitted:
+Constants are compile-time expressions declared through `@const`. Unlike a `let` variable, a constant has no storage. The compiler substitutes its value at compile time, similar to a type-safe C `#define`. Constants must be initialized and cannot be reassigned. The type annotation is optional. When it is omitted, the compiler infers the type from the value:
 
 ```
 @const name: T = <value>;
 @const name = <value>; // type inferred
 ```
 
-Each module keeps its own constants: two modules may both declare a `SEEK_SET`, like stdio and unistd do. A use resolves to the nearest declaration its file's view reaches: the file's own (or an include's) first, then a member import's, then the compilation unit's. Two equally near declarations are ambiguous and rejected; the qualified spelling names one module's.
+Each module keeps its own constants. For example, the stdio and unistd modules can both declare `SEEK_SET`. A use resolves to the nearest visible declaration. The compiler searches the file and its includes first, then member imports, and then the compilation unit. Two declarations at the same distance are ambiguous. A qualified name selects a declaration from one module.
 
 #### Target constants
 
@@ -332,7 +332,7 @@ The compiler defines constants for the compilation target, taken from the target
 | `OS_UNKNOWN` |                | `ENV_ELF`     |
 |              |                | `ENV_UNKNOWN` |
 
-`OS_NONE` marks bare-metal targets (a triple like `riscv64-unknown-none-elf`). `TARGET_ENV` is the optional fourth field of the triple (`gnu`, `musl`, `msvc`, `android`, `elf`, …); triples without one leave it `ENV_UNKNOWN`. The unknowns catch anything else the compiler doesn't classify.
+`OS_NONE` marks bare-metal targets, such as `riscv64-unknown-none-elf`. `TARGET_ENV` is the optional fourth field of the triple. Known values include `gnu`, `musl`, `msvc`, `android`, and `elf`. A triple without this field uses `ENV_UNKNOWN`. The unknown constants identify values that the compiler does not classify.
 
 ```
 case (TARGET_OS) {
@@ -394,9 +394,9 @@ The expansion is type-checked. Names in the body resolve where the macro was wri
 
 The condition is a constant expression: literals, `@const` names, enum members, `@sizeof`, arithmetic, comparisons, and `and`/`or`/`not`. The unchosen branch is skipped entirely, never parsed into the program, so its declarations may collide with the chosen one's:
 
-Constant integer arithmetic follows runtime signed division and remainder:
+Constant integer arithmetic follows run-time signed division and remainder:
 division truncates toward zero, and a remainder has the dividend's sign.
-`and` and `or` short-circuit here exactly as they do at runtime. Division by
+`and` and `or` short-circuit here exactly as they do at run time. Division by
 zero, negative or out-of-range shifts, and results wider than every Sie integer
 type are compile-time errors rather than Python or backend failures.
 
@@ -420,11 +420,11 @@ type are compile-time errors rather than Python or backend failures.
 }
 ```
 
-A branch may hold any top-level declaration (functions, structs, enums, globals, constants, type aliases) including further `@if` blocks, and a constant declared in a chosen branch is visible to the conditions after it.
+A branch can contain any top-level declaration. This includes functions, structs, enums, globals, constants, type aliases, and nested `@if` blocks. A constant in a selected branch is visible to subsequent conditions.
 
-Conditions that need no type meaning are selected before declarations are collected. A condition using an enum member, `@sizeof`, or `@typeid` waits until the active type inventory is resolved, so it may inspect a declaration written later. Once such a branch is chosen, its declarations are registered before its nested conditions run. A condition cannot depend on a declaration whose own existence it decides; that dependency has no inventory in which to resolve.
+Conditions that do not require type information are selected before declarations are collected. A condition that uses an enum member, `@sizeof`, or `@typeid` is evaluated after the active types are resolved. It can therefore inspect a declaration written later. When a branch is selected, its declarations are registered before its nested conditions are evaluated. A condition cannot depend on a declaration whose existence the condition controls.
 
-An `@include` may also sit in a branch: only the chosen arm's files load, and an unchosen arm's include is never resolved, so its file need not exist on this platform, C-header-style:
+An `@include` can also occur in a branch. The loader loads files only from the selected arm. It does not resolve an include in an unselected arm. Therefore, the file does not have to exist on the current platform:
 
 ```
 @if (TARGET_OS == OS_DARWIN) {
@@ -434,11 +434,11 @@ An `@include` may also sit in a branch: only the chosen arm's files load, and an
 }
 ```
 
-Because includes decide what the program _is_, a condition guarding one evaluates while files are still loading, before the program assembles. Such a condition is held to what exists at that point: literals, operators, the target constants, and `@const` values already loaded (the file's own, its includes', and earlier chosen arms'). Enum members and `@sizeof` need the assembled program and cannot appear there; an `@if` with no include in reach keeps the [full constant language](#conditional-compilation). An `import` stays unconditional either way: to vary by platform, import one module that hides the choice behind a conditional include.
+An include determines which files form the program. A condition that controls an include is therefore evaluated while files are loading. At that point, the condition can use literals, operators, target constants, and loaded `@const` values. Loaded constants can come from the current file, its includes, or previously selected branches. Enum members and `@sizeof` require the assembled program and cannot be used in this condition. An `@if` that does not control an include can use the [full constant language](#conditional-compilation). Imports are unconditional. For platform-specific imports, import a module that selects an include conditionally.
 
 #### Error
 
-`@error("message")` stops the compilation with the message it carries. Since an unchosen branch is never resolved, one inside an `@if` is reached only when that branch is the chosen one, which is how a set of platform arms refuses everything it has no binding for:
+`@error("message")` stops compilation and reports its message. The compiler does not resolve an unselected branch. Therefore, an `@error` in an `@if` takes effect only when the compiler selects that branch. Use this behavior to reject a platform that has no binding:
 
 ```
 @if (TARGET_OS == OS_DARWIN) {
@@ -450,11 +450,11 @@ Because includes decide what the program _is_, a condition guarding one evaluate
 }
 ```
 
-The message is reported like any compile error, naming the file and line it sits on. Outside an `@if` there is nothing to gate it, so the file simply cannot build; an `@error` in an imported module blames that module, not its importer. A trailing `;` is fine, statement-style.
+The compiler reports the message with its file and line. Outside an `@if`, `@error` always prevents the file from building. An `@error` in an imported module identifies that module, not its importer. A trailing `;` is permitted.
 
 #### Static assert
 
-`@static_assert(cond, "message")` requires a compile-time condition to hold, C's `static_assert`: nothing happens when it does, and the message stops the compilation when it doesn't, reported as `static assertion failed: <message>`.
+`@static_assert(cond, "message")` requires a compile-time condition to be true. It is equivalent to C's `static_assert`. A true condition has no effect. A false condition stops compilation and reports `static assertion failed: <message>`.
 
 ```
 struct Header { a: u64; b: u64; }
@@ -462,7 +462,7 @@ struct Header { a: u64; b: u64; }
 @static_assert(@sizeof(Header) == 16, "Header must stay two words");
 ```
 
-Unlike an `@if`, an assert declares nothing, so it is checked once the whole program is registered rather than while the conditions are still choosing what to compile. Its condition can therefore weigh what those declarations turned out to be: a struct's `@sizeof`, an enum's members, and constants, whatever order they were written in. An assert inside an `@if` still follows its branch, checked only when that branch is the chosen one.
+Unlike an `@if`, an assert does not declare an item. The compiler checks it after the whole program is registered. Its condition can inspect a struct's `@sizeof`, enum members, and constants in any declaration order. An assert inside an `@if` is checked only when the compiler selects that branch.
 
 ### Arithmetic
 
@@ -532,7 +532,7 @@ let c: bool = not a;       // c holds the value false
 
 ### Compound assignment
 
-Arithmetic and bitwise operators can be combined with `=` into a compound assignment, updating a variable in place with the result of applying the operator to its current value:
+An arithmetic or bitwise operator can combine with `=` to form a compound assignment. The compound assignment updates the variable in place:
 
 - Arithmetic: `+=`, `-=`, `*=`, `/=`, `%=`, `**=`
 - Bitwise: `<<=`, `>>=`, `&=`, `|=`, `^=`
@@ -546,9 +546,9 @@ a += 5; // a holds the value 15, equivalent to a = a + 5
 
 Values other than `bool` can still be used wherever a truthy value is expected:
 
-- Numbers and `char`s are truthy when they're `!= 0`.
-- Booleans are truthy when they're `true`.
-- Pointers are truthy when they're non-null.
+- Numbers and `char`s are truthy when they are `!= 0`.
+- Booleans are truthy when they are `true`.
+- Pointers are truthy when they are non-null.
 - Arrays are truthy when their length is `> 0`.
 
 These built-in rules implement the `Truthy` interface directly in the compiler. A struct can implement the same interface through a read-only `truthy` method:
@@ -624,7 +624,7 @@ case (op) {
 }
 ```
 
-The subject is evaluated once. `when` values are ordinary expressions, compared with the subject by equality in order, and each arm's statements run in a scope of their own, up to the next `when`, `else`, or the closing brace.
+The subject is evaluated once. The compiler compares each `when` expression with the subject in declaration order. Statements in each arm run in a separate scope. The scope ends at the next `when`, `else`, or closing brace.
 
 A `when` may list several comma-separated values; any of them selects the arm:
 
@@ -683,7 +683,7 @@ Anything `Iterable<T>` works ([arrays included](#the-iteration-interfaces)). `br
 
 #### Enumerate
 
-The builtin `enumerate(x)` wraps an Iterable (or an iterator) in an iterator of `{index: u64, value: T}` pairs, counting from zero:
+The built-in `enumerate(x)` wraps an Iterable (or an iterator) in an iterator of `{index: u64, value: T}` pairs, counting from zero:
 
 ```
 foreach (e : enumerate(nums)) {
@@ -691,7 +691,7 @@ foreach (e : enumerate(nums)) {
 }
 ```
 
-`value` is a copy of the element, not a reference into the collection. A mutable iterator produces `Enumerated<T>` pairs through `EnumerateIterator<I, T>`; a const iterator produces `ConstEnumerated<T>` pairs through `ConstEnumerateIterator<I, T>`, whose `value` remains `const T`. A declared function named `enumerate` takes precedence over the builtin.
+`value` is a copy of the element, not a reference into the collection. A mutable iterator produces `Enumerated<T>` pairs through `EnumerateIterator<I, T>`; a const iterator produces `ConstEnumerated<T>` pairs through `ConstEnumerateIterator<I, T>`, whose `value` remains `const T`. A declared function named `enumerate` takes precedence over the built-in function.
 
 #### Break and continue
 
@@ -766,7 +766,7 @@ defer {
 }
 ```
 
-This is commonly used to release a resource right next to where it's acquired:
+Use this form to place resource release code next to the acquisition code:
 
 ```
 fn f() -> i32 {
@@ -809,7 +809,7 @@ defer {
 }
 ```
 
-For the same reason, a deferred statement cannot `return`, `emit`, `break`, or `continue` its surroundings; each would cut through the flush that's already underway.
+For the same reason, a deferred statement cannot use `return`, `emit`, `break`, or `continue` to leave its surrounding scope. Each operation would interrupt the active defer sequence.
 
 ### Functions
 
@@ -954,19 +954,19 @@ An untyped integer literal counts as its first fitting signed type: `i32`,
 
 ```
 dec.add(5);            // an i32, widened into the i64 overload
-dec.add(5000000000);   // doesn't fit an i32: exactly the i64 overload
+dec.add(5000000000);   // does not fit an i32: exactly the i64 overload
 dec.add(other);        // a Decimal: exactly 'const &Decimal'
 ```
 
 Signed and unsigned never mix: a `u8` argument widens into a `u64` candidate, never an `i64` one. A reference parameter (`&T`) needs its exact type, since it aliases the argument in place.
 
-The return type is not part of the signature, so two overloads differing only there conflict. `@extern`, `@symbol`, and `main` functions cannot overload: each names one fixed symbol. A bare reference to an overloaded name (`let g = f;`) is an error, since without arguments there is nothing to pick by.
+The return type is not part of the signature, so two overloads that differ only by return type conflict. `@extern`, `@symbol`, and `main` functions cannot overload because each maps to one symbol. A bare reference to an overloaded name, such as `let g = f;`, is an error because no arguments are available to select an overload.
 
 A function's module symbol carries its parameter types: `pick(i64)`, `List<char>::init(&List<char>,u64)`. Separately compiled units therefore name every signature alike, whatever their declaration order; only `@extern`, `@symbol`, and `main` keep their unmangled C symbols.
 
 #### Overrides
 
-`@override` deliberately replaces one matching function or method implementation. The target must already exist in the compilation unit with the same parameter and return types; without the decorator, defining that same function twice remains an error. Collection happens before override selection, so the declarations may appear in either order:
+`@override` replaces one matching function or method implementation. The target must exist in the compilation unit with the same parameter and return types. Without the decorator, two definitions of the same function cause an error. Collection occurs before override selection, so the declarations can occur in either order:
 
 ```
 fn answer() -> i32 { return 1; }
@@ -1005,7 +1005,7 @@ let sum = dec + other;   // dec.add(other)
 let scaled = dec * 10;   // dec.mul(10): the i64 overload
 ```
 
-Compound assignment has methods of its own, `add_assign` through `rem_assign`, taking the value and returning nothing: `a += b` is `a.add_assign(b)`, which updates `a` where it stands. This matters when the binary operator builds a new value: `add` returning a fresh `Decimal` would leave `a += b` assigning that result back over `a`, dropping whatever `a` held. The in-place method spends no copy and leaves nothing behind.
+Compound assignment uses the methods `add_assign` through `rem_assign`. Each method takes the value and returns nothing. For example, `a += b` calls `a.add_assign(b)` and updates `a` in place. This behavior is important when the binary operator creates a new value. If `add` returns a new `Decimal`, the fallback operation assigns that result to `a` and drops the previous value. An in-place method avoids this temporary value.
 
 ```
 dec += 1;                // dec.add_assign(1): dec updates in place
@@ -1021,7 +1021,7 @@ if (dec != 1) { ... }       // not dec.eq(1): the i64 overload
 if (dec < other) { ... }    // dec.cmp(other) < 0
 ```
 
-The prelude declares an interface per operator: `Add<S, T>` requires `add(&self, value: T) -> S`, and `Sub`, `Mul`, `Div`, and `Rem` follow the same shape; `AddAssign<T>` requires `add_assign(&self, value: T)`, with `SubAssign`, `MulAssign`, `DivAssign`, and `RemAssign` alongside; `Eq<T>` requires `eq(&self, value: T) -> bool`, and `Ord<T>` requires `cmp(&self, value: T) -> i32`. Claiming one declares and enforces the contract, one claim per supported right-hand type:
+The prelude declares one interface for each operator. `Add<S, T>` requires `add(&self, value: T) -> S`. The `Sub`, `Mul`, `Div`, and `Rem` interfaces use the same form. `AddAssign<T>` requires `add_assign(&self, value: T)`. The `SubAssign`, `MulAssign`, `DivAssign`, and `RemAssign` interfaces use the same form. `Eq<T>` requires `eq(&self, value: T) -> bool`. `Ord<T>` requires `cmp(&self, value: T) -> i32`. A claim declares and enforces the contract for one supported right-hand type:
 
 ```
 struct Decimal : Add<Decimal, Decimal>, Add<Decimal, i64>, AddAssign<i64>,
@@ -1036,7 +1036,7 @@ Numeric primitives implement these interfaces intrinsically so `1.add(2)` is equ
 
 #### Indexed operators
 
-Indexing has the same shorthand for structs. `a[key]` is `a.get_item(key)`, while `a[key] = value` is `a.set_item(key, value)`. The key and value types come from the selected overload, and a compound assignment reads, applies the binary operator, then writes the result back: `a[key] += value` is `a.set_item(key, a.get_item(key) + value)`.
+Indexing has the same shorthand for structs. `a[key]` is `a.get_item(key)`, while `a[key] = value` is `a.set_item(key, value)`. The selected overload supplies the key and value types. A compound assignment reads the value, applies the binary operator, and writes the result. Thus, `a[key] += value` is `a.set_item(key, a.get_item(key) + value)`.
 
 ```
 struct Table : GetItem<u64, i32>, SetItem<u64, i32> {
@@ -1057,7 +1057,7 @@ table[1] = 40;         // table.set_item(1, 40)
 table[2] += 12;        // get_item, '+', then set_item
 ```
 
-The prelude's `GetItem<K, V>` requires `get_item(const &self, key: K) -> V`; `SetItem<K, V>` requires `set_item(&self, key: K, value: V)`. A type may claim only the read capability, or both when it also writes. As with the other operator interfaces, the shorthand is structural, while a claim enforces the method's signature and lets the capability bound an interface parameter.
+The prelude interface `GetItem<K, V>` requires `get_item(const &self, key: K) -> V`. The `SetItem<K, V>` interface requires `set_item(&self, key: K, value: V)`. A type can claim only the read capability. It can claim both interfaces if it also writes. The shorthand is structural, as with the other operator interfaces. A claim enforces the method signature and permits the capability to bound an interface parameter.
 
 Native arrays, raw arrays, pointers, and tuples keep their built-in storage indexing: their `[]` never routes through these methods.
 
@@ -1083,7 +1083,7 @@ fn f<T, U>(t: T) -> U; // a generic function that receives a parameter of type T
                        // that can be replaced by any concrete types at compile time
 ```
 
-A type parameter is lexical: inside its function, method, receiver family, struct, interface, or alias, it wins over a same-named type or interface declared outside the template. The rule follows the placeholder through derived and nested forms such as `T[]`, `Box<T>`, and `fn(T) -> T`; outside the template, the global declaration keeps its ordinary meaning.
+A type parameter has lexical scope. Inside its template, it has precedence over an external type or interface with the same name. A template can be a function, method, receiver family, struct, interface, or alias. The rule applies to derived and nested forms such as `T[]`, `Box<T>`, and `fn(T) -> T`. Outside the template, the global declaration keeps its normal meaning.
 
 A parameter may carry a bound after `:`. An interface bound accepts any type that implements it; any other type-like bound (an intrinsic, alias, or struct) accepts that canonical type exactly. Bounds may refer to the other parameters, and apply whether the call infers its arguments or spells them:
 
@@ -1098,13 +1098,13 @@ fn ordered<T: Hashable & Comparable<T>>(value: T) -> T;
 
 An alias in a bound means its target, so `@type Word = u64; fn word<T: Word>(...)` has the same bound as the third declaration. A concrete interface claim can also fill parameters named only inside the bound: an argument implementing `Iterable<char>` binds `T` to `char` in `U: Iterable<T>`.
 
-`Scalar` is a sealed builtin interface for the primitive value types: the signed and unsigned integers, `f32`, `f64`, `bool`, and `char`. It is useful when an implementation needs the builtin scalar representation while accepting every width. Structs, enums, pointers, and arrays do not satisfy it, and user declarations cannot claim it.
+`Scalar` is a sealed built-in interface for the primitive value types: the signed and unsigned integers, `f32`, `f64`, `bool`, and `char`. It is useful when an implementation needs the built-in scalar representation while accepting every width. Structs, enums, pointers, and arrays do not satisfy it, and user declarations cannot claim it.
 
 `Integer` is the same kind of sealed marker for every integer primitive (`i8`…`i128` and `u8`…`u128`). `SignedInteger` and `UnsignedInteger` narrow that further to one signedness each. Like `Scalar`, only the compiler's primitives satisfy them, and user declarations cannot claim them.
 
-A call instantiates the function for its concrete types, compiled once per argument list. The type arguments are inferred from the value arguments (`identity(n)` on an `i32` compiles `identity<i32>`) by matching each parameter's shape against its argument (`items: T*` against an `i32*` binds `T` to `i32`), with literals defaulting like they do in any untyped context.
+A call instantiates the function for its concrete types. The compiler creates one instance for each argument list. It infers type arguments by matching each parameter form against its value argument. For example, `identity(n)` for an `i32` compiles `identity<i32>`. A parameter `items: T*` with an `i32*` argument binds `T` to `i32`. Literals use their default type when no context supplies a type.
 
-In a typed context (a declared return type, an annotated `let`, an argument's parameter) the expected type also drives inference, binding what the arguments cannot: `return Ok(v);` names both of `Result<V, E>`'s parameters from the return type. Where the expected type and an argument both speak, the expected type wins and the argument coerces to it. When nothing pins a parameter down (`fn empty<T>() -> T*` called bare), spell the arguments explicitly:
+A typed context also supplies information for inference. A typed context can be a declared return type, an annotated `let`, or a function parameter. For example, the return type supplies both parameters of `Result<V, E>` in `return Ok(v);`. If the expected type and an argument supply different types, the expected type has precedence. The compiler converts the argument to that type. Specify the type arguments when no context determines a parameter, as in a call to `fn empty<T>() -> T*`:
 
 ```
 let p = empty<i32>();
@@ -1115,7 +1115,7 @@ Same-named generic functions with different type-parameter counts coexist, like 
 
 Generic functions may recurse and call one another, and their return types may name generic structs (`fn make<T>(t: T) -> Box<T>`). The same modifier rule as [generic structs](#generic-structs) applies to type arguments, and a template nobody calls compiles to nothing. `@extern` functions cannot be generic: they name one foreign symbol.
 
-A generic function also works as a [function reference](#function-references): `identity<i32>` outside a call is the instance's function value, and a bare generic name bound to a function-typed context (a `fn(...)` annotation, parameter, or [generic alias](#generic-type-aliases) of one) picks its arguments by unifying the template's signature with the target:
+A generic function can also be a [function reference](#function-references). Outside a call, `identity<i32>` is the function value of that instance. A function-typed context can also resolve a bare generic name. Such a context includes a `fn(...)` annotation, a parameter, or a [generic alias](#generic-type-aliases). The compiler unifies the template signature with the target type:
 
 ```
 let g = identity<i32>;             // explicit instance
@@ -1127,7 +1127,7 @@ Qualified spellings work the same way: `util.identity<i32>` and a bare `util.ide
 
 #### Variadic functions
 
-A last parameter spelled `name...` is sugar for `name: const Any[]`: each extra call argument wraps as an [Any](#any) and packs into a borrowed array view, an empty one when none are given. The callee can inspect and forward that pack but cannot mutate it.
+A final parameter written as `name...` is shorthand for `name: const Any[]`. Each extra call argument is wrapped as an [Any](#any). The compiler packs the values into a borrowed array view. If there are no values, it creates an empty view. The called function can inspect and forward the array but cannot modify it.
 
 ```
 fn println(str: const char[], args...) {
@@ -1138,11 +1138,11 @@ println("hello world");        // args.length = 0
 println("hello {}", "world");  // args.length = 1
 ```
 
-The body dispatches on each element with [`@typeof`](#any), and passing an `Any[]` or `const Any[]` itself forwards it as-is instead of re-packing, so variadics delegate to one another. Methods take the sugar too. `@extern` functions keep C's bare `...`, which passes arguments the C way instead.
+The body dispatches on each element with [`@typeof`](#any). Passing an `Any[]` or `const Any[]` forwards the existing array without packing it again. This permits one variadic function to call another. Methods also support this shorthand. `@extern` functions keep the C `...` form and use the C argument convention.
 
 #### Extern
 
-Functions can be decorated with `@extern` to indicate that they're going to be resolved at link time. Extern functions must follow C's ABI and can only use C-compatible types.
+Functions can be decorated with `@extern` to declare that they are resolved at link time. Extern functions must follow the C application binary interface (ABI) and can use only C-compatible types.
 
 ```
 @extern fn printf(fmt: char*, ...);
@@ -1150,7 +1150,7 @@ Functions can be decorated with `@extern` to indicate that they're going to be r
 @extern fn free(ptr: opaque*);
 ```
 
-Struct and union values cross the boundary by value the way C's do, in both directions: the compiler lowers parameters and returns to the target's C calling convention (registers for the small ones, memory for the large), so a C function taking or returning a struct is declared and called naturally:
+Struct and union values cross the boundary by value in both directions. The compiler follows the target C calling convention for parameters and return values. It uses registers for small values and memory for large values. A C function that takes or returns a struct therefore uses a direct Sie declaration:
 
 ```
 struct div_t {
@@ -1174,7 +1174,7 @@ r.quot;             // 43
 
 #### Symbol
 
-`@symbol("name")` decouples a function's Sie name from its module symbol: the function links and emits under the given symbol, while the program calls it by its Sie name. Combined with `@extern`, it binds a foreign symbol behind a name of your choosing; combined with [conditional compilation](#conditional-compilation), one name covers a symbol that differs by platform:
+`@symbol("name")` separates a function's Sie name from its module symbol. The function links and emits under the specified symbol, while the program calls it by its Sie name. With `@extern`, it binds a foreign symbol to a selected Sie name. With [conditional compilation](#conditional-compilation), one Sie name can refer to different platform symbols:
 
 ```
 @if (TARGET_OS == OS_DARWIN) {
@@ -1196,7 +1196,7 @@ struct FILE;
 }
 ```
 
-It also works on defined functions, exporting them under the chosen symbol. `main` cannot be renamed (the C runtime looks it up by name), and `@symbol` cannot combine with `@static`, whose symbol is the compiler's to mangle.
+It also exports defined functions under the selected symbol. `main` cannot be renamed because the C run time finds it by name. `@symbol` cannot combine with `@static` because the compiler controls a static symbol.
 
 #### Inline
 
@@ -1210,7 +1210,7 @@ Functions can be decorated with `@inline` to inline them into every caller. Unli
 
 #### Static
 
-Functions can be decorated with `@static` to make them local to their file: no other file sees them, and every file may reuse the name for a static of its own. This is the home for a file's private helpers.
+Functions can be decorated with `@static` to make them local to their file. Other files cannot access them, and each file can reuse the name for its own static function. Use `@static` for private file helpers.
 
 ```
 @static fn helper() -> i32 {
@@ -1218,9 +1218,9 @@ Functions can be decorated with `@static` to make them local to their file: no o
 }
 ```
 
-Decorators stack, so `@static @inline fn` is both, except for `@extern`, whose function has no body for the others to act on; only `@noreturn`, which describes the signature rather than the body, rides along with it.
+Decorators can be combined. For example, `@static @inline fn` is both static and inline. An `@extern` function has no body, so body decorators do not apply to it. Only `@noreturn` can be combined with `@extern` because it describes the signature.
 
-`@static let` declares a file-local global variable the same way: one storage location shared by every call, visible only to its own file. Its initializer, when given, must be a compile-time constant. As with a local `let`, an initializer can supply an omitted type; without an initializer the type remains required and the storage starts at zero, C-style. An `@extern let` always keeps its explicit ABI type.
+`@static let` declares a file-local global variable. One storage location is shared by every call and is visible only in its file. Its initializer must be a compile-time constant. As with a local `let`, the initializer can supply an omitted type. Without an initializer, the type is required and the storage starts at zero. An `@extern let` always keeps its explicit ABI type.
 
 ```
 @static let count: i32 = 0;
@@ -1246,13 +1246,13 @@ cannot.
 @private struct State;
 ```
 
-This differs from `@static`: a static function has file-local linkage and is
-visible only in its own file, while a private declaration remains shared across
-a textual include module.
+This differs from `@static`. A static function has file-local linkage and is
+visible only in its own file. A private declaration remains shared across a
+textual include module.
 
 #### Noreturn
 
-Functions can be decorated with `@noreturn` to declare that they never give control back to their caller: they exit the process, loop forever, or hand off to another `@noreturn` function.
+The `@noreturn` decorator declares that a function does not return control to its caller. Such a function exits, loops continuously, or calls another `@noreturn` function.
 
 ```
 @extern @noreturn fn exit(code: i32);
@@ -1262,7 +1262,7 @@ Functions can be decorated with `@noreturn` to declare that they never give cont
 }
 ```
 
-A statement calling an `@noreturn` function ends its path, so it satisfies a required return the same way a `return` would, in a whole function or a single branch:
+A call to an `@noreturn` function ends its control path. Therefore, it satisfies a required return in a function or branch:
 
 ```
 fn checked(x: i32) -> i32 {
@@ -1295,7 +1295,7 @@ Programs warn only about uses reachable from `main`. A library unit without a `m
 
 #### Remove
 
-Once a deprecated function is actually gone, `@remove("advice")` leaves a tombstone in its place: the declaration stands so its uses still name it, but there is nothing left to define, so it takes no body. Any use is a compile error quoting the advice:
+Use `@remove("advice")` after a deprecated function is removed. The declaration remains so that the compiler can identify uses of its name. It has no body because it has no definition. Each use produces a compile error that includes the advice:
 
 ```
 fn new_func() { }
@@ -1339,7 +1339,7 @@ fn f() {
 }
 ```
 
-`@asm` also works as an inline block, embedding assembly in an expression or statement position instead of taking over a whole function. Values from the enclosing scope pass in through a parenthesized argument list, each interpolated inside the block by its own name, exactly like a decorated function's params:
+`@asm` also works as an inline block. It inserts assembly in an expression or statement instead of replacing a complete function. A parenthesized argument list passes values from the enclosing scope. Each name inserts its value in the block, as in a decorated function:
 
 ```
 @asm { /* no operands */ }
@@ -1353,7 +1353,7 @@ fn f() {
 @asm @clobbers("x0", "memory") (x, y) { /* ... */ }
 ```
 
-An inline block produces a value when its argument list is followed by `-> T`, `${out}` standing for the result the same way it does in a decorated function:
+An inline block produces a value when `-> T` follows its argument list. As in a decorated function, `${out}` represents the result:
 
 ```
 let sum: i32 = @asm (x, y) -> i32 {
@@ -1367,7 +1367,7 @@ let masked: i32 = @asm @clobbers("x0", "memory") (x, y) -> i32 {
 
 ### Types
 
-#### Builtin types
+#### Built-in types
 
 - Signed integers: `i8`, `i16`, `i32`, `i64`, `i128`.
 - Unsigned integers: `u8`, `u16`, `u32`, `u64`, `u128`.
@@ -1402,7 +1402,7 @@ let end: char = '\0';
 let hex: char = '\x41'; // 'A'
 ```
 
-Unlike other languages, there's no `void`. For opaque pointers you can use `opaque*`.
+Sie has no `void` type. Use `opaque*` for opaque pointers.
 
 Any pointer can be used where an `opaque*` is expected, decaying to it contextually; arrays reach it through their data pointer. The explicit cast is also allowed.
 
@@ -1452,14 +1452,14 @@ let c: bool = s < u; // error: cannot mix signed and unsigned operands
 
 #### Implicit widening
 
-A value of an `iN`, `uN`, or `fN` type widens implicitly when it's assigned or passed to a larger type, as long as the prefix is kept: `iN` to a wider `iM`, `uN` to a wider `uM`, `fN` to a wider `fM`. Signed values sign-extend, unsigned values zero-extend, and floats extend.
+A value of an `iN`, `uN`, or `fN` type widens implicitly when it is assigned or passed to a larger type with the same prefix. An `iN` widens to an `iM`, a `uN` widens to a `uM`, and an `fN` widens to an `fM`. Signed values sign-extend, unsigned values zero-extend, and floats extend.
 
 ```
 let a: u8 = 0;
 let b: u64 = a; // implicit widening, equivalent to let b: u64 = a as u64;
 ```
 
-Operands widen the same way: when the two sides of an arithmetic operation or comparison share a prefix but differ in width, the narrower one meets the wider.
+Operands use the same widening rules. If both operands have the same prefix but different widths, the compiler widens the narrower operand.
 
 ```
 let total: u64 = 100;
@@ -1509,7 +1509,7 @@ let field: i32* = &pt.y;   // address of a field
 let elem: i32* = &arr[1];  // address of an element
 ```
 
-The `*` operator dereferences a pointer: `*p` is `p[0]` by another spelling, and can be read or assigned to the same way. Prefixes stack, so `**pp` peels a pointer to a pointer.
+The `*` operator dereferences a pointer. `*p` is equivalent to `p[0]` and supports the same read and assignment operations. Prefixes can be combined, so `**pp` dereferences two pointer levels.
 
 ```
 let x: i32 = 1;
@@ -1553,7 +1553,7 @@ let q = null; // q: opaque*
 
 #### Arrays
 
-Arrays are collections of same-type values. They are represented by `X[]` and their internal representation is always `{X*, u64}`, where `X*` is a pointer to `X` and `u64` is the number of elements. These are exposed as the members `data` and `length`, accessed like a struct's:
+Arrays are collections of values with the same type. They are written as `X[]` and have the internal form `{X*, u64}`. The `X*` value points to `X`, and the `u64` value contains the element count. The `data` and `length` members expose these values:
 
 ```
 let arr: i32[];
@@ -1562,7 +1562,7 @@ let ptr: i32* = arr.data;   // the backing pointer
 let n: u64 = arr.length;    // the element count
 ```
 
-Declaring an array with a size `X[N]` backs it with `N` automatically allocated stack elements: its data points at them and its length starts at `N`. Since the contents come from the size, a sized declaration takes no initializer. The size is a constant integer expression: a literal, a `@const`, or any combination, evaluated at compile time and required to be positive.
+An `X[N]` declaration allocates `N` elements on the stack. The array data points to these elements, and its initial length is `N`. A sized declaration does not take an initializer. The size must be a positive constant integer expression. It can contain literals, `@const` values, or a combination of them.
 
 ```
 @const HEADER = 16;
@@ -1571,11 +1571,10 @@ let buf: u8[64];              // buf.data -> 64 stack bytes, buf.length == 64
 let body: u8[64 - HEADER];    // sized by a constant expression
 ```
 
-A sized struct field owns the same fixed backing inline in its containing
-struct, so moving the struct cannot leave an internal pointer behind. Reading
-the field still produces the ordinary `X[]` view, with `data` pointing at that
-inline backing and `length` equal to `N`; indexing reads or writes the backing
-directly.
+A sized struct field owns fixed inline storage in its containing struct.
+Therefore, moving the struct does not leave an internal pointer behind. Reading
+the field produces an ordinary `X[]` view. Its `data` points to the inline
+storage, and its `length` is `N`. Indexing accesses the storage directly.
 
 ```
 struct State {
@@ -1590,7 +1589,7 @@ let first: i32 = arr[0]; // equivalent to arr.data[0]
 arr[1] = 5;
 ```
 
-Arrays can be initialiazed with elements `a`, `b`, etc. enclosed by `[]` and separated by commas, a trailing one after the last element allowed.
+Arrays can be initialized with elements enclosed by `[]` and separated by commas. A trailing comma is permitted.
 
 ```
 let arr: i32[] = [1, 2, 3];
@@ -1634,7 +1633,7 @@ arr[1:3]; // [2, 3]
 
 #### Raw arrays
 
-`@raw<T>[N]` is C's `T[N]`: exactly N elements of inline storage, no pointer and no runtime length. Where an `X[]` is a `{pointer, length}` pair over backing data, a raw array _is_ its data, which is what C ABIs expect of fixed-size array fields:
+`@raw<T>[N]` is equivalent to C `T[N]`. It contains exactly N inline elements with no pointer or run-time length. An `X[]` is a `{pointer, length}` pair that refers to storage. A raw array is the storage itself, as required for fixed-size C ABI fields:
 
 ```
 struct buf {
@@ -1666,9 +1665,9 @@ let msg: char[] = "Hello";
 let inferred = "Hello";      // a char[] too
 ```
 
-A literal is a `char[]` everywhere: it carries its length, indexes, takes the [builtin type methods](#builtin-type-methods), and the operator shorthands follow (`"a" + s`, `s == "a"`). Only an explicit `char*` context takes the bare pointer instead, C-style: `let p: char* = "Hello";`, or an `@extern` function's `char*` parameter.
+A literal is a `char[]` in all contexts. It has a length, supports indexing, and uses the [built-in type methods](#built-in-type-methods). Operator shorthands also apply, such as `"a" + s` and `s == "a"`. Only an explicit `char*` context takes the pointer. Examples include `let p: char* = "Hello";` and an `@extern` function with a `char*` parameter.
 
-Just like any other array, they can initialized by a pair `{ptr, n}`:
+String arrays can also be initialized with a `{ptr, n}` pair:
 
 ```
 let ptr: char* = "Hello";
@@ -1676,13 +1675,13 @@ let n: u64 = 5;
 let msg: char[] = {ptr, n};
 ```
 
-They are null-terminated for C compatibility, but their length does not include the null character. This is why `char` is its own type instead of an alias of `i8` or `u8`: a `char[]` carries string semantics that a plain byte array does not.
+They are null-terminated for C compatibility, but their length does not include the null character. The separate `char` type gives `char[]` string behavior that a plain byte array does not have.
 
 Casting between `i8[]`/`u8[]` and `char[]` automatically handles the length change, but assumes that the underlying pointer is null-terminated.
 
 #### References
 
-References to a type `T` are represented by `&T`. References cannot be dereferenced, meaning that you can't obtain the address where the value is stored through the `&` operator. This covers anything reached through the reference: for `s: &S`, both `&s` and `&s.member` are compile errors, since either would leak the caller's storage.
+References to a type `T` are represented by `&T`. The `&` operator cannot obtain the address of storage reached through a reference. For `s: &S`, both `&s` and `&s.member` are compile errors because they would expose the caller's storage.
 
 References cannot type a variable.
 
@@ -1690,7 +1689,7 @@ References cannot type a variable.
 let t: &T; // invalid
 ```
 
-As function params, they indicate that the value is passed by reference instead of by value. Internally they are represented by a hidden pointer.
+As function parameters, references indicate that the value is passed by reference instead of by value. Internally, they are represented by a hidden pointer.
 
 ```
 fn add(a: &i32, b: i32) {
@@ -1707,9 +1706,9 @@ fn main() {
 }
 ```
 
-A reference parameter normally aliases assignable storage in the caller. A `const &T` parameter only reads, so a literal or implicitly convertible value may pass too: it converts when necessary, materializes at the parameter's type, and is referenced in place. A mutable `&T` still needs caller storage of exactly that type, since conversion would make a temporary and writes to it would vanish.
+A reference parameter normally aliases assignable storage in the caller. A `const &T` parameter only reads, so it also accepts literals and convertible values. The compiler converts the value when necessary and creates storage with the parameter type. A mutable `&T` requires caller storage of exactly that type. A conversion would create temporary storage and discard writes to it.
 
-A function may also return a reference, `-> &T`, provided it has a reference parameter to derive it from, the receiver usually; returning storage that dies with the call (a local, a parameter's copy) has no reference to give. The `return` takes the value's address, and the call's result reads as the T it aliases, like a reference parameter does: reading copies the value out, while calling a [method](#methods) on it, or returning it along, keeps aliasing the original.
+A function can return a reference with `-> &T` if the function has a source reference parameter. This source is usually the receiver. The function cannot return a reference to storage that expires after the call, such as a local variable or a parameter copy. The `return` takes the address of the value. Reading the result copies the value. Calling a [method](#methods) on the result, or returning it again, preserves the alias to the original value.
 
 ```
 fn List<T>::get(self: &List<T>, index: u64) -> &T {
@@ -1795,7 +1794,7 @@ let value = 42;
 invoke(() => { use(value); });
 ```
 
-`callback.env` exposes the opaque environment pointer for foreign callback APIs whose `user_data` parameter carries it. An explicit cast adapts the closure to the foreign signature: that signature must end in `opaque*`, its leading parameters must begin with the closure's declared parameters, and any parameters between them are ignored by the closure. A generic macro can package the cast while leaving the ABI visible at the call site:
+`callback.env` exposes the opaque environment pointer for foreign callback APIs. Their `user_data` parameter carries this pointer. An explicit cast adapts the closure to the foreign signature. The signature must end in `opaque*`. Its first parameters must match the declared closure parameters. The closure ignores additional parameters between the declared parameters and `opaque*`. A generic macro can contain the cast while keeping the ABI visible at the call site:
 
 ```
 @macro G_CALLBACK<ABI>(callback) = callback as ABI as GCallback;
@@ -1813,11 +1812,11 @@ fn Application::connect_activate(
 }
 ```
 
-Captured variables are promoted to stable shared storage when the closure is formed. The original scope and every closure capturing that variable therefore observe the same value, and `callback.env` remains valid when a foreign callback retains it beyond the creating function's return. Promoted closure storage is currently retained for the process lifetime. Future release support can let safe library wrappers reclaim it through a foreign API's destroy notification or an owned connection which disconnects before releasing its environment.
+Captured variables move to stable shared storage when the closure is formed. The original scope and every closure that captures the variable observe the same value. The `callback.env` value remains valid if a foreign callback retains it after the creating function returns. The storage currently remains allocated for the process lifetime. Future release support can permit safe library wrappers to reclaim it. A wrapper can use a foreign API destroy notification or an owned connection that disconnects before it releases the environment.
 
 #### Type aliases
 
-Type aliases give an existing type expression a new name. They're declared through `@type` followed by their name, `=`, and the aliased type expression, ending in `;`:
+Type aliases give an existing type expression a new name. They are declared through `@type`, followed by the name, `=`, and the aliased type expression. The declaration ends in `;`:
 
 ```
 @type <name> = <type expr>;
@@ -1842,7 +1841,7 @@ Type aliases are generic when their name is followed by an arbitrary number of p
 @type fnc<T, U> = fn(T) -> U;
 ```
 
-A concrete spelling supplies the arguments wherever a type is written: `cmp<i32>` is `fn(i32, i32) -> bool`. The target may be any type over the parameters, including a [generic struct](#generic-structs) or another generic alias (`@type boxes<T> = List<Box<T>>;`); the same modifier rule applies to arguments, and cycles are reported like any alias cycle.
+A concrete type supplies arguments where the type is written. For example, `cmp<i32>` is `fn(i32, i32) -> bool`. The target can be any type that uses the parameters. This includes a [generic struct](#generic-structs) or another generic alias, such as `@type boxes<T> = List<Box<T>>;`. The same modifier rule applies to arguments. The compiler reports cycles as alias cycles.
 
 Alias parameters take the same [bounds as generic functions](#generic-functions), checked before the target expands:
 
@@ -1929,7 +1928,7 @@ let arr: i32[];
 
 Inside a [generic](#generic-functions), the placeholder substitutes first, so `@typename(T)` names each instance's concrete type. Any expression works as the argument too, naming its static type without evaluating it: `@typename(args[i])`, `@typename(n + 1)`.
 
-An [Any](#any) operand is the one runtime case: it answers with the wrapped type's name, looked up by its id in a table of every type the program wraps, an unknown id answering `"?"`. Under [separate compilation](#imports) each unit's table holds its own wraps, so an Any crossing `-c` units may answer `"?"` in a unit that never wraps its type.
+An [Any](#any) operand is resolved at run time. The compiler looks up the wrapped type identifier in a table of types that the program wraps. An unknown identifier returns `"?"`. With [separate compilation](#imports), each unit has its own table. An `Any` value that crosses `-c` units can therefore return `"?"` in a unit that does not wrap its type.
 
 #### Typeid
 
@@ -1952,7 +1951,7 @@ Being a compile-time constant, it works anywhere one is required: `@const` value
 
 #### Any
 
-`Any` is a builtin struct erasing a value's type behind its id:
+`Any` is a built-in struct that erases a value's type behind its identifier:
 
 ```
 struct Any {
@@ -1979,7 +1978,7 @@ log([1 as Any, "text" as Any, 2.5 as Any]);
 
 The array and its `Any` entries are borrowed views. When an erased payload owns resources, inspect it through a const cast (`arg as const Resource`); that view receives no independent cleanup responsibility. Acquiring another owner remains explicit, for example by cloning that const view.
 
-`@typeof(x)` yields the type id an expression carries: an `Any` operand reads its runtime `id` field, and any other operand folds to its static type's `@typeid` at compile time (the operand is never evaluated). Comparing it against a bare type name means the type's id, in `==`/`!=` and in `when` arms, where non-identifier spellings (`char[]`, `i32*`) work too:
+`@typeof(x)` returns the type identifier of an expression. For an `Any` operand, it reads the run-time `id` field. For all other operands, the compiler uses the static `@typeid` value and does not evaluate the operand. A comparison with a bare type name uses the identifier of that type. This applies to `==`, `!=`, and `when` arms. Type forms such as `char[]` and `i32*` are also permitted:
 
 ```
 @typeof(arg) == @typeid(u64);
@@ -1990,9 +1989,9 @@ case (@typeof(arg)) {
 }
 ```
 
-`a as T` reads the erased value back as `T`, unchecked: comparing `@typeof(a)` first is the caller's job. The pointed value lives in the frame of the function that wrapped it, so an `Any` outliving that frame dangles like any pointer to a local would; and wrapping erases the `const` contract, which the unwrapper chooses anew.
+`a as T` reads the erased value as `T` without a run-time check. The caller must compare `@typeof(a)` before the cast. The pointed value is in the frame of the function that wrapped it. If an `Any` value outlives that frame, its pointer becomes invalid. Wrapping also removes the `const` contract. The code that unwraps the value selects a new contract.
 
-A `when` may also name an [interface](#interfaces): the arm is generic, expanding into one arm per type known to implement it, the body stamped with the concrete type wherever the interface is spelled. The cast in each stamped arm therefore reads the arm's own type:
+A `when` can also name an [interface](#interfaces). The compiler creates one arm for each known type that implements the interface. It replaces the interface name in the body with the concrete type. Therefore, the cast in each generated arm reads that concrete type:
 
 ```
 case (@typeof(args[i])) {
@@ -2004,7 +2003,7 @@ when Formattable:
 
 The expansion covers every type claiming the interface, arrays included through the family's claim, so `when Iterable<char>:` arms `char[]` among the implementers. A type an earlier arm already matched never reaches its stamped arm: the first match still wins.
 
-A nested interface argument expands per combination: `when Iterable<Formattable>:` substitutes each formattable type into the argument and arms every iterable of each, so an `i64[]` and a `P[]` both land in it when `i64` and `P` claim `Formattable`.
+A nested interface argument expands for each type combination. For `when Iterable<Formattable>:`, the compiler substitutes each formattable type into the argument. It then creates an arm for each iterable of that type. Thus, the arm includes `i64[]` and `P[]` when `i64` and `P` claim `Formattable`.
 
 ### Enums
 
@@ -2023,7 +2022,7 @@ Members are accessed through the enum's name and `::`:
 let color: name = name::ABC;
 ```
 
-Optionally, you can define a specific value for any of their members through `= <value>` after their name. The value is a constant integer expression, and may combine literals, `@const` constants, and members of any enum:
+An enum member can define a specific value with `= <value>` after its name. The value is a constant integer expression. It can combine literals, `@const` constants, and members of any enum:
 
 ```
 enum name {
@@ -2067,13 +2066,13 @@ where their internal representation is the type `T` defined in their declaration
 
 ### Structs
 
-Structs are containers that can hold structured data of multiple types. They're declared through the keyword `struct` followed by their name, while their members are declared by their name followed by `: T`, where `T` is their type, and separated by semi-colons.
+Structs contain structured data of multiple types. A struct declaration starts with `struct` followed by its name. Each member has a name followed by `: T`, where `T` is its type. Semicolons separate the members.
 
 ```
 struct S {
     a: A;
     b: B;
-    // etc...
+    // more members
 }
 ```
 
@@ -2200,7 +2199,7 @@ The bound is checked when a concrete `Map<K, V>` is formed, before its fields or
 
 #### Tuples
 
-`Tuple<A, B, ...>` is builtin and variadic: each arity is a struct of its element types, built by a parenthesized literal or declared like any type:
+`Tuple<A, B, ...>` is built-in and variadic. Each arity is a struct of its element types. A parenthesized literal builds it, or a declaration names it like any type:
 
 ```
 let t: Tuple<i32, f64>;
@@ -2217,7 +2216,7 @@ p[1] = 3.5;
 p.length;    // 3
 ```
 
-A `let` over a parenthesized pattern destructures: each name binds the matching element as a fresh local copy, the pattern's arity must match the tuple's, and patterns nest. The types come from the tuple, so the pattern takes no annotation:
+A `let` with a parenthesized pattern destructures a tuple. Each name binds the corresponding element as a new local copy. The pattern and tuple must have the same arity. Patterns can be nested. The tuple supplies the types, so the pattern has no annotation:
 
 ```
 let (lo, hi) = minmax(9, 3);
@@ -2239,7 +2238,7 @@ sum(t);
 
 ### Unions
 
-Unions are declared like structs through the `union` keyword, but their fields all share one storage: writing one field and reading another reinterprets the same bytes, C-style.
+Unions use the `union` keyword and have the same declaration form as structs. All fields share one storage location. Writing one field and reading another reinterprets the same bytes.
 
 ```
 union <name> {
@@ -2266,7 +2265,7 @@ union U { a: u64; b: f64; }
 let u: U = { a = 100 };
 ```
 
-The field name is required because the fields overlap; empty, positional and multiple-field union literals are refused. Bytes outside the selected field begin at zero. A union's size and alignment are its largest field's, inside enclosing structs too. `@align(N)` and `@volatile` apply like a struct's; `@packed` has no field layout to act on and is refused.
+The field name is required because the fields overlap. Empty, positional, and multiple-field union literals are invalid. Bytes outside the selected field start at zero. The union uses the size and alignment of its largest field, including when it is in a struct. `@align(N)` and `@volatile` apply as they do to a struct. `@packed` is invalid because a union has no separate field layout.
 
 #### Unnamed structs and unions
 
@@ -2286,9 +2285,9 @@ struct datum {
 d.u.i = 42; // fields chain through like any other
 ```
 
-An unnamed type's identity is structural: two spellings with the same fields are one type, so a `struct { x: i32; y: i32; }` local passes to a `struct { x: i32; y: i32; }` parameter directly. They compose everywhere a named type would: locals, aliases, raw arrays, pointers, `@sizeof`, and each other.
+An unnamed type has structural identity. Two declarations with the same fields define the same type. Therefore, a `struct { x: i32; y: i32; }` local passes directly to a `struct { x: i32; y: i32; }` parameter. Unnamed types can occur in locals, aliases, raw arrays, pointers, `@sizeof`, and other unnamed types.
 
-An unnamed struct or union can also be a member with no name of its own: its fields then hoist into the enclosing struct, C-style, nesting included:
+An unnamed struct or union can be an unnamed member. Its fields become direct fields of the enclosing struct. This rule also applies to nested unnamed members:
 
 ```
 struct Result {
@@ -2304,10 +2303,10 @@ r.value = 42; // reaches the unnamed union's field directly
 
 ### Methods
 
-Structs can have methods, which are a special type of function that acts
-on a specific struct type.
+Structs can have methods. A method is a function that acts on a specific
+struct type.
 
-Similar to regular functions, they're declared through the `fn` keyword.
+Methods are declared through the `fn` keyword.
 They may live inside the struct body, where the enclosing struct supplies
 their receiver type:
 
@@ -2354,8 +2353,8 @@ fn S<A>::get(const &self) -> A {
 A body may be nested or out of line independently for each method. Fields
 and methods may appear in either order inside the struct.
 
-Their first param is the receiver and is always a reference, meaning that
-the method acts on the instance itself and not on a copy.
+The first parameter is the receiver and is always a reference. The method
+therefore acts on the instance and not on a copy.
 
 ```
 fn S::method(self: &S) {
@@ -2363,7 +2362,7 @@ fn S::method(self: &S) {
 }
 ```
 
-`&self` is sugar for exactly that, spelling the receiver's type for you, `&S<A, B>` included for a [generic struct's](#methods-of-a-generic-struct) methods:
+`&self` is a shorthand that supplies the receiver type. For a [generic struct](#methods-of-a-generic-struct), it also supplies a type such as `&S<A, B>`:
 
 ```
 fn S::method(&self) {
@@ -2371,7 +2370,7 @@ fn S::method(&self) {
 }
 ```
 
-If the method does not mutate the instance, the receiver should be declared `self: const &S` (or `const &self`) instead, so it can also be called on a `const S`. Calling a mutating method (`self: &S`) on a `const` instance is an error.
+If the method does not modify the instance, declare the receiver as `self: const &S` or `const &self`. This permits calls on a `const S`. A call to a modifying method with a `const` instance is an error.
 
 ```
 fn S::read(const &self) -> T {
@@ -2459,7 +2458,7 @@ str.null_terminate();
 
 #### Constructors
 
-For a struct `S` with an `init` method, calling `S(args)` builds an instance in place: stack space, the struct's [field defaults](#field-defaults), then `S::init(self, args...)`. It is the expression form of:
+For a struct `S` with an `init` method, `S(args)` creates an instance in place. It allocates stack space and applies the [field defaults](#field-defaults). It then calls `S::init(self, args...)`. This is the expression form of:
 
 ```
 let s: S;
@@ -2574,9 +2573,9 @@ fn S<A, B, ...>::method<X, Y, ...>(self: &S<A, B, ...>, x: X, y: Y, ...) {
 }
 ```
 
-#### Builtin type methods
+#### Built-in type methods
 
-Methods may be declared directly on builtin types in the same way as methods
+Methods may be declared directly on built-in types in the same way as methods
 on structs:
 
 ```
@@ -2587,8 +2586,8 @@ fn i32::doubled(const &self) -> i32 {
 let answer = 21.doubled();
 ```
 
-Use `@where` with a builtin bound to declare one method for a family of
-builtin types:
+Use `@where` with a built-in bound to declare one method for a family of
+built-in types:
 
 ```
 @where<T: Scalar>
@@ -2598,7 +2597,7 @@ fn T::value(const &self) -> T {
 ```
 
 `Scalar` covers all primitive value types. `Integer`, `SignedInteger`, and
-`UnsignedInteger` provide narrower builtin families.
+`UnsignedInteger` provide narrower built-in families.
 
 Arrays support methods in the same way. Using `T` as the element type declares
 the method for every array type:
@@ -2647,11 +2646,11 @@ required field and method. Multiple interfaces are separated by commas, as in
 the interface body as `fn Named::greet(&self) -> char[];`.
 
 Interfaces may be used only as parameter types. Calls are compiled for each
-concrete argument type, with no runtime interface object or dispatch.
+concrete argument type, with no run-time interface object or dispatch.
 
 #### Generic interfaces
 
-Interfaces can be generic just like structs, when their name is followed by `<T>`, their bodies speaking the type parameters:
+Interfaces can be generic like structs. Their name is followed by `<T>`, and their body can use the type parameters:
 
 ```
 interface Iterable<T> {
@@ -2669,7 +2668,7 @@ interface Iterable<T>;
 fn Iterable<T>::iterator(self: &Iterable<T>) -> Iterator<T>;
 ```
 
-A claim's type argument may itself be an interface: `struct List<T>: Add<List<T>, Iterable<T>>` requires an `add` taking any iterable, and the overload whose parameter spells that same interface satisfies it.
+A claim type argument can be an interface. For example, `struct List<T>: Add<List<T>, Iterable<T>>` requires an `add` method that takes any iterable. An overload with that interface parameter satisfies the requirement.
 
 #### Extending types
 
@@ -2711,7 +2710,7 @@ not change the primitive's built-in operators.
 
 #### The iteration interfaces
 
-`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are builtin and available
+`Iterator<T>`, `ConstIterator<T>`, and `Iterable<T>` are built-in and available
 without an import:
 
 ```
@@ -2743,7 +2742,7 @@ update the collection.
 
 ### Error handling
 
-Sie uses the builtin `Result<V, E>` when an operation returns either a value
+Sie uses the built-in `Result<V, E>` when an operation returns either a value
 or an error. `Result<E>` represents success without a value. Create results
 with `Ok` and `Error`; their types are usually inferred from the surrounding
 return type or annotation.
