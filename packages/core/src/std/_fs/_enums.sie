@@ -12,9 +12,11 @@ enum FileMode: i32 {
 enum OpenError {
     SystemError = -1,
     AlreadyOpen = 1,
+    AlreadyExists,
     InvalidMode,
     NotFound,
     PermissionDenied,
+    InvalidFile,
 }
 
 enum CloseError {

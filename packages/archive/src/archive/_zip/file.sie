@@ -1,0 +1,66 @@
+import { IOReadable, IOWritable, IOError, SeekOrigin, IOSeekable } from std.io;
+import {
+    ZIP_ER,
+    zip_error,
+    zip_file_get_error,
+    zip_file,
+    zip_fread,
+    zip_fseek,
+} from zip;
+
+/**
+ * A file inside a ZIP archive.
+ */
+struct File: IOReadable, IOSeekable {
+    @private handle: zip_file* = null; /* The underlying zip handle. */
+
+    /**
+    * Read from a file.
+    * 
+    * @param self The file object to read from.
+    * @param buf The buffer to read into.
+    * @return The result of the operation.
+    */
+    fn read(&self, buf: &u8[], count: u64) -> Result<i64, IOError> {
+        if (self.handle == null) return Error(IOError::NotOpen);
+        if (buf.length < count) return Error(IOError::InvalidBuffer);
+
+        let n = zip_fread(self.handle, buf, count);
+        if (n < 0) {
+            let error = zip_file_get_error(self.handle);
+            case (error->zip_err) {
+            when ZIP_ER::ZIPCLOSED:
+                return Error(IOError::NotOpen);
+            else:
+                return Error(IOError::SystemError);
+            }
+        }
+        
+        return Ok(n);
+    }
+
+    /**
+    * Read the given number of bytes from the file.
+    *
+    * @param buf The buffer to read the bytes into.
+    * @return The number of bytes read.
+    */
+    @inline
+    fn read(&self, buf: &u8[]) -> Result<i64, IOError> {
+        return self.read(buf, buf.length);
+    }
+
+    /**
+    * Seek to the given offset from the given origin.
+    *
+    * @param offset The offset to seek to.
+    * @param origin The origin to seek from.
+    * @return The result of the operation.
+    */
+    fn seek(&self, offset: i64, origin: SeekOrigin) -> Result<i64, IOError> {
+        if (self.handle == null) return Error(IOError::NotOpen);
+        let res = zip_fseek(self.handle, offset, origin);
+        if (res < 0) return Error(IOError::InvalidBuffer);
+        return Ok(res);
+    }
+}

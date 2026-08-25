@@ -1,0 +1,22 @@
+/**
+ * The mode of the archive.
+ */
+enum ArchiveMode {
+    None = 0,
+    Read = 1,
+    Write = 2,
+    ReadWrite = ArchiveMode::Read | ArchiveMode::Write,
+    Truncate = 4,
+    Create = 8,
+}
+
+/**
+ * The error that occurs when stating a ZIP archive.
+ */
+enum StatError {
+    SystemError = -1,
+    NotFound = 1,
+    NotOpen,
+    PermissionDenied,
+    Deleted,
+}
