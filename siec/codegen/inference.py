@@ -329,18 +329,19 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
     # a method call on a receiver expression types like the qualified
     # call it resolves to, the receiver joining the arguments
     if isinstance(expr, MethodCall):
-        from siec.codegen.methods import resolve_method, takes_receiver
+        from siec.codegen.methods import resolve_method
 
         symbol = resolve_method(gen, expr_sie_type(gen, expr.receiver, scope),
                                 expr.method)
         if symbol is None:
             return None
 
-        args = ([expr.receiver, *expr.args] if takes_receiver(gen, symbol)
-                else expr.args)
-        return expr_sie_type(gen, Call(symbol, args, expr.type_args), scope)
+        call = Call(symbol, list(expr.args), expr.type_args)
+        call.method_receiver = expr.receiver
+        return expr_sie_type(gen, call, scope)
 
     if isinstance(expr, Call):
+        method_receiver = getattr(expr, "method_receiver", None)
         from siec.codegen.macros import resolve_macro_use
 
         use = resolve_macro_use(gen, expr, scope)
@@ -401,11 +402,8 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
                 from siec.codegen.methods import method_call
 
                 if "." in expr.name and (found := method_call(gen, expr, scope)):
-                    symbol, receiver = found
+                    symbol, method_receiver = found
                     module = None
-                    if receiver is not None:
-                        call = Call(expr.name, [receiver, *expr.args],
-                                    expr.type_args)
 
         # Concrete and generic candidates use the same exact/implicit/adopt
         # ordering here as checking and emission. A generic return can be
@@ -415,7 +413,8 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
         try:
             kind, candidate = pick_call_candidate(
                 gen, symbol, call, scope,
-                getattr(expr, "expected_type", None), module=module)
+                getattr(expr, "expected_type", None), module=module,
+                method_receiver=method_receiver)
         except TypeError:
             return None
 

@@ -17,7 +17,7 @@ from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.generics import (constraint_count, split_generic, substitute,
                                    substitute_types)
-from siec.codegen.types import strip_const, strip_reference
+from siec.codegen.types import is_reference, strip_const, strip_reference
 
 
 def method_signature(fn, mapping: dict | None = None) -> tuple:
@@ -520,10 +520,14 @@ def takes_receiver(gen: CodeGenerator, symbol: str) -> bool:
     from siec.codegen.overloads import overload_candidates
 
     base = symbol.partition("::")[0]
-    if (template := gen.generic_functions.get(symbol)) is not None:
+    if symbol in gen.param_types:
+        params = gen.param_types[symbol]
+        first = params[0] if params else None
+    elif (template := gen.generic_functions.get(symbol)) is not None:
         first = template.params[0].type if template.params else None
     else:
-        # any candidate answers: overloads share their receiver-ness
+        # A family name has no candidate-specific answer. Its first overload
+        # preserves the historical result for callers that have not picked yet.
         params = gen.param_types.get(overload_candidates(gen, symbol)[0], ())
         first = params[0] if params else None
 
@@ -538,6 +542,29 @@ def takes_receiver(gen: CodeGenerator, symbol: str) -> bool:
         return is_reference(strip_const(first))
 
     return strip_const(first) == f"&{base}"
+
+
+def template_takes_receiver(template) -> bool:
+    """Whether one generic method template takes its instance receiver."""
+    expected = template.receiver
+    if expected is None and "::" in template.name:
+        expected = template.name.partition("::")[0]
+    if expected is None or not template.params:
+        return False
+
+    first = strip_const(template.params[0].type)
+    if not is_reference(first):
+        return False
+
+    actual = strip_const(strip_reference(first))
+    if actual == expected:
+        return True
+
+    actual_parts = split_generic(actual)
+    expected_parts = split_generic(expected)
+    actual_base = actual_parts[0] if actual_parts else actual
+    expected_base = expected_parts[0] if expected_parts else expected
+    return actual_base == expected_base
 
 
 def qualified_method(gen: CodeGenerator, name: str) -> str | None:
@@ -729,8 +756,9 @@ def method_call(gen: CodeGenerator, call: Call, scope: dict) -> tuple | None:
     if symbol is None:
         return None
 
-    # a static reached through an instance takes no receiver argument
-    return symbol, (receiver if takes_receiver(gen, symbol) else None)
+    # Receiver attachment is decided after overload selection. A mixed family
+    # may contain both instance and static candidates.
+    return symbol, receiver
 
 
 def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,

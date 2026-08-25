@@ -167,7 +167,8 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
 
 def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
                       receiver: str | None = None,
-                      module: str | None = None) -> tuple[str, str]:
+                      module: str | None = None,
+                      method_receiver=None) -> tuple[str, str]:
     """
     Pick a concrete overload and also return its conversion-strength tier.
 
@@ -183,21 +184,38 @@ def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
         # ('@extern free' beside another module's 'free(opaque*)').
         return symbol, "exact"
 
+    arg_types = [rank_type(gen, arg, scope) for arg in args]
+    ranked_args = [adapting_value(gen, arg, scope) for arg in args]
+    method_type = (rank_type(gen, method_receiver, scope)
+                   if method_receiver is not None else None)
+    ranked_receiver = (adapting_value(gen, method_receiver, scope)
+                       if method_receiver is not None else None)
+
+    def candidate_arguments(candidate: str) -> tuple[list, list]:
+        """The written arguments, plus this candidate's hidden receiver."""
+        candidate_args = ranked_args
+        candidate_types = arg_types
+        if method_receiver is not None:
+            from siec.codegen.methods import takes_receiver
+
+            if takes_receiver(gen, candidate):
+                candidate_args = [ranked_receiver, *candidate_args]
+                candidate_types = [method_type, *candidate_types]
+        if receiver is not None:
+            candidate_args = [None, *candidate_args]
+            candidate_types = [receiver, *candidate_types]
+        return candidate_args, candidate_types
+
     # a lone candidate resolves as ever, unless a generic template shares
     # the name and the arguments must decide between the two
     if len(entry) == 1 and gen.generic_functions.get(symbol) is None:
         candidate = entry[0][1]
-        arg_types = [rank_type(gen, arg, scope) for arg in args]
-        ranked_args = [adapting_value(gen, arg, scope) for arg in args]
-        if receiver is not None:
-            ranked_args = [None, *ranked_args]
-            arg_types = [receiver, *arg_types]
-        fit = candidate_fit(gen, candidate, ranked_args, arg_types)
+        candidate_args, candidate_types = candidate_arguments(candidate)
+        fit = candidate_fit(gen, candidate, candidate_args, candidate_types)
         # Arity/type diagnostics are emitted later for a lone declaration,
         # matching the historical behavior of returning it unconditionally.
         return candidate, fit or "exact"
 
-    arg_types = [rank_type(gen, arg, scope) for arg in args]
     # Surface the precise reason an argument has no type before ranking:
     # otherwise an undefined name or call matches every candidate as an
     # adaptable expression and reports an unrelated overload ambiguity.
@@ -213,17 +231,10 @@ def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
 
             check_expression(gen, arg, scope)
 
-    # adapting '@const' names become their values for fit checks, so a
-    # literal's 'adopt' into a wider parameter still applies
-    args = [adapting_value(gen, arg, scope) for arg in args]
-
-    if receiver is not None:
-        args = [None, *args]
-        arg_types = [receiver, *arg_types]
-
     tiers = {"exact": [], "implicit": [], "adopt": []}
     for _, candidate in entry:
-        fit = candidate_fit(gen, candidate, args, arg_types)
+        candidate_args, candidate_types = candidate_arguments(candidate)
+        fit = candidate_fit(gen, candidate, candidate_args, candidate_types)
         if fit is not None:
             tiers[fit].append(candidate)
 
@@ -231,8 +242,7 @@ def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
     name = display_name(symbol)
 
     if not pool:
-        shown_types = arg_types[1:] if receiver is not None else arg_types
-        shown = ", ".join(t or "?" for t in shown_types)
+        shown = ", ".join(arg_type or "?" for arg_type in arg_types)
         raise TypeError(f"no overload of {name!r} takes ({shown})")
 
     if len(pool) > 1:

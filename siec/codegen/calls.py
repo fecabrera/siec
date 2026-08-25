@@ -36,6 +36,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # type arguments; prefer the HIR stamp checking left, then any
     # coercion-side annotation
     expected = getattr(call, "expected_type", None)
+    method_receiver = getattr(call, "method_receiver", None)
 
     # a macro call expands in place instead of resolving a function; in
     # an untyped context its 'emit' value types the block
@@ -107,6 +108,9 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
             if as_address and not is_reference(gen.return_types.get(func.name)):
                 raise TypeError("cannot take the address of a call's value")
 
+            if method_receiver is not None:
+                emit_expression(gen, builder, method_receiver, None, scope)
+
             return _emit_resolved_call(gen, builder, call, scope, func,
                                        as_address)
 
@@ -120,7 +124,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     # a dotted name is a method on its receiver chain, or resolves
     # through the file's module bindings; a scoped receiver shadows any
     # module prefix
-    receiver = None
+    receiver = method_receiver
     module = None
     if "::" in call.name:
         # 'S::method(s)' passes its receiver explicitly, and a static's
@@ -186,20 +190,25 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     check_removed(gen, symbol)
 
-    # the sugar form passes the receiver as the hidden first argument
-    if receiver is not None:
-        call = Call(call.name, [receiver, *call.args], call.type_args)
-
     # Concrete and generic overloads share one strength ordering: exact,
     # implicit, then literal adoption. Concrete wins only an equal-strength
     # tie, rather than every viable concrete conversion winning up front.
     kind, candidate = pick_call_candidate(
-        gen, symbol, call, scope, expected, module=module)
+        gen, symbol, call, scope, expected, module=module,
+        method_receiver=receiver)
     if kind == "generic":
         template, type_args = candidate
         symbol = instantiate_function(gen, template, type_args)
     else:
         symbol = candidate
+
+    if receiver is not None:
+        from siec.codegen.methods import takes_receiver
+
+        if takes_receiver(gen, symbol):
+            call = Call(call.name, [receiver, *call.args], call.type_args)
+        else:
+            emit_expression(gen, builder, receiver, None, scope)
 
     # a stamped overload's body waits for its first picked call
     from siec.codegen.worklist import activate_function_instance

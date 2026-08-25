@@ -127,6 +127,69 @@ def test_methods_overload_on_the_receiver_type(run):
     assert run(source).returncode == 42
 
 
+def test_static_and_instance_methods_share_an_overload_family(run):
+    """
+    Instance syntax attaches its receiver only to candidates that take it.
+    Static and instance overloads work together regardless of declaration
+    order, and qualified calls keep passing every argument explicitly.
+    """
+    source = """
+    struct Counter { value: i32; }
+
+    fn Counter::read(value: i32) -> i64 { return value; }
+    fn Counter::read(&self) -> i32 { return self.value; }
+
+    fn main() -> i32 {
+        let counter: Counter = {10};
+        let instance = counter.read();
+        let static = counter.read(20);
+        let qualified_instance = Counter::read(counter);
+        let qualified_static = Counter::read(2);
+
+        return instance + static as i32 + qualified_instance
+               + qualified_static as i32;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_mixed_method_family_can_include_a_generic_static(run):
+    """A generic static overload does not steal an instance's receiver."""
+    source = """
+    struct Box<T> { value: T; }
+
+    fn Box<T>::pick<U>(value: U) -> U { return value; }
+    fn Box<T>::pick(&self) -> T { return self.value; }
+
+    fn main() -> i32 {
+        let box: Box<i32> = {40};
+        let instance = box.pick();
+        let static = box.pick(2);
+        return instance + static;
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_equally_exact_static_and_instance_methods_are_ambiguous(
+        compile_source):
+    """Receiver attachment does not break a genuine exact-match tie."""
+    with pytest.raises(TypeError, match="ambiguous"):
+        compile_source("""
+        struct Counter { value: i32; }
+
+        fn Counter::pick(value: i32) -> i32 { return value; }
+        fn Counter::pick(&self, value: i32) -> i32 {
+            return self.value + value;
+        }
+
+        fn main() -> i32 {
+            let counter: Counter = {40};
+            return counter.pick(2);
+        }
+        """)
+
+
 def test_unsigned_arguments_stay_in_their_prefix(run):
     """
     A u8 argument widens into the u64 overload, never the i64 one.

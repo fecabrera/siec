@@ -886,7 +886,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 return check_expression(gen, const.value, scope, expected)
 
     if isinstance(expr, MethodCall):
-        from siec.codegen.methods import resolve_method, takes_receiver
+        from siec.codegen.methods import resolve_method
 
         receiver_type = check_expression(gen, expr.receiver, scope)
         from siec.codegen.deprecation import check_removed_method
@@ -897,15 +897,14 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             raise TypeError(
                 f"type {receiver_type or '?'} has no method "
                 f"{expr.method!r}")
-        args = ([expr.receiver, *expr.args] if takes_receiver(gen, symbol)
-                else expr.args)
-        call = Call(symbol, args, expr.type_args)
+        call = Call(symbol, list(expr.args), expr.type_args)
         result = check_call(
             gen,
             call,
             scope,
             expected,
             resolved=symbol,
+            method_receiver=expr.receiver,
         )
         expr.resolved_symbol = getattr(call, "resolved_symbol", symbol)
         return result
@@ -1308,13 +1307,21 @@ def block_emit_type(gen: CodeGenerator, statements: list,
 
 def check_call(gen: CodeGenerator, call: Call, scope: dict,
                expected: str | None = None, *,
-               resolved: str | None = None) -> str | None:
+               resolved: str | None = None,
+               method_receiver=None) -> str | None:
     """Resolve and check a call without emitting its instruction."""
     from siec.codegen.generics import instantiate_function, pick_call_candidate
-    from siec.codegen.methods import constructor_type, method_call, qualified_method
+    from siec.codegen.methods import (
+        constructor_type,
+        method_call,
+        qualified_method,
+        takes_receiver,
+    )
     from siec.codegen.worklist import activate_function_instance
 
     written_call = call
+    method_receiver = (method_receiver if method_receiver is not None
+                       else getattr(call, "method_receiver", None))
 
     from siec.codegen.macros import resolve_macro_use
 
@@ -1352,7 +1359,6 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         return check_indirect_call(gen, call, scope, indirect)
 
     symbol = resolved
-    receiver = None
     module = None
     if symbol is None and "::" in call.name:
         symbol = qualified_method(gen, call.name)
@@ -1360,8 +1366,9 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         if (found := gen.resolve_member(call.name.split("."))) is not None:
             symbol, module = found
         if symbol is None and (found := method_call(gen, call, scope)):
-            symbol, receiver = found
-        if symbol is not None and receiver is None and symbol in gen.globals:
+            symbol, method_receiver = found
+        if (symbol is not None and method_receiver is None
+                and symbol in gen.globals):
             return check_indirect_call(gen, call, scope, gen.globals[symbol])
         if symbol is None:
             from siec.codegen.deprecation import check_removed_method
@@ -1378,21 +1385,28 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
             raise NameError(f"undefined function {call.name!r}")
         symbol, module = gen.resolve_call_target(call.name)
 
-    if receiver is not None:
-        call = Call(call.name, [receiver, *call.args], call.type_args)
-
     from siec.codegen.deprecation import check_removed
 
     check_removed(gen, symbol)
 
     kind, candidate = pick_call_candidate(
-        gen, symbol, call, scope, expected, module=module)
+        gen, symbol, call, scope, expected, module=module,
+        method_receiver=method_receiver)
     if kind == "generic":
         template, type_args = candidate
         symbol = instantiate_function(gen, template, type_args)
     else:
         symbol = candidate
     activate_function_instance(gen, symbol)
+
+    if method_receiver is not None and takes_receiver(gen, symbol):
+        call = Call(
+            call.name,
+            [method_receiver, *call.args],
+            call.type_args,
+        )
+    if method_receiver is not None:
+        written_call.method_receiver = method_receiver
 
     if symbol not in gen.return_types:
         if (ctor := constructor_type(gen, call, symbol)) is not None:

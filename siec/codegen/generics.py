@@ -676,7 +676,8 @@ def accepts_arity(template, count: int) -> bool:
 
 
 def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
-                      expected: str | None = None) -> tuple:
+                      expected: str | None = None,
+                      method_receiver=None) -> tuple:
     """
     Resolve a call against a generic function's templates - arity
     overloads included - returning the winning template and its type
@@ -690,15 +691,26 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
     failure = None
     resolved = []
     for template in candidates:
+        candidate_call = call
+        if method_receiver is not None:
+            from siec.codegen.methods import template_takes_receiver
+
+            if template_takes_receiver(template):
+                candidate_call = Call(
+                    call.name,
+                    [method_receiver, *call.args],
+                    call.type_args,
+                )
+
         if (call.type_args is not None
                 and len(call.type_args) != len(template.type_params)):
             continue
 
-        if not accepts_arity(template, len(call.args)):
+        if not accepts_arity(template, len(candidate_call.args)):
             continue
 
         try:
-            type_args = resolve_generic_call(gen, template, call, scope,
+            type_args = resolve_generic_call(gen, template, candidate_call, scope,
                                              expected)
 
             # a template whose constraints reject the bound arguments is
@@ -716,12 +728,12 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
                 check_constraints(gen, template,
                                   dict(zip(template.type_params, expanded)))
 
-            resolved.append((template, type_args))
+            resolved.append((template, type_args, candidate_call))
         except TypeError as error:
             failure = failure or error
 
     if len(resolved) == 1:
-        return resolved[0]
+        return resolved[0][:2]
 
     # several resolve: a typed context picks the templates whose returns
     # produce it, then the arguments' concrete types rank the substituted
@@ -731,7 +743,7 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
     if resolved:
         if expected is not None:
             matching = [entry for entry in resolved
-                        if returns_expected(gen, *entry, expected)]
+                        if returns_expected(gen, *entry[:2], expected)]
             resolved = matching or resolved
 
         strength = {"exact": 0, "implicit": 1, "adopt": 2}
@@ -739,7 +751,8 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
             (strength[fit], -constraint_count(entry[0].constraints),
              -int(entry[0].is_override), entry)
             for entry in resolved
-            if (fit := generic_fit(gen, *entry, call, scope)) is not None
+            if (fit := generic_fit(
+                    gen, entry[0], entry[1], entry[2], scope)) is not None
         ]
         if ranked:
             best = min(candidate[:3] for candidate in ranked)
@@ -751,16 +764,26 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
                    for candidate in winners) > 1:
                 raise TypeError(
                     f"overrides of function {symbol!r} are ambiguous")
-            return winners[0][3]
+            return winners[0][3][:2]
 
-        return resolved[0]
+        return resolved[0][:2]
 
     if failure is not None:
         raise failure
 
     # nothing fit the call's shape: report against the primary template
-    return candidates[0], resolve_generic_call(gen, candidates[0], call,
-                                               scope, expected)
+    candidate_call = call
+    if method_receiver is not None:
+        from siec.codegen.methods import template_takes_receiver
+
+        if template_takes_receiver(candidates[0]):
+            candidate_call = Call(
+                call.name,
+                [method_receiver, *call.args],
+                call.type_args,
+            )
+    return candidates[0], resolve_generic_call(
+        gen, candidates[0], candidate_call, scope, expected)
 
 
 def returns_expected(gen: CodeGenerator, template, type_args: list,
@@ -841,7 +864,8 @@ def pick_call_candidate(gen: CodeGenerator, symbol: str, call, scope: dict,
                         module: str | None = None,
                         receiver: str | None = None,
                         generic_call=None,
-                        generic_scope: dict | None = None) -> tuple[str, object]:
+                        generic_scope: dict | None = None,
+                        method_receiver=None) -> tuple[str, object]:
     """
     Arbitrate concrete and generic overloads by their actual fit strength.
 
@@ -866,7 +890,8 @@ def pick_call_candidate(gen: CodeGenerator, symbol: str, call, scope: dict,
         try:
             concrete_symbol, concrete_fit = pick_overload_fit(
                 gen, symbol, call.args, scope,
-                receiver=receiver, module=module)
+                receiver=receiver, module=module,
+                method_receiver=method_receiver)
             concrete = (concrete_symbol, concrete_fit)
         except TypeError as error:
             concrete_error = error
@@ -883,9 +908,20 @@ def pick_call_candidate(gen: CodeGenerator, symbol: str, call, scope: dict,
         ranked_scope = generic_scope if generic_scope is not None else scope
         try:
             template, type_args = pick_generic_call(
-                gen, symbol, ranked_call, ranked_scope, expected)
+                gen, symbol, ranked_call, ranked_scope, expected,
+                method_receiver=method_receiver)
+            fitted_call = ranked_call
+            if method_receiver is not None:
+                from siec.codegen.methods import template_takes_receiver
+
+                if template_takes_receiver(template):
+                    fitted_call = Call(
+                        ranked_call.name,
+                        [method_receiver, *ranked_call.args],
+                        ranked_call.type_args,
+                    )
             fit = generic_fit(
-                gen, template, type_args, ranked_call, ranked_scope)
+                gen, template, type_args, fitted_call, ranked_scope)
             generic = (template, type_args, fit)
         except TypeError as error:
             generic_error = error
