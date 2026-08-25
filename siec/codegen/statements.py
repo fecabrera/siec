@@ -491,9 +491,21 @@ def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
     place = resolve_lvalue(
         gen, builder, target, scope,
         allow_const_init=getattr(stmt, "const_init", False))
-    from siec.codegen.assignment import assignment_action
+    from siec.codegen.assignment import (
+        AssignmentAction,
+        assignment_action,
+        initializes_uninitialized_member,
+    )
 
-    action = assignment_action(gen, target, place.type, stmt.value, scope)
+    initializing = getattr(
+        stmt, "initialization",
+        initializes_uninitialized_member(target, scope),
+    )
+    action = (
+        AssignmentAction(None, stmt.value)
+        if initializing
+        else assignment_action(gen, target, place.type, stmt.value, scope)
+    )
     if action.call is not None:
         emit_expression(gen, builder, action.call, None, scope)
         return
@@ -504,7 +516,8 @@ def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
                                        emit_drop_cleanup, emit_drop_slot,
                                        set_drop_flag)
 
-    if isinstance(place, AddressLValue) and destroyable(gen, place.type):
+    if (not initializing and isinstance(place, AddressLValue)
+            and destroyable(gen, place.type)):
         # Preserve ordinary assignment evaluation order: retain the target
         # address, compute the replacement completely, then release the old
         # value before storing the new owner.

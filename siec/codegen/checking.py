@@ -337,10 +337,20 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             target_type = mutable_lvalue_type(
                 gen, target, scope, allow_const_init=const_init)
             stmt.const_init = const_init
-            from siec.codegen.assignment import assignment_action
+            from siec.codegen.assignment import (
+                AssignmentAction,
+                assignment_action,
+                initializes_uninitialized_member,
+            )
 
-            action = assignment_action(
-                gen, target, target_type, stmt.value, scope)
+            stmt.initialization = initializes_uninitialized_member(
+                target, scope)
+            action = (
+                AssignmentAction(None, stmt.value)
+                if stmt.initialization
+                else assignment_action(
+                    gen, target, target_type, stmt.value, scope)
+            )
             if action.call is not None:
                 check_expression(gen, action.call, scope)
             else:

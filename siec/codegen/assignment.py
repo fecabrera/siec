@@ -19,6 +19,18 @@ class AssignmentAction:
     value: object | None
 
 
+def initializes_uninitialized_member(target, scope: dict) -> bool:
+    """Whether a member write initializes storage in a bare local."""
+    if not isinstance(target, Member):
+        return False
+
+    root = target.base
+    while isinstance(root, Member):
+        root = root.base
+    return (isinstance(root, Var) and root.name in scope
+            and not scope[root.name].initialized)
+
+
 def assignment_action(gen: CodeGenerator, target, target_type: str,
                       value, scope: dict) -> AssignmentAction:
     """

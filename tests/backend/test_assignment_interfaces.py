@@ -3,6 +3,41 @@
 import pytest
 
 
+BARE_OWNED_FIELD = r"""
+@extern fn printf(format: char*, ...);
+
+struct Owned: Destroy, AssignFrom<Owned> { value: i32; }
+struct Holder {
+    ok: bool;
+    union {
+        value: Owned;
+        error: i32;
+    };
+}
+
+fn Owned::destroy(&self) {}
+
+fn Owned::assign_from(&self, source: const &Owned) {
+    printf("assigned\n");
+    self.value = source.value;
+}
+
+fn wrap(value: Owned) -> Holder {
+    let result: Holder;
+    result.ok = true;
+    result.value = value;
+    return result;
+}
+
+fn main() -> i32 {
+    let result = wrap({42});
+    let value = result.value.value;
+    drop result.value;
+    return value;
+}
+"""
+
+
 def test_assignment_selects_borrowed_consuming_and_clone_paths(run):
     """RHS ownership selects the matching interface and preserves borrows."""
     source = """
@@ -248,6 +283,20 @@ def test_assignment_reinitializes_a_moved_local(run):
     }
     """
     assert run(source).returncode == 42
+
+
+def test_owned_field_write_initializes_a_bare_aggregate(run):
+    """A first member write stores directly instead of replacing garbage."""
+    result = run(BARE_OWNED_FIELD)
+    assert result.returncode == 42
+    assert result.stdout == ""
+
+
+def test_jit_owned_field_write_initializes_a_bare_aggregate(compile_source):
+    """JIT also transfers the first owned field value without assignment."""
+    from siec.backend import run_jit
+
+    assert run_jit(compile_source(BARE_OWNED_FIELD), ["test.sie"]) == 42
 
 
 def test_move_state_flows_out_of_nested_control_flow(compile_source):
