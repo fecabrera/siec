@@ -40,10 +40,55 @@ struct Path: Destroy {
     /**
      * Get the basename of the path.
      *
+     * @param path The null-terminated path to get the basename of.
      * @return The basename of the path.
      */
+    @inline
+    fn basename(path: &char[]) -> String {
+        return String(basename(path));
+    }
+
+    /**
+     * Get the basename of the path.
+     *
+     * @param path The path to get the basename of.
+     * @return The basename of the path.
+     */
+    @inline
+    fn basename(path: &String) -> String {
+        return Path::basename(path.as_null_terminated_array());
+    }
+
+    /**
+     * Get the basename of the path.
+     *
+     * @return The basename of the path.
+     */
+    @inline
     fn basename(&self) -> String {
-        return String(basename(self.path.as_null_terminated_array()));
+        return Path::basename(self.path);
+    }
+
+    /**
+     * Get the dirname of the path.
+     *
+     * @param path The null-terminated path to get the dirname of.
+     * @return The dirname of the path.
+     */
+    @inline
+    fn dirname(path: &char[]) -> String {
+        return String(dirname(path));
+    }
+
+    /**
+     * Get the dirname of the path.
+     *
+     * @param path The path to get the dirname of.
+     * @return The dirname of the path.
+     */
+    @inline
+    fn dirname(path: &String) -> String {
+        return Path::dirname(path.as_null_terminated_array());
     }
 
     /**
@@ -51,19 +96,21 @@ struct Path: Destroy {
      *
      * @return The dirname of the path.
      */
+    @inline
     fn dirname(&self) -> String {
-        return String(dirname(self.path.as_null_terminated_array()));
+        return Path::dirname(self.path);
     }
 
     /**
      * Check if the path is a directory.
      *
+     * @param path The null-terminated path to check if it is a directory.
      * @return The result of the check.
      */
-    fn is_dir(&self) -> Result<bool, StatError> {
+    fn is_dir(path: &char[]) -> Result<bool, StatError> {
         let st: stat;
         
-        if (stat(self.path.as_null_terminated_array(), &st) < 0) {
+        if (stat(path, &st) < 0) {
             let errsv = errno;
             case(errsv) {
             when ENOENT:
@@ -79,14 +126,36 @@ struct Path: Destroy {
     }
 
     /**
-     * Check if the path is a regular file.
+     * Check if the path is a directory.
+     *
+     * @param path The path to check if it is a directory.
+     * @return The result of the check.
+     */
+    @inline
+    fn is_dir(path: &String) -> Result<bool, StatError> {
+        return Path::is_dir(path.as_null_terminated_array());
+    }
+
+    /**
+     * Check if the path is a directory.
      *
      * @return The result of the check.
      */
-    fn is_regular(&self) -> Result<bool, StatError> {
+    @inline
+    fn is_dir(&self) -> Result<bool, StatError> {
+        return Path::is_dir(self.path);
+    }
+
+    /**
+     * Check if the path is a regular file.
+     *
+     * @param path The null-terminated path to check if it is a regular file.
+     * @return The result of the check.
+     */
+    fn is_regular(path: const &char[]) -> Result<bool, StatError> {
         let st: stat;
         
-        if (stat(self.path.as_null_terminated_array(), &st) < 0) {
+        if (stat(path, &st) < 0) {
             let errsv = errno;
             case(errsv) {
             when ENOENT:
@@ -99,5 +168,26 @@ struct Path: Destroy {
         }
 
         return Ok(S_ISREG(st.st_mode));
+    }
+
+    /**
+     * Check if the path is a regular file.
+     *
+     * @param path The path to check if it is a regular file.
+     * @return The result of the check.
+     */
+    @inline
+    fn is_regular(path: &String) -> Result<bool, StatError> {
+        return Path::is_regular(path.as_null_terminated_array());
+    }
+
+    /**
+     * Check if the path is a regular file.
+     *
+     * @return The result of the check.
+     */
+    @inline
+    fn is_regular(&self) -> Result<bool, StatError> {
+        return Path::is_regular(self.path.as_null_terminated_array());
     }
 }
