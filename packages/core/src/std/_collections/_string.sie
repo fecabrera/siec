@@ -25,9 +25,7 @@ import { Formattable } from std.format;
     * @return The new String.
     */
     fn null_terminated(src: const char*) -> String {
-        let str = String(src);
-        str.null_terminate();
-        return str;
+        return String(src).null_terminate();
     }
 
     /**
@@ -37,9 +35,15 @@ import { Formattable } from std.format;
     * @return The new String.
     */
     fn null_terminated(src: const &Iterable<char>) -> String {
-        let str = String(src);
-        str.null_terminate();
-        return str;
+        return String(src).null_terminate();
+    }
+
+    /**
+    * Null terminate the String.
+    */
+    fn null_terminate(&self) -> self {
+        self.push('\0');
+        self.pop();
     }
 
     /**
@@ -98,15 +102,6 @@ import { Formattable } from std.format;
     fn assign(&self, arr: const char*) {
         self.reset();
         self.append(arr);
-    }
-
-    /**
-    * Null terminate the String.
-    */
-    @inline
-    fn null_terminate(&self) {
-        self.push('\0');
-        self.pop();
     }
 
     /**

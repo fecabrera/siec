@@ -54,6 +54,18 @@ fn Buffer::null_terminate(&self) -> self {
     self.data[0] = 1;
 }
 
+fn Buffer::a(&self) -> self {
+    self.data[0] += 1;
+}
+
+fn Buffer::b(&self) -> self {
+    self.data[0] += 2;
+}
+
+fn Buffer::c(&self) -> &Buffer {
+    return self.a().b();
+}
+
 fn borrow(value: &Buffer) -> &Buffer {
     return value;
 }
@@ -84,6 +96,9 @@ fn main() -> i32 {
     let built_assigned = Buffer(9);
     built_assigned = Buffer(0).null_terminate();
     let built_argument = read(Buffer(0).null_terminate());
+    let discarded = Buffer(0);
+    discarded.a().b();
+    let referenced = Buffer(0);
     if (chained.data[0] != 41) { return 1; }
     if (copied.data[0] != 41 or copied.data == chained.data) { return 2; }
     if (returned.data[0] != 41 or returned.data == chained.data) { return 3; }
@@ -95,6 +110,12 @@ fn main() -> i32 {
     if (built_returned.data[0] != 1) { return 9; }
     if (built_assigned.data[0] != 1) { return 10; }
     if (built_argument != 1) { return 11; }
+    if (discarded.data[0] != 3) { return 12; }
+    if (referenced.c().data != referenced.data) { return 13; }
+    if (referenced.data[0] != 3) { return 14; }
+    let received = referenced.c();
+    if (referenced.data[0] != 6) { return 15; }
+    if (received.data[0] != 6 or received.data == referenced.data) { return 16; }
     return 42;
 }
 """
@@ -384,13 +405,13 @@ def test_mutable_reference_to_temporary_does_not_double_free(run):
     assert result.stdout == "drop\n"
 
 
-def test_owned_values_read_through_references_are_cloned(run):
-    """A fluent reference result never shares one owned allocation."""
+def test_owned_reference_copies_and_self_return_chains(run):
+    """Owned copies clone, while discarded and borrowed self chains do not."""
     assert run(REFERENCE_COPY).returncode == 42
 
 
-def test_jit_clones_owned_reference_results(compile_source):
-    """JIT cleanup follows the same owned-copy lifetime as native code."""
+def test_jit_owned_reference_copies_and_self_return_chains(compile_source):
+    """JIT follows the same owned-copy and self-chain rules as native code."""
     from siec.backend import run_jit
 
     assert run_jit(compile_source(REFERENCE_COPY), ["test.sie"]) == 42
