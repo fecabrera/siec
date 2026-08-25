@@ -16,18 +16,11 @@ fn main(args: const char*[]) -> i32 {
     }
 
     let input = String::null_terminated(args[1]);
-    let output = String::null_terminated(args.length < 3 ? "archive.zip" : args[2]);
-
-    // stat input
-    let st: stat;
-    if (stat(input.as_const_array(), &st) < 0) {
-        std.io.println(std.io.stderr, "can't stat {}: {}", input, errno);
-        return 1;
-    }
+    let output = args.length < 3 ? String::null_terminated("archive.zip") : String::null_terminated(args[2]);
 
     // open zip archive from path
     let errorp: zip.ZIP_ER;
-    let archive = zip.zip_open(output.as_const_array(), zip.ZIP::CREATE | zip.ZIP::EXCL, &errorp);
+    let archive = zip.zip_open(output.as_const_array(), zip.ZIP::CREATE | zip.ZIP::TRUNCATE, &errorp);
     if (archive == null) {
         // initialize error
         let error: zip.zip_error;
@@ -39,20 +32,22 @@ fn main(args: const char*[]) -> i32 {
     }
     defer zip.zip_close(archive);
 
-    // zip input
-    if (S_ISDIR(st.st_mode)) {
+    // check if input is dir
+    let is_dir = try Path::is_dir(input) except (error) {
+        std.io.println(std.io.stderr, "{}: {}", input, error);
+        return 1;
+    }
+    
+    if (is_dir) {
+        // zip dir
         try zip_dir(archive, input, String::null_terminated("")) except (err) {
             std.io.println(std.io.stderr, "can't zip directory: {}", input);
             return 1;
         }
     } else {
-        let path = Path(input);
-
-        let dirname = path.dirname();
-        dirname.null_terminate();
-        
-        let basename = path.basename();
-        basename.null_terminate();
+        // zip file
+        let dirname = Path::dirname(input).null_terminate();
+        let basename = Path::basename(input).null_terminate();
 
         try zip_file(archive, basename, input) except (err) {
             std.io.println(std.io.stderr, "can't zip file: {}", input);
@@ -79,26 +74,21 @@ fn zip_dir(archive: zip.zip*, dirname: const &String, dirpath: const &String) ->
         let name = String::null_terminated(dirp->d_name as char*);
         if (name == "." or name == "..") continue;
 
-        let fullname = format("{}/{}", dirname, name);
-        fullname.null_terminate();
+        let fullname = format("{}/{}", dirname, name).null_terminate();
+        let path = dirpath ? format("{}/{}", dirpath, name).null_terminate() : String::null_terminated(name);
 
-        let path = dirpath.get_length() == 0 ? String(name) : format("{}/{}", dirpath, name);
-        path.null_terminate();
-
-        let st: stat;
-        if (stat(fullname.as_const_array(), &st) < 0) {
-            std.io.println(std.io.stderr, "can't stat {}: {}", fullname, errno);
+        let is_dir = try Path::is_dir(fullname) except (error) {
+            std.io.println(std.io.stderr, "{}: {}", fullname, error);
             return Error(1);
         }
 
-        if (S_ISDIR(st.st_mode)) {
-            std.io.println("{} -> {}", fullname, path);
-            let res = zip.zip_dir_add(archive, path.as_const_array(), zip.ZIP_FL::ENC_UTF_8);
-            if (res < 0) {
+        if (is_dir) {
+            if (zip.zip_dir_add(archive, path.as_const_array(), zip.ZIP_FL::ENC_UTF_8) < 0) {
                 std.io.println(std.io.stderr, "can't add directory {}: {}", fullname, zip.zip_strerror(archive));
                 return Error(1);
             }
-
+            
+            std.io.println("{} -> {}", fullname, path);
             try zip_dir(archive, fullname, path);
         } else {
             try zip_file(archive, path, fullname);
