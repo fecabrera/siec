@@ -218,11 +218,28 @@ def check_temporary_cleanup(gen: CodeGenerator, type_name: str | None,
 def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
                              scope: dict) -> None:
     """Transfer a destructible value expression into a new owner."""
-    from siec.codegen.ownership import destroyable
+    from siec.codegen.ownership import (
+        destroyable,
+        expression_returns_reference,
+        inherit_expression_identity,
+    )
+    from siec.codegen.interfaces import type_implements
 
     if isinstance(expr, Move):
         return
     if not destroyable(gen, type_name):
+        return
+    if expression_returns_reference(gen, expr):
+        value_type = strip_const(strip_reference(type_name))
+        if not type_implements(gen, value_type, "Clone"):
+            raise TypeError(
+                f"cannot copy owned {value_type!r} value through a reference: "
+                "implement Clone")
+        if getattr(expr, "owned_copy", None) is None:
+            copied = inherit_expression_identity(
+                expr, MethodCall(expr, "clone", []))
+            check_expression(gen, copied, scope, value_type)
+            expr.owned_copy = copied
         return
     if isinstance(expr, Var) and expr.name in scope:
         variable = scope[expr.name]
@@ -326,6 +343,8 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 check_expression(gen, action.call, scope)
             else:
                 check_expression(gen, action.value, scope, target_type)
+                consume_owned_expression(
+                    gen, action.value, target_type, scope)
 
             if isinstance(target, Var) and target.name in scope:
                 variable = scope[target.name]
@@ -360,6 +379,8 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 check_expression(gen, action.call, scope)
             else:
                 check_expression(gen, action.value, scope, target_type)
+                consume_owned_expression(
+                    gen, action.value, target_type, scope)
             return False
 
         if isinstance(stmt, Return):

@@ -363,6 +363,13 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
 
             return emit_coerced(gen, builder, expansion, target_name, scope)
 
+    # Reading an owned value through a reference copies it. Checking resolves
+    # the Clone call and gives it the source expression's ownership identity,
+    # so the surrounding let, return, assignment, or argument consumes the
+    # copied temporary instead of the borrowed storage.
+    if (copied := getattr(expr, "owned_copy", None)) is not None:
+        return emit_coerced(gen, builder, copied, target_name, scope)
+
     # the target may drive a generic callee's type arguments where its
     # own cannot: 'let r: Result<i32, u8> = Ok(5);' binds E from the target
     if isinstance(expr, (Call, MethodCall)) and target_name is not None:

@@ -1,5 +1,7 @@
 """Feature tests for nominal Destroy ownership and automatic cleanup."""
 
+import pytest
+
 
 RESOURCE = r"""
 @extern fn printf(format: char*, ...);
@@ -19,6 +21,60 @@ fn inspect(value: const &Resource) {
 
 fn consume(value: Resource) {
     printf("consume %d\n", value.id);
+}
+"""
+
+
+REFERENCE_COPY = r"""
+@extern fn malloc(size: u64) -> opaque*;
+@extern fn free(ptr: opaque*);
+
+struct Buffer: Destroy, Clone { data: i32*; }
+
+fn Buffer::init(&self, value: i32) {
+    self.data = malloc(@sizeof(i32)) as i32*;
+    self.data[0] = value;
+}
+
+fn Buffer::clone(const &self) -> Buffer {
+    return Buffer(self.data[0] + 100);
+}
+
+fn Buffer::destroy(&self) {
+    free(self.data);
+    self.data = null;
+}
+
+fn Buffer::touch(&self) -> &Buffer {
+    self.data[0] += 1;
+    return self;
+}
+
+fn borrow(value: &Buffer) -> &Buffer {
+    return value;
+}
+
+fn copy(value: &Buffer) -> Buffer {
+    return borrow(value);
+}
+
+fn read(value: Buffer) -> i32 {
+    return value.data[0];
+}
+
+fn main() -> i32 {
+    let chained = Buffer(40).touch();
+    let copied = borrow(chained);
+    let returned = copy(chained);
+    let assigned = Buffer(0);
+    assigned = borrow(chained);
+    let argument = read(borrow(chained));
+    if (chained.data[0] != 141) { return 1; }
+    if (copied.data[0] != 241) { return 2; }
+    if (returned.data[0] != 241) { return 3; }
+    if (assigned.data[0] != 241) { return 4; }
+    if (argument != 241) { return 5; }
+    return 42;
 }
 """
 
@@ -305,6 +361,35 @@ def test_mutable_reference_to_temporary_does_not_double_free(run):
     """)
     assert result.returncode == 0
     assert result.stdout == "drop\n"
+
+
+def test_owned_values_read_through_references_are_cloned(run):
+    """A fluent reference result never shares one owned allocation."""
+    assert run(REFERENCE_COPY).returncode == 42
+
+
+def test_jit_clones_owned_reference_results(compile_source):
+    """JIT cleanup follows the same owned-copy lifetime as native code."""
+    from siec.backend import run_jit
+
+    assert run_jit(compile_source(REFERENCE_COPY), ["test.sie"]) == 42
+
+
+def test_owned_reference_result_requires_clone(compile_source):
+    """An owned borrowed value cannot become a second owner without Clone."""
+    with pytest.raises(TypeError, match="cannot copy owned 'Buffer'.*Clone"):
+        compile_source(r"""
+        struct Buffer: Destroy { value: i32; }
+
+        fn Buffer::destroy(&self) {}
+        fn Buffer::view(&self) -> &Buffer { return self; }
+
+        fn main() -> i32 {
+            let source: Buffer = {42};
+            let copy = source.view();
+            return copy.value;
+        }
+        """)
 
 
 def test_nested_borrowed_temporary_lives_through_outer_call(run):
