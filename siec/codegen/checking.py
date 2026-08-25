@@ -484,9 +484,15 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             return bool(left and right)
 
         if isinstance(stmt, Case):
+            runtime_type_case = False
             if isinstance(stmt.subject, TypeOf):
                 from siec.codegen.expressions import type_operand
                 from siec.codegen.statements import expand_when_interface
+
+                subject_type = infer_type(gen, stmt.subject.value, scope)
+                runtime_type_case = (
+                    strip_const(strip_reference(subject_type or "")) == "Any"
+                )
 
                 stmt.arms = [
                     expanded
@@ -516,9 +522,16 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     )
                     check_expression(gen, value, scope, arm_expected)
                 arm_scope = dict(scope)
-                terminates = check_block(
-                    gen, arm.body, arm_scope, fn,
-                    loop=loop, emit_type=emit_type)
+                previous_guard = gen.runtime_type_guard
+                if runtime_type_case:
+                    gen.runtime_type_guard = getattr(
+                        arm, "runtime_interface_type", None)
+                try:
+                    terminates = check_block(
+                        gen, arm.body, arm_scope, fn,
+                        loop=loop, emit_type=emit_type)
+                finally:
+                    gen.runtime_type_guard = previous_guard
                 arms.append(terminates)
                 if not terminates:
                     continuing.append(arm_scope)
@@ -1147,6 +1160,10 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             expr.expanded = True
         validate_type(expr.type, gen.structs)
         operand_type = check_expression(gen, expr.operand, scope)
+        if (strip_const(expr.type) == "Any" and operand_type is not None
+                and strip_const(strip_reference(operand_type)) != "Any"):
+            wrapped = strip_const(strip_reference(operand_type))
+            gen.any_types.setdefault(gen.current_function, set()).add(wrapped)
         if ((operand_type or "").startswith("closure fn(")
                 and expr.type.startswith("fn(")):
             from siec.codegen.closures import validate_callback_adapter
@@ -1229,6 +1246,24 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             check_truth(gen, expr.left, scope)
             check_truth(gen, expr.right, scope)
             return "bool"
+
+        # Pointer compatibility is a Sie type rule, not an LLVM lowering
+        # detail. Check it here even when this function will not be emitted.
+        left_name = strip_const(expand_alias(
+            gen, expr_sie_type(gen, expr.left, scope)
+            or infer_type(gen, expr.left, scope), checked=False) or "")
+        right_name = strip_const(expand_alias(
+            gen, expr_sie_type(gen, expr.right, scope)
+            or infer_type(gen, expr.right, scope), checked=False) or "")
+        left_pointer = left_name.endswith("*") or left_name.startswith("fn(")
+        right_pointer = right_name.endswith("*") or right_name.startswith("fn(")
+        if ((left_pointer or right_pointer)
+                and expr.op not in ("+", "-")
+                and (not left_pointer or not right_pointer
+                     or (left_name != right_name
+                         and "opaque*" not in (left_name, right_name)))):
+            raise TypeError(
+                f"cannot apply {expr.op!r} to {left_name} and {right_name}")
 
     if isinstance(expr, UnaryOp) and expr.op == "not":
         check_truth(gen, expr.operand, scope)
@@ -1500,6 +1535,9 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                     init,
                     default_offset=default_offset,
                 )
+                from siec.codegen.deprecation import note_use
+
+                note_use(gen, init)
             gen.checked_call = None
             return ctor
         if call.type_args is not None:
@@ -1590,7 +1628,12 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
             if not is_const(param):
                 consume_owned_expression(gen, arg, actual or param, scope)
     for arg in call.args[fixed:]:
-        check_expression(gen, arg, scope)
+        actual = check_expression(gen, arg, scope)
+        if variadic and actual is not None:
+            wrapped = strip_const(strip_reference(actual))
+            if wrapped != "Any":
+                gen.any_types.setdefault(gen.current_function, set()).add(
+                    wrapped)
 
     # Omitted defaults are part of this call's checked expression graph.
     # Resolve them in the declaration's file view and without caller locals,

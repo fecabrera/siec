@@ -1000,7 +1000,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     # Check ordinary bodies against the resolved inventories. Generic calls
     # request concrete headers and bodies for the fixed-point worklist below.
-    from siec.codegen.checking import check_function
+    from siec.codegen.checking import check_function, resolved_symbol
 
     for fn in program.functions:
         if (fn.type_params is None and fn.receiver_params is None
@@ -1016,6 +1016,25 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     run_semantic_worklist(gen)
 
     complete_semantics(gen)
+
+    # Duplicate definitions are a source error even when no application path
+    # reaches them. Body emission used to discover this accidentally; keep it
+    # in the semantic phase now that unreachable bodies are not lowered.
+    from siec.codegen.functions import shown_signature
+
+    defined_symbols = set()
+    for fn in program.functions:
+        if (fn.type_params is not None or fn.receiver_params is not None
+                or (fn.body is None and fn.asm is None)
+                or id(fn) in gen.overridden_functions
+                or not (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
+            continue
+        with gen.in_file(fn.file):
+            symbol = resolved_symbol(gen, fn)
+        if symbol in defined_symbols:
+            raise TypeError(
+                f"function '{shown_signature(fn)}' is defined more than once")
+        defined_symbols.add(symbol)
 
     # The semantic graph is complete and checked. Only now materialize its
     # LLVM globals and callable declarations, then lower checked bodies.
@@ -1036,29 +1055,67 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     gen.emitting = True
 
-    for fn in program.functions:
-        if (fn.type_params is None and fn.receiver_params is None
-                and (fn.body is not None or fn.asm is not None)
-                and id(fn) not in gen.overridden_functions
-                and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
-            emit_function(gen, fn)
-
+    # A whole-program application has one entry point, so declarations that
+    # cannot be reached from it need no body. Separate compilation and units
+    # without a main keep every definition available to an eventual linker.
     from siec.codegen.functions import link_once
+    from siec.codegen.checking import resolved_symbol
+    from siec.codegen.worklist import function_instance_symbol
 
-    for instance in gen.checked_instance_bodies:
-        gen.ungated_types += 1
-        try:
-            emit_function(gen, instance)
-        finally:
-            gen.ungated_types -= 1
+    ordinary = []
+    for fn in program.functions:
+        if (fn.type_params is not None or fn.receiver_params is not None
+                or (fn.body is None and fn.asm is None)
+                or id(fn) in gen.overridden_functions
+                or not (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
+            continue
+        with gen.in_file(fn.file):
+            ordinary.append((resolved_symbol(gen, fn), fn))
+    instances = [
+        (function_instance_symbol(gen, instance), instance)
+        for instance in gen.checked_instance_bodies
+    ]
 
-        if gen.unit_files is not None:
-            link_once(gen, instance)
+    whole_application = gen.unit_files is None and "main" in gen.checked_functions
+    emitted = set()
+    while True:
+        if whole_application:
+            from siec.codegen.deprecation import reachable_application_functions
+
+            live_functions = reachable_application_functions(gen, "main")
+        else:
+            live_functions = {symbol for symbol, _ in (*ordinary, *instances)}
+
+        progressed = False
+        for symbol, fn in ordinary:
+            if symbol in live_functions and symbol not in emitted:
+                emit_function(gen, fn)
+                emitted.add(symbol)
+                progressed = True
+
+        for symbol, instance in instances:
+            if symbol not in live_functions or symbol in emitted:
+                continue
+            gen.ungated_types += 1
+            try:
+                emit_function(gen, instance)
+            finally:
+                gen.ungated_types -= 1
+            emitted.add(symbol)
+            progressed = True
+
+            if gen.unit_files is not None:
+                link_once(gen, instance)
+
+        if not progressed:
+            break
 
     # a stamped '@inline' overload no call activated keeps no body; only a
     # definition may carry 'linkonce_odr', so it declares externally
     for func in gen.module.functions:
         if func.linkage == "linkonce_odr" and not func.blocks:
+            func.linkage = "external"
+        if func.linkage in ("internal", "private") and not func.blocks:
             func.linkage = "external"
 
     gen.emitting = False

@@ -95,6 +95,11 @@ class SymbolTable:
     deprecated: dict[str, str] = field(default_factory=dict)
     removed: dict[str, str] = field(default_factory=dict)
     call_graph: dict = field(default_factory=dict)
+    conditional_call_graph: dict[tuple[str, str], set[str]] = field(
+        default_factory=dict)
+    any_types: dict[str | None, set[str]] = field(default_factory=dict)
+    live_any_types: set[str] | None = None
+    runtime_type_guard: str | None = None
     call_sites: dict[tuple[str, str], tuple[str, int]] = field(
         default_factory=dict)
     type_instantiation_sites: dict[str, tuple[str, str, int]] = field(

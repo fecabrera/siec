@@ -212,6 +212,7 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
 
     previous_function = gen.current_function
     previous_file = gen.current_file
+    gen.call_graph.setdefault(previous_function, set()).add(invoke.name)
     gen.current_function = invoke.name
     gen.current_file = expr.file
     gen.return_types[invoke.name] = expr.return_type

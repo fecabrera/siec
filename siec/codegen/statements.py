@@ -901,7 +901,9 @@ def expand_when_interface(gen: CodeGenerator, arm: When, scope: dict) -> list:
         for concrete in interface_expansions(gen, spelling):
             body = copy.deepcopy(arm.body)
             respell_types(body, spelling, concrete)
-            arms.append(When([TypeId(concrete)], body))
+            expanded = When([TypeId(concrete)], body)
+            expanded.runtime_interface_type = concrete
+            arms.append(expanded)
 
     return arms
 
@@ -917,9 +919,20 @@ def emit_case(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Case, scope: dict
     # into an arm per implementing type
     if isinstance(stmt.subject, TypeOf):
         from siec.codegen.expressions import type_operand
+        from siec.codegen.inference import infer_type
+        from siec.codegen.types import strip_const, strip_reference
 
         stmt.arms = [expanded for arm in stmt.arms
                      for expanded in expand_when_interface(gen, arm, scope)]
+
+        subject_type = infer_type(gen, stmt.subject.value, scope)
+        if (strip_const(strip_reference(subject_type or "")) == "Any"
+                and gen.live_any_types is not None):
+            stmt.arms = [
+                arm for arm in stmt.arms
+                if getattr(arm, "runtime_interface_type", None) is None
+                or arm.runtime_interface_type in gen.live_any_types
+            ]
 
         for arm in stmt.arms:
             arm.values = [type_operand(gen, value, scope)

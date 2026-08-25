@@ -22,7 +22,11 @@ def note_use(gen: CodeGenerator, symbol: str) -> None:
     check_removed(gen, symbol)
 
     caller = gen.current_function
-    gen.call_graph.setdefault(caller, set()).add(symbol)
+    if gen.runtime_type_guard is None:
+        gen.call_graph.setdefault(caller, set()).add(symbol)
+    else:
+        gen.conditional_call_graph.setdefault(
+            (caller, symbol), set()).add(gen.runtime_type_guard)
     if caller is not None:
         gen.call_sites.setdefault(
             (caller, symbol), (gen.current_file, gen.current_line))
@@ -86,6 +90,46 @@ def reachable_from(gen: CodeGenerator, entry: str) -> set:
                 reached.add(callee)
                 stack.append(callee)
 
+    return reached
+
+
+def reachable_application_functions(gen: CodeGenerator, entry: str) -> set:
+    """
+    Functions an application can call, including runtime interface arms for
+    the concrete types a reachable expression can wrap in ``Any``.
+
+    Interface ``when`` arms are checked for every known implementation. Their
+    calls only become live when the program can actually place that concrete
+    type in an ``Any`` value.
+    """
+    reached = {entry}
+    stack = [entry]
+    any_types = set(gen.any_types.get(None, ()))
+
+    while stack:
+        caller = stack.pop()
+        any_types.update(gen.any_types.get(caller, ()))
+
+        for callee in gen.call_graph.get(caller, ()):
+            if callee not in reached:
+                reached.add(callee)
+                stack.append(callee)
+
+        for (owner, callee), guards in gen.conditional_call_graph.items():
+            if owner == caller and guards & any_types and callee not in reached:
+                reached.add(callee)
+                stack.append(callee)
+
+        # A newly reached producer can enable an arm in a function already
+        # visited. Revisit the graph whenever the runtime type set grows.
+        expanded = set(any_types)
+        for owner in reached:
+            expanded.update(gen.any_types.get(owner, ()))
+        if expanded != any_types:
+            any_types = expanded
+            stack.extend(reached)
+
+    gen.live_any_types = any_types
     return reached
 
 

@@ -890,9 +890,11 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
     symbol = candidate
 
     # a stamped overload's body waits for its first picked call
+    from siec.codegen.deprecation import note_use
     from siec.codegen.worklist import activate_function_instance
 
     activate_function_instance(gen, symbol)
+    note_use(gen, symbol)
 
     func = gen.module.globals[symbol]
     sie_params = gen.param_types[func.name]
