@@ -9,12 +9,6 @@ enum FileMode: i32 {
     Create      = 8,
 }
 
-enum SeekOrigin {
-    Start,
-    Current,
-    End,
-}
-
 enum OpenError {
     SystemError = -1,
     AlreadyOpen = 1,

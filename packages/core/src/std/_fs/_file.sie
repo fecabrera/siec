@@ -2,22 +2,18 @@ import unistd;
 import errno;
 import { fstat, stat } from sys.stat;
 import { errno } from errno;
-import { IOReadable, IOWritable, IOError } from std.io;
+import { IOReadable, IOWritable, IOError, IOSeekable, SeekOrigin } from std.io;
 import { Formattable } from std.format;
 import { mode_t, S_ISUID, S_IRWXU, S_IRWXG, S_IRWXO } from sys.types;
-import { FileMode, OpenError, CloseError, SeekOrigin, StatError } from _enums;
+import { FileMode, OpenError, CloseError, StatError } from _enums;
 
 /**
  * A file.
- *
- * @param fd The file descriptor.
- * @param mode The mode the file was opened in.
- * @param open Whether the file is open.
  */
-struct File: IOReadable, IOWritable {
-    @private fd: i32 = -1;
-    @private mode: FileMode = FileMode::None;
-    @private open: bool = false;
+struct File: IOReadable, IOWritable, IOSeekable {
+    @private fd: i32 = -1;                      /* The file descriptor. */
+    @private mode: FileMode = FileMode::None;   /* The mode the file was opened in. */
+    @private open: bool = false;                /* Whether the file is open. */
 
     /**
     * Open a file.
