@@ -5,6 +5,7 @@ import { Formattable } from std.format;
 
 struct List<T>
     : Destroy,
+      Truthy,
       Iterable<T>,
       GetItem<u64, T>,
       SetItem<u64, T>,
@@ -76,10 +77,21 @@ fn List<T>::destroy(&self) {
 }
 
 /**
+ * Check if the List is truthy.
+ *
+ * @return True if the List is truthy, false otherwise.
+ */
+@inline
+fn List<T>::truthy(const &self) -> bool {
+    return self.length > 0;
+}
+
+/**
  * Get the length of the list
  *
  * @return The length of the list
  */
+@inline
 fn List<T>::get_length(const &self) -> u64 {
     return self.length;
 }
@@ -89,6 +101,7 @@ fn List<T>::get_length(const &self) -> u64 {
  *
  * @return The capacity of the list
  */
+@inline
 fn List<T>::get_capacity(const &self) -> u64 {
     return self.capacity;
 }
