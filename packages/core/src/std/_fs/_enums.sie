@@ -16,10 +16,22 @@ enum SeekOrigin {
 }
 
 enum OpenError {
-    SystemError,
-    AlreadyOpen,
+    SystemError = -1,
+    AlreadyOpen = 1,
     InvalidMode,
     NotFound,
+    PermissionDenied,
+}
+
+enum CloseError {
+    SystemError = -1,
+    AlreadyClosed = 1,
+}
+
+enum StatError {
+    SystemError = -1,
+    NotFound = 1,
+    NotOpen,
     PermissionDenied,
 }
 
@@ -48,11 +60,6 @@ enum OpenError {
     }
 }
 
-enum CloseError {
-    SystemError,
-    AlreadyClosed,
-}
-
 @extend CloseError: Formattable {
     /**
     * Format the CloseError.
@@ -70,13 +77,6 @@ enum CloseError {
             return String("Unknown error");
         }
     }
-}
-
-enum StatError {
-    SystemError,
-    NotFound,
-    NotOpen,
-    PermissionDenied,
 }
 
 @extend StatError: Formattable {
