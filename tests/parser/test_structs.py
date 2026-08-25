@@ -2,7 +2,7 @@
 
 import pytest
 
-from siec.ast import Field, Struct
+from siec.ast import BoolLiteral, Field, IntLiteral, Struct
 from siec.parser.structs import parse_struct
 
 
@@ -80,6 +80,25 @@ def test_struct_fields_keep_pointer_and_struct_types(ts):
     """
     assert parse_struct(ts("struct S { p: i32*; inner: T; }")) == Struct(
         "S", [Field("p", "i32*"), Field("inner", "T")])
+
+
+def test_struct_fields_may_infer_their_types_from_defaults(ts):
+    """An equals sign after the name leaves the field type for inference."""
+    struct = parse_struct(ts("struct S { count = 1; ready = false; }"))
+
+    assert struct == Struct("S", [
+        Field("count", None, IntLiteral(1)),
+        Field("ready", None, BoolLiteral(False)),
+    ])
+
+
+def test_private_inferred_field_keeps_its_decorator(ts):
+    """A private field can omit its type without losing its visibility."""
+    struct = parse_struct(ts("struct S { @private ready = false; }"))
+
+    assert struct.fields == [
+        Field("ready", None, BoolLiteral(False), is_private=True),
+    ]
 
 
 def test_generic_struct_bounds(ts):

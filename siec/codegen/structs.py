@@ -19,6 +19,7 @@ def register_structs(gen: CodeGenerator, program: Program) -> None:
     separately, retaining backend-neutral semantic records through checking.
     """
     declare_structs(gen, program)
+    infer_struct_field_types(gen, program)
     define_structs(gen, program)
     lower_structs(gen)
 
@@ -140,6 +141,28 @@ def define_structs(gen: CodeGenerator, program: Program) -> None:
                 raise TypeError(f"a union field cannot have a default value")
             for field in struct.fields:
                 validate_type(field.type, gen.structs)
+
+
+def infer_struct_field_types(gen: CodeGenerator, program: Program) -> None:
+    """Infer every unannotated field from the default written beside it."""
+    from siec.codegen.inference import infer_type
+
+    for struct in program.structs:
+        if struct.fields is None:
+            continue
+
+        gen.current_file = struct.file
+        for field in struct.fields:
+            if field.type is not None:
+                continue
+
+            with source_location(line=field.line, file=struct.file):
+                inferred = infer_type(gen, field.default, {})
+                if inferred is None:
+                    raise TypeError(
+                        f"cannot infer a type for field {field.name!r}: "
+                        "annotate it explicitly")
+                field.type = inferred
 
 
 def lower_structs(gen: CodeGenerator) -> None:

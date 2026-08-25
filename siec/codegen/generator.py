@@ -858,7 +858,11 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     )
     from siec.codegen.functions import emit_function, lower_functions
     from siec.codegen.globals import lower_globals, resolve_globals
-    from siec.codegen.structs import declare_structs, define_structs
+    from siec.codegen.structs import (
+        declare_structs,
+        define_structs,
+        infer_struct_field_types,
+    )
 
     from siec.codegen.constants import BUILTIN_CONSTANTS
 
@@ -923,6 +927,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.interfaces import collect_extensions, resolve_extensions
 
     collect_extensions(gen, program)
+    infer_struct_field_types(gen, program)
 
     # Resolve declaration headers only after the active inventory is present.
     # Claims resolve before fields so bounded fields can use an extension
@@ -937,6 +942,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
         collect_enums(gen, branch)
         declare_structs(gen, branch)
         collect_extensions(gen, branch)
+        infer_struct_field_types(gen, branch)
         resolve_extensions(gen)
         resolve_enums(gen)
         resolve_aliases(gen)

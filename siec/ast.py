@@ -652,11 +652,12 @@ class Function:
 @dataclass
 class Field:
     """
-    A struct field with its name, type annotation, and optional default
-    value, taken where a declaration or literal leaves the field unfilled.
+    A struct field with its name, optional type annotation, and optional
+    default value. A field without an annotation infers its type from that
+    default.
     """
     name: str
-    type: str
+    type: str | None
     default: object | None = None
     is_private: bool = False  # '@private': reachable only from the struct's methods
     line: int = _line()

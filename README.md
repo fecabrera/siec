@@ -2139,6 +2139,18 @@ struct List<T> {
 }
 ```
 
+The type may be left out when the default determines it:
+
+```
+struct State {
+    mode = Mode::None;
+    open = false;
+    retries = 3;
+}
+```
+
+Enum members keep their enum type, and literals use their usual defaults such as `bool`, `i32`, and `f64`. Keep the annotation when the default needs a specific context, such as `handle: Handle* = null`.
+
 A bare declaration of a struct with any default starts from its defaults, the undefaulted fields zeroed (`let l: List<i32>;` holds `{null, 0, 8}`), and defaults of nested struct fields cascade. A named aggregate literal fills what it names and defaults the rest (`{ length = 2 }` keeps `data = null`); a positional literal still fills every field. A struct with no defaults anywhere stays uninitialized on a bare declaration, as ever.
 
 Defaults are written in the struct's declaration, so they see no local names: literals, `null`, constants, enum members, and `@sizeof` are the natural fits. Union fields take no default, since their fields share one storage, and module-level globals keep their zero initialization.

@@ -106,7 +106,7 @@ def parse_struct(ts: TokenStream) -> Struct:
                 or (ts.peek().value == "@"
                     and not (ts.peek(1).value == "private"
                              and ts.peek(2).kind == "ident"
-                             and ts.peek(3).value == ":"))):
+                             and ts.peek(3).value in (":", "=")))):
             # deferred import: functions and structs are mutually recursive
             from siec.parser.functions import (
                 merge_constraints,
@@ -147,8 +147,12 @@ def parse_struct(ts: TokenStream) -> Struct:
 
         named = ts.expect("ident")
         field_name = named.value
-        ts.expect("sym", ":")
-        field_type = parse_type(ts)
+        field_type = None
+        if ts.peek().syntax == ":":
+            ts.next()
+            field_type = parse_type(ts)
+        elif ts.peek().syntax != "=":
+            ts.expect("sym", ":")
 
         default = None
         if ts.peek().syntax == "=":
