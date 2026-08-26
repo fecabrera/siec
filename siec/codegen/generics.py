@@ -746,25 +746,24 @@ def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
                         if returns_expected(gen, *entry[:2], expected)]
             resolved = matching or resolved
 
-        strength = {"exact": 0, "implicit": 1, "adopt": 2}
         ranked = [
-            (strength[fit], -constraint_count(entry[0].constraints),
+            (*fit.rank, -constraint_count(entry[0].constraints),
              -int(entry[0].is_override), entry)
             for entry in resolved
             if (fit := generic_fit(
                     gen, entry[0], entry[1], entry[2], scope)) is not None
         ]
         if ranked:
-            best = min(candidate[:3] for candidate in ranked)
+            best = min(candidate[:5] for candidate in ranked)
             winners = [
                 candidate for candidate in ranked
-                if candidate[:3] == best
+                if candidate[:5] == best
             ]
-            if sum(candidate[3][0].is_override
+            if sum(candidate[5][0].is_override
                    for candidate in winners) > 1:
                 raise TypeError(
                     f"overrides of function {symbol!r} are ambiguous")
-            return winners[0][3][:2]
+            return winners[0][5][:2]
 
         return resolved[0][:2]
 
@@ -819,7 +818,7 @@ def generic_fit(gen: CodeGenerator, template, type_args: list, call,
     """
     # deferred imports: aliases and overloads both lean on generics
     from siec.codegen.aliases import expand_alias
-    from siec.codegen.overloads import parameter_fit, rank_type
+    from siec.codegen.overloads import FitProfile, parameter_fit, rank_type
 
     mapping = dict(zip(template.type_params, type_args))
     params = [substitute(p.type, mapping) for p in template.params]
@@ -843,18 +842,20 @@ def generic_fit(gen: CodeGenerator, template, type_args: list, call,
     # the substituted spellings mix files' names; no view gates them
     gen.ungated_types += 1
     try:
-        strength = {"exact": 0, "implicit": 1, "adopt": 2}
-        fit = "exact"
+        adopted = 0
+        implicit = 0
         for arg, param in zip(args, params):
             one = parameter_fit(gen, arg, rank_type(gen, arg, scope),
                                 expand_alias(gen, param))
             if one is None:
                 return None
 
-            if strength[one] > strength[fit]:
-                fit = one
+            if one == "adopt":
+                adopted += 1
+            elif one == "implicit":
+                implicit += 1
 
-        return fit
+        return FitProfile(adopted, implicit)
     finally:
         gen.ungated_types -= 1
 
@@ -898,7 +899,7 @@ def pick_call_candidate(gen: CodeGenerator, symbol: str, call, scope: dict,
 
     # Nothing can outrank an exact concrete overload, so avoid resolving
     # irrelevant templates (which may intentionally be uninferable here).
-    if concrete is not None and concrete[1] == "exact":
+    if concrete is not None and concrete[1].tier == "exact":
         return "concrete", concrete[0]
 
     generic = None
@@ -927,8 +928,7 @@ def pick_call_candidate(gen: CodeGenerator, symbol: str, call, scope: dict,
             generic_error = error
 
     if concrete is not None and generic is not None:
-        strength = {"exact": 0, "implicit": 1, "adopt": 2, None: 3}
-        if strength[generic[2]] < strength[concrete[1]]:
+        if generic[2] is not None and generic[2].rank < concrete[1].rank:
             return "generic", generic[:2]
         return "concrete", concrete[0]
 

@@ -254,6 +254,40 @@ def test_ambiguous_conversions_are_an_error(compile_source):
         """)
 
 
+def test_fewer_implicit_argument_conversions_win(run):
+    """A candidate with fewer implicit argument conversions is stronger."""
+    source = """
+    enum Mode: i32 {
+        Create = 1,
+        Write = 2,
+    }
+
+    fn open(path: const &char[], mode: Mode) -> i32 { return 1; }
+    fn open(path: const char*, mode: Mode) -> i32 { return 2; }
+
+    fn main() -> i32 {
+        let path: const char[] = "file";
+        return open(path, Mode::Create | Mode::Write);
+    }
+    """
+    assert run(source).returncode == 1
+
+
+def test_equal_implicit_argument_counts_remain_ambiguous(compile_source):
+    """Equal conversion counts do not select an arbitrary argument order."""
+    with pytest.raises(TypeError, match="ambiguous"):
+        compile_source("""
+        fn pick(left: i32, right: i64) -> i32 { return 1; }
+        fn pick(left: i64, right: i32) -> i32 { return 2; }
+
+        fn main() -> i32 {
+            let left: i16 = 0;
+            let right: i16 = 0;
+            return pick(left, right);
+        }
+        """)
+
+
 def test_no_matching_overload_is_an_error(compile_source):
     """
     An argument no candidate takes names the types it offered.

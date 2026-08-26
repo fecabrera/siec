@@ -927,7 +927,20 @@ fn Decimal::add(&self, n: i64) -> Decimal { ... }
 fn Decimal::add(&self, f: f64) -> Decimal { ... }
 ```
 
-Each call ranks every matching overload together, including generic and interface-bound ones. Exact matches come first; a concrete overload wins when it is just as exact as a generic one. Only when there is no exact match does the call consider implicit conversions such as widening, array decay, `opaque*`, and `null`. No reachable candidate, or a tie at the winning rank, is a compile-time error.
+Each call ranks all matching overloads together, including generic and interface-bound ones. The least exact argument sets the candidate's rank: exact match, implicit conversion, then literal adoption. Implicit conversions include widening, array decay, `opaque*`, and `null`. Literal adoption occurs when an untyped literal takes the parameter type instead of its default type.
+
+When candidates have the same rank, the candidate with fewer literal adoptions wins. If those counts are equal, the candidate with fewer implicit conversions wins.
+
+```
+fn pick(left: i32, right: i64) -> i32 { return 1; }
+fn pick(left: i64, right: i64) -> i32 { return 2; }
+
+let left: i32 = 0;
+let right: i32 = 0;
+pick(left, right); // the first overload: one widening instead of two
+```
+
+A concrete overload wins when its conversion profile equals a generic overload's profile. If no candidate matches, or candidates remain tied after these comparisons, the call is a compile-time error.
 
 An interface match keeps the argument's type, so it wins over a concrete overload that would have to convert it:
 

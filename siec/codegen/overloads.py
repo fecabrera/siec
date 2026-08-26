@@ -1,11 +1,13 @@
 """Resolution of overloaded functions: one name, distinct parameter lists.
 
 A name's overloads live under mangled sibling symbols, and a call picks
-among them by its argument types, ranked exact match over implicit
-conversion; no fit, or a tie between conversions, is a compile-time error.
+among them by its argument types. Conversion severity ranks first, then the
+number of conversions; no fit, or an equal conversion profile, is an error.
 An argument ranks at its declared Sie type, a literal at its smallest default
 signed type: 'i32', 'i64', or 'i128'.
 """
+
+from typing import NamedTuple
 
 from siec.ast import (
     AggregateLiteral,
@@ -35,6 +37,27 @@ from siec.codegen.types import (
     strip_const,
     strip_reference,
 )
+
+
+class FitProfile(NamedTuple):
+    """The number and severity of conversions a candidate requires."""
+
+    adopted: int = 0
+    implicit: int = 0
+
+    @property
+    def tier(self) -> str:
+        if self.adopted:
+            return "adopt"
+        if self.implicit:
+            return "implicit"
+        return "exact"
+
+    @property
+    def rank(self) -> tuple[int, int, int]:
+        """Severity first, then fewer conversions within that severity."""
+        strength = {"exact": 0, "implicit": 1, "adopt": 2}
+        return strength[self.tier], self.adopted, self.implicit
 
 
 def display_name(symbol: str) -> str:
@@ -152,9 +175,9 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
                   receiver: str | None = None,
                   module: str | None = None) -> str:
     """
-    Pick the overload a call's arguments select: a candidate every
-    argument matches exactly beats one reached through conversions; no
-    viable candidate, or a tie between converted ones, is an error.
+    Pick the overload a call's arguments select. Conversion severity ranks
+    first, then the number of converted arguments. No viable candidate, or
+    an equal conversion profile, is an error.
 
     A constructor passes its instance's type as 'receiver', standing in
     for the receiver argument it has yet to build. 'module' limits the
@@ -168,7 +191,7 @@ def pick_overload(gen: CodeGenerator, symbol: str, args: list, scope: dict,
 def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
                       receiver: str | None = None,
                       module: str | None = None,
-                      method_receiver=None) -> tuple[str, str]:
+                      method_receiver=None) -> tuple[str, FitProfile]:
     """
     Pick a concrete overload and also return its conversion-strength tier.
 
@@ -178,11 +201,11 @@ def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
     """
     entry = overload_entries(gen, symbol, module)
     if entry is None:
-        return symbol, "exact"
+        return symbol, FitProfile()
     if not entry:
         # This module has no mangled sibling; keep the base symbol
         # ('@extern free' beside another module's 'free(opaque*)').
-        return symbol, "exact"
+        return symbol, FitProfile()
 
     arg_types = [rank_type(gen, arg, scope) for arg in args]
     ranked_args = [adapting_value(gen, arg, scope) for arg in args]
@@ -214,7 +237,7 @@ def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
         fit = candidate_fit(gen, candidate, candidate_args, candidate_types)
         # Arity/type diagnostics are emitted later for a lone declaration,
         # matching the historical behavior of returning it unconditionally.
-        return candidate, fit or "exact"
+        return candidate, fit or FitProfile()
 
     # Surface the precise reason an argument has no type before ranking:
     # otherwise an undefined name or call matches every candidate as an
@@ -231,42 +254,37 @@ def pick_overload_fit(gen: CodeGenerator, symbol: str, args: list, scope: dict,
 
             check_expression(gen, arg, scope)
 
-    tiers = {"exact": [], "implicit": [], "adopt": []}
+    ranked = []
     for _, candidate in entry:
         candidate_args, candidate_types = candidate_arguments(candidate)
         fit = candidate_fit(gen, candidate, candidate_args, candidate_types)
         if fit is not None:
-            tiers[fit].append(candidate)
+            ranked.append((fit.rank, candidate, fit))
 
-    pool = tiers["exact"] or tiers["implicit"] or tiers["adopt"]
     name = display_name(symbol)
 
-    if not pool:
+    if not ranked:
         shown = ", ".join(arg_type or "?" for arg_type in arg_types)
         raise TypeError(f"no overload of {name!r} takes ({shown})")
 
+    best = min(rank for rank, _, _ in ranked)
+    pool = [(candidate, fit) for rank, candidate, fit in ranked
+            if rank == best]
     if len(pool) > 1:
         signatures = "; ".join(
-            f"({', '.join(gen.param_types.get(c, ()))})" for c in pool)
+            f"({', '.join(gen.param_types.get(candidate, ()))})"
+            for candidate, _ in pool)
         raise TypeError(f"call to {name!r} is ambiguous between {signatures}")
 
-    return pool[0], fit_for_pool(tiers, pool)
-
-
-def fit_for_pool(tiers: dict[str, list[str]], pool: list[str]) -> str:
-    """Return the tier whose candidate list supplied an overload pool."""
-    for fit in ("exact", "implicit", "adopt"):
-        if pool is tiers[fit]:
-            return fit
-    raise AssertionError("overload pool does not belong to a fit tier")
+    return pool[0]
 
 
 def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
-                  arg_types: list) -> str | None:
+                  arg_types: list) -> FitProfile | None:
     """
-    How a candidate's parameters take a call's arguments: the weakest of
-    its per-argument fits - 'exact', 'implicit' conversion, or a
-    literal's 'adopt' - and None when one doesn't fit or the count is off.
+    Count how a candidate's parameters take a call's arguments: 'exact',
+    'implicit' conversion, or a literal's 'adopt'. Return None when an
+    argument does not fit or the argument count is invalid.
     """
     params = gen.param_types.get(symbol, [])
 
@@ -293,18 +311,19 @@ def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
         fixed = len(params) - 1
         args, arg_types, params = args[:fixed], arg_types[:fixed], params[:fixed]
 
-    strength = {"exact": 0, "implicit": 1, "adopt": 2}
-
-    fit = "exact"
+    adopted = 0
+    implicit = 0
     for arg, arg_type, param in zip(args, arg_types, params):
         one = parameter_fit(gen, arg, arg_type, param)
         if one is None:
             return None
 
-        if strength[one] > strength[fit]:
-            fit = one
+        if one == "adopt":
+            adopted += 1
+        elif one == "implicit":
+            implicit += 1
 
-    return fit
+    return FitProfile(adopted, implicit)
 
 
 def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
