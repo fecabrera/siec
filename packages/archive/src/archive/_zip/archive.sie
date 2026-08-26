@@ -135,7 +135,7 @@ struct Archive {
      * @return The result of the operation.
      */
     fn get_file(&self, index: u64) -> Result<File, OpenError> {
-        if (self.handle == null) return Error(OpenError::InvalidFilesystem);
+        if (self.handle == null) return Error(OpenError::FilesystemError);
 
         let file = zip_fopen_index(self.handle, index, 0);
         if (file == null) {

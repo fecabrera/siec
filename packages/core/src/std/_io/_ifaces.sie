@@ -2,7 +2,7 @@ import { String } from std.collections;
 import { Formattable } from std.format;
 
 enum IOError {
-    SystemError,
+    SystemError = -1,
     NotOpen,
     PermissionDenied,
     InvalidBuffer,

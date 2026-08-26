@@ -10,8 +10,8 @@ enum FileMode: i32 {
 }
 
 enum OpenError {
-    SystemError = -1,
-    InvalidFilesystem = 1,
+    SystemError = 1,
+    FilesystemError,
     AlreadyOpen,
     AlreadyExists,
     InvalidMode,
@@ -22,14 +22,14 @@ enum OpenError {
 }
 
 enum CloseError {
-    SystemError = -1,
-    InvalidFilesystem = 1,
+    SystemError = 1,
+    FilesystemError,
     AlreadyClosed,
 }
 
 enum StatError {
-    SystemError = -1,
-    InvalidFilesystem = 1,
+    SystemError = 1,
+    FilesystemError,
     AlreadyClosed,
     NotFound,
     NotOpen,
@@ -47,14 +47,22 @@ enum StatError {
         case (self) {
         when OpenError::SystemError:
             return String("System error");
+        when OpenError::FilesystemError:
+            return String("Filesystem error");
         when OpenError::AlreadyOpen:
             return String("Already open");
+        when OpenError::AlreadyExists:
+            return String("Already exists");
         when OpenError::InvalidMode:
             return String("Invalid mode");
         when OpenError::NotFound:
             return String("Not found");
         when OpenError::PermissionDenied:
             return String("Permission denied");
+        when OpenError::InvalidFile:
+            return String("Invalid file");
+        when OpenError::Encrypted:
+            return String("Encrypted");
         else:
             return String("Unknown error");
         }
@@ -72,6 +80,8 @@ enum StatError {
         case (self) {
         when CloseError::SystemError:
             return String("System error");
+        when CloseError::FilesystemError:
+            return String("Filesystem error");
         when CloseError::AlreadyClosed:
             return String("Already closed");
         else:
@@ -91,8 +101,14 @@ enum StatError {
         case (self) {
         when StatError::SystemError:
             return String("System error");
+        when StatError::FilesystemError:
+            return String("Filesystem error");
+        when StatError::AlreadyClosed:
+            return String("Already closed");
         when StatError::NotFound:
             return String("Not found");
+        when StatError::NotOpen:
+            return String("Not open");
         when StatError::PermissionDenied:
             return String("Permission denied");
         else:
