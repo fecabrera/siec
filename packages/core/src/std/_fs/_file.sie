@@ -68,7 +68,13 @@ struct File: IOReadable, IOWritable, IOSeekable {
         else
             return Error(OpenError::InvalidMode);
 
-        if (mode & FileMode::Append) flags |= unistd.O_APPEND;
+        if (mode & FileMode::Append and mode & FileMode::Truncate)
+            return Error(OpenError::InvalidMode);
+        else if (mode & FileMode::Append)
+            flags |= unistd.O_APPEND;
+        else if (mode & FileMode::Truncate)
+            flags |= unistd.O_TRUNC;
+
         if (mode & FileMode::Create) {
             flags |= unistd.O_CREAT;
             u_mode |= S_ISUID | S_IRWXU | S_IRWXG | S_IRWXO;

@@ -2,11 +2,12 @@ import { String } from std.collections;
 
 enum FileMode: i32 {
     None        = 0,
-    Read        = 1,
-    Write       = 2,
+    Read        = 1 << 0,
+    Write       = 1 << 1,
     ReadWrite   = FileMode::Read | FileMode::Write,
-    Append      = 4,
-    Create      = 8,
+    Append      = 1 << 2,
+    Create      = 1 << 3,
+    Truncate    = 1 << 4,
 }
 
 enum OpenError {
