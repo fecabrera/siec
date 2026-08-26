@@ -2,8 +2,9 @@ import unistd;
 import errno;
 import { fstat, stat } from sys.stat;
 import { errno } from errno;
-import { IOReadable, IOWritable, IOError, IOSeekable, SeekOrigin } from std.io;
+import { String } from std.collections;
 import { Formattable } from std.format;
+import { IOReadable, IOWritable, IOError, IOSeekable, SeekOrigin } from std.io;
 import { mode_t, S_ISUID, S_IRWXU, S_IRWXG, S_IRWXO } from sys.types;
 import { FileMode, OpenError, CloseError, StatError } from _enums;
 
@@ -17,18 +18,38 @@ struct File: IOReadable, IOWritable, IOSeekable {
 
     /**
     * Open a file.
+    *
+    * It creates a temporary null-terminated copy of path so it doesn't need
+    * to be null-terminated.
     * 
     * @param path The path to the file.
     * @param mode The mode to open the file in.
     * @return The result of the operation.
     */
-    fn open(path: const &Iterable<char>, mode: FileMode) -> Result<File, OpenError> {
+    @inline
+    fn open(path: const &String, mode: FileMode) -> Result<File, OpenError> {
         return File::open(String::null_terminated(path).as_const_array(), mode);
     }
 
     /**
     * Open a file.
+    *
+    * Path must be null-terminated.
     * 
+    * @param path The path to the file.
+    * @param mode The mode to open the file in.
+    * @return The result of the operation.
+    */
+    @inline
+    fn open(path: const &char[], mode: FileMode) -> Result<File, OpenError> {
+        return File::open(path.data, mode);
+    }
+
+    /**
+    * Open a file.
+    * 
+    * Path must be null-terminated.
+    *
     * @param path The path to the file.
     * @param mode The mode to open the file in.
     * @return The result of the operation.
