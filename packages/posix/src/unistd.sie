@@ -21,15 +21,15 @@ import { pid_t, useconds_t, mode_t } from sys.types;
 @const STDERR_FILENO = 2;    /* standard error file descriptor */
 
 @if (TARGET_OS == OS_DARWIN) {
-    @const O_RDONLY = 0;          /* open for reading only */
-    @const O_WRONLY = 1;          /* open for writing only */
-    @const O_RDWR = 2;          /* open for reading and writing */
-    @const O_NONBLOCK = 4;      /* no delay */
-    @const O_APPEND = 8;      /* set append mode */
-    @const O_CREAT = 0x00000200;      /* create if nonexistant */
-    @const O_TRUNC = 0x00000400;      /* truncate to zero length */   
-    @const O_EXCL = 0x00000800;      /* error if already exists */
-    @const O_EXEC = 0x40000000;               /* open file for execute only */
+    @const O_RDONLY = 0;            /* open for reading only */
+    @const O_WRONLY = 1;            /* open for writing only */
+    @const O_RDWR = 2;              /* open for reading and writing */
+    @const O_NONBLOCK = 4;          /* no delay */
+    @const O_APPEND = 8;            /* set append mode */
+    @const O_CREAT = 0x00000200;    /* create if nonexistant */
+    @const O_TRUNC = 0x00000400;    /* truncate to zero length */   
+    @const O_EXCL = 0x00000800;     /* error if already exists */
+    @const O_EXEC = 0x40000000;     /* open file for execute only */
 } @else @if (TARGET_OS == OS_LINUX) {
     @const O_RDONLY = 0;
     @const O_WRONLY = 1;
