@@ -17,7 +17,12 @@ fn main(args: const char*[]) -> i32 {
     }
 
     let input = String::null_terminated(args[1]);
-    let output = args.length < 3 ? String::null_terminated("archive.zip") : String::null_terminated(args[2]);
+    let output: String;
+    if (args.length < 3) {
+        output = format("{}.zip", input.split('.').first()).null_terminate();
+    } else {
+        output = String::null_terminated(args[2]);
+    }
 
     // open zip archive from path
     let errorp: zip.ZIP_ER;
