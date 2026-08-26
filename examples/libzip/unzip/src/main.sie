@@ -1,6 +1,10 @@
 import zip;
 import std.io;
+import { format } from std.format;
 import { String } from std.collections;
+import { mkdir, S_IRWXU } from sys.stat;
+import { errno, EEXIST } from errno;
+import { File, FileMode } from std.fs;
 import { Archive, ArchiveMode } from archive.zip;
 
 fn main(args: const char*[]) -> i32 {
@@ -10,7 +14,12 @@ fn main(args: const char*[]) -> i32 {
     }
 
     let input = String::null_terminated(args[1]);
-    let output = args.length < 3 ? String::null_terminated(".") : String::null_terminated(args[2]);
+    let output: String;
+    if (args.length < 3) {
+        output = input.split('.').first().null_terminate();
+    } else {
+        output = String::null_terminated(args[2]);
+    }
 
     // open zip archive from path
     let archive = try Archive::open(input.as_const_array(), ArchiveMode::Read) except (error) {
@@ -24,14 +33,62 @@ fn main(args: const char*[]) -> i32 {
         return 1;
     }
 
+    let res = mkdir(output.as_const_array(), S_IRWXU);
+    let errsv = errno;
+    if (res < 0 and errsv != EEXIST) {
+        std.io.println(std.io.stderr, "can't create dir {}: errno {}", output, errsv);
+        return 1;
+    }
+
+    // read files
     for (let i: u64 = 0; i < n; i += 1) {
-        let name = try archive.get_entry_name(i) except (error) {
-            std.io.println(std.io.stderr, "can't fetch entry at index {}:", i, error);
-            continue;
+        let in_path = try archive.get_entry_name(i) except (error) {
+            std.io.println(std.io.stderr, "can't fetch entry at index {}: {}", i, error);
+            return 1;
         }
 
-        let is_dir = name.last() == '/';
-        std.io.println("{}", name);
+        let is_dir = in_path.last() == '/';
+        let out_path = format("{}/{}", output, in_path).null_terminate();
+        
+        std.io.println("{} -> {}", in_path, out_path);
+        
+        if (is_dir) {
+            let res = mkdir(out_path.as_const_array(), S_IRWXU);
+            let errsv = errno;
+            if (res < 0 and errsv != EEXIST) {
+                std.io.println(std.io.stderr, "can't create dir {}: errno {}", out_path, errsv);
+                return 1;
+            }
+        } else {
+            let in_file = try archive.get_file(i) except (error) {
+                std.io.println(std.io.stderr, "{}: {}", in_path, error);
+                return 1;
+            }
+            defer in_file.close();
+
+            let out_file = try File::open(
+                out_path.as_const_array(),
+                FileMode::Create | FileMode::Write | FileMode::Truncate
+            ) except (error) {
+                std.io.println(std.io.stderr, "{}: {}", out_path, error);
+                return 1;
+            }
+
+            let buf: u8[16384];
+            while (true) {
+                let n = try in_file.read(buf) except (error) {
+                    std.io.println(std.io.stderr, "{}: {}", in_path, error);
+                    return 1;
+                }
+
+                if (n == 0) break;
+
+                try out_file.write(buf, n as u64) except (error) {
+                    std.io.println(std.io.stderr, "{}: {}", out_file, error);
+                    return 1;
+                }
+            }
+        }
     }
 
     return 0;
