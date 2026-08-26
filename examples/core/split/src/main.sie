@@ -1,0 +1,13 @@
+import std.io;
+import { String } from std.collections;
+
+fn main(args: const char*[]) -> i32 {
+    if (args.length != 3) {
+        std.io.println(std.io.stderr, "usage: {} <str> <div>", args[0]);
+        return 1;
+    }
+
+    std.io.println("{} -> {}", args[1], String(args[1]).split(args[2][0]));
+
+    return 0;
+}

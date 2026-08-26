@@ -1,3 +1,4 @@
+import std.array;
 import { List } from _list;
 import { Formattable } from std.format;
 
@@ -66,6 +67,10 @@ import { Formattable } from std.format;
     */
     fn add_assign(&self, arr: const char*) {
         self.append(arr);
+    }
+
+    fn split(const &self, div: char) -> List<String> {
+        return self.as_const_array().split(div);
     }
 
     /**

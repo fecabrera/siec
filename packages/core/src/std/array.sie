@@ -1,7 +1,26 @@
 import { strlen } from string;
-import { List } from collections;
+import { String, List } from collections;
 
 @extend char[] {
+    fn split(const &self, div: char) -> List<String> {
+        let lst = List<String>();
+        let buf = String(self.length);
+        foreach (c : self) {
+            if (c == div) {
+                if (buf.get_length()) {
+                    lst.push(buf.clone());  // clone the string
+                    buf.reset();            // empty the string
+                }
+            } else {
+                buf.push(c);
+            }
+        }
+        if (buf.get_length()) {
+            lst.push(buf.clone());
+        }
+        return lst;
+    }
+
     fn from_c_str(str: char*) -> char[] {
         return {str, strlen(str)};
     }
