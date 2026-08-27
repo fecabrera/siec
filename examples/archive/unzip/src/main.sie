@@ -1,4 +1,3 @@
-import zip;
 import std.io;
 import { format } from std.format;
 import { String } from std.collections;
@@ -13,6 +12,7 @@ fn main(args: const char*[]) -> i32 {
         return 1;
     }
 
+    // build input and output paths
     let input = String::null_terminated(args[1]);
     let output: String;
     if (args.length < 3) {
@@ -28,11 +28,16 @@ fn main(args: const char*[]) -> i32 {
     }
     defer archive.close();
 
+    // get number of entries
     let n = try archive.get_total_entries() except (error) {
         std.io.println(std.io.stderr, "{}: {}", input, error);
         return 1;
     }
 
+    // if zip is empty
+    if (n == 0) return 0;
+
+    // create dir
     let res = mkdir(output.as_const_array(), S_IRWXU);
     let errsv = errno;
     if (res < 0 and errsv != EEXIST) {
@@ -53,6 +58,7 @@ fn main(args: const char*[]) -> i32 {
         std.io.println("{} -> {}", in_path, out_path);
         
         if (is_dir) {
+            // create dir
             let res = mkdir(out_path.as_const_array(), S_IRWXU);
             let errsv = errno;
             if (res < 0 and errsv != EEXIST) {
@@ -60,12 +66,14 @@ fn main(args: const char*[]) -> i32 {
                 return 1;
             }
         } else {
+            // get compressed filed
             let in_file = try archive.get_file(i) except (error) {
                 std.io.println(std.io.stderr, "{}: {}", in_path, error);
                 return 1;
             }
             defer in_file.close();
 
+            // create file
             let out_file = try File::open(
                 out_path.as_const_array(),
                 FileMode::Create | FileMode::Write | FileMode::Truncate
@@ -76,13 +84,16 @@ fn main(args: const char*[]) -> i32 {
 
             let buf: u8[16384];
             while (true) {
+                // read chunk
                 let n = try in_file.read(buf) except (error) {
                     std.io.println(std.io.stderr, "{}: {}", in_path, error);
                     return 1;
                 }
 
+                // if EOF
                 if (n == 0) break;
 
+                // write chunk
                 try out_file.write(buf, n as u64) except (error) {
                     std.io.println(std.io.stderr, "{}: {}", out_file, error);
                     return 1;

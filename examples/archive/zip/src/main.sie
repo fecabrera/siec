@@ -1,5 +1,4 @@
 import std.io;
-import std.array;
 import { errno } from errno;
 import { String } from std.collections;
 import { format } from std.format;
@@ -13,6 +12,7 @@ fn main(args: const char*[]) -> i32 {
         return 1;
     }
 
+    // build input and output paths
     let input = String::null_terminated(args[1]);
     let output: String;
     if (args.length < 3) {
@@ -44,10 +44,11 @@ fn main(args: const char*[]) -> i32 {
             return 1;
         }
     } else {
-        // zip file
+        // build name
         let basename = Path::basename(input).null_terminate();
 
-        try zip_file(archive, input, basename) except (error) {
+        // zip file
+        try archive.add_file(input.as_const_array(), basename.as_const_array()) except (error) {
             std.io.println(std.io.stderr, "can't zip file {}:", input, error);
             return 1;
         }
@@ -68,30 +69,38 @@ fn zip_dir(archive: &Archive, source: const &String, dest: const &String) -> Res
     let dirp: dirent*;
     while (true) {
         dirp = readdir(dp);
+        
+        // no more entries
         if (dirp == null) break;
 
+        // ignore . and ..
         let name = String::null_terminated(dirp->d_name as char*);
         if (name == "." or name == "..") continue;
 
+        // build input and output paths
         let fullname = format("{}/{}", source, name).null_terminate();
         let path = dest ? format("{}/{}", dest, name).null_terminate() : String::null_terminated(name);
 
+        // check if it's dir
         let is_dir = try Path::is_dir(fullname) except (error) {
             std.io.println(std.io.stderr, "{}: {}", fullname, error);
             return Error(1);
         }
 
+        std.io.println("{} -> {}", fullname, path);
+        
         if (is_dir) {
-            std.io.println("{} -> {}", fullname, path);
-            
+            // add dir
             try archive.add_dir(path.as_const_array()) except (error) {
                 std.io.println(std.io.stderr, "can't add directory {}: {}", fullname, error);
                 return Error(1);
             }
             
+            // recursive
             try zip_dir(archive, fullname, path);
         } else {
-            try zip_file(archive, fullname, path) except (error) {
+            // add file
+            try archive.add_file(fullname.as_const_array(), path.as_const_array()) except (error) {
                 std.io.println(std.io.stderr, "can't add file {}: {}", fullname, error);
                 return Error(1);
             }
@@ -99,9 +108,4 @@ fn zip_dir(archive: &Archive, source: const &String, dest: const &String) -> Res
     }
 
     return Ok();
-}
-
-fn zip_file(archive: &Archive, source: const &String, dest: const &String) -> Result<OpenError> {
-    std.io.println("{} -> {}", source, dest);
-    return archive.add_file(source.as_const_array(), dest.as_const_array());
 }
