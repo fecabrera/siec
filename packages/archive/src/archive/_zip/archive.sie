@@ -4,6 +4,7 @@ import { ArchiveMode, StatError } from enums;
 import {
     ZIP,
     ZIP_ER,
+    ZIP_FL,
     zip,
     zip_error,
     zip_get_error,
@@ -13,6 +14,10 @@ import {
     zip_get_num_entries,
     zip_fopen,
     zip_fopen_index,
+    zip_source_file,
+    zip_dir_add,
+    zip_file_add,
+    zip_source_free,
 } from zip;
 import { File } from file;
 
@@ -43,6 +48,8 @@ struct Archive {
 
     /**
      * Opens a ZIP archive.
+     *
+     * Path must be null-terminated.
      * 
      * @param path: The path to the archive.
      * @param mode: The mode of the archive.
@@ -151,5 +158,74 @@ struct Archive {
         }
 
         return Ok(File(file));
+    }
+
+    /**
+     * Add a directory to the archive.
+     * 
+     * Path must be null-terminated.
+     * 
+     * @param path: The path of the dir to add.
+     * @return The result of the operation.
+     */
+    fn add_dir(&self, path: const &char[]) -> Result<OpenError> {
+        if (self.handle == null) return Error(OpenError::FilesystemError);
+
+        if (zip_dir_add(self.handle, path, ZIP_FL::ENC_UTF_8) < 0) {
+            let error = zip_get_error(self.handle);
+            case (error->zip_err) {
+            when ZIP_ER::EXISTS:
+                return Error(OpenError::AlreadyExists);
+            when ZIP_ER::INVAL:
+                return Error(OpenError::InvalidFile);
+            else:
+                return Error(OpenError::SystemError);
+            }
+        }
+
+        return Ok();
+    }
+
+    /**
+     * Add a file to the archive .
+     * 
+     * Source and destination path must be null-terminated.
+     * 
+     * @param source: The path of the file to add.
+     * @param dest: The destination path of the file to add.
+     * @return The result of the operation.
+     */
+    fn add_file(&self, source: const &char[], dest: const &char[]) -> Result<OpenError> {
+        if (self.handle == null) return Error(OpenError::FilesystemError);
+
+        let tmp = zip_source_file(self.handle, source, 0, 0);
+        if (tmp == null) {
+            let error = zip_get_error(self.handle);
+            case (error->zip_err) {
+            when ZIP_ER::INVAL:
+                return Error(OpenError::InvalidFile);
+            else:
+                return Error(OpenError::SystemError);
+            }
+        }
+
+        let res = zip_file_add(self.handle, dest, tmp, ZIP_FL::ENC_UTF_8);
+        if (res < 0) {
+            zip_source_free(tmp);
+
+            let error = zip_get_error(self.handle);
+            case (error->zip_err) {
+            when ZIP_ER::EXISTS:
+                return Error(OpenError::AlreadyExists);
+            when ZIP_ER::INVAL:
+                return Error(OpenError::InvalidFile);
+            when ZIP_ER::RDONLY:
+                return Error(OpenError::InvalidMode);
+            else:
+                return Error(OpenError::SystemError);
+            }
+        }
+
+        return Ok();
     }
 }
