@@ -1,14 +1,11 @@
-import zip;
 import std.io;
 import std.array;
+import { errno } from errno;
 import { String } from std.collections;
 import { format } from std.format;
-import { alloc, free } from std.alloc;
-import { File, FileMode, Path } from std.fs;
-import { SeekOrigin } from std.io;
-import { errno } from errno;
-import { stat, S_ISDIR } from sys.stat;
-import { opendir, closedir, dirent, readdir } from dirent;
+import { Path, OpenError } from std.fs;
+import { Archive, ArchiveMode } from archive.zip;
+import { dirent, opendir, closedir, readdir } from dirent;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length < 2) {
@@ -19,24 +16,20 @@ fn main(args: const char*[]) -> i32 {
     let input = String::null_terminated(args[1]);
     let output: String;
     if (args.length < 3) {
-        output = format("{}.zip", input.split('.').first()).null_terminate();
+        output = format("{}.zip", Path::basename(input).split('.').first()).null_terminate();
     } else {
         output = String::null_terminated(args[2]);
     }
 
     // open zip archive from path
-    let errorp: zip.ZIP_ER;
-    let archive = zip.zip_open(output.as_const_array(), zip.ZIP::CREATE | zip.ZIP::TRUNCATE, &errorp);
-    if (archive == null) {
-        // initialize error
-        let error: zip.zip_error;
-        zip.zip_error_init_with_code(&error, errorp);
-        defer zip.zip_error_fini(&error);
-
-        std.io.println(std.io.stderr, "can't open archive: {}", zip.zip_error_strerror(&error));
+    let archive = try Archive::open(
+        output.as_const_array(),
+        ArchiveMode::Create | ArchiveMode::Truncate
+    ) except (error) {
+        std.io.println(std.io.stderr, "{}: {}", output, error);
         return 1;
     }
-    defer zip.zip_close(archive);
+    defer archive.close();
 
     // check if input is dir
     let is_dir = try Path::is_dir(input) except (error) {
@@ -46,17 +39,16 @@ fn main(args: const char*[]) -> i32 {
     
     if (is_dir) {
         // zip dir
-        try zip_dir(archive, input, String::null_terminated("")) except (err) {
-            std.io.println(std.io.stderr, "can't zip directory: {}", input);
+        try zip_dir(archive, input, String::null_terminated("")) except (error) {
+            std.io.println(std.io.stderr, "can't zip directory {}: {}", input, error);
             return 1;
         }
     } else {
         // zip file
-        let dirname = Path::dirname(input).null_terminate();
         let basename = Path::basename(input).null_terminate();
 
-        try zip_file(archive, basename, input) except (err) {
-            std.io.println(std.io.stderr, "can't zip file: {}", input);
+        try zip_file(archive, input, basename) except (error) {
+            std.io.println(std.io.stderr, "can't zip file {}:", input, error);
             return 1;
         }
     }
@@ -64,10 +56,11 @@ fn main(args: const char*[]) -> i32 {
     return 0;
 }
 
-fn zip_dir(archive: zip.zip*, dirname: const &String, dirpath: const &String) -> Result<i32> {
-    let dp = opendir(dirname.as_const_array());
+fn zip_dir(archive: &Archive, source: const &String, dest: const &String) -> Result<i32> {
+    let dp = opendir(source.as_const_array());
     if (dp == null) {
-        std.io.println(std.io.stderr, "can't open directory {}: {}", dirname, errno);
+        let errsv = errno;
+        std.io.println(std.io.stderr, "can't open directory {}: {}", source, errsv);
         return Error(1);
     }
     defer closedir(dp);
@@ -80,8 +73,8 @@ fn zip_dir(archive: zip.zip*, dirname: const &String, dirpath: const &String) ->
         let name = String::null_terminated(dirp->d_name as char*);
         if (name == "." or name == "..") continue;
 
-        let fullname = format("{}/{}", dirname, name).null_terminate();
-        let path = dirpath ? format("{}/{}", dirpath, name).null_terminate() : String::null_terminated(name);
+        let fullname = format("{}/{}", source, name).null_terminate();
+        let path = dest ? format("{}/{}", dest, name).null_terminate() : String::null_terminated(name);
 
         let is_dir = try Path::is_dir(fullname) except (error) {
             std.io.println(std.io.stderr, "{}: {}", fullname, error);
@@ -89,36 +82,26 @@ fn zip_dir(archive: zip.zip*, dirname: const &String, dirpath: const &String) ->
         }
 
         if (is_dir) {
-            if (zip.zip_dir_add(archive, path.as_const_array(), zip.ZIP_FL::ENC_UTF_8) < 0) {
-                std.io.println(std.io.stderr, "can't add directory {}: {}", fullname, zip.zip_strerror(archive));
+            std.io.println("{} -> {}", fullname, path);
+            
+            try archive.add_dir(path.as_const_array()) except (error) {
+                std.io.println(std.io.stderr, "can't add directory {}: {}", fullname, error);
                 return Error(1);
             }
             
-            std.io.println("{} -> {}", fullname, path);
             try zip_dir(archive, fullname, path);
         } else {
-            try zip_file(archive, path, fullname);
+            try zip_file(archive, fullname, path) except (error) {
+                std.io.println(std.io.stderr, "can't add file {}: {}", fullname, error);
+                return Error(1);
+            }
         }
     }
 
     return Ok();
 }
 
-fn zip_file(archive: zip.zip*, name: const &String, path: const &String) -> Result<i32> {
-    std.io.println("{} -> {}", path, name);
-    
-    let source = zip.zip_source_file(archive, path.as_const_array(), 0, 0);
-    if (source == null) {
-        std.io.println(std.io.stderr, "can't create file {}: {}", path, zip.zip_strerror(archive));
-        return Error(1);
-    }
-
-    let res = zip.zip_file_add(archive, name.as_const_array(), source, zip.ZIP_FL::ENC_UTF_8);
-    if (res < 0) {
-        zip.zip_source_free(source);
-        std.io.println(std.io.stderr, "can't add file {}: {}", path, zip.zip_strerror(archive));
-        return Error(1);
-    }
-
-    return Ok();
+fn zip_file(archive: &Archive, source: const &String, dest: const &String) -> Result<OpenError> {
+    std.io.println("{} -> {}", source, dest);
+    return archive.add_file(source.as_const_array(), dest.as_const_array());
 }
