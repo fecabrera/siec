@@ -1,10 +1,8 @@
 import std.io;
-import { errno } from errno;
 import { String } from std.collections;
 import { format } from std.format;
-import { Path, OpenError } from std.fs;
+import { Directory, Path, OpenError } from std.fs;
 import { Archive, ArchiveMode } from archive.zip;
-import { dirent, opendir, closedir, readdir } from dirent;
 
 fn main(args: const char*[]) -> i32 {
     if (args.length < 2) {
@@ -58,23 +56,16 @@ fn main(args: const char*[]) -> i32 {
 }
 
 fn zip_dir(archive: &Archive, source: const &String, dest: const &String) -> Result<i32> {
-    let dp = opendir(source.as_const_array());
-    if (dp == null) {
-        let errsv = errno;
-        std.io.println(std.io.stderr, "can't open directory {}: {}", source, errsv);
+    let dir = try Directory::open(source.as_const_array()) except (error) {
+        std.io.println(std.io.stderr, "can't open directory {}: {}", source, error);
         return Error(1);
     }
-    defer closedir(dp);
+    defer dir.close();
 
-    let dirp: dirent*;
-    while (true) {
-        dirp = readdir(dp);
-        
-        // no more entries
-        if (dirp == null) break;
-
+    foreach (entry : dir.iterator()) {
+        let name = entry.get_const_array();
+    
         // ignore . and ..
-        let name = String::null_terminated(dirp->d_name as char*);
         if (name == "." or name == "..") continue;
 
         // build input and output paths
