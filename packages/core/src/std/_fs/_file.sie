@@ -100,7 +100,6 @@ struct File: IOReadable, IOWritable, IOSeekable {
     /**
     * Close a file.
     * 
-    * @param self The file object to close.
     * @return The result of the operation.
     */
     fn close(&self) -> Result<CloseError> {
@@ -118,7 +117,6 @@ struct File: IOReadable, IOWritable, IOSeekable {
     /**
     * Read from a file.
     * 
-    * @param self The file object to read from.
     * @param buf The buffer to read into.
     * @return The result of the operation.
     */

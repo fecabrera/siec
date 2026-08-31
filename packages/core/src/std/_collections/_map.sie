@@ -134,7 +134,7 @@ struct ConstMapIterator<K, V>: ConstIterator<KeyValuePair<K, V>> {
                 return self.entries[self.index] as const KeyValuePair<K, V>;
         }
 
-        panic("called {}::next() without calling {}::hash_next() before", @typename(self), @typename(self));
+        panic("called {}::next() without calling {}::has_next() before", @typename(self), @typename(self));
     }
 }
 

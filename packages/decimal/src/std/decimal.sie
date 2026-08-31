@@ -170,6 +170,9 @@ fn Decimal::assign_from(&self, value: const &char[]) {
 /**
  * Set the value of the Decimal.
  *
+ * It creates a temporary null-terminated copy of path so it doesn't need
+ * to be null-terminated.
+ *
  * @param value The value to set the Decimal to.
  */
 fn Decimal::assign_from(&self, value: const &String) {
