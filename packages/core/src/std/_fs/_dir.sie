@@ -1,0 +1,167 @@
+import { panic } from std;
+import { IOError } from std.io;
+import { String } from std.collections;
+import { errno, EACCES, ENOENT } from errno;
+import { DIR, dirent, opendir, closedir, readdir, rewinddir } from dirent;
+import { OpenError, CloseError, StatError } from _enums;
+import { Path } from _path;
+
+/**
+ * An iterator over the directory.
+ */
+struct DirectoryIterator: Destroy, Iterator<Path> {
+    @private handle: DIR*;              /* The underlying pointer to the directory stream */
+    @private path: Option<Path> = None; /* The current path */
+
+    /**
+     * Initialize the iterator.
+     *
+     * @param handle The handle to the directory.
+     */
+    fn init(&self, handle: DIR*) {
+        self.handle = handle;
+    }
+
+    /**
+     * Destroy the iterator.
+     */
+    fn destroy(&self) {
+        drop self.path;
+    }
+
+    /**
+     * Check if there is a next entry.
+     *
+     * @return True if there is a next entry, false otherwise.
+     */
+    fn has_next(&self) -> bool {
+        if (self.handle == null) {
+            self.path = None;
+            return false;
+        }
+        
+        let direntp = readdir(self.handle);
+        if (direntp == null) {
+            self.path = None;
+            return false;
+        }
+
+        self.path = Path(direntp->d_name as char*);
+
+        return true;
+    }
+
+    /**
+     * Get the next entry.
+     *
+     * @return The next entry.
+     */
+    fn next(&self) -> &Path {
+        if (self.path)
+            return self.path;
+        
+        panic("There are no more entries for {}", @typename(self));
+    }
+}
+
+/**
+ * A directory.
+ */
+struct Directory {
+    @private handle: DIR*;  /* The underlying pointer to the directory stream */
+
+    /**
+    * Open a directory.
+    *
+    * It creates a temporary null-terminated copy of path so it doesn't need
+    * to be null-terminated.
+    * 
+    * @param path The path to the directory.
+    * @return The result of the operation.
+    */
+    fn open(path: const &String) -> Result<Directory, OpenError> {
+        return Directory::open(String::null_terminated(path).as_const_array());
+    } 
+
+    /**
+    * Open a directory.
+    *
+    * Path must be null-terminated
+    * 
+    * @param path The path to the directory.
+    * @return The result of the operation.
+    */
+    fn open(path: const &char[]) -> Result<Directory, OpenError> {
+        let dir = opendir(path);
+        if (dir == null) {
+            let errsv = errno;
+            case (errsv) {
+            when EACCES:
+                return Error(OpenError::PermissionDenied);
+            when ENOENT:
+                return Error(OpenError::NotFound);
+            else:
+                return Error(OpenError::SystemError);
+            }
+        }
+        return Ok({dir});
+    }
+
+    /**
+    * Close a directory.
+    * 
+    * @return The result of the operation.
+    */
+    fn close(&self) -> Result<CloseError> {
+        if (self.handle == null)
+            return Error(CloseError::AlreadyClosed);
+        
+        closedir(self.handle);
+        self.handle = null;
+        
+        return Ok();
+    }
+
+    /**
+     * Get an iterator over the directory.
+     *
+     * @return The iterator.
+     */
+    fn iterator(&self) -> DirectoryIterator {
+        return DirectoryIterator(self.handle);
+    }
+
+    /**
+     * Iterate over the directory.
+     *
+     * @param callback The callback to call for each directory entry.
+     * @return The number of entries iterated over.
+     */
+    fn each(&self, callback: closure fn(&Path)) -> Result<u64, IOError> {
+        if (self.handle == null)
+            return Error(CloseError::AlreadyClosed);
+
+        // iterate from the start
+        rewinddir(self.handle);
+
+        let i: u64 = 0;
+        while (true) {
+            errno = 0; // reset errno
+            let d = readdir(self.handle);
+            if (d == null) { // check if dirent is null
+                let errsv = errno;
+                case (errsv) {
+                when 0: // EOF
+                    break;
+                else: // Unexpected error
+                    return Error(IOError::SystemError);
+                }
+            }
+
+            callback(Path(d->d_name as char*));
+
+            i += 1;
+        }
+        return Ok(i);
+    }
+}

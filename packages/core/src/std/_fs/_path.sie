@@ -1,3 +1,4 @@
+import { Formattable } from std.format;
 import { stat, S_ISDIR, S_ISREG } from sys.stat;
 import { errno, ENOENT, EACCES } from errno;
 import { basename, dirname } from libgen;
@@ -9,7 +10,7 @@ import { StatError } from _enums;
  *
  * @param path The path to the file or directory.
  */
-struct Path: Destroy {
+struct Path: Formattable, Destroy {
     @private path: String;
 
     /**
@@ -44,6 +45,35 @@ struct Path: Destroy {
      */
     fn destroy(&self) {
         drop self.path;
+    }
+
+    /**
+     * Get the underlying array representation of the path.
+     *
+     * @return The path as a char array.
+     */
+    fn get_string(&self) -> const &String {
+        return self.path.null_terminate();
+    }
+
+    /**
+     * Get the underlying array representation of the path.
+     *
+     * @return The path as a char array.
+     */
+    fn get_const_array(&self) -> const char[] {
+        return self.path.null_terminate().as_const_array();
+    }
+
+    /**
+     * Format the path with the given modifiers.
+     *
+     * @param modifiers The modifiers to format the path with.
+     * @return The formatted path.
+     */
+    @inline
+    fn format(const &self, modifiers: const &char[]) -> String {
+        return self.path.format(modifiers);
     }
 
     /**
