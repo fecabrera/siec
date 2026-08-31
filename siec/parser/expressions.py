@@ -424,6 +424,12 @@ def parse_primary(ts: TokenStream) -> Expr:
 
             return parse_postfix(ts, Call(name, args, method_args))
 
+        # None is a context-driven builtin constructor.  Its useful surface
+        # spelling has no empty call suffix: `None` and `None<T>` mean the
+        # same thing as their zero-argument constructor forms.
+        if tok.value == "None" and ts.peek().syntax != "(":
+            return parse_postfix(ts, Call(tok.value, [], type_args))
+
         if type_args is not None and ts.peek().syntax != "(":
             return parse_postfix(ts, Var(tok.value, type_args=type_args))
 

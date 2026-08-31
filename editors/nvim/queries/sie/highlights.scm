@@ -133,7 +133,7 @@
 ; the prelude's own declarations
 ((identifier) @type.builtin
  (#any-of? @type.builtin
-  "Any" "Result" "Tuple" "Slot" "Scalar" "Integer" "SignedInteger" "UnsignedInteger"
+  "Any" "Option" "Result" "Tuple" "Slot" "Scalar" "Integer" "SignedInteger" "UnsignedInteger"
   "Iterator" "ConstIterator" "Iterable"
   "ArrayIterator" "ConstArrayIterator" "Enumerated" "EnumerateIterator"
   "Add" "Sub" "Mul" "Div" "Rem"
@@ -171,6 +171,10 @@
 
 ((call_expression function: (identifier) @function.builtin)
  (#any-of? @function.builtin "Ok" "Error" "enumerate"))
+
+; None is a builtin value even though its T is inferred like a constructor's
+((identifier) @constant.builtin
+ (#eq? @constant.builtin "None"))
 
 ; ----------------------------------------------------------------- members
 (parameter name: (identifier) @variable.parameter)

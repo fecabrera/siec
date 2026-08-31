@@ -529,6 +529,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             expr.left = type_operand(gen, expr.left, scope)
             expr.right = type_operand(gen, expr.right, scope)
 
+        from siec.codegen.inference import option_none_test
+
+        if (rewritten := option_none_test(gen, expr, scope)) is not None:
+            return emit_expression(gen, builder, rewritten, expected_type, scope)
+
         # a struct operand's operator is the method call it desugars to:
         # 'a + b' is 'a.add(b)', each overload picked by b's type, and
         # 'a != b' the negated 'not a.eq(b)'

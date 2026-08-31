@@ -67,13 +67,16 @@ from siec.ast import (
 from siec.codegen.aliases import expand_alias
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, Variable
-from siec.codegen.inference import expr_sie_type, infer_type, result_arms
+from siec.codegen.inference import (expr_sie_type, infer_type, is_none,
+                                    option_value, result_arms)
 from siec.codegen.types import sized_array, strip_const, strip_reference
 
 # what a condition established about a result's 'ok' tag; a path with no
 # state of its own is unchecked, and either member is out of reach
 OK = "ok"
 ERR = "error"
+PRESENT = "present"
+ABSENT = "absent"
 
 # the members 'ok' guards, and the tag itself
 GUARDED = ("value", "error")
@@ -311,12 +314,25 @@ class ResultFlow:
         name = strip_const(strip_reference(strip_const(self.sie_type(expr)) or ""))
         return name if name.startswith("Result<") else None
 
+    def option_type(self, expr) -> str | None:
+        """The ``Option`` an expression holds, or None for anything else."""
+        stamped = getattr(expr, "option_source_type", None)
+        name = strip_const(strip_reference(
+            strip_const(stamped or self.sie_type(expr)) or ""))
+        return name if option_value(name) is not None else None
+
     def origin(self, expr) -> str | None:
         """
         What a result-valued expression says about its own tag: 'Ok' and
         'Error' build one each way, and a copy of another result carries
         that result's state along.
         """
+        if is_none(expr):
+            return ABSENT
+
+        if getattr(expr, "option_wrap_type", None) is not None:
+            return PRESENT
+
         if isinstance(expr, Call) and expr.name in ("Ok", "Error"):
             return OK if expr.name == "Ok" else ERR
 
@@ -390,7 +406,9 @@ class ResultFlow:
                 type_name = sized[0]
 
             self.declare(stmt.name, type_name)
-            if stmt.value is not None and self.result_type(Var(stmt.name)):
+            if (stmt.value is not None
+                    and (self.result_type(Var(stmt.name))
+                         or self.option_type(Var(stmt.name)))):
                 self.rebind((stmt.name,), stmt.value)
         elif isinstance(stmt, LetTuple):
             self.check(stmt.value)
@@ -398,7 +416,9 @@ class ResultFlow:
                 self.declare(name, None)
         elif isinstance(stmt, Assign):
             self.check(stmt.value)
-            if not stmt.qualified and self.result_type(Var(stmt.name)):
+            if (not stmt.qualified
+                    and (self.result_type(Var(stmt.name))
+                         or self.option_type(Var(stmt.name)))):
                 self.rebind((stmt.name,), stmt.value)
             elif not stmt.qualified:
                 self.forget(stmt.name)
@@ -473,12 +493,15 @@ class ResultFlow:
             self.rebind(path, stmt.value)
             return
 
-        if stmt.field != "ok" or not self.result_type(stmt.base):
-            return
-
-        self.state.pop(path[:-1], None)
-        if isinstance(stmt.value, BoolLiteral):
-            self.state[path[:-1]] = OK if stmt.value.value else ERR
+        tag = None
+        if stmt.field == "ok" and self.result_type(stmt.base):
+            tag = (OK, ERR)
+        elif stmt.field == "present" and self.option_type(stmt.base):
+            tag = (PRESENT, ABSENT)
+        if tag is not None:
+            self.state.pop(path[:-1], None)
+            if isinstance(stmt.value, BoolLiteral):
+                self.state[path[:-1]] = tag[0] if stmt.value.value else tag[1]
 
     def check_if(self, stmt) -> bool:
         """
@@ -607,6 +630,15 @@ class ResultFlow:
         """
         from siec.codegen.overloads import overload_candidates
 
+        if not isinstance(expr, (Call, MethodCall)):
+            return False
+
+        # Semantic checking has already selected the concrete overload or
+        # generic instance.  Prefer that decision: resolving the written name
+        # again loses imported/generic callees such as std's panic.
+        if (resolved := getattr(expr, "resolved_symbol", None)) is not None:
+            return resolved in self.gen.noreturns
+
         if not isinstance(expr, Call):
             return False
 
@@ -651,6 +683,9 @@ class ResultFlow:
         Walk an expression, checking its reads and handing back what it
         establishes about any tag when it holds and when it doesn't.
         """
+        if getattr(expr, "option_decay_type", None) is not None:
+            self.confirm_option_decay(expr)
+
         if isinstance(expr, UnaryOp):
             if expr.op == "not":
                 yes, no = self.visit(expr.operand)
@@ -673,6 +708,18 @@ class ResultFlow:
             self.under(no, expr.orelse)
             return {}, {}
 
+        # Testing an entire tagged value establishes its tag even when the
+        # storage is reached through members (`self.path`), not only through a
+        # local variable. Do this before member-field dispatch handles the
+        # expression as an ordinary access.
+        if (self.result_type(expr) is not None
+                and (path := path_of(expr)) is not None):
+            return {path: OK}, {path: ERR}
+
+        if (self.option_type(expr) is not None
+                and (path := path_of(expr)) is not None):
+            return {path: PRESENT}, {path: ABSENT}
+
         if isinstance(expr, Member):
             return self.visit_member(expr)
 
@@ -682,10 +729,6 @@ class ResultFlow:
         # Result implements Truthy through its 'ok' tag. Testing a named
         # result therefore establishes the same flow facts as reading
         # '.ok' explicitly.
-        if (self.result_type(expr) is not None
-                and (path := path_of(expr)) is not None):
-            return {path: OK}, {path: ERR}
-
         if isinstance(expr, Call):
             for arg in expr.args:
                 self.check(arg)
@@ -737,6 +780,17 @@ class ResultFlow:
             return {}, {**no, **right_no}
 
         if expr.op in ("==", "!="):
+            for side, other in ((expr.left, expr.right),
+                                (expr.right, expr.left)):
+                if is_none(other) and self.option_type(side) is not None:
+                    self.visit(side)
+                    path = path_of(side)
+                    if path is None:
+                        return {}, {}
+                    yes = {path: ABSENT}
+                    no = {path: PRESENT}
+                    return (yes, no) if expr.op == "==" else (no, yes)
+
             for side, other in ((expr.left, expr.right), (expr.right, expr.left)):
                 if isinstance(other, BoolLiteral):
                     yes, no = self.visit(side)
@@ -821,7 +875,31 @@ class ResultFlow:
             if (path := path_of(base)) is not None:
                 return {path: OK}, {path: ERR}
 
+        option = self.option_type(base)
+        if option is not None and expr.field == "value":
+            self.confirm_option(expr, base)
+
+        if option is not None and expr.field == "present":
+            if (path := path_of(base)) is not None:
+                return {path: PRESENT}, {path: ABSENT}
+
         return {}, {}
+
+    def confirm_option_decay(self, expr) -> None:
+        """Require an implicit ``Option<T>`` decay to stand on a present path."""
+        path = path_of(expr)
+        if path is None or self.state.get(path) != PRESENT:
+            shown = spell(expr)
+            raise TypeError(f"cannot use {shown!r} as its optional value: "
+                            "check that it is present first")
+
+    def confirm_option(self, expr, base) -> None:
+        """Require a direct optional value read to stand on a present path."""
+        path = path_of(base)
+        if path is None or self.state.get(path) != PRESENT:
+            shown = spell(expr)
+            raise TypeError(f"cannot read {shown!r}: the option is absent or "
+                            "unchecked; check its 'present' tag first")
 
     def confirm(self, expr, base) -> None:
         """

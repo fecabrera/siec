@@ -318,7 +318,8 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
 
 
 def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
-                 target_name: str | None, scope: dict):
+                 target_name: str | None, scope: dict, *,
+                 _inside_option: bool = False):
     """
     Emit an expression for a typed context, implicitly widening it to the target when allowed.
 
@@ -369,6 +370,28 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # copied temporary instead of the borrowed storage.
     if (copied := getattr(expr, "owned_copy", None)) is not None:
         return emit_coerced(gen, builder, copied, target_name, scope)
+
+    # Option coercions are stamped by semantic checking.  Wrapping constructs
+    # the two-field value directly; decay reads its carried field only after
+    # the flow pass has established that `present` is true on this path.
+    if (not _inside_option
+            and (carried := getattr(expr, "option_wrap_type", None)) is not None):
+        option_type = resolve_type(strip_const(target_name), gen.structs)
+        value = emit_coerced(
+            gen, builder, expr, carried, scope, _inside_option=True)
+        wrapped = ir.Constant(option_type, None)
+        wrapped = builder.insert_value(
+            wrapped, ir.Constant(ir.IntType(1), 1), 0, name="option.present")
+        return builder.insert_value(wrapped, value, 1, name="option.value")
+
+    if (not _inside_option
+            and getattr(expr, "option_decay_type", None) is not None):
+        from siec.codegen.expressions import emit_expression
+
+        option_name = getattr(expr, "option_source_type", None)
+        value = emit_expression(
+            gen, builder, expr, resolve_type(option_name, gen.structs), scope)
+        return builder.extract_value(value, 1, name="option.value")
 
     # the target may drive a generic callee's type arguments where its
     # own cannot: 'let r: Result<i32, u8> = Ok(5);' binds E from the target

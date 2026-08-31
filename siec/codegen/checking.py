@@ -254,6 +254,27 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
                         "local variable")
 
 
+def declared_bound(fn: Function, type_name: str | None,
+                   required: str) -> bool:
+    """Whether this generic body's own bounds prove an interface claim."""
+    placeholder = strip_const(strip_reference(type_name or ""))
+    parameters = {
+        *(fn.receiver_params or ()),
+        *(fn.type_params or ()),
+        *(fn.receiver_constraints or {}),
+        *(fn.constraints or {}),
+    }
+    if placeholder not in parameters:
+        return False
+
+    for constraints in (fn.receiver_constraints, fn.constraints):
+        bound = (constraints or {}).get(placeholder)
+        bounds = bound if isinstance(bound, tuple) else (bound,)
+        if required in bounds:
+            return True
+    return False
+
+
 def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     loop: bool = False,
                     emit_type: str | None | object = NO_EMIT) -> bool:
@@ -599,12 +620,17 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     raise TypeError("cannot drop a trait-indexed value: "
                                     "the container owns its element")
 
-            if not destroyable(gen, target_type):
+            bounded_destroy = declared_bound(fn, target_type, "Destroy")
+            if not destroyable(gen, target_type) and not bounded_destroy:
                 raise TypeError(
                     f"cannot drop {target_type!r}: the type does not "
                     "implement Destroy")
-            check_expression(
-                gen, MethodCall(stmt.target, "destroy", []), scope)
+            # A placeholder's concrete destroy method is selected when its
+            # bounded receiver family is instantiated; there is no method
+            # symbol for the bare T during template-body checking.
+            if not bounded_destroy:
+                check_expression(
+                    gen, MethodCall(stmt.target, "destroy", []), scope)
             if isinstance(stmt.target, Var) and stmt.target.name in scope:
                 variable = scope[stmt.target.name]
                 if not is_reference(variable.type):
@@ -842,6 +868,14 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
     # checks and alias expansion, rather than only to qualified-name lookup.
     with expression_view(gen, expr):
         result = _check_expression(gen, expr, scope, expected)
+        # Calls return their declared type even when an expected type drove
+        # generic resolution.  Apply the ordinary value conversion here as
+        # the common boundary so constructors and method calls receive the
+        # same coercion stamps as literals and variable reads.
+        if (isinstance(expr, (Call, MethodCall))
+                and expected is not None and result is not None
+                and result != expected):
+            require_fit(gen, expr, result, expected)
         return annotate_result(
             expr,
             result,
@@ -1237,7 +1271,10 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         expr.right = type_operand(gen, expr.right, scope)
 
     if isinstance(expr, BinaryOp):
-        from siec.codegen.inference import operator_call
+        from siec.codegen.inference import operator_call, option_none_test
+
+        if (rewritten := option_none_test(gen, expr, scope)) is not None:
+            return check_expression(gen, rewritten, scope, expected)
 
         if (rewritten := operator_call(gen, expr, scope)) is not None:
             return check_expression(gen, rewritten, scope, expected)
@@ -1722,6 +1759,22 @@ def require_fit(gen: CodeGenerator, expr: Expr, actual: str,
 
     source = strip_const(actual)
     target = strip_const(expected)
+
+    from siec.codegen.inference import option_value
+
+    # Any value fitting T fills an Option<T>; after flow checking has proven
+    # presence, an Option<T> expression may in turn stand in for its T.
+    if (carried := option_value(target)) is not None:
+        require_fit(gen, expr, actual, carried)
+        expr.option_wrap_type = carried
+        return
+    if (carried := option_value(source)) is not None:
+        if strip_const(carried) != target:
+            raise TypeError(f"cannot implicitly convert {actual} to {target}")
+        expr.option_source_type = source
+        expr.option_decay_type = carried
+        return
+
     if (is_const(actual) and is_aliasing(source)
             and not is_const(expected)):
         raise TypeError(

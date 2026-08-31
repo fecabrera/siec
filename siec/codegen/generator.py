@@ -406,7 +406,8 @@ class CodeGenerator:
         return info is not None and info.volatile
 
 
-# builtin declarations every program starts from: 'Result<V, E>' holds a
+# builtin declarations every program starts from: 'Option<T>' holds a value
+# behind its 'present' tag, 'Result<V, E>' holds a
 # value or an error behind its 'ok' tag, 'Result<E>' only the error, and
 # 'Ok'/'Error' construct them - usually inferred from the expected type;
 # 'Iterator<T>' and 'Iterable<T>' are the interfaces iteration speaks,
@@ -718,6 +719,29 @@ fn __const_enumerate<I, T>(it: I) -> ConstEnumerateIterator<I, T> {
     return e;
 }
 
+struct Option<T>: Truthy {
+    present: bool;
+    value: T;
+}
+
+fn Option<T>::truthy(const &self) -> bool {
+    return self.present;
+}
+
+fn None<T>() -> Option<T> {
+    let option: Option<T>;
+    option.present = false;
+    return option;
+}
+
+@where<T: Destroy>
+@extend Option<T>: Destroy {
+    fn destroy(&self) {
+        if (self)
+            drop self.value;
+    }
+}
+
 struct Result<V, E>: Truthy {
     ok: bool;
     union {
@@ -896,7 +920,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program.functions = [*prelude.functions, *program.functions]
     program.extends = [*prelude.extends, *program.extends]
     gen.builtin_names.update(struct.name for struct in prelude.structs)
-    gen.builtin_names.update(("Result", "Ok", "Error", "Scalar", "Integer",
+    gen.builtin_names.update(("Option", "None", "Result", "Ok", "Error",
+                              "Scalar", "Integer",
                               "SignedInteger", "UnsignedInteger", "Clone",
                               "Truthy",
                               "AssignFrom", "Assign", "Destroy",

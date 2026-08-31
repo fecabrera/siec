@@ -1,8 +1,8 @@
 # Sie for VS Code
 
 Syntax highlighting for the Sie programming language: keywords, decorators
-(`@extern`, `@asm`, ...), builtin types and the prelude names (`Result`,
-`Ok`, `Error`, the iteration and operator interfaces, including `GetItem`
+(`@extern`, `@asm`, ...), builtin types and the prelude names (`Option`,
+`None`, `Result`, `Ok`, `Error`, the iteration and operator interfaces, including `GetItem`
 and `SetItem`), strings with escapes, numbers, enum members, methods, and
 `@asm` bodies.
 

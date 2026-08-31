@@ -2668,6 +2668,41 @@ interface Iterable<T> {
 
 [Arrays](#arrays) implement `Iterable<T>` automatically, so they work with `foreach` and may be passed anywhere an `Iterable<T>` is expected. Iterator references point to the original elements, allowing mutable iteration to update the collection.
 
+### Optional values
+
+The built-in `Option<T>` represents a value that may be absent. It contains a `present` tag and a `value` of type `T`; the built-in value `None` creates an absent option. Its type is normally inferred from a return type, annotation, or function parameter, and can be written explicitly as `None<T>` when there is no typed context.
+
+An ordinary `T` implicitly fills an `Option<T>`, so functions can return their value directly:
+
+```
+fn find(enabled: bool) -> Option<i32> {
+    if (enabled) {
+        return 42;
+    }
+    return None;
+}
+
+let missing: Option<i32> = None;
+let explicit = None<i32>;
+```
+
+An option is truthy when it is present. Compare it with `None`, test it directly, or read its `present` tag. After the check establishes that the option is present, it may decay to `T`; its `value` member may also be read directly:
+
+```
+fn use(value: Option<i32>) {
+    if (value == None) {
+        report_missing();
+    } else {
+        consume(value);       // checked Option<i32> decays to i32
+        consume(value.value); // direct access is valid on this path
+    }
+}
+```
+
+The check remains known after an absent branch leaves through `return`, `break`, or a call to an `@noreturn` function. Assigning to the option or exposing its address invalidates the check.
+
+When `T` implements `Destroy`, `Option<T>` does too. Replacing a present option destroys its previous value, explicitly dropping the option destroys a present value, and normal scope cleanup does the same. Dropping `None` has no contained value to destroy. An `Option<T>` whose `T` does not implement `Destroy` is not owned.
+
 ### Error handling
 
 Sie uses the built-in `Result<V, E>` when an operation returns either a value or an error. `Result<E>` represents success without a value. Create results with `Ok` and `Error`; their types are usually inferred from the surrounding return type or annotation.

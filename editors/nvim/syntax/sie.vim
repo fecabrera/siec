@@ -21,12 +21,12 @@ syn keyword sieType closure
 
 " literals
 syn keyword sieBoolean true false
-syn keyword sieConstant null
+syn keyword sieConstant null None
 syn keyword sieSelf self
 
 " the builtin types, and the builtin declarations the prelude ships
 syn keyword sieType i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 bool char opaque raw
-syn keyword sieBuiltinType Any Result Tuple Slot Scalar Integer SignedInteger UnsignedInteger Iterator ConstIterator Iterable
+syn keyword sieBuiltinType Any Option Result Tuple Slot Scalar Integer SignedInteger UnsignedInteger Iterator ConstIterator Iterable
 syn keyword sieBuiltinType Clone AssignFrom Assign Destroy
 syn keyword sieBuiltinType ArrayIterator ConstArrayIterator Enumerated
 syn keyword sieBuiltinType ConstEnumerated EnumerateIterator

@@ -1720,6 +1720,8 @@ fn main() -> i32 {
     assert names["Integer"].kind == "interface"
     assert names["SignedInteger"].kind == "interface"
     assert names["UnsignedInteger"].kind == "interface"
+    assert names["Option"].kind == "struct"
+    assert names["None"].kind == "function"
     assert names["i128"].kind == "keyword"
     assert names["u128"].kind == "keyword"
     assert names["return"].kind == "keyword"

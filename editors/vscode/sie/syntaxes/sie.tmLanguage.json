@@ -140,7 +140,7 @@
         },
         "constants": {
             "name": "constant.language.sie",
-            "match": "\\b(true|false|null)\\b"
+            "match": "\\b(true|false|null|None)\\b"
         },
         "builtin-types": {
             "name": "support.type.primitive.sie",
@@ -150,7 +150,7 @@
             "patterns": [
                 {
                     "name": "support.class.builtin.sie",
-                    "match": "\\b(Any|Result|Tuple|Slot|Scalar|Integer|SignedInteger|UnsignedInteger|Iterator|ConstIterator|Iterable|ArrayIterator|ConstArrayIterator|Enumerated|ConstEnumerated|EnumerateIterator|ConstEnumerateIterator|Clone|AssignFrom|Assign|Destroy|Add|Sub|Mul|Div|Rem|AddAssign|SubAssign|MulAssign|DivAssign|RemAssign|Eq|Ord|GetItem|SetItem)\\b"
+                    "match": "\\b(Any|Option|Result|Tuple|Slot|Scalar|Integer|SignedInteger|UnsignedInteger|Iterator|ConstIterator|Iterable|ArrayIterator|ConstArrayIterator|Enumerated|ConstEnumerated|EnumerateIterator|ConstEnumerateIterator|Clone|AssignFrom|Assign|Destroy|Add|Sub|Mul|Div|Rem|AddAssign|SubAssign|MulAssign|DivAssign|RemAssign|Eq|Ord|GetItem|SetItem)\\b"
                 },
                 {
                     "name": "support.function.builtin.sie",

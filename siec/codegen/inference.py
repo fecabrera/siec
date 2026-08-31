@@ -105,6 +105,51 @@ def result_arms(name: str | None) -> tuple[str | None, str] | None:
     return (args[0], args[1]) if len(args) == 2 else None
 
 
+def option_value(name: str | None) -> str | None:
+    """The value type carried by an ``Option<T>`` spelling."""
+    from siec.codegen.generics import split_generic
+
+    split = split_generic(strip_const(strip_reference(strip_const(name) or "")))
+    if split is None or split[0] != "Option" or len(split[1]) != 1:
+        return None
+    return split[1][0]
+
+
+def is_none(expr: Expr) -> bool:
+    """Whether an expression is the builtin zero-argument None value."""
+    return isinstance(expr, Call) and expr.name == "None" and not expr.args
+
+
+def option_none_test(gen: "CodeGenerator", expr: BinaryOp,
+                     scope: dict) -> Expr | None:
+    """Lower ``option == None`` and ``option != None`` to its presence tag."""
+    if expr.op not in ("==", "!="):
+        return None
+
+    for none, option in ((expr.left, expr.right), (expr.right, expr.left)):
+        if not is_none(none):
+            continue
+        carried = option_value(expr_sie_type(gen, option, scope))
+        if carried is None:
+            continue
+
+        if none.type_args is not None:
+            if len(none.type_args) != 1:
+                raise TypeError("None takes exactly one type argument")
+            explicit = expand_alias(gen, none.type_args[0], checked=False)
+            if strip_const(explicit) != strip_const(carried):
+                raise TypeError(f"cannot compare Option<{carried}> to "
+                                f"None<{explicit}>")
+
+        from siec.codegen.ownership import inherit_expression_identity
+
+        present = Member(option, "present")
+        lowered = present if expr.op == "!=" else UnaryOp("not", present)
+        return inherit_expression_identity(expr, lowered)
+
+    return None
+
+
 def try_arms(gen: CodeGenerator, expr: Try, scope: dict) -> tuple[str | None, str]:
     """
     The value and error types a 'try' unwraps, or the reason its operand
@@ -633,6 +678,9 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
         # Resolve each operand at most once here. Previously operator lookup,
         # pointer classification, and arithmetic promotion each walked the
         # left subtree again, making a left-associated expression exponential.
+        if (rewritten := option_none_test(gen, expr, scope)) is not None:
+            return expr_sie_type(gen, rewritten, scope)
+
         left_type = expr_sie_type(gen, expr.left, scope)
         if (rewritten := operator_call(
                 gen, expr, scope, left_type=left_type)) is not None:

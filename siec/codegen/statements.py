@@ -389,13 +389,22 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             # assignable storage of exactly the referenced type
             if is_reference(ret_type):
                 referenced = strip_reference(ret_type)
-                value_type = expr_sie_type(gen, stmt.value, scope)
+                returned = stmt.value
+                value_type = expr_sie_type(gen, returned, scope)
+
+                # A checked Option<T> decaying into a reference return borrows
+                # its inline value field. Extracting the Option as a value
+                # would create a temporary and could not yield a stable &T.
+                if getattr(returned, "option_decay_type", None) is not None:
+                    returned = Member(returned, "value")
+                    value_type = getattr(stmt.value, "option_decay_type")
+
                 if (value_type is not None
                         and strip_const(value_type) != strip_const(referenced)):
                     raise TypeError(f"cannot return a {value_type!r} value "
                                     f"as {ret_type!r}")
 
-                value = emit_lvalue(gen, builder, stmt.value, scope)
+                value = emit_lvalue(gen, builder, returned, scope)
                 flush_defers(gen, builder, gen.defer_frames)
                 builder.ret(value)
                 return

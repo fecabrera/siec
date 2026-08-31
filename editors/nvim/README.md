@@ -38,7 +38,7 @@ cp -r editors/nvim/* ~/.config/nvim/
 
 **Highlighting** covers the language as the compiler reads it: keywords,
 the builtin types (`i32`, `opaque`, `char`, ...), the prelude's builtin
-declarations (`Result`, `Any`, `Iterator`, the operator interfaces), every
+declarations (`Option`, `None`, `Result`, `Any`, `Iterator`, the operator interfaces), every
 `@directive` from `@const` to `@sizeof`, the target constants, function
 declarations with their `S::method` receivers, and the literal forms
 including hexadecimal, escapes, and char literals.
