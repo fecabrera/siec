@@ -157,10 +157,11 @@ def parse_try(ts: TokenStream, line: int) -> Try:
 
     ts.expect("kw", "except")
     ts.expect("sym", "(")
-    name = ts.expect("ident").value
+    name_token = ts.expect("ident")
     ts.expect("sym", ")")
 
-    return Try(result, name, parse_block(ts), line=line)
+    return Try(result, name_token.value, parse_block(ts), line=line,
+               name_line=name_token.line, name_col=name_token.col)
 
 
 def parse_primary(ts: TokenStream) -> Expr:

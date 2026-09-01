@@ -359,6 +359,8 @@ class Try:
     body: list | None
     braced: bool = True
     line: int = _line()
+    name_line: int = _line()
+    name_col: int = field(default=0, compare=False, repr=False)
 
     @property
     def fallback(self) -> bool:

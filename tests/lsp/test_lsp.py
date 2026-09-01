@@ -844,6 +844,30 @@ fn main() -> i32 {
     assert finding.targets == [(str(src.resolve()), 2)]
 
 
+def test_inspect_types_a_try_error_binding(tmp_path):
+    """Hover shows the error type on its binding and inside its arm."""
+    analysis, src = unit(tmp_path, """\
+fn read() -> Result<i32, u8> { return Error(1); }
+
+fn main() -> i32 {
+    let value = try read() except (error) {
+        return error as i32;
+    }
+    return value;
+}
+""")
+
+    assert analysis.report is None
+
+    binding = probe(analysis, src, 3, 37)
+    assert binding.text == "error: u8"
+    assert binding.targets == [(str(src.resolve()), 4)]
+
+    use = probe(analysis, src, 4, 15)
+    assert use.text == "error: u8"
+    assert use.targets == [(str(src.resolve()), 4)]
+
+
 def test_inspect_does_not_leak_a_local_past_its_block(tmp_path):
     """
     A declaration inside an if is absent after its closing brace, even

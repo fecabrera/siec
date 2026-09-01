@@ -22,7 +22,7 @@ from inspect import isawaitable, iscoroutinefunction
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from siec.ast import Body, For, Function, Let, LocalFunction, Program
+from siec.ast import Body, For, Function, Let, LocalFunction, Program, Try
 from siec.cli import error_parts
 from siec.codegen import CodeGenerator, codegen
 from siec.codegen.generator import Variable
@@ -753,7 +753,7 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
     """
     from dataclasses import fields as dataclass_fields, is_dataclass
 
-    from siec.codegen.inference import infer_type
+    from siec.codegen.inference import infer_type, try_arms
 
     scope: dict[str, Variable] = {}
     lines: dict[str, int] = {}
@@ -815,8 +815,38 @@ def local_scope(gen: CodeGenerator, fn: Function, line: int, col: int = 0):
 
         return None
 
+    def bind_active_try_errors(node) -> None:
+        """Bind errors for the active `except` arm and its declaration."""
+        if isinstance(node, Try):
+            on_name = (
+                node.name is not None
+                and node.name_line == line
+                and node.name_col <= col < node.name_col + len(node.name)
+            )
+            in_arm = node.body is not None and span_contains(
+                node.body, line, col)
+            if node.name is not None and (on_name or in_arm):
+                try:
+                    _, error_type = try_arms(gen, node, scope)
+                    scope[node.name] = Variable(None, error_type)
+                except (TypeError, NameError, RuntimeError):
+                    pass
+                lines[node.name] = node.name_line or node.line
+
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                bind_active_try_errors(item)
+            return
+
+        if not is_dataclass(node):
+            return
+
+        for field_ in dataclass_fields(node):
+            bind_active_try_errors(getattr(node, field_.name))
+
     def walk(body: Body) -> None:
         for statement in body:
+            bind_active_try_errors(statement)
             nested = active_body(statement)
             if nested is not None:
                 # A for initializer belongs to its condition, step, and body,
