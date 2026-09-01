@@ -1567,6 +1567,8 @@ let first: i32 = arr[0]; // equivalent to arr.data[0]
 arr[1] = 5;
 ```
 
+Each direct array read, write, or compound assignment checks that the index is less than `arr.length`. An invalid index reports `array index is out of bounds` and aborts the program. Indexing `arr.data` uses a raw pointer and does not perform this check. A direct string literal read also permits the index equal to its length so that code can read its stored null terminator.
+
 Arrays can be initialized with elements enclosed by `[]` and separated by commas. A trailing comma is permitted.
 
 ```
@@ -1608,6 +1610,8 @@ arr[1:];  // [2, 3, 4, 5]
 arr[:3];  // [1, 2, 3]
 arr[1:3]; // [2, 3]
 ```
+
+The bounds must satisfy `from <= to` and `to <= arr.length`. An invalid range reports `array slice is out of bounds` and aborts the program. The failure does not unwind Sie scopes.
 
 #### Raw arrays
 

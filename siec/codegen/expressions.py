@@ -69,11 +69,112 @@ from siec.codegen.inference import (
     sized_member_array,
     try_arms,
     type_info,
+    value_class,
     valueless_try,
 )
 from siec.codegen.resolution import fold_qualified
 from siec.codegen.types import (is_array_struct, is_reference, raw_array,
                                 resolve_type, strip_const, strip_reference)
+
+
+def bounds_failure(gen: CodeGenerator) -> ir.Function:
+    """Return the private run-time failure path used by array checks."""
+    name = ".siec.bounds.fail"
+    existing = gen.module.globals.get(name)
+    if existing is not None:
+        return existing
+
+    char_ptr = ir.PointerType(ir.IntType(8))
+    failure_type = ir.FunctionType(ir.VoidType(), [char_ptr])
+    failure = ir.Function(gen.module, failure_type, name=name)
+    failure.linkage = "private"
+    failure.attributes.add("noreturn")
+
+    puts_type = ir.FunctionType(ir.IntType(32), [char_ptr])
+    puts = gen.module.globals.get("puts")
+    if puts is None:
+        puts = ir.Function(gen.module, puts_type, name="puts")
+    elif not isinstance(puts, ir.Function) or puts.function_type != puts_type:
+        raise TypeError("array bounds checks require puts(char*) -> i32")
+
+    fflush = gen.module.globals.get("fflush")
+    if fflush is None:
+        fflush_type = ir.FunctionType(ir.IntType(32), [char_ptr])
+        fflush = ir.Function(gen.module, fflush_type, name="fflush")
+    elif (not isinstance(fflush, ir.Function)
+          or len(fflush.args) != 1
+          or not isinstance(fflush.args[0].type, ir.PointerType)
+          or fflush.function_type.return_type != ir.IntType(32)):
+        raise TypeError("array bounds checks require fflush(pointer) -> i32")
+
+    abort_type = ir.FunctionType(ir.VoidType(), [])
+    abort = gen.module.globals.get("abort")
+    if abort is None:
+        abort = ir.Function(gen.module, abort_type, name="abort")
+    elif not isinstance(abort, ir.Function) or abort.function_type != abort_type:
+        raise TypeError("array bounds checks require abort()")
+    abort.attributes.add("noreturn")
+
+    builder = ir.IRBuilder(failure.append_basic_block("entry"))
+    builder.call(puts, [failure.args[0]])
+    builder.call(fflush, [ir.Constant(fflush.args[0].type, None)])
+    builder.call(abort, [])
+    builder.unreachable()
+    return failure
+
+
+def emit_bounds_assert(gen: CodeGenerator, builder: ir.IRBuilder,
+                       condition, message: str) -> None:
+    """Continue when condition holds, or report and abort when it does not."""
+    passed = builder.function.append_basic_block("bounds.ok")
+    failed = builder.function.append_basic_block("bounds.failed")
+    builder.cbranch(condition, passed, failed)
+
+    builder.position_at_end(failed)
+    text = builder.bitcast(gen.string_constant(message),
+                           ir.PointerType(ir.IntType(8)))
+    builder.call(bounds_failure(gen), [text])
+    builder.unreachable()
+
+    builder.position_at_end(passed)
+
+
+def array_index_in_bounds(gen: CodeGenerator, builder: ir.IRBuilder,
+                          expr: Expr, index, length, scope: dict, *,
+                          inclusive: bool = False):
+    """Compare any integer index width with an array's u64 length."""
+    classification = value_class(gen, index, expr, scope)
+    if not isinstance(index.type, ir.IntType):
+        raise TypeError("an array index must be an integer")
+    if classification is None:
+        prefix = "i" if isinstance(expr, IntLiteral) else "u"
+        classification = prefix, index.type.width
+    elif classification[0] == "f":
+        raise TypeError("an array index must be an integer")
+
+    prefix, _ = classification
+    width = max(index.type.width, length.type.width)
+    compare_type = ir.IntType(width)
+
+    compared_index = index
+    if index.type.width < width:
+        extend = builder.sext if prefix == "i" else builder.zext
+        compared_index = extend(index, compare_type, name="index.wide")
+
+    compared_length = length
+    if length.type.width < width:
+        compared_length = builder.zext(
+            length, compare_type, name="index.len.wide")
+
+    operator = "<=" if inclusive else "<"
+    bounded = builder.icmp_unsigned(
+        operator, compared_index, compared_length)
+    if prefix != "i":
+        return bounded
+
+    nonnegative = builder.icmp_signed(
+        ">=", compared_index, ir.Constant(compare_type, 0))
+    return builder.and_(nonnegative, bounded)
 
 
 def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
@@ -385,7 +486,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # pointer indexing, C-style: offset the base pointer and load the
         # element; an array indexes through its data pointer
         base = emit_expression(gen, builder, expr.base, base_context, scope)
-        if is_array_struct(base.type):
+        is_array = is_array_struct(base.type)
+        length = (builder.extract_value(base, 1, name="index.len")
+                  if is_array else None)
+        if is_array:
             base = builder.extract_value(base, 0, name="index.data")
 
         if not isinstance(base.type, ir.PointerType):
@@ -394,6 +498,12 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                             "only a pointer or an array indexes")
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
+        if length is not None:
+            emit_bounds_assert(
+                gen, builder, array_index_in_bounds(
+                    gen, builder, expr.index, index, length, scope,
+                    inclusive=isinstance(expr.base, StrLiteral)),
+                "array index is out of bounds")
         load = builder.load(builder.gep(base, [index]))
         if gen.volatile_struct(load.type):
             make_volatile(load)
@@ -740,7 +850,10 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
         # offset the base pointer's value to the element's address, C-style;
         # an array's elements are addressed through its data pointer
         base = emit_expression(gen, builder, expr.base, None, scope)
-        if is_array_struct(base.type):
+        is_array = is_array_struct(base.type)
+        length = (builder.extract_value(base, 1, name="index.len")
+                  if is_array else None)
+        if is_array:
             base = builder.extract_value(base, 0, name="index.data")
 
         if not isinstance(base.type, ir.PointerType):
@@ -749,6 +862,11 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
                             "only a pointer or an array indexes")
 
         index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
+        if length is not None:
+            emit_bounds_assert(
+                gen, builder, array_index_in_bounds(
+                    gen, builder, expr.index, index, length, scope),
+                "array index is out of bounds")
         return builder.gep(base, [index])
 
     # a dereference names the storage its pointer points at, addressed as
@@ -1638,11 +1756,18 @@ def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,
         else ir.Constant(ir.IntType(64), 0)
     )
 
+    length = builder.extract_value(base, 1, name="slice.len")
     stop = (
         emit_coerced(gen, builder, expr.stop, "u64", scope)
         if expr.stop is not None
-        else builder.extract_value(base, 1, name="slice.len")
+        else length
     )
+
+    ordered = builder.icmp_unsigned("<=", start, stop)
+    bounded = builder.icmp_unsigned("<=", stop, length)
+    emit_bounds_assert(
+        gen, builder, builder.and_(ordered, bounded),
+        "array slice is out of bounds")
 
     # the view shares the backing data, offset to 'from', spanning 'to' - 'from'
     data = builder.gep(builder.extract_value(base, 0, name="slice.data"), [start])

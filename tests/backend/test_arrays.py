@@ -294,6 +294,32 @@ def test_slices_view_the_backing_data(run):
     assert run(source).returncode == 9
 
 
+@pytest.mark.parametrize("bounds", ["3:2", "0:4", "4:"])
+def test_slice_bounds_fail_at_runtime(run, bounds):
+    """A reversed range or a bound past the array length aborts."""
+    result = run(f"""
+    fn main() -> i32 {{
+        let arr: i32[] = [1, 2, 3];
+        let invalid = arr[{bounds}];
+        return invalid.length as i32;
+    }}
+    """)
+    assert result.returncode != 0
+    assert result.stdout == "array slice is out of bounds\n"
+
+
+def test_empty_slice_at_the_end_is_valid(run):
+    """Equal bounds at the array length produce an empty final view."""
+    source = """
+    fn main() -> i32 {
+        let arr: i32[] = [1, 2, 3];
+        let empty = arr[3:3];
+        return empty.length as i32;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_arrays_index_directly(run):
     """
     'arr[i]' reads and writes the backing data, equivalent to 'arr.data[i]';
@@ -314,6 +340,80 @@ def test_arrays_index_directly(run):
     }
     """
     assert run(source).returncode == 6
+
+
+@pytest.mark.parametrize("operation", [
+    "let value = arr[3];",
+    "arr[3] = 4;",
+    "arr[3] += 4;",
+])
+def test_array_index_bounds_fail_at_runtime(run, operation):
+    """Array reads, writes, and updates abort before an invalid access."""
+    result = run(f"""
+    fn main() -> i32 {{
+        let arr: i32[] = [1, 2, 3];
+        {operation}
+        return 0;
+    }}
+    """)
+    assert result.returncode != 0
+    assert result.stdout == "array index is out of bounds\n"
+
+
+def test_compound_array_index_is_evaluated_once(run):
+    """A checked compound update shares one evaluated index."""
+    source = """
+    fn next(index: &u64) -> u64 {
+        let current = index;
+        index += 1;
+        return current;
+    }
+
+    fn main() -> i32 {
+        let arr: i32[] = [40];
+        let index: u64 = 0;
+        arr[next(index)] += 2;
+        if (index != 1) return 1;
+        return arr[0];
+    }
+    """
+    assert run(source).returncode == 42
+
+
+def test_array_bounds_accept_each_integer_width(run):
+    """Bounds comparisons widen signed and unsigned integer indices safely."""
+    source = """
+    fn main() -> i32 {
+        let arr: i32[] = [1, 2];
+        let a: i8 = 1;
+        let b: u8 = 1;
+        let c: i16 = 1;
+        let d: u16 = 1;
+        let e: i32 = 1;
+        let f: u32 = 1;
+        let g: i64 = 1;
+        let h: u64 = 1;
+        let i: i128 = 1;
+        let j: u128 = 1;
+        return arr[a] + arr[b] + arr[c] + arr[d] + arr[e]
+             + arr[f] + arr[g] + arr[h] + arr[i] + arr[j];
+    }
+    """
+    assert run(source).returncode == 20
+
+
+@pytest.mark.parametrize("type_name", ["i8", "i32", "i128"])
+def test_negative_signed_array_index_fails_at_runtime(run, type_name):
+    """A negative signed index fails before pointer arithmetic."""
+    result = run(f"""
+    fn main() -> i32 {{
+        let arr: i32[] = [1, 2, 3];
+        let index: {type_name} = -1;
+        return arr[index];
+    }}
+    """)
+    assert result.returncode != 0
+    assert result.stdout == "array index is out of bounds\n"
 
 
 def test_aggregate_literal_slices_in_place(run):
