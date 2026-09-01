@@ -227,6 +227,7 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
 
     if isinstance(expr, Move):
         return
+    source = expr
     if not destroyable(gen, type_name):
         return
     if getattr(expr, "self_transfer", False):
@@ -243,13 +244,35 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
             check_expression(gen, copied, scope, value_type)
             expr.owned_copy = copied
         return
-    if isinstance(expr, Var) and expr.name in scope:
-        variable = scope[expr.name]
+    if isinstance(source, Var) and source.name in scope:
+        variable = scope[source.name]
         if variable.moved:
-            raise TypeError(f"use of moved value {expr.name!r}")
-        scope[expr.name] = checked_variable(variable.type, moved=True)
+            raise TypeError(f"use of moved value {source.name!r}")
+        scope[source.name] = checked_variable(variable.type, moved=True)
         return
-    if isinstance(expr, (Member, Index)):
+    result_base = source.base if isinstance(source, Member) else None
+    while (isinstance(result_base, Member)
+           and result_base.field.startswith("#")):
+        result_base = result_base.base
+    if (isinstance(source, Member)
+            and source.field in ("value", "error")
+            and isinstance(result_base, Var)
+            and result_base.name in scope):
+        from siec.codegen.inference import result_arms
+
+        base = result_base.name
+        variable = scope[base]
+        arms = result_arms(expand_alias(gen, variable.type))
+        valid = (
+            arms is not None
+            and (source.field == "error" or arms[0] is not None)
+        )
+        if valid and destroyable(gen, variable.type):
+            if variable.moved:
+                raise TypeError(f"use of moved value {base!r}")
+            scope[base] = checked_variable(variable.type, moved=True)
+            return
+    if isinstance(source, (Member, Index)):
         raise TypeError("cannot move part of an owned value; move the whole "
                         "local variable")
 
@@ -1054,6 +1077,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         check_expression(gen, expr.result, scope)
         result_type = expr_sie_type(gen, expr.result, scope)
         value_type, error_type = try_arms(gen, expr, scope)
+        consume_owned_expression(gen, expr.result, result_type, scope)
 
         if value_type is None and expected is not None:
             from siec.codegen.inference import valueless_try
@@ -1064,11 +1088,21 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
         if expr.propagates:
             check_try_propagation(gen, error_type)
+            propagated_scope = dict(scope)
+            propagated_scope["try.error"] = checked_variable(error_type)
+            check_owned_cleanup(gen, "try.error", propagated_scope)
+            returned = gen.return_types.get(gen.current_function)
+            propagated = Call("Error", [Var("try.error")])
+            check_expression(
+                gen, propagated, propagated_scope, returned)
+            consume_owned_expression(
+                gen, propagated, returned, propagated_scope)
             return value_type
 
         inner = dict(scope)
         if expr.name is not None:
             inner[expr.name] = checked_variable(error_type)
+            check_owned_cleanup(gen, expr.name, inner)
 
         body = expr.body or []
         if value_type is None and expr.fallback and not expr.braced:

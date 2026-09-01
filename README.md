@@ -276,6 +276,8 @@ let second = Resource();
 
 Moving, returning, or passing the value by ownership transfers that cleanup. `destroy` is responsible for the whole value, including owned fields. The compiler does not destroy the fields separately. `drop place;` and `value.destroy()` destroy a mutable place and disable its automatic cleanup.
 
+`Result<V, E>` and `Result<E>` conditionally implement `Destroy`. A successful result destroys its value when `V` implements `Destroy`. A failed result destroys its error when `E` implements `Destroy`. It never destroys the inactive member.
+
 #### Raw storage slots
 
 `Slot<T>` has the size and alignment of `T`, but it has no automatic lifetime. The caller must mark each state transition. `Slot<T>` does not implement `Destroy`.
@@ -2747,6 +2749,17 @@ if (res.ok) {
 
 The check also remains known after a branch that returns, breaks, or otherwise leaves. Assigning to the result or exposing its address invalidates what was known, so it must be checked again.
 
+When an active member implements `Destroy`, binding or returning that member moves it out of the result. The result is then moved on that control-flow path and does not destroy the same payload again:
+
+```
+let result = read_resource();
+if (not result) {
+    let error = result.error;
+    return;
+}
+let value = result.value;
+```
+
 #### Unwrapping with try
 
 `try <result> except (<name>) { ... }` unwraps a successful result. On failure, the `except` block runs with the error bound to `name`:
@@ -2760,6 +2773,8 @@ let value = try divide(10, 2) except (error) {
 ```
 
 For `Result<V, E>`, the block must leave the current control flow or use `emit` to provide a replacement value. A `Result<E>` has no value to replace, so its block may finish normally.
+
+`try` transfers the active payload. On success, the unwrapped value owns the value payload. On failure, the `except` binding owns the error payload. The outer result is disarmed, so each payload is destroyed at most once.
 
 #### The fallback shorthand
 

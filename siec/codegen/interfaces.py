@@ -988,8 +988,12 @@ def resolve_extension(gen: CodeGenerator, ext) -> None:
     # 'Base<E>' over bare placeholder names extends the template; spelled
     # over real types, one concrete instantiation.
     parts = split_generic(ext.name)
+    declared_placeholders = False
+    if parts is not None and ext.params is not None:
+        declared_placeholders = all(arg in ext.params for arg in parts[1])
     if (parts is not None and parts[0] in gen.generic_structs
-            and not any(is_type_name(gen, arg) for arg in parts[1])):
+            and (declared_placeholders
+                 or not any(is_type_name(gen, arg) for arg in parts[1]))):
         resolve_template_extend(gen, ext, *parts)
         return
 
@@ -1107,6 +1111,10 @@ def resolve_template_extend(gen: CodeGenerator, ext, base: str,
     claims only when its arguments satisfy those bounds.
     """
     template = gen.generic_structs[base]
+    claim_key = base
+    if len(args) != len(template.params):
+        claim_key = f"{base}#{len(args)}"
+        template = gen.generic_structs.get(claim_key) or template
     if len(args) != len(template.params):
         take = len(template.params)
         raise TypeError(f"generic struct {base!r} takes {take} type "
@@ -1122,7 +1130,7 @@ def resolve_template_extend(gen: CodeGenerator, ext, base: str,
         for param, bound in (ext.constraints or {}).items()
     }
     entry = (claims, constraints, ext.file, ext.line)
-    gen.generic_struct_claims.setdefault(base, []).append(entry)
+    gen.generic_struct_claims.setdefault(claim_key, []).append(entry)
 
     for name in list(gen.structs):
         parts = split_generic(name)

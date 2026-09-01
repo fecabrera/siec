@@ -755,6 +755,40 @@ struct Result<E>: Truthy {
     error: E;
 }
 
+@where<V: Destroy, E>
+@extend Result<V, E>: Destroy {
+    fn destroy(&self) {
+        if (self.ok)
+            drop self.value;
+    }
+}
+
+@where<V, E: Destroy>
+@extend Result<V, E>: Destroy {
+    fn destroy(&self) {
+        if (not self.ok)
+            drop self.error;
+    }
+}
+
+@where<V: Destroy, E: Destroy>
+@extend Result<V, E>: Destroy {
+    fn destroy(&self) {
+        if (self.ok)
+            drop self.value;
+        else
+            drop self.error;
+    }
+}
+
+@where<E: Destroy>
+@extend Result<E>: Destroy {
+    fn destroy(&self) {
+        if (not self.ok)
+            drop self.error;
+    }
+}
+
 fn Result<V, E>::truthy(const &self) -> bool {
     return self.ok;
 }

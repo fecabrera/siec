@@ -181,9 +181,19 @@ def temporary_registered(gen: CodeGenerator, expr) -> bool:
 
 def disarm_expression(gen: CodeGenerator, builder, expr, scope: dict) -> None:
     """Transfer ownership out of a whole local expression when applicable."""
-    from siec.ast import Move
+    from siec.ast import Member, Move
 
     source = expr.operand if isinstance(expr, Move) else expr
+    if isinstance(source, Member) and source.field in ("value", "error"):
+        from siec.codegen.inference import expr_sie_type
+
+        if not destroyable(gen, expr_sie_type(gen, source, scope)):
+            return
+        base = source.base
+        while isinstance(base, Member) and base.field.startswith("#"):
+            base = base.base
+        if isinstance(base, Var):
+            source = base
     if not isinstance(source, Var) or source.name not in scope:
         return
     variable = scope[source.name]

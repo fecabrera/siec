@@ -1658,6 +1658,10 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     result = emit_expression(gen, builder, expr.result, None, scope)
     holder = entry_alloca(builder, result.type, "try.result")
     builder.store(result, holder)
+    from siec.codegen.ownership import (consume_temporary, disarm_expression)
+
+    consume_temporary(gen, expr.result)
+    disarm_expression(gen, builder, expr.result, scope)
 
     inner = dict(scope)
     inner[HOLDER] = Variable(holder, result_type)
@@ -1694,12 +1698,21 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
         name = ERROR
         propagated(gen, builder, error_type)
 
+    error_cleanup = None
     if name is not None:
+        from siec.codegen.ownership import (DropCleanup, destroyable,
+                                           new_drop_flag)
+
         error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
                                   name)
         builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "error"),
                                    error_type, arm), error_slot)
-        arm[name] = Variable(error_slot, error_type)
+        owned_error = destroyable(gen, error_type)
+        error_flag = new_drop_flag(
+            builder, name, initialized=owned_error) if owned_error else None
+        arm[name] = Variable(error_slot, error_type, drop_flag=error_flag)
+        if owned_error:
+            error_cleanup = DropCleanup(name, arm[name])
 
         if gen.debug is not None and expr.name is not None:
             gen.debug.declare_variable(builder, error_slot, name,
@@ -1718,7 +1731,9 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
 
     # an 'emit' inside the arm produces the value the ok path would have
     gen.emit_targets.append((slot, end_block, value_type, len(gen.defer_frames)))
-    emit_block(gen, builder, body, arm)
+    emit_block(
+        gen, builder, body, arm,
+        initial_cleanups=[error_cleanup] if error_cleanup is not None else None)
     gen.emit_targets.pop()
 
     # an arm owing a value must leave rather than fall out without one;
@@ -1733,7 +1748,13 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
         builder.branch(end_block)
 
     builder.position_at_end(end_block)
-    return builder.load(slot) if slot is not None else None
+    if slot is None:
+        return None
+
+    value = builder.load(slot)
+    from siec.codegen.ownership import track_value_temporary
+
+    return track_value_temporary(gen, builder, expr, value, value_type)
 
 
 def emit_slice(gen: CodeGenerator, builder: ir.IRBuilder, expr: Slice,

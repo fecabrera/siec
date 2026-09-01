@@ -150,6 +150,158 @@ def test_initialization_moves_cleanup_responsibility(run):
     assert result.stdout == "drop 42\n"
 
 
+def test_result_destroys_only_its_active_owned_payload(run):
+    """An owned Result drops its value or error according to its tag."""
+    result = run(RESOURCE + r"""
+    fn outcome(ok: bool) -> Result<Resource, Resource> {
+        if (ok) { return Ok(Resource(1)); }
+        return Error(Resource(2));
+    }
+
+    fn main() -> i32 {
+        {
+            let value = outcome(true);
+        }
+        {
+            let error = outcome(false);
+        }
+        {
+            let value: Result<Resource, i32> = Ok(Resource(3));
+        }
+        {
+            let error: Result<i32, Resource> = Error(Resource(4));
+        }
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 1\ndrop 2\ndrop 3\ndrop 4\n"
+
+
+def test_result_member_move_disarms_the_outer_result(run):
+    """Moving a proven active member transfers the Result's one owner."""
+    result = run(RESOURCE + r"""
+    fn outcome(ok: bool) -> Result<Resource, Resource> {
+        if (ok) { return Ok(Resource(1)); }
+        return Error(Resource(2));
+    }
+
+    fn take(ok: bool) {
+        let result = outcome(ok);
+        if (not result) {
+            let error = result.error;
+            return;
+        }
+        let value = result.value;
+    }
+
+    fn main() -> i32 {
+        take(false);
+        take(true);
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 2\ndrop 1\n"
+
+
+def test_try_transfers_owned_value_or_error_without_a_second_drop(run):
+    """Try gives ownership to its value or its except binding."""
+    result = run(RESOURCE + r"""
+    fn outcome(ok: bool) -> Result<Resource, Resource> {
+        if (ok) { return Ok(Resource(1)); }
+        return Error(Resource(2));
+    }
+
+    fn take(ok: bool) {
+        let value = try outcome(ok) except (error) {
+            return;
+        }
+    }
+
+    fn main() -> i32 {
+        take(false);
+        take(true);
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 2\ndrop 1\n"
+
+
+def test_try_transfers_an_owned_error_from_valueless_result(run):
+    """Try over Result<E> drops only a bound failed error."""
+    result = run(RESOURCE + r"""
+    fn outcome(ok: bool) -> Result<Resource> {
+        if (ok) { return Ok(); }
+        return Error(Resource(3));
+    }
+
+    fn take(ok: bool) {
+        try outcome(ok) except (error) {
+            return;
+        }
+    }
+
+    fn main() -> i32 {
+        take(false);
+        take(true);
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 3\n"
+
+
+def test_result_assignment_and_member_return_transfer_once(run):
+    """Replacement and a returned active member keep one cleanup owner."""
+    result = run(RESOURCE + r"""
+    fn outcome(ok: bool) -> Result<Resource, Resource> {
+        if (ok) { return Ok(Resource(1)); }
+        return Error(Resource(2));
+    }
+
+    fn take(ok: bool) -> Resource {
+        let result = outcome(ok);
+        if (not result) { return result.error; }
+        return result.value;
+    }
+
+    fn main() -> i32 {
+        let result = outcome(true);
+        result = outcome(false);
+        let error = take(false);
+        let value = take(true);
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 1\ndrop 1\ndrop 2\ndrop 2\n"
+
+
+def test_bare_try_transfers_an_owned_error_to_the_caller(run):
+    """Bare try drops a discarded value or propagates one owned error."""
+    result = run(RESOURCE + r"""
+    fn outcome(ok: bool) -> Result<Resource, Resource> {
+        if (ok) { return Ok(Resource(1)); }
+        return Error(Resource(2));
+    }
+
+    fn forward(ok: bool) -> Result<Resource> {
+        try outcome(ok);
+        return Ok();
+    }
+
+    fn main() -> i32 {
+        let success = forward(true);
+        let failure = forward(false);
+        return 0;
+    }
+    """)
+    assert result.returncode == 0
+    assert result.stdout == "drop 1\ndrop 2\n"
+
+
 def test_move_assignment_destroys_old_value_and_transfers_owner(run):
     """Built-in move replacement releases the target and disarms the source."""
     result = run(RESOURCE + r"""

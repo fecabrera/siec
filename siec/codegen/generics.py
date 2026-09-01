@@ -278,8 +278,12 @@ def _instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
         # An '@extend Base<T>' claim has its own template environment. Unlike
         # claims written on the struct, it applies only when this instance's
         # arguments satisfy the extension bounds.
+        claim_key = (
+            base if gen.generic_structs.get(base) is template
+            else f"{base}#{len(args)}"
+        )
         for claims, constraints, file, line in gen.generic_struct_claims.get(
-                base, ()):
+                claim_key, ()):
             if constraints_hold(gen, constraints, mapping, file):
                 declare_implements(
                     gen,
