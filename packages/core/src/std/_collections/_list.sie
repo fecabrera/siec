@@ -1,5 +1,5 @@
+import { assert } from std;
 import { alloc, free } from std.alloc;
-import { panic } from std;
 import { FNV1a } from std.hashing;
 import { Formattable } from std.format;
 
@@ -161,9 +161,7 @@ fn List<T>::assign_from(&self, str: const &Iterable<T>) {
  * @return The first element.
  */
 fn List<T>::first(&self) -> &T {
-    if (not self.length)
-        panic("List is empty");
-
+    assert(self.length, "List is empty");
     return self.data[0].get_mut();
 }
 
@@ -173,9 +171,7 @@ fn List<T>::first(&self) -> &T {
  * @return The last element.
  */
 fn List<T>::last(&self) -> &T {
-    if (not self.length)
-        panic("List is empty");
-
+    assert(self.length, "List is empty");
     return self.data[self.length - 1].get_mut();
 }
 
@@ -187,9 +183,7 @@ fn List<T>::last(&self) -> &T {
  */
 @deprecated("use operator [], get_item() or set_item()")
 fn List<T>::get(&self, index: const u64) -> &T {
-    if (index >= self.length)
-        panic("List index is out of bounds");
-
+    assert(index < self.length, "List index is out of bounds");
     return self.data[index].get_mut();
 }
 
@@ -253,8 +247,7 @@ fn List<T>::get_slice(const &self, start: const u64, finish: const u64) -> List<
  * @return The element at the given index.
  */
 fn List<T>::get_item(const &self, index: const u64) -> const T {
-    if (index >= self.length)
-        panic("List index is out of bounds");
+    assert(index < self.length, "List index is out of bounds");
 
     return self.data[index].get();
 }
@@ -266,9 +259,7 @@ fn List<T>::get_item(const &self, index: const u64) -> const T {
  * @param value The value to set at the given index.
  */
 fn List<T>::set_item(&self, index: const u64, value: T) {
-    if (index >= self.length)
-        panic("List index is out of bounds");
-
+    assert(index < self.length, "List index is out of bounds");
     self.data[index].replace(move value);
 }
 
@@ -306,9 +297,7 @@ fn List<T>::push_from(&self, value: const &T) {
  * @return The last element from the List.
  */
 fn List<T>::pop(&self) -> T {
-    if (not self.length)
-        panic("cannot pop an empty List");
-
+    assert(self.length, "List is empty");
     self.length -= 1;
     return self.data[self.length].take();
 }
