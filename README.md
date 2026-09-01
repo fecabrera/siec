@@ -2670,9 +2670,11 @@ interface Iterable<T> {
 
 ### Optional values
 
-The built-in `Option<T>` represents a value that may be absent. It contains a `present` tag and a `value` of type `T`; the built-in value `None` creates an absent option. Its type is normally inferred from a return type, annotation, or function parameter, and can be written explicitly as `None<T>` when there is no typed context.
+The built-in `Option<T>` represents a value that may be absent. It contains a `present` tag and a `value` of type `T`. The built-in value `None` creates an absent option.
 
-An ordinary `T` implicitly fills an `Option<T>`, so functions can return their value directly:
+The compiler infers the type of `None` from a return type, annotation, or function parameter. If there is no type context, use `None<T>`.
+
+A value of type `T` converts implicitly to `Option<T>`. Thus, a function can return a value of type `T` directly:
 
 ```
 fn find(enabled: bool) -> Option<i32> {
@@ -2686,22 +2688,24 @@ let missing: Option<i32> = None;
 let explicit = None<i32>;
 ```
 
-An option is truthy when it is present. Compare it with `None`, test it directly, or read its `present` tag. After the check establishes that the option is present, it may decay to `T`; its `value` member may also be read directly:
+An option is true when it contains a value. Test the option directly, compare it with `None`, or read its `present` tag.
+
+After a check shows that the option is present, it can decay to `T`. Its `value` member is also available:
 
 ```
 fn use(value: Option<i32>) {
     if (value == None) {
         report_missing();
     } else {
-        consume(value);       // checked Option<i32> decays to i32
-        consume(value.value); // direct access is valid on this path
+        consume(value);       // decays to i32
+        consume(value.value); // accesses the value directly
     }
 }
 ```
 
-The check remains known after an absent branch leaves through `return`, `break`, or a call to an `@noreturn` function. Assigning to the option or exposing its address invalidates the check.
+The compiler keeps the result of the check when an absent branch ends with `return`, `break`, or a call to an `@noreturn` function. An assignment to the option or access to its address invalidates the check.
 
-When `T` implements `Destroy`, `Option<T>` does too. Replacing a present option destroys its previous value, explicitly dropping the option destroys a present value, and normal scope cleanup does the same. Dropping `None` has no contained value to destroy. An `Option<T>` whose `T` does not implement `Destroy` is not owned.
+When `T` implements `Destroy`, `Option<T>` also implements it. Replacing, dropping, or cleaning up a present option destroys its value. An absent option has no value to destroy. If `T` does not implement `Destroy`, `Option<T>` is not owned.
 
 ### Error handling
 
