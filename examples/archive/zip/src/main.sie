@@ -47,7 +47,7 @@ fn main(args: const char*[]) -> i32 {
 
         // zip file
         try archive.add_file(input.as_const_array(), basename.as_const_array()) except (error) {
-            std.io.println(std.io.stderr, "can't zip file {}:", input, error);
+            std.io.println(std.io.stderr, "can't zip file {}: {}", input, error);
             return 1;
         }
     }
