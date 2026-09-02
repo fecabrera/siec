@@ -31,6 +31,7 @@ from siec.codegen.types import (
     raw_array,
     resolve_type,
     strip_const,
+    strip_nonnull,
     strip_reference,
 )
 
@@ -445,7 +446,8 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # its data pointer: 'let ptr: i32* = [1, 2, 3];'
         if isinstance(target_type, ir.PointerType):
             array_type = ir.LiteralStructType([target_type, ir.IntType(64)])
-            element_name = target_name.removesuffix("*") if target_name else None
+            element_name = (strip_nonnull(target_name).removesuffix("*")
+                            if target_name else None)
             value = emit_array(gen, builder, expr, array_type, scope, element_name)
             return builder.extract_value(value, 0, name="decay")
 

@@ -31,6 +31,31 @@ def test_nonnull_pointer_has_pointer_layout_and_weakens(run):
     assert result.returncode == 42
 
 
+def test_literals_decay_to_nonnull_pointer_parameters(run):
+    """Array and string literals have non-null compiler-owned backing."""
+    result = run(r'''
+    fn first_int(values: const !i32*) -> i32 { return values[0]; }
+    fn first_char(value: const !char*) -> char { return value[0]; }
+
+    fn main() -> i32 {
+        return first_int([42, 2]) + first_char("*") as i32 - 42;
+    }
+    ''')
+    assert result.returncode == 42
+
+
+def test_general_array_does_not_decay_to_nonnull_pointer(compile_source):
+    """An array value needs an explicit assertion on its data pointer."""
+    with pytest.raises(
+            TypeError,
+            match=r"cannot implicitly convert i32\[\] to !i32\*"):
+        compile_source(r'''
+        fn read(values: !i32*) -> i32 { return values[0]; }
+        fn pass(values: i32[]) -> i32 { return read(values); }
+        fn main() -> i32 { return 0; }
+        ''')
+
+
 def test_null_cannot_initialize_nonnull_pointer(compile_source):
     """A null literal cannot satisfy a non-null pointer type."""
     with pytest.raises(TypeError, match="null cannot initialize"):

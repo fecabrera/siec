@@ -1634,6 +1634,20 @@ let arr: i32[] = [1, 2, 3];
 f(arr); // equivalent to f(arr as i32*);
 ```
 
+A direct array or string literal can also lower to `!X*`. The compiler creates
+its backing storage, so its data pointer is not null. A general `X[]` value can
+contain a null data pointer and does not lower to `!X*`. Check its data field
+explicitly when a non-null pointer is required.
+
+```
+fn first(values: const !i32*) -> i32;
+
+first([1, 2, 3]); // allowed
+
+let values: i32[] = [1, 2, 3];
+first(values.data!);
+```
+
 An array can be sliced with `arr[from:to]`, where either bound can be omitted: `from` defaults to `0` and `to` defaults to `arr.length`. Slicing yields an `X[]` view over the same backing data, not a copy.
 
 ```
