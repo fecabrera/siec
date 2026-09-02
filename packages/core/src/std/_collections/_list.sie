@@ -161,7 +161,7 @@ fn List<T>::assign_from(&self, str: const &Iterable<T>) {
  * @return The first element.
  */
 fn List<T>::first(&self) -> &T {
-    assert(self.length, "List is empty");
+    assert(self.length != 0, "List is empty");
     return self.data[0].get_mut();
 }
 
@@ -171,7 +171,7 @@ fn List<T>::first(&self) -> &T {
  * @return The last element.
  */
 fn List<T>::last(&self) -> &T {
-    assert(self.length, "List is empty");
+    assert(self.length != 0, "List is empty");
     return self.data[self.length - 1].get_mut();
 }
 
@@ -297,7 +297,7 @@ fn List<T>::push_from(&self, value: const &T) {
  * @return The last element from the List.
  */
 fn List<T>::pop(&self) -> T {
-    assert(self.length, "List is empty");
+    assert(self.length != 0, "List is empty");
     self.length -= 1;
     return self.data[self.length].take();
 }
