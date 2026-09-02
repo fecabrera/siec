@@ -115,6 +115,9 @@ def type_layout(gen: CodeGenerator, name: str | None, *,
                 suffix = suffix[2:]
         return layout
 
+    from siec.codegen.types import strip_nonnull
+
+    name = strip_nonnull(name)
     stripped = name.rstrip("*")
     base, pointer_depth = stripped, len(name) - len(stripped)
     if pointer_depth:

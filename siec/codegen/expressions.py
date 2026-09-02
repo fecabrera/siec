@@ -596,6 +596,17 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         if expr.op == "not":
             return builder.not_(emit_bool(gen, builder, expr.operand, scope))
 
+        if expr.op == "nonnull":
+            value = emit_expression(gen, builder, expr.operand, expected_type, scope)
+            if getattr(expr, "nonnull_proven", False):
+                return value
+            valid = builder.icmp_unsigned(
+                "!=", value, ir.Constant(value.type, None))
+            emit_bounds_assert(
+                gen, builder, valid,
+                "null pointer used in a non-null assertion")
+            return value
+
         # '&' takes the address of an assignable expression: its stack slot;
         # a reference parameter is not dereferenceable - no address rooted
         # at it may be taken ('&s' and '&s.member' would both leak the
@@ -691,12 +702,14 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # Pointer compatibility follows Sie types rather than LLVM pointees:
         # opaque* is the wildcard pointer, while two typed pointers must name
         # the same type (even when both lower to the same LLVM type).
-        left_name = strip_const(expand_alias(
+        from siec.codegen.types import strip_nonnull
+
+        left_name = strip_const(strip_nonnull(expand_alias(
             gen, expr_sie_type(gen, expr.left, scope)
-            or infer_type(gen, expr.left, scope), checked=False) or "")
-        right_name = strip_const(expand_alias(
+            or infer_type(gen, expr.left, scope), checked=False) or ""))
+        right_name = strip_const(strip_nonnull(expand_alias(
             gen, expr_sie_type(gen, expr.right, scope)
-            or infer_type(gen, expr.right, scope), checked=False) or "")
+            or infer_type(gen, expr.right, scope), checked=False) or ""))
         # A bare function reference also lowers to a pointer and keeps its
         # established null/opaque comparison behavior.
         left_pointer = (left_name.endswith("*")

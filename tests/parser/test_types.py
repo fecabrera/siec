@@ -19,6 +19,18 @@ def test_pointer_type(ts):
     assert parse_type(ts("u8*")) == "u8*"
 
 
+def test_nonnull_pointer_type(ts):
+    """A leading bang marks the complete pointer type as non-null."""
+    assert parse_type(ts("!u8*")) == "!u8*"
+    assert parse_type(ts("const !u8*")) == "const !u8*"
+
+
+def test_nonnull_requires_a_pointer_type(ts):
+    """The non-null modifier cannot qualify a non-pointer type."""
+    with pytest.raises(SyntaxError, match="can only qualify a pointer"):
+        parse_type(ts("!u8"))
+
+
 def test_array_type(ts):
     """
     An array type is a type followed by an empty '[]'.

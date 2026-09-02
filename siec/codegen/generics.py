@@ -470,6 +470,8 @@ def unify(pattern: str | None, concrete: str | None,
 
     pattern, concrete = strip_const(pattern), strip_const(concrete)
     pattern, concrete = strip_reference(pattern), strip_reference(concrete)
+    pattern = pattern.removeprefix("!")
+    concrete = concrete.removeprefix("!")
 
     if pattern in type_params:
         previous = bindings.setdefault(pattern, concrete)

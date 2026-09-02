@@ -1534,6 +1534,10 @@ def build(argv: list[str]) -> int:
                       metavar="N", help="optimization level, cc-style (default 0)")
     args.add_argument("-g", "--debug", action="store_true", dest="debug",
                       help="emit DWARF debug info, for source-level debugging")
+    args.add_argument("-Wunchecked-dereference", action="store_true",
+                      dest="warn_unchecked_dereference",
+                      help="warn when a nullable pointer is dereferenced "
+                           "without a non-null proof")
     args.add_argument("--run", nargs=argparse.REMAINDER, metavar="ARG",
                       help="JIT-run the package instead of building it; "
                            "pass all following arguments to the program")
@@ -1621,6 +1625,8 @@ def build_from_store(root: PackageManifest, sources: list[Path],
         command += [f"-O{opts.opt}"]
     if opts.debug:
         command += ["-g"]
+    if opts.warn_unchecked_dereference:
+        command += ["-Wunchecked-dereference"]
     if opts.run is not None:
         command += ["--run", *opts.run]
     else:

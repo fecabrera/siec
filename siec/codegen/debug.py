@@ -18,6 +18,7 @@ from siec.codegen.types import (
     resolve_type,
     sized_array,
     strip_const,
+    strip_nonnull,
     strip_reference,
 )
 
@@ -184,6 +185,9 @@ class DebugInfo:
                 "baseType": self.di_type(strip_reference(name)),
                 "size": 64,
             })
+
+        if name.startswith("!"):
+            return self.build_type(strip_nonnull(name))
 
         if name.endswith("*"):
             inner = name[:-1]

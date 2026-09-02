@@ -97,6 +97,10 @@ def main(argv: list[str] | None = None) -> int:
                       metavar="N", help="optimization level, cc-style (default 0)")
     args.add_argument("-g", "--debug", action="store_true", dest="debug",
                       help="emit DWARF debug info, for source-level debugging")
+    args.add_argument("-Wunchecked-dereference", action="store_true",
+                      dest="warn_unchecked_dereference",
+                      help="warn when a nullable pointer is dereferenced "
+                           "without a non-null proof")
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("-l", action="append", default=[], dest="libs", metavar="LIB",
@@ -151,8 +155,11 @@ def main(argv: list[str] | None = None) -> int:
     # definitions coming from its own unit at link
     try:
         program = discover_program(sources, include_paths, opts.target)
+        warnings = ({"unchecked-dereference"}
+                    if opts.warn_unchecked_dereference else set())
         module = codegen(program, str(sources[0]), opts.target, opts.debug,
-                         define_imports=not opts.compile_only)
+                         define_imports=not opts.compile_only,
+                         warnings=warnings)
     except (DiagnosticError, SyntaxError, TypeError, NameError,
             FileNotFoundError) as error:
         print(format_error(str(sources[0]), error), file=sys.stderr)

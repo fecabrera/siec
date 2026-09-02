@@ -34,11 +34,12 @@ def volatile_chain(gen: CodeGenerator, expr, scope: dict) -> bool:
     Whether an lvalue chain passes through a '@volatile' struct: any link
     whose type names one, directly or behind pointers and arrays.
     """
-    from siec.codegen.types import strip_const
+    from siec.codegen.types import strip_const, strip_nonnull
 
     node = expr
     while True:
-        name = strip_const(expr_sie_type(gen, node, scope)) or ""
+        name = strip_nonnull(
+            strip_const(expr_sie_type(gen, node, scope))) or ""
         while name.endswith("*") or name.endswith("[]"):
             name = name.removesuffix("[]").rstrip("*")
 
@@ -63,7 +64,10 @@ def reject_const_base(gen: CodeGenerator, scope: dict, base) -> None:
     while True:
         base_type = expr_sie_type(gen, base, scope)
         if is_const(base_type):
-            raise TypeError(f"cannot mutate a {base_type!r} value")
+            from siec.codegen.types import strip_nonnull
+
+            display_type = strip_nonnull(base_type)
+            raise TypeError(f"cannot mutate a {display_type!r} value")
 
         if isinstance(base, (Member, Index)):
             base = base.base

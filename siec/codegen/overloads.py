@@ -336,6 +336,8 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     Declared parameter types are already canonical - declaration expanded
     their aliases - so no view-gated expansion happens here.
     """
+    from siec.codegen.types import is_nonnull_pointer, strip_nonnull
+
     target = strip_const(param)
 
     # A mutable reference aliases its argument in place and therefore needs
@@ -389,9 +391,16 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
     if source == target:
         return "exact"
 
+    nullable_source = strip_const(strip_nonnull(source))
+    nullable_target = strip_const(strip_nonnull(target))
+    if nullable_source == nullable_target and nullable_source.endswith("*"):
+        if is_nonnull_pointer(source) or is_nonnull_pointer(target):
+            return "implicit"
+
     # 'null' adopts any pointer parameter, and a string literal fills a
     # 'char[]' one as the fat value it already is, length included
-    if isinstance(arg, NullLiteral) and target.endswith("*"):
+    if (isinstance(arg, NullLiteral) and target.endswith("*")
+            and not is_nonnull_pointer(target)):
         return "implicit"
 
     if isinstance(arg, StrLiteral) and target == "char[]":

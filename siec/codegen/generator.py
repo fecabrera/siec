@@ -884,7 +884,8 @@ def parse_prelude() -> Program:
 
 def codegen(program: Program, module_name: str, target: str | None = None,
             debug: bool = False, define_imports: bool = True,
-            gen: "CodeGenerator | None" = None) -> ir.Module:
+            gen: "CodeGenerator | None" = None,
+            warnings: set[str] | None = None) -> ir.Module:
     """
     Generate an LLVM module from a Program AST: register structs, declare functions, emit bodies.
 
@@ -930,6 +931,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     program = copy.deepcopy(program)
 
     gen = gen or CodeGenerator(module_name, target)
+    gen.enabled_warnings = set(warnings or ())
     gen.program = program
 
     gen.module_bindings = program.module_bindings

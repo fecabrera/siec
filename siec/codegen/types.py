@@ -39,6 +39,27 @@ def strip_const(name: str | None) -> str | None:
     return name.removeprefix("const ") if name is not None else None
 
 
+def is_nonnull_pointer(name: str | None) -> bool:
+    """Whether a type carries the non-null pointer contract."""
+    return name is not None and strip_const(name).startswith("!")
+
+
+def strip_nonnull(name: str | None) -> str | None:
+    """Remove a non-null pointer contract while preserving outer const."""
+    if not is_nonnull_pointer(name):
+        return name
+
+    base = strip_const(name)[1:]
+    return f"const {base}" if is_const(name) else base
+
+
+def nonnull_pointer(name: str) -> str:
+    """Add a non-null contract to one pointer type."""
+    base = strip_const(name)
+    result = base if base.startswith("!") else f"!{base}"
+    return f"const {result}" if is_const(name) else result
+
+
 def is_reference(name: str | None) -> bool:
     """
     Whether a type name is a '&T' reference, behind any 'const' marking.
@@ -240,6 +261,10 @@ def validate_type(name: str | None, structs: dict | None = None,
         return
 
     name = strip_const(name)
+    if name.startswith("!"):
+        if not name[1:].endswith("*"):
+            raise TypeError("'!' can only qualify a pointer type")
+        name = name[1:]
     if name.startswith("&"):
         validate_type(name[1:], structs)
         return
@@ -311,6 +336,10 @@ def resolve_type(name: str | None, structs: dict | None = None,
 
     # 'const T' is a contract, not a type: it resolves as its base type
     name = strip_const(name)
+    if name.startswith("!"):
+        if not name[1:].endswith("*"):
+            raise TypeError("'!' can only qualify a pointer type")
+        name = name[1:]
 
     # a '&T' reference is represented by a hidden pointer to T
     if name.startswith("&"):

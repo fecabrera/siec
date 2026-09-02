@@ -49,6 +49,24 @@ def test_deprecation_warnings_print_on_stderr(tmp_path, capsys, monkeypatch):
     assert "warning: 'old' is deprecated: use later" in err
 
 
+def test_unchecked_dereference_warning_is_opt_in(
+        tmp_path, capsys, monkeypatch):
+    """The null-dereference warning prints only when its option is present."""
+    src = tmp_path / "p.sie"
+    src.write_text("""\
+    fn read(pointer: i32*) -> i32 { return *pointer; }
+    fn main() -> i32 { return 0; }
+    """)
+
+    assert run_cli(monkeypatch, src, "--emit-llvm") == 0
+    assert "unchecked" not in capsys.readouterr().err
+
+    assert run_cli(
+        monkeypatch, src, "-Wunchecked-dereference", "--emit-llvm") == 0
+    err = capsys.readouterr().err
+    assert "warning: pointer 'pointer' is not definitely non-null" in err
+
+
 def test_emit_asm_prints_native_assembly(tmp_path, capsys, monkeypatch):
     """
     --emit-asm prints the host target's assembly instead of building.

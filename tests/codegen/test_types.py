@@ -48,6 +48,11 @@ def test_pointer_types_wrap_per_star():
     assert resolve_type("u8**") == ir.PointerType(ir.PointerType(ir.IntType(8)))
 
 
+def test_nonnull_pointer_has_the_same_llvm_type():
+    """A non-null contract does not change pointer representation."""
+    assert resolve_type("!i32*") == resolve_type("i32*")
+
+
 def test_array_type_lowers_to_a_fat_struct():
     """
     An 'X[]' array lowers to a struct of a pointer to X and an i64 length.

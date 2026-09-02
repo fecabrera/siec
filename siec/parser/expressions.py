@@ -741,9 +741,10 @@ def ident_chain(expr: Expr) -> list[str] | None:
 
 def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
     """
-    Apply postfix '[index]', '[from:to]', '.field', and '->field' chains to an
-    expression: variables, call results, groupings, and literals alike. A '('
-    after a pure name chain calls it by its dotted name ('libc.stdio.printf(...)').
+    Apply postfix '!', '[index]', '[from:to]', '.field', and '->field' chains
+    to an expression: variables, call results, groupings, and literals alike.
+    A '(' after a pure name chain calls it by its dotted name
+    ('libc.stdio.printf(...)').
     """
     while True:
         # '::' after a pure name chain reaches an enum member or a static
@@ -819,6 +820,11 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
 
                 expr = MethodCall(expr.base, expr.field, args, type_args)
                 continue
+
+        if ts.peek().syntax == "!":
+            ts.next()
+            expr = UnaryOp("nonnull", expr)
+            continue
 
         if ts.peek().syntax not in ("[", ".", "->"):
             return expr

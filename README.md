@@ -1463,7 +1463,7 @@ let d: f32 = a; // error: integer to float
 
 #### Pointers
 
-A pointer to `T` is written `T*`. Indexing a pointer with `ptr[i]` accesses the `i`th `T` past it, C-style, and can be read or assigned to.
+A nullable pointer to `T` is written `T*`. A non-null pointer is written `!T*`. Both types have the same representation and C ABI. Indexing a pointer with `ptr[i]` accesses the `i`th `T` past it, C-style, and can be read or assigned to.
 
 ```
 let ptr: i32*;
@@ -1480,7 +1480,7 @@ let points: Point*;
 points[0].x = 5;
 ```
 
-The `&` operator takes the address of a value, yielding a `T*`. It applies to anything assignable: a variable, a struct field, or an indexed element.
+The `&` operator takes the address of a value, yielding a `!T*`. It applies to anything assignable: a variable, a struct field, or an indexed element. A `!T*` converts to `T*` without a check.
 
 ```
 let x: i32 = 1;
@@ -1512,7 +1512,7 @@ p->x = 5;        // (*p).x = 5
 
 ##### Null
 
-`null` is the pointer literal. It works as an `opaque*`, adapting to whatever pointer type its context expects: initializing, comparing, passing, and returning any `T*`.
+`null` is the pointer literal. It works as an `opaque*`, adapting to whatever nullable pointer type its context expects: initializing, comparing, passing, and returning any `T*`. It cannot initialize, replace, or return a `!T*`.
 
 ```
 let p: i32* = null;
@@ -1533,6 +1533,35 @@ let q = null; // q: opaque*
 ```
 
 `null` only lands in pointer slots; giving it to a non-pointer is a compile-time error.
+
+A nullable pointer converts to `!T*` when control flow proves that it is not null:
+
+```
+fn read(pointer: !i32*) -> i32 {
+    return *pointer;
+}
+
+fn checked(pointer: i32*) -> i32 {
+    if (pointer == null) {
+        return 0;
+    }
+
+    return read(pointer);
+}
+```
+
+The proof follows `if`, `else`, early exits, pointer truth tests, and short-circuit `and` and `or`. Assignment from an unknown pointer removes the proof. Taking the address of a pointer local also prevents a lasting proof because another operation can replace it.
+
+Postfix `!` checks a nullable pointer at run time and produces a `!T*`:
+
+```
+let required: !i32* = pointer!;
+read(pointer!);
+```
+
+The operand is evaluated once. A null value reports `null pointer used in a non-null assertion` and aborts the process. It does not unwind scopes. For a local whose address was not exposed, a successful `pointer!;` statement also proves that later uses are non-null.
+
+Use `-Wunchecked-dereference` to warn when `*pointer`, `pointer[index]`, or `pointer->member` dereferences a nullable pointer without a non-null proof. The option does not change whether the program compiles.
 
 #### Arrays
 

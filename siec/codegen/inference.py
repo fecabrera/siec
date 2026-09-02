@@ -563,7 +563,9 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
         if base is None:
             return None
 
-        stripped = strip_const(base)
+        from siec.codegen.types import strip_nonnull
+
+        stripped = strip_const(strip_nonnull(base))
         if stripped.startswith("Tuple<"):
             from siec.codegen.enums import evaluate
             from siec.codegen.generics import split_generic
@@ -607,8 +609,19 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
         if operand is None:
             return None
 
+        from siec.codegen.types import nonnull_pointer
+
         pointer = f"{strip_const(operand)}*"
+        pointer = nonnull_pointer(pointer)
         return f"const {pointer}" if const_chain(gen, expr.operand, scope) else pointer
+
+    if isinstance(expr, UnaryOp) and expr.op == "nonnull":
+        from siec.codegen.types import nonnull_pointer, strip_nonnull
+
+        operand = expr_sie_type(gen, expr.operand, scope)
+        if operand is None or not strip_const(strip_nonnull(operand)).endswith("*"):
+            return None
+        return nonnull_pointer(operand)
 
     # '*' dereferences a pointer: the element type its 'p[0]' spelling reads
     if isinstance(expr, UnaryOp) and expr.op == "*":
@@ -723,10 +736,14 @@ def pointer_arithmetic_type(gen: CodeGenerator, expr: BinaryOp,
     right_ptr = strip_const(right or "").endswith("*")
 
     if left_ptr and not right_ptr:
-        return left
+        from siec.codegen.types import strip_nonnull
+
+        return strip_nonnull(left)
 
     if expr.op == "+" and right_ptr and not left_ptr:
-        return right
+        from siec.codegen.types import strip_nonnull
+
+        return strip_nonnull(right)
 
     return None
 

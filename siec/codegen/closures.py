@@ -87,7 +87,11 @@ def check_closure(gen, expr, scope: dict) -> str:
     synthetic = Function(
         expr.name or "<closure>", expr.params, expr.return_type,
         expr.body, line=expr.line, file=expr.file)
+    null_scope = dict(inner)
     terminates = check_block(gen, expr.body, inner, synthetic)
+    from siec.codegen.nulls import check_nulls
+
+    check_nulls(gen, synthetic, null_scope)
     if expr.return_type is not None and not terminates:
         raise TypeError(f"closure {expr.name or '<anonymous>'!r} must return "
                         "a value")

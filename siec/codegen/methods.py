@@ -89,7 +89,9 @@ def concrete_type_like(gen: CodeGenerator, spelling: str) -> bool:
     """Whether a receiver argument contains no free type placeholders."""
     from siec.codegen.interfaces import is_type_name
 
-    spelling = strip_const(strip_reference(spelling))
+    from siec.codegen.types import strip_nonnull
+
+    spelling = strip_nonnull(strip_const(strip_reference(spelling)))
     while spelling.endswith("*") or spelling.endswith("[]"):
         spelling = spelling[:-1] if spelling.endswith("*") else spelling[:-2]
 

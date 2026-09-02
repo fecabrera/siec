@@ -81,6 +81,19 @@ def resolve_header_type(gen: CodeGenerator, spelling: str | None,
         )
         return f"&{inner}"
 
+    if spelling.startswith("!"):
+        inner = resolve_header_type(
+            gen,
+            spelling[1:],
+            parameters,
+            allow_interface=allow_interface,
+            allow_opaque=allow_opaque,
+            allow_free=allow_free,
+        )
+        if not inner.endswith("*"):
+            raise TypeError("'!' can only qualify a pointer type")
+        return f"!{inner}"
+
     if spelling.startswith("fn(") or spelling.startswith("closure fn("):
         closure = spelling.startswith("closure ")
         params, ret, suffix = fn_type_parts(spelling)

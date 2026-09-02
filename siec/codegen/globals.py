@@ -155,6 +155,10 @@ def validate_constant_value(gen: CodeGenerator, expr: Expr,
         return
 
     if isinstance(expr, NullLiteral):
+        from siec.codegen.types import is_nonnull_pointer
+
+        if is_nonnull_pointer(target):
+            raise TypeError("null cannot initialize a non-null pointer")
         if not target.endswith("*"):
             raise TypeError(
                 f"'null' cannot initialize a {sie_type!r} value")

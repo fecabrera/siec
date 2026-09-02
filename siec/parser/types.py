@@ -19,6 +19,15 @@ def parse_type(ts: TokenStream) -> str:
         ts.next()
         return f"&{parse_type(ts)}"
 
+    # a leading '!' marks a pointer whose value cannot be null
+    if ts.peek().syntax == "!":
+        line = ts.next().line
+        pointer = parse_type(ts)
+        if not pointer.endswith("*"):
+            raise SyntaxError(
+                f"line {line}: '!' can only qualify a pointer type")
+        return f"!{pointer}"
+
     # '@raw<T>[N]' is an inline fixed-size array; 'fn(A, B) -> T' a function
     # reference type; anything else a base type name; each may be followed
     # by any mix of '*'s (which the lexer may have glued into '**' tokens)

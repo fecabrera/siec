@@ -143,6 +143,10 @@ def check_function(gen: CodeGenerator, fn: Function) -> None:
 
         check_results(gen, fn, params)
 
+        from siec.codegen.nulls import check_nulls
+
+        check_nulls(gen, fn, params)
+
         if (fn.return_type is not None and not fn.noreturn
                 and not fn.returns_self and not terminates):
             raise TypeError(f"function {fn.name!r} must return a value")
@@ -1228,6 +1232,13 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             expr.expanded = True
         validate_type(expr.type, gen.structs)
         operand_type = check_expression(gen, expr.operand, scope)
+        from siec.codegen.types import is_nonnull_pointer
+
+        if (is_nonnull_pointer(expr.type)
+                and not is_nonnull_pointer(operand_type)):
+            raise TypeError(
+                "an explicit cast cannot promise a non-null pointer; "
+                "cast to a nullable pointer, then use postfix '!'")
         if (strip_const(expr.type) == "Any" and operand_type is not None
                 and strip_const(strip_reference(operand_type)) != "Any"):
             wrapped = strip_const(strip_reference(operand_type))
@@ -1243,6 +1254,10 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         # a bare function reference is a pointer at heart: 'null' clears
         # a callback the same way it clears any pointer target
         target = strip_const(expected) if expected is not None else None
+        from siec.codegen.types import is_nonnull_pointer
+
+        if is_nonnull_pointer(target):
+            raise TypeError("null cannot initialize a non-null pointer")
         if (target is not None and not target.endswith("*")
                 and not (target.startswith("fn(")
                          and not fn_type_parts(target)[2])):
@@ -1320,12 +1335,14 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
         # Pointer compatibility is a Sie type rule, not an LLVM lowering
         # detail. Check it here even when this function will not be emitted.
-        left_name = strip_const(expand_alias(
+        from siec.codegen.types import strip_nonnull
+
+        left_name = strip_const(strip_nonnull(expand_alias(
             gen, expr_sie_type(gen, expr.left, scope)
-            or infer_type(gen, expr.left, scope), checked=False) or "")
-        right_name = strip_const(expand_alias(
+            or infer_type(gen, expr.left, scope), checked=False) or ""))
+        right_name = strip_const(strip_nonnull(expand_alias(
             gen, expr_sie_type(gen, expr.right, scope)
-            or infer_type(gen, expr.right, scope), checked=False) or "")
+            or infer_type(gen, expr.right, scope), checked=False) or ""))
         left_pointer = left_name.endswith("*") or left_name.startswith("fn(")
         right_pointer = right_name.endswith("*") or right_name.startswith("fn(")
         if ((left_pointer or right_pointer)
@@ -1339,6 +1356,21 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
     if isinstance(expr, UnaryOp) and expr.op == "not":
         check_truth(gen, expr.operand, scope)
         return "bool"
+
+    if isinstance(expr, UnaryOp) and expr.op == "nonnull":
+        from siec.codegen.types import nonnull_pointer, strip_nonnull
+
+        actual = check_expression(gen, expr.operand, scope)
+        nullable = strip_const(strip_nonnull(actual)) if actual else None
+        if nullable is None or not nullable.endswith("*"):
+            raise TypeError("postfix '!' requires a pointer operand")
+        if isinstance(expr.operand, NullLiteral):
+            raise TypeError("null cannot be converted to a non-null pointer")
+        result = nonnull_pointer(actual)
+        if expected is not None:
+            require_fit(gen, expr, result, expected)
+            return expected
+        return result
 
     # Walk the expression's children first so nested calls request their
     # instances even when the outer node's type is already obvious.
@@ -1772,8 +1804,14 @@ def require_fit(gen: CodeGenerator, expr: Expr, actual: str,
                 expected: str) -> None:
     """Require an expression to fit a semantic target type."""
     from siec.codegen.overloads import parameter_fit
+    from siec.codegen.types import is_nonnull_pointer, strip_nonnull
 
     if parameter_fit(gen, expr, actual, expected) is not None:
+        source = strip_const(actual)
+        target = strip_const(expected)
+        if (is_nonnull_pointer(target) and not is_nonnull_pointer(source)
+                and strip_nonnull(source) == strip_nonnull(target)):
+            expr.requires_nonnull = True
         return
 
     # a bare integer literal fills a 'char' or 'bool' target like the

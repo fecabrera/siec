@@ -185,6 +185,12 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
     if name.startswith("&"):
         return f"&{expand_alias(gen, name[1:], seen, checked, parameters)}"
 
+    if name.startswith("!"):
+        expanded = expand_alias(gen, name[1:], seen, checked, parameters)
+        if not expanded.endswith("*"):
+            raise TypeError("'!' can only qualify a pointer type")
+        return f"!{expanded}"
+
     # a function reference type expands its parameter and return names,
     # keeping any '*'/'[]' suffix on the reference itself
     if name.startswith("fn(") or name.startswith("closure fn("):
