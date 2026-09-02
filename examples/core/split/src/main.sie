@@ -7,7 +7,7 @@ fn main(args: const char*[]) -> i32 {
         return 1;
     }
 
-    std.io.println("{} -> {}", args[1], String(args[1]).split(args[2][0]));
+    std.io.println("{} -> {}", args[1], String(args[1]!).split(args[2][0]));
 
     return 0;
 }

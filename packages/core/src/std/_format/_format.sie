@@ -45,7 +45,8 @@ fn format(str: const &Iterable<char>, args...) -> String {
                 case (@typeof(args[i])) {
                 when char*:
                     let arg = args[i] as char*;
-                    result.append(arg);
+                    if (arg == null) result.append("(null)");
+                    else result.append(arg);
                 when Formattable:
                     let arg = args[i] as const Formattable;
                     let tmp = arg.format(modifier.as_array());

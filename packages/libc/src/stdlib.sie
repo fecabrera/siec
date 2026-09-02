@@ -49,15 +49,15 @@ struct lldiv_t {
  * String conversion
  ***************************************/
 
-@extern fn atoi(str: char*) -> i32;
-@extern fn atol(str: char*) -> i64;
-@extern fn atoll(str: char*) -> i64;
-@extern fn atof(str: char*) -> f64;
-@extern fn strtol(str: char*, endptr: char**, base: i32) -> i64;
-@extern fn strtoll(str: char*, endptr: char**, base: i32) -> i64;
-@extern fn strtoul(str: char*, endptr: char**, base: i32) -> u64;
-@extern fn strtoull(str: char*, endptr: char**, base: i32) -> u64;
-@extern fn strtod(str: char*, endptr: char**) -> f64;
+@extern fn atoi(str: const !char*) -> i32;
+@extern fn atol(str: const !char*) -> i64;
+@extern fn atoll(str: const !char*) -> i64;
+@extern fn atof(str: const !char*) -> f64;
+@extern fn strtol(str: const !char*, endptr: const char**, base: i32) -> i64;
+@extern fn strtoll(str: const !char*, endptr: const char**, base: i32) -> i64;
+@extern fn strtoul(str: const !char*, endptr: const char**, base: i32) -> u64;
+@extern fn strtoull(str: const !char*, endptr: const char**, base: i32) -> u64;
+@extern fn strtod(str: const !char*, endptr: const char**) -> f64;
 
 /***************************************
  * Pseudo-random numbers
@@ -70,14 +70,14 @@ struct lldiv_t {
  * Searching and sorting
  ***************************************/
 
-@extern fn qsort(base: opaque*, count: u64, size: u64,
-                 cmp: fn(opaque*, opaque*) -> i32);
-@extern fn bsearch(key: opaque*, base: opaque*, count: u64, size: u64,
-                   cmp: fn(opaque*, opaque*) -> i32) -> opaque*;
+@extern fn qsort(base: !opaque*, count: u64, size: u64,
+                 cmp: fn(const opaque*, const opaque*) -> i32);
+@extern fn bsearch(key: const !opaque*, base: const opaque*, count: u64, size: u64,
+                   cmp: fn(const opaque*, const opaque*) -> i32) -> opaque*;
 
 /***************************************
  * Environment
  ***************************************/
 
-@extern fn getenv(name: char*) -> char*;
-@extern fn system(command: char*) -> i32;
+@extern fn getenv(name: const !char*) -> char*;
+@extern fn system(command: const char*) -> i32;

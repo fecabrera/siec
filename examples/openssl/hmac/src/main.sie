@@ -29,8 +29,8 @@ fn tag(key: const char*, message: const char*, out: &u8[]) -> u32 {
     // one call: init, update, final. HMAC answers null on failure, and
     // otherwise the same buffer it was handed
     let res = HMAC(EVP_sha256(),
-                   key as const opaque*, strlen(key) as i32,
-                   message as const u8*, strlen(message),
+                   key as const opaque*, strlen(key!) as i32,
+                   message as const u8*, strlen(message!),
                    out, &length);
 
     return res == null ? 0 : length;
@@ -58,12 +58,12 @@ fn main(args: char*[]) -> i32 {
         return 1;
     }
 
-    if (strcmp(args[1], "sign") == 0) {
+    if (strcmp(args[1]!, "sign") == 0) {
         print_hex(computed, length);
         return 0;
     }
 
-    if (strcmp(args[1], "verify") != 0 or args.length != 5) {
+    if (strcmp(args[1]!, "verify") != 0 or args.length != 5) {
         std.io.println(std.io.stderr, "{}: expected 'sign' or 'verify'", args[0]);
         return 2;
     }

@@ -692,7 +692,7 @@ fn Decimal::hash(const &self) -> u64 {
     h.ingest(sign);
     h.ingest(eff_digits as u64);
     h.ingest(eff_exp as u64);
-    h.ingest({tmp.mpd->data, tmp.mpd->length as u64});
+    h.ingest({tmp.mpd->data!, tmp.mpd->length as u64});
     
     return h.get_value();
 }

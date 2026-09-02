@@ -267,7 +267,7 @@ def test_empty_container_access_panics(monkeypatch, tmp_path):
     import { atoi } from stdlib;
 
     fn main(argc: i32, argv: char**) -> i32 {
-        let operation = atoi(argv[1]);
+        let operation = atoi(argv[1]!);
 
         if (operation == 0) {
             let list = List<i32>();
@@ -310,7 +310,7 @@ def test_empty_container_access_panics(monkeypatch, tmp_path):
     }
     """
     expected = (
-        "cannot pop an empty List",
+        "List is empty",
         "List index is out of bounds",
         "List index is out of bounds",
         "cannot pop an empty Stack",

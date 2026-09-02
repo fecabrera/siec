@@ -11,12 +11,12 @@ fn main(args: const char*[]) -> i32 {
     }
 
     // build input and output paths
-    let input = String::null_terminated(args[1]);
+    let input = String::null_terminated(args[1]!);
     let output: String;
     if (args.length < 3) {
         output = format("{}.zip", Path::basename(input).split('.').first()).null_terminate();
     } else {
-        output = String::null_terminated(args[2]);
+        output = String::null_terminated(args[2]!);
     }
 
     // open zip archive from path

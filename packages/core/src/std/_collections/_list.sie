@@ -42,6 +42,16 @@ fn List<T>::init(&self, capacity: u64 = 0) {
 }
 
 /**
+ * Initialize the List.
+ *
+ * @param capacity The capacity of the List.
+ */
+fn List<T>::init(&self, arr: const !T*, n: u64) {
+    self.init(n);
+    self.append(arr, n);
+}
+
+/**
  * Initialize the List with the given array.
  *
  * @param arr The array to initialize the List with.
@@ -232,12 +242,14 @@ fn List<T>::get_slice_to(const &self, finish: const u64) -> List<T> {
  * @return The slice of the List.
  */
 fn List<T>::get_slice(const &self, start: const u64, finish: const u64) -> List<T> {
-    if (start < self.length) return List<T>();
-    
     let end = finish > self.length ? self.length : finish;
     if (start > end) return List<T>();
     
-    return List<T>({self.data as const T* + start, end - start});
+    let n = end - start;
+    if (n == 0) return List<T>();
+
+    let data = self.data as const T* + start;
+    return List<T>(data!, n);
 }
 
 /**
@@ -331,7 +343,7 @@ fn List<T>::add_assign(&self, it: const &Iterable<T>) {
  * @param arr The array to append to the List.
  * @param n The number of elements to append.
  */
-fn List<T>::append(&self, arr: const T*, n: u64) {
+fn List<T>::append(&self, arr: const !T*, n: u64) {
     for (let i: u64 = 0; i < n; i += 1) {
         self.push_from(arr[i]);
     }

@@ -1,2 +1,2 @@
-@extern fn dirname(path: char*) -> char*;
-@extern fn basename(path: char*) -> char*;
+@extern fn dirname(path: !char*) -> !char*;
+@extern fn basename(path: !char*) -> !char*;

@@ -358,7 +358,9 @@ fn Map<K, V>::grow(&self) {
  * @return The iterator for the map.
  */
 fn Map<K, V>::iterator(&self) -> MapIterator<K, V> {
-    return MapIterator<K, V>({self.entries, self.capacity});
+    if (self.capacity == 0)
+        return MapIterator<K, V>({[], 0});
+    return MapIterator<K, V>({self.entries!, self.capacity});
 }
 
 /**
@@ -367,5 +369,7 @@ fn Map<K, V>::iterator(&self) -> MapIterator<K, V> {
  * @return The const iterator for the map.
  */
 fn Map<K, V>::const_iterator(const &self) -> ConstMapIterator<K, V> {
-    return ConstMapIterator<K, V>({self.entries, self.capacity});
+    if (self.capacity == 0)
+        return ConstMapIterator<K, V>({[], 0});
+    return ConstMapIterator<K, V>({self.entries!, self.capacity});
 }

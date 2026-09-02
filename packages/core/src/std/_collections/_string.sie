@@ -5,16 +5,16 @@ import { Formattable } from std.format;
 @type String = List<char>;
 
 @extend String
-    : Add<String, char*>,
-      AddAssign<char*>,
-      Eq<char*>,
+    : Add<String, !char*>,
+      AddAssign<!char*>,
+      Eq<!char*>,
       Formattable {
     /**
     * Initialize the String with the given array.
     *
     * @param arr The array to initialize the String with.
     */
-    fn init(&self, arr: const char*) {
+    fn init(&self, arr: const !char*) {
         self.init();
         self.append(arr);
     }
@@ -25,7 +25,7 @@ import { Formattable } from std.format;
     * @param src The null-terminated array to create the String from.
     * @return The new String.
     */
-    fn null_terminated(src: const char*) -> String {
+    fn null_terminated(src: const !char*) -> String {
         return String(src).null_terminate();
     }
 
@@ -53,7 +53,7 @@ import { Formattable } from std.format;
     * @param arr The array to add to the String.
     * @return The resulting String.
     */
-    fn add(&self, arr: const char*) -> String {
+    fn add(&self, arr: const !char*) -> String {
         let result = String(self);
         result.append(arr);
         return result;
@@ -65,7 +65,7 @@ import { Formattable } from std.format;
     * @param arr The array to add to the String.
     * @return The resulting String.
     */
-    fn add_assign(&self, arr: const char*) {
+    fn add_assign(&self, arr: const !char*) {
         self.append(arr);
     }
 
@@ -79,7 +79,7 @@ import { Formattable } from std.format;
     * @param arr The char pointer to check if the String is equal to.
     * @return True if the String is equal to the given array, false otherwise.
     */
-    fn eq(const &self, arr: const char*) -> bool {
+    fn eq(const &self, arr: const !char*) -> bool {
         for (let i: u64 = 0; i < self.length; i += 1) {
             if (arr[i] == 0 or self.data[i].get() != arr[i])
                 return false;
@@ -93,7 +93,7 @@ import { Formattable } from std.format;
     *
     * @param arr The array to append to the String.
     */
-    fn append(&self, arr: const char*) {
+    fn append(&self, arr: const !char*) {
         for (let i: u64 = 0; arr[i]; i += 1) {
             self.push(arr[i]);
         }
@@ -104,7 +104,7 @@ import { Formattable } from std.format;
     *
     * @param arr The array to set the String to.
     */
-    fn assign(&self, arr: const char*) {
+    fn assign(&self, arr: const !char*) {
         self.reset();
         self.append(arr);
     }

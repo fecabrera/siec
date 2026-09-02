@@ -36,7 +36,7 @@ struct Path: Formattable, Destroy {
      *
      * @param path The path
      */
-    fn init(&self, path: const char*) {
+    fn init(&self, path: const !char*) {
         self.path = String(path);
     }
 
