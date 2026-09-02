@@ -1538,6 +1538,8 @@ def build(argv: list[str]) -> int:
                       dest="warn_unchecked_dereference",
                       help="warn when a nullable pointer is dereferenced "
                            "without a non-null proof")
+    args.add_argument("-s", "--silent", action="store_true",
+                      help="hide build progress and dependency output")
     args.add_argument("--run", nargs=argparse.REMAINDER, metavar="ARG",
                       help="JIT-run the package instead of building it; "
                            "pass all following arguments to the program")
@@ -1612,9 +1614,11 @@ def build_from_store(root: PackageManifest, sources: list[Path],
                   file=sys.stderr)
             return 1
 
-    print(f"{'running' if opts.run is not None else 'building'} {root.spec}")
-    for member in tree:
-        print(f"  {member.spec}")
+    if not opts.silent:
+        print(f"{'running' if opts.run is not None else 'building'} "
+              f"{root.spec}")
+        for member in tree:
+            print(f"  {member.spec}")
 
     command = [str(s) for s in sources]
     for directory in includes:
@@ -1638,7 +1642,7 @@ def build_from_store(root: PackageManifest, sources: list[Path],
     if status != 0:
         return status
 
-    if output is not None:
+    if output is not None and not opts.silent:
         print(f"built {display_path(str(output))}")
 
     return 0

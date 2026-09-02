@@ -173,6 +173,8 @@ running helloworld
   libc@1.0.0
 ```
 
+Pass `-s` or `--silent` to hide build progress and the dependency list. Compiler warnings, errors, and output from `--run` remain visible.
+
 An app needs a `name` for the binary, but no `version`. Pointing `build` at a `[library]` is an error: it is installed, not built.
 
 `[dependencies]` names packages and the accepted versions (`*`, `~1`, `^1.2.3`, comparisons, or a bare version). Dependencies resolve from the install root. When multiple versions match, the newest version is selected. Their sources and `libs` are included in the build. Library search directories come from `LIBRARY_PATH`, as in a C build. The `-O` and `-g` options pass through to the compiler.

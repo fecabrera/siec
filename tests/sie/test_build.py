@@ -129,6 +129,17 @@ def test_builds_a_package_into_its_own_build_directory(
     assert "built" in capsys.readouterr().out
 
 
+def test_silent_build_hides_progress_output(
+        home, monkeypatch, capsys):  # noqa: F811
+    """'--silent' builds the binary without build progress on stdout."""
+    app = package(home, "app")
+
+    assert run_sie(monkeypatch, "build", app, "--silent") == 0
+
+    assert (app / "build" / "app").is_file()
+    assert capsys.readouterr().out == ""
+
+
 def test_the_package_is_the_working_directory_by_default(
         home, monkeypatch):  # noqa: F811
     """
@@ -153,6 +164,23 @@ def test_run_jits_a_package_without_building_a_binary(
     out = capsys.readouterr().out
     assert "running app" in out
     assert "built " not in out
+
+
+def test_silent_run_keeps_program_output(
+        home, monkeypatch, capfd):  # noqa: F811
+    """Silent mode hides progress but does not hide the program's stdout."""
+    app = package(home, "app", files=[
+        ("src/main.sie", "@extern fn printf(fmt: char*, ...) -> i32; "
+                         "fn main() -> i32 { "
+                         "printf(\"program output\\n\"); return 0; }"),
+    ])
+
+    assert run_sie(
+        monkeypatch, "build", app, "--silent", "--run") == 0
+
+    out = capfd.readouterr().out
+    assert "program output" in out
+    assert "running app" not in out
 
 
 def test_run_uses_the_working_package_and_forwards_arguments(
