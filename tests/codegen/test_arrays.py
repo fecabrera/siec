@@ -6,6 +6,7 @@ from llvmlite import ir
 from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
+    Index,
     IntLiteral,
     Member,
     MemberAssign,
@@ -13,7 +14,11 @@ from siec.ast import (
     StrLiteral,
     Var,
 )
-from siec.codegen.expressions import emit_expression, emit_lvalue
+from siec.codegen.expressions import (
+    emit_checked_index_address,
+    emit_expression,
+    emit_lvalue,
+)
 from siec.codegen.inference import member_field, signedness
 from siec.codegen.generator import Variable
 from siec.codegen.types import resolve_type
@@ -320,14 +325,27 @@ def test_array_indexes_through_its_data_pointer(env):
     """
     Indexing an array value extracts the data pointer, geps, and loads the element.
     """
-    from siec.ast import Index
-
     gen, builder = env
     scope = array_scope(builder)
 
     value = emit_expression(gen, builder, Index(Var("a"), IntLiteral(1)), None, scope)
     assert value.type == ir.IntType(32)
     assert "index.data" in str(builder.function)
+
+
+def test_checked_index_address_returns_the_element_address_and_type(env):
+    """Shared index preparation returns one checked typed address."""
+    gen, builder = env
+    scope = array_scope(builder)
+
+    address, element_type = emit_checked_index_address(
+        gen, builder, Index(Var("a"), IntLiteral(1)), scope)
+
+    assert address.type == ir.PointerType(ir.IntType(32))
+    assert element_type == ir.IntType(32)
+    body = str(builder.function)
+    assert "index.data" in body
+    assert "icmp ult i64" in body
 
 
 def test_array_index_assignment_writes_the_backing_data(env):
@@ -350,8 +368,6 @@ def test_indexed_literal_takes_its_shape_from_the_element_context(env):
     """
     '{ptr, n}[i]' shapes the literal from the expected element type.
     """
-    from siec.ast import Index
-
     gen, builder = env
     scope = {
         "ptr": Variable(builder.alloca(ir.PointerType(ir.IntType(32)), name="ptr"), "i32*"),

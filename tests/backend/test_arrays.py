@@ -610,3 +610,22 @@ def test_string_literals_default_to_char_arrays(run):
     }
     """
     assert run(source).returncode == 42
+
+
+def test_only_a_direct_string_literal_can_read_its_terminator(run):
+    """A direct literal can read its terminator without widening array bounds."""
+    direct = run("""
+    fn main() -> i32 {
+        return "x"[1] as i32;
+    }
+    """)
+    assert direct.returncode == 0
+
+    stored = run("""
+    fn main() -> i32 {
+        let text = "x";
+        return text[1] as i32;
+    }
+    """)
+    assert stored.returncode != 0
+    assert stored.stdout == "array index is out of bounds\n"

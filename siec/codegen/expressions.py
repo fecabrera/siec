@@ -177,6 +177,45 @@ def array_index_in_bounds(gen: CodeGenerator, builder: ir.IRBuilder,
     return builder.and_(nonnegative, bounded)
 
 
+def emit_checked_index_address(gen: CodeGenerator, builder: ir.IRBuilder,
+                               expr: Index, scope: dict,
+                               expected_type: ir.Type | None = None, *,
+                               allow_string_terminator: bool = False):
+    """Emit one pointer or array index and return its address and type."""
+    base_context = None
+    if expected_type is not None and not isinstance(expected_type, ir.VoidType):
+        base_context = ir.LiteralStructType([
+            ir.PointerType(expected_type),
+            ir.IntType(64),
+        ])
+
+    base = emit_expression(gen, builder, expr.base, base_context, scope)
+    length = None
+    if is_array_struct(base.type):
+        length = builder.extract_value(base, 1, name="index.len")
+        base = builder.extract_value(base, 0, name="index.data")
+
+    if not isinstance(base.type, ir.PointerType):
+        raise TypeError(
+            f"cannot index a value of type "
+            f"{indexed_spelling(gen, expr, base, scope)!r}: "
+            "only a pointer or an array indexes")
+
+    index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
+    if length is not None:
+        inclusive = allow_string_terminator and isinstance(expr.base, StrLiteral)
+        emit_bounds_assert(
+            gen, builder,
+            array_index_in_bounds(
+                gen, builder, expr.index, index, length, scope,
+                inclusive=inclusive),
+            "array index is out of bounds",
+        )
+
+    address = builder.gep(base, [index])
+    return address, base.type.pointee
+
+
 def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                     expected_type: ir.Type | None, scope: dict):
     """
@@ -476,35 +515,11 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             slot = builder.gep(base, [ir.Constant(ir.IntType(32), 0), index])
             return builder.load(slot)
 
-        # the element context implies the base's array shape, which is what
-        # gives a literal base ('{ptr, n}[1]', say) its type
-        base_context = None
-        if expected_type is not None and not isinstance(expected_type, ir.VoidType):
-            base_context = ir.LiteralStructType([ir.PointerType(expected_type),
-                                                 ir.IntType(64)])
-
-        # pointer indexing, C-style: offset the base pointer and load the
-        # element; an array indexes through its data pointer
-        base = emit_expression(gen, builder, expr.base, base_context, scope)
-        is_array = is_array_struct(base.type)
-        length = (builder.extract_value(base, 1, name="index.len")
-                  if is_array else None)
-        if is_array:
-            base = builder.extract_value(base, 0, name="index.data")
-
-        if not isinstance(base.type, ir.PointerType):
-            raise TypeError(f"cannot index a value of type "
-                            f"{indexed_spelling(gen, expr, base, scope)!r}: "
-                            "only a pointer or an array indexes")
-
-        index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
-        if length is not None:
-            emit_bounds_assert(
-                gen, builder, array_index_in_bounds(
-                    gen, builder, expr.index, index, length, scope,
-                    inclusive=isinstance(expr.base, StrLiteral)),
-                "array index is out of bounds")
-        load = builder.load(builder.gep(base, [index]))
+        # Pointer and array reads share address preparation with writes.
+        address, _ = emit_checked_index_address(
+            gen, builder, expr, scope, expected_type,
+            allow_string_terminator=True)
+        load = builder.load(address)
         if gen.volatile_struct(load.type):
             make_volatile(load)
 
@@ -860,27 +875,9 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
             index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
             return builder.gep(base, [ir.Constant(ir.IntType(32), 0), index])
 
-        # offset the base pointer's value to the element's address, C-style;
-        # an array's elements are addressed through its data pointer
-        base = emit_expression(gen, builder, expr.base, None, scope)
-        is_array = is_array_struct(base.type)
-        length = (builder.extract_value(base, 1, name="index.len")
-                  if is_array else None)
-        if is_array:
-            base = builder.extract_value(base, 0, name="index.data")
-
-        if not isinstance(base.type, ir.PointerType):
-            raise TypeError(f"cannot index a value of type "
-                            f"{indexed_spelling(gen, expr, base, scope)!r}: "
-                            "only a pointer or an array indexes")
-
-        index = emit_expression(gen, builder, expr.index, ir.IntType(64), scope)
-        if length is not None:
-            emit_bounds_assert(
-                gen, builder, array_index_in_bounds(
-                    gen, builder, expr.index, index, length, scope),
-                "array index is out of bounds")
-        return builder.gep(base, [index])
+        # Pointer and array writes use the same checked address as reads.
+        address, _ = emit_checked_index_address(gen, builder, expr, scope)
+        return address
 
     # a dereference names the storage its pointer points at, addressed as
     # its 'p[0]' spelling would be
