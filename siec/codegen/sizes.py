@@ -6,10 +6,9 @@ from llvmlite import ir
 
 from siec.codegen.aliases import expand_alias
 from siec.codegen.generator import CodeGenerator
+from siec.codegen.type_refs import parse_type_ref
 from siec.codegen.types import (
     SCALAR_TYPES,
-    fn_type_parts,
-    raw_array,
     sized_array,
     strip_const,
     strip_reference,
@@ -87,52 +86,32 @@ def type_layout(gen: CodeGenerator, name: str | None, *,
         raise TypeError("'@sizeof' needs a sized type, not void")
 
     validate_type(name, gen.structs)
-    name = strip_const(name)
+    ref = parse_type_ref(name)
 
-    if name.startswith("&"):
+    if ref.kind in ("const", "nonnull"):
+        return type_layout(gen, ref.inner.spelling(), active=active)
+
+    if ref.kind in ("reference", "pointer"):
         return primitive_layout(gen, ir.PointerType(ir.IntType(8)))
 
-    if (sized := sized_array(name)) is not None:
-        name = sized[0]
-
-    if name.startswith("closure fn("):
+    if ref.kind == "closure":
         pointer = primitive_layout(gen, ir.PointerType(ir.IntType(8)))
         return aggregate_layout([pointer, pointer])
 
-    if name.startswith("fn("):
-        _, _, suffix = fn_type_parts(name)
-        layout = primitive_layout(gen, ir.PointerType(ir.IntType(8)))
-        while suffix:
-            if suffix.startswith("*"):
-                layout = primitive_layout(
-                    gen, ir.PointerType(ir.IntType(8)))
-                suffix = suffix[1:]
-            else:
-                layout = aggregate_layout([
-                    primitive_layout(gen, ir.PointerType(ir.IntType(8))),
-                    primitive_layout(gen, SCALAR_TYPES["u64"]),
-                ])
-                suffix = suffix[2:]
-        return layout
-
-    from siec.codegen.types import strip_nonnull
-
-    name = strip_nonnull(name)
-    stripped = name.rstrip("*")
-    base, pointer_depth = stripped, len(name) - len(stripped)
-    if pointer_depth:
+    if ref.kind == "function":
         return primitive_layout(gen, ir.PointerType(ir.IntType(8)))
 
-    if base.endswith("[]"):
+    if ref.kind in ("array", "sized"):
         return aggregate_layout([
             primitive_layout(gen, ir.PointerType(ir.IntType(8))),
             primitive_layout(gen, SCALAR_TYPES["u64"]),
         ])
 
-    if (raw := raw_array(base)) is not None:
-        element = type_layout(gen, raw[0], active=active)
-        return TypeLayout(element.size * int(raw[1]), element.align)
+    if ref.kind == "raw":
+        element = type_layout(gen, ref.inner.spelling(), active=active)
+        return TypeLayout(element.size * int(ref.size), element.align)
 
+    base = ref.spelling()
     if base in SCALAR_TYPES:
         return primitive_layout(gen, SCALAR_TYPES[base])
 

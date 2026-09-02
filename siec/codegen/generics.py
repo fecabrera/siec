@@ -17,7 +17,6 @@ from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import (
     fn_type_parts,
     is_reference,
-    raw_array,
     strip_const,
     strip_reference,
     validate_type,
@@ -78,27 +77,15 @@ def split_generic(name: str) -> tuple[str, list[str]] | None:
     Arguments split on top-level commas only: brackets of any kind nest,
     and the '>' of a function type's '->' closes nothing.
     """
-    base, sep, rest = name.partition("<")
-    if not sep or not base.isidentifier() or not name.endswith(">"):
+    from siec.codegen.type_refs import parse_type_ref
+
+    try:
+        ref = parse_type_ref(name)
+    except TypeError:
         return None
-
-    inner = rest[:-1]
-    args, depth, start = [], 0, 0
-    for i, char in enumerate(inner):
-        if char in "<([{":
-            depth += 1
-        elif char == ">" and inner[i - 1:i] == "-":
-            continue
-        elif char in ">)]}":
-            depth -= 1
-        elif char == "," and depth == 0:
-            args.append(inner[start:i])
-            start = i + 1
-
-    if depth != 0:
+    if ref.kind != "generic" or not ref.name.isidentifier():
         return None
-
-    return base, [*args, inner[start:]]
+    return ref.name, [arg.spelling() for arg in ref.items]
 
 
 def substitute(type_name: str, mapping: dict) -> str:
@@ -468,43 +455,49 @@ def unify(pattern: str | None, concrete: str | None,
     if pattern is None or concrete is None:
         return
 
-    pattern, concrete = strip_const(pattern), strip_const(concrete)
-    pattern, concrete = strip_reference(pattern), strip_reference(concrete)
-    pattern = pattern.removeprefix("!")
-    concrete = concrete.removeprefix("!")
+    from siec.codegen.type_refs import parse_type_ref
 
-    if pattern in type_params:
-        previous = bindings.setdefault(pattern, concrete)
-        if previous != concrete:
-            raise TypeError(f"conflicting type arguments for {pattern!r}: "
-                            f"{previous!r} and {concrete!r}")
+    pattern_ref = parse_type_ref(pattern)
+    concrete_ref = parse_type_ref(concrete)
+    for kind in ("const", "reference", "nonnull"):
+        if pattern_ref.kind == kind:
+            pattern_ref = pattern_ref.inner
+        if concrete_ref.kind == kind:
+            concrete_ref = concrete_ref.inner
+    _unify_refs(pattern_ref, concrete_ref, type_params, bindings)
+
+
+def _unify_refs(pattern, concrete, type_params: list, bindings: dict) -> None:
+    """Unify two parsed type shapes without reparsing their components."""
+    pattern_name = pattern.spelling()
+    concrete_name = concrete.spelling()
+    if pattern_name in type_params:
+        previous = bindings.setdefault(pattern_name, concrete_name)
+        if previous != concrete_name:
+            raise TypeError(
+                f"conflicting type arguments for {pattern_name!r}: "
+                f"{previous!r} and {concrete_name!r}")
         return
 
-    if pattern.endswith("*") and concrete.endswith("*"):
-        return unify(pattern[:-1], concrete[:-1], type_params, bindings)
+    if (pattern.kind == concrete.kind
+            and pattern.kind in ("pointer", "array", "raw")):
+        return _unify_refs(
+            pattern.inner, concrete.inner, type_params, bindings)
 
-    if pattern.endswith("[]") and concrete.endswith("[]"):
-        return unify(pattern[:-2], concrete[:-2], type_params, bindings)
+    if (pattern.kind == concrete.kind
+            and pattern.kind in ("function", "closure")):
+        for left, right in zip(pattern.items, concrete.items):
+            _unify_refs(left, right, type_params, bindings)
+        if pattern.result is not None and concrete.result is not None:
+            _unify_refs(
+                pattern.result, concrete.result, type_params, bindings)
+        return
 
-    raw_p, raw_c = raw_array(pattern), raw_array(concrete)
-    if raw_p is not None and raw_c is not None:
-        return unify(raw_p[0], raw_c[0], type_params, bindings)
-
-    if ((pattern.startswith("fn(") and concrete.startswith("fn("))
-            or (pattern.startswith("closure fn(")
-                and concrete.startswith("closure fn("))):
-        p_params, p_ret, _ = fn_type_parts(pattern)
-        c_params, c_ret, _ = fn_type_parts(concrete)
-        for p, c in zip(p_params, c_params):
-            unify(p, c, type_params, bindings)
-        return unify(p_ret, c_ret, type_params, bindings)
-
-    generic_p, generic_c = split_generic(pattern), split_generic(concrete)
-    if (generic_p is not None and generic_c is not None
-            and generic_p[0] == generic_c[0]
-            and len(generic_p[1]) == len(generic_c[1])):
-        for p, c in zip(generic_p[1], generic_c[1]):
-            unify(p, c, type_params, bindings)
+    if (pattern.kind == concrete.kind == "generic"
+            and pattern.name == concrete.name
+            and len(pattern.items) == len(concrete.items)):
+        for left, right in zip(pattern.items, concrete.items):
+            _unify_refs(left, right, type_params, bindings)
 
 
 def resolve_generic_call(gen: CodeGenerator, template, call, scope: dict,

@@ -9,16 +9,13 @@ from pathlib import Path
 
 from llvmlite import ir
 
+from siec.codegen.type_refs import parse_type_ref
 from siec.codegen.types import (
     SIGNED_TYPES,
     UNSIGNED_TYPES,
-    is_const,
-    is_reference,
-    raw_array,
     resolve_type,
     sized_array,
     strip_const,
-    strip_nonnull,
     strip_reference,
 )
 
@@ -156,8 +153,12 @@ class DebugInfo:
             # the member's pointer type even though its pointee is not ready.
             self.di_types[name] = None
             self.di_types[name] = self.build_type(name)
-        elif self.di_types[name] is None and name.endswith("*"):
-            return self.pointer_type(None)
+        elif self.di_types[name] is None:
+            ref = parse_type_ref(name)
+            while ref.kind in ("const", "nonnull"):
+                ref = ref.inner
+            if ref.kind == "pointer":
+                return self.pointer_type(None)
 
         return self.di_types[name]
 
@@ -173,36 +174,38 @@ class DebugInfo:
         """
         Build the DWARF description of one canonical Sie type name.
         """
-        if is_const(name):
+        ref = parse_type_ref(name)
+        if ref.kind == "const":
             return self.module.add_debug_info("DIDerivedType", {
                 "tag": ir.DIToken("DW_TAG_const_type"),
-                "baseType": self.di_type(strip_const(name)),
+                "baseType": self.di_type(ref.inner.spelling()),
             })
 
-        if is_reference(name):
+        if ref.kind == "reference":
             return self.module.add_debug_info("DIDerivedType", {
                 "tag": ir.DIToken("DW_TAG_reference_type"),
-                "baseType": self.di_type(strip_reference(name)),
+                "baseType": self.di_type(ref.inner.spelling()),
                 "size": 64,
             })
 
-        if name.startswith("!"):
-            return self.build_type(strip_nonnull(name))
+        if ref.kind == "nonnull":
+            return self.build_type(ref.inner.spelling())
 
-        if name.endswith("*"):
-            inner = name[:-1]
+        if ref.kind == "pointer":
+            inner = ref.inner.spelling()
             return self.pointer_type(
                 None if inner == "opaque" else self.di_type(inner))
 
         # an 'X[]' fat array is its two-field struct: data and length
-        if name.endswith("[]"):
+        if ref.kind == "array":
             return self.fat_array_type(name)
 
-        if (raw := raw_array(name)) is not None and not raw[2]:
-            return self.raw_array_type(name, raw[0], int(raw[1]))
+        if ref.kind == "raw":
+            return self.raw_array_type(
+                name, ref.inner.spelling(), int(ref.size))
 
         # a function type is called through its pointer
-        if name.startswith("fn("):
+        if ref.kind == "function":
             return self.module.add_debug_info("DIDerivedType", {
                 "tag": ir.DIToken("DW_TAG_pointer_type"),
                 "baseType": None,

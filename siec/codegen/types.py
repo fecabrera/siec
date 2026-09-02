@@ -2,6 +2,8 @@
 
 from llvmlite import ir
 
+from siec.codegen.type_refs import TypeRef, derivation, parse_type_ref
+
 SCALAR_TYPES = {
     "i8": ir.IntType(8),
     "i16": ir.IntType(16),
@@ -29,19 +31,29 @@ def is_const(name: str | None) -> bool:
     """
     Whether a type name carries the 'const' contract prefix.
     """
-    return name is not None and name.startswith("const ")
+    return bool(name) and parse_type_ref(name).kind == "const"
 
 
 def strip_const(name: str | None) -> str | None:
     """
     A type name without its 'const' contract prefix: the represented type.
     """
-    return name.removeprefix("const ") if name is not None else None
+    if name is None:
+        return None
+    if not name:
+        return name
+    ref = parse_type_ref(name)
+    return ref.inner.spelling() if ref.kind == "const" else name
 
 
 def is_nonnull_pointer(name: str | None) -> bool:
     """Whether a type carries the non-null pointer contract."""
-    return name is not None and strip_const(name).startswith("!")
+    if not name:
+        return False
+    ref = parse_type_ref(name)
+    if ref.kind == "const":
+        ref = ref.inner
+    return ref.kind == "nonnull"
 
 
 def strip_nonnull(name: str | None) -> str | None:
@@ -49,22 +61,34 @@ def strip_nonnull(name: str | None) -> str | None:
     if not is_nonnull_pointer(name):
         return name
 
-    base = strip_const(name)[1:]
-    return f"const {base}" if is_const(name) else base
+    ref = parse_type_ref(name)
+    if ref.kind == "const":
+        return TypeRef("const", inner=ref.inner.inner).spelling()
+    return ref.inner.spelling()
 
 
 def nonnull_pointer(name: str) -> str:
     """Add a non-null contract to one pointer type."""
-    base = strip_const(name)
-    result = base if base.startswith("!") else f"!{base}"
-    return f"const {result}" if is_const(name) else result
+    ref = parse_type_ref(name)
+    if ref.kind == "const":
+        inner = ref.inner
+        if inner.kind != "nonnull":
+            inner = TypeRef("nonnull", inner=inner)
+        return TypeRef("const", inner=inner).spelling()
+    return (ref if ref.kind == "nonnull"
+            else TypeRef("nonnull", inner=ref)).spelling()
 
 
 def is_reference(name: str | None) -> bool:
     """
     Whether a type name is a '&T' reference, behind any 'const' marking.
     """
-    return name is not None and strip_const(name).startswith("&")
+    if not name:
+        return False
+    ref = parse_type_ref(name)
+    if ref.kind == "const":
+        ref = ref.inner
+    return ref.kind == "reference"
 
 
 def strip_reference(name: str | None) -> str | None:
@@ -75,8 +99,10 @@ def strip_reference(name: str | None) -> str | None:
     if not is_reference(name):
         return name
 
-    base = strip_const(name)[1:]
-    return f"const {base}" if is_const(name) else base
+    ref = parse_type_ref(name)
+    if ref.kind == "const":
+        return TypeRef("const", inner=ref.inner.inner).spelling()
+    return ref.inner.spelling()
 
 
 def is_aliasing(name: str | None) -> bool:
@@ -84,7 +110,12 @@ def is_aliasing(name: str | None) -> bool:
     Whether a type's values alias memory beyond their own copy: pointers
     and arrays, the types a 'const' contract must follow.
     """
-    return name is not None and (name.endswith("*") or name.endswith("[]"))
+    if not name:
+        return False
+    ref = parse_type_ref(name)
+    while ref.kind in ("const", "reference", "nonnull"):
+        ref = ref.inner
+    return ref.kind in ("pointer", "array")
 
 
 def sized_array(name: str | None) -> tuple[str, str] | None:
@@ -95,17 +126,12 @@ def sized_array(name: str | None) -> tuple[str, str] | None:
     The size is a constant integer expression's tokens, evaluated where a
     declaration allocates the backing; the type itself is just 'X[]'.
     """
-    if name is None or not name.endswith("]") or name.endswith("[]"):
+    if not name:
         return None
-
-    base, _, size = name.rpartition("[")
-
-    # a 'raw<T>[N]' bracket is the raw array's own size, part of its type;
-    # a generic's 'S<i32>[N]' is a true sized array of instantiations
-    if base.endswith(">") and base.startswith("raw<"):
+    ref = parse_type_ref(name)
+    if ref.kind != "sized":
         return None
-
-    return f"{base}[]", size[:-1]
+    return TypeRef("array", inner=ref.inner).spelling(), ref.size
 
 
 def raw_array(name: str | None) -> tuple[str, str, str] | None:
@@ -113,29 +139,12 @@ def raw_array(name: str | None) -> tuple[str, str, str] | None:
     Split a raw array name 'raw<T>[N]...' into its element type name, its
     size text, and any trailing suffix; None for any other type name.
     """
-    if name is None or not name.startswith("raw<"):
+    if not name:
         return None
-
-    depth = 0
-    for close, char in enumerate(name):
-        if char == "<":
-            depth += 1
-        elif char == ">":
-            depth -= 1
-            if depth == 0:
-                break
-    else:
-        raise TypeError(f"malformed raw array type {name!r}")
-
-    rest = name[close + 1:]
-    end = rest.find("]")
-    if not rest.startswith("[") or end == -1:
-        raise TypeError(f"malformed raw array type {name!r}")
-
-    return name[4:close], rest[1:end], rest[end + 1:]
-
-
-NESTING = {"{": 1, "(": 1, "[": 1, "}": -1, ")": -1, "]": -1}
+    base, suffix = derivation(parse_type_ref(name))
+    if base.kind != "raw":
+        return None
+    return base.inner.spelling(), base.size, suffix
 
 
 def anonymous_struct(name: str | None) -> tuple[bool, list, str] | None:
@@ -144,34 +153,13 @@ def anonymous_struct(name: str | None) -> tuple[bool, list, str] | None:
     whether it's a union, its (field name, field type) pairs, and any
     trailing suffix; None for any other type name.
     """
-    if name is None or not (name.startswith("struct{") or name.startswith("union{")):
+    if not name:
         return None
-
-    start = name.find("{")
-    depth = 0
-    for close in range(start, len(name)):
-        depth += NESTING.get(name[close], 0)
-        if depth == 0:
-            break
-    else:
-        raise TypeError(f"malformed anonymous type {name!r}")
-
-    body, suffix = name[start + 1:close], name[close + 1:]
-
-    # fields split on top-level ';', each 'name:type'
-    fields, depth, piece = [], 0, ""
-    for char in body:
-        depth += NESTING.get(char, 0)
-        if char == ";" and depth == 0:
-            fields.append(piece)
-            piece = ""
-        else:
-            piece += char
-    if piece:
-        fields.append(piece)
-
-    pairs = [tuple(field.split(":", 1)) for field in fields]
-    return name.startswith("union{"), pairs, suffix
+    base, suffix = derivation(parse_type_ref(name))
+    if base.kind not in ("struct", "union"):
+        return None
+    pairs = [(field, type_.spelling()) for field, type_ in base.fields]
+    return base.kind == "union", pairs, suffix
 
 
 def type_signedness(name: str | None) -> str | None:
@@ -197,46 +185,12 @@ def fn_type_parts(name: str) -> tuple[list[str], str | None, str]:
     A '->' after the parameter list claims the whole rest of the name for the
     return type; a suffix can only follow a function type with no return.
     """
-    if name.startswith("closure "):
-        name = name.removeprefix("closure ")
-
-    # find the ')' matching the opening paren of the parameter list
-    depth = 0
-    for end, ch in enumerate(name):
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-            if depth == 0:
-                break
-    else:
+    base, suffix = derivation(parse_type_ref(name))
+    if base.kind not in ("function", "closure"):
         raise TypeError(f"malformed function type {name!r}")
-
-    inner, rest = name[3:end], name[end + 1:]
-
-    ret = None
-    if rest.startswith("->"):
-        ret, rest = rest[2:], ""
-
-    # split the parameter list on top-level commas, leaving nested fn
-    # and generic argument lists whole ('fn(Tuple<i32,i32>)', 'fn(fn(A)->B)')
-    params, depth, angles, start = [], 0, 0, 0
-    for i, ch in enumerate(inner):
-        if ch == "<":
-            angles += 1
-        elif ch == ">" and angles > 0:
-            angles -= 1
-        elif ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-        elif ch == "," and depth == 0 and angles == 0:
-            params.append(inner[start:i])
-            start = i + 1
-    if inner:
-        params.append(inner[start:])
-
-    return params, ret, rest
+    params = [param.spelling() for param in base.items]
+    result = base.result.spelling() if base.result is not None else None
+    return params, result, suffix
 
 
 def is_array_struct(type_: ir.Type | None) -> bool:
@@ -259,66 +213,62 @@ def validate_type(name: str | None, structs: dict | None = None,
     """
     if name is None:
         return
+    _validate_ref(parse_type_ref(name), structs, allow_opaque)
 
-    name = strip_const(name)
-    if name.startswith("!"):
-        if not name[1:].endswith("*"):
+
+def _validate_ref(ref: TypeRef | None, structs: dict | None,
+                  allow_opaque: bool = False) -> None:
+    """Validate one structural type reference."""
+    if ref is None:
+        return
+    if ref.kind == "const":
+        _validate_ref(ref.inner, structs, allow_opaque)
+        return
+    if ref.kind == "nonnull":
+        if ref.inner.kind != "pointer":
             raise TypeError("'!' can only qualify a pointer type")
-        name = name[1:]
-    if name.startswith("&"):
-        validate_type(name[1:], structs)
+        _validate_ref(ref.inner, structs, allow_opaque)
+        return
+    if ref.kind == "reference":
+        _validate_ref(ref.inner, structs)
+        return
+    if ref.kind == "pointer":
+        if ref.inner.kind == "closure":
+            raise TypeError(f"malformed closure type {ref.spelling()!r}")
+        _validate_ref(ref.inner, structs, allow_opaque=True)
+        return
+    if ref.kind in ("array", "sized"):
+        _validate_ref(ref.inner, structs, allow_opaque=True)
+        return
+    if ref.kind == "raw":
+        if not ref.size.isdigit():
+            raise TypeError(
+                f"unresolved raw array size {ref.size!r} in {ref.spelling()!r}")
+        _validate_ref(ref.inner, structs)
+        return
+    if ref.kind == "closure":
+        _validate_ref(ref.result, structs)
+        for param in ref.items:
+            _validate_ref(param, structs)
+        return
+    if ref.kind == "function":
+        _validate_ref(ref.result, structs)
+        for param in ref.items:
+            _validate_ref(param, structs)
         return
 
-    if (sized := sized_array(name)) is not None:
-        validate_type(sized[0], structs, allow_opaque)
-        return
-
-    if name.startswith("closure fn("):
-        params, ret, suffix = fn_type_parts(name)
-        if suffix:
-            raise TypeError(f"malformed closure type {name!r}")
-        validate_type(ret, structs)
-        for param in params:
-            validate_type(param, structs)
-        return
-
-    if name.startswith("fn("):
-        params, ret, suffix = fn_type_parts(name)
-        validate_type(ret, structs)
-        for param in params:
-            validate_type(param, structs)
-
-        while suffix:
-            if suffix.startswith("*"):
-                suffix = suffix[1:]
-            elif suffix.startswith("[]"):
-                suffix = suffix[2:]
-            else:
-                raise TypeError(f"malformed function type {name!r}")
-        return
-
-    stripped = name.rstrip("*")
-    base, pointer_depth = stripped, len(name) - len(stripped)
-
-    if base.endswith("[]"):
-        validate_type(base[:-2], structs, allow_opaque=True)
-    elif (raw := raw_array(base)) is not None:
-        element_name, size, _ = raw
-        if not size.isdigit():
-            raise TypeError(f"unresolved raw array size {size!r} in {base!r}")
-        validate_type(element_name, structs)
-    elif base == "opaque":
-        if pointer_depth == 0:
+    name = ref.spelling()
+    if name == "opaque":
+        if not allow_opaque:
             raise TypeError("'opaque' can only be used as a pointer (opaque*)")
-    elif base in SCALAR_TYPES:
-        pass
-    elif structs and base in structs:
-        if (structs[base].fields is None and pointer_depth == 0
-                and not allow_opaque):
-            raise TypeError(f"struct {base!r} has no body and can only be "
-                            f"used through a pointer ({base}*)")
+    elif name in SCALAR_TYPES:
+        return
+    elif structs and name in structs:
+        if structs[name].fields is None and not allow_opaque:
+            raise TypeError(f"struct {name!r} has no body and can only be "
+                            f"used through a pointer ({name}*)")
     else:
-        raise TypeError(f"unknown type {base!r}")
+        raise TypeError(f"unknown type {name!r}")
 
 
 def resolve_type(name: str | None, structs: dict | None = None,
@@ -333,88 +283,39 @@ def resolve_type(name: str | None, structs: dict | None = None,
     """
     if name is None:
         return ir.VoidType()
+    ref = parse_type_ref(name)
+    _validate_ref(ref, structs, allow_opaque)
+    return _resolve_ref(ref, structs, allow_opaque)
 
-    # 'const T' is a contract, not a type: it resolves as its base type
-    name = strip_const(name)
-    if name.startswith("!"):
-        if not name[1:].endswith("*"):
-            raise TypeError("'!' can only qualify a pointer type")
-        name = name[1:]
 
-    # a '&T' reference is represented by a hidden pointer to T
-    if name.startswith("&"):
-        return ir.PointerType(resolve_type(name[1:], structs))
-
-    # a sized array 'X[N]' is the same fat value as 'X[]'; the size only
-    # directs the automatic backing a declaration allocates
-    if (sized := sized_array(name)) is not None:
-        return resolve_type(sized[0], structs, allow_opaque)
-
-    # A closure carries its erased invocation function and environment.
-    if name.startswith("closure fn("):
-        params, ret, suffix = fn_type_parts(name)
-        if suffix:
-            raise TypeError(f"malformed closure type {name!r}")
-        validate_type(ret, structs)
-        for param in params:
-            validate_type(param, structs)
+def _resolve_ref(ref: TypeRef, structs: dict | None,
+                 allow_opaque: bool = False) -> ir.Type:
+    """Lower one validated structural type reference to LLVM."""
+    if ref.kind in ("const", "nonnull"):
+        return _resolve_ref(ref.inner, structs, allow_opaque)
+    if ref.kind == "reference":
+        return ir.PointerType(_resolve_ref(ref.inner, structs))
+    if ref.kind == "pointer":
+        return ir.PointerType(_resolve_ref(ref.inner, structs, True))
+    if ref.kind in ("array", "sized"):
+        element = _resolve_ref(ref.inner, structs, True)
+        return ir.LiteralStructType([ir.PointerType(element), ir.IntType(64)])
+    if ref.kind == "raw":
+        return ir.ArrayType(
+            _resolve_ref(ref.inner, structs), int(ref.size))
+    if ref.kind == "closure":
         opaque = ir.PointerType(ir.IntType(8))
         return ir.LiteralStructType([opaque, opaque])
+    if ref.kind == "function":
+        return ir.PointerType(ir.FunctionType(
+            (_resolve_ref(ref.result, structs)
+             if ref.result is not None else ir.VoidType()),
+            [_resolve_ref(param, structs) for param in ref.items],
+        ))
 
-    # a function reference type resolves to a pointer to the function's signature
-    if name.startswith("fn("):
-        params, ret, suffix = fn_type_parts(name)
-        resolved = ir.PointerType(ir.FunctionType(
-            resolve_type(ret, structs),
-            [resolve_type(p, structs) for p in params]))
-
-        # a suffix wraps the reference itself: '*' in a pointer, '[]' in an array
-        while suffix:
-            if suffix.startswith("*"):
-                resolved = ir.PointerType(resolved)
-                suffix = suffix[1:]
-            elif suffix.startswith("[]"):
-                resolved = ir.LiteralStructType([ir.PointerType(resolved), ir.IntType(64)])
-                suffix = suffix[2:]
-            else:
-                raise TypeError(f"malformed function type {name!r}")
-
-        return resolved
-
-    # peel trailing '*'s into a pointer depth; a '*' inside the name
-    # (an array of pointers, say) stays part of the base
-    stripped = name.rstrip("*")
-    base, pointer_depth = stripped, len(name) - len(stripped)
-
-    if base.endswith("[]"):
-        # an 'X[]' array is a struct of a pointer to X and a u64 length
-        element = resolve_type(base[:-2], structs, allow_opaque=True)
-        resolved = ir.LiteralStructType([ir.PointerType(element), ir.IntType(64)])
-    elif (raw := raw_array(base)) is not None:
-        # a 'raw<T>[N]' is N elements of inline storage, C's 'T[N]'
-        element_name, size, _ = raw
-        if not size.isdigit():
-            raise TypeError(f"unresolved raw array size {size!r} in {base!r}")
-
-        resolved = ir.ArrayType(resolve_type(element_name, structs), int(size))
-    elif base == "opaque":
-        if pointer_depth == 0:
-            raise TypeError("'opaque' can only be used as a pointer (opaque*)")
-
-        resolved = ir.IntType(8)  # opaque* lowers to i8*, like C's void*
-    elif base in SCALAR_TYPES:
-        resolved = SCALAR_TYPES[base]
-    elif structs and base in structs:
-        if (structs[base].fields is None and pointer_depth == 0 and not allow_opaque):
-            raise TypeError(f"struct {base!r} has no body and can only be "
-                            f"used through a pointer ({base}*)")
-
-        resolved = structs[base].type
-    else:
-        raise TypeError(f"unknown type {base!r}")
-
-    # wrap the base type in one pointer per '*'
-    for _ in range(pointer_depth):
-        resolved = ir.PointerType(resolved)
-    
-    return resolved
+    name = ref.spelling()
+    if name == "opaque":
+        return ir.IntType(8)
+    if name in SCALAR_TYPES:
+        return SCALAR_TYPES[name]
+    return structs[name].type

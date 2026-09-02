@@ -5,7 +5,8 @@ import re
 from siec.ast import Program
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.types import SCALAR_TYPES, fn_type_parts
+from siec.codegen.type_refs import TypeRef, derivation, parse_type_ref
+from siec.codegen.types import SCALAR_TYPES
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -175,80 +176,80 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
         return name
 
     checked = checked and not gen.ungated_types
+    ref = parse_type_ref(name)
 
     # prefixes wrap the expanded rest; a target's own 'const' isn't repeated
-    if name.startswith("const "):
+    if ref.kind == "const":
         inner = expand_alias(
-            gen, name.removeprefix("const "), seen, checked, parameters)
-        return inner if inner.startswith("const ") else f"const {inner}"
+            gen, ref.inner.spelling(), seen, checked, parameters)
+        inner_ref = parse_type_ref(inner)
+        return (inner if inner_ref.kind == "const"
+                else TypeRef("const", inner=inner_ref).spelling())
 
-    if name.startswith("&"):
-        return f"&{expand_alias(gen, name[1:], seen, checked, parameters)}"
+    if ref.kind == "reference":
+        inner = expand_alias(
+            gen, ref.inner.spelling(), seen, checked, parameters)
+        return TypeRef(
+            "reference", inner=parse_type_ref(inner)).spelling()
 
-    if name.startswith("!"):
-        expanded = expand_alias(gen, name[1:], seen, checked, parameters)
-        if not expanded.endswith("*"):
+    if ref.kind == "nonnull":
+        expanded = expand_alias(
+            gen, ref.inner.spelling(), seen, checked, parameters)
+        expanded_ref = parse_type_ref(expanded)
+        if expanded_ref.kind != "pointer":
             raise TypeError("'!' can only qualify a pointer type")
-        return f"!{expanded}"
+        return TypeRef("nonnull", inner=expanded_ref).spelling()
+
+    base_ref, suffix = derivation(ref)
 
     # a function reference type expands its parameter and return names,
     # keeping any '*'/'[]' suffix on the reference itself
-    if name.startswith("fn(") or name.startswith("closure fn("):
-        closure = name.startswith("closure ")
-        params, ret, suffix = fn_type_parts(name)
+    if base_ref.kind in ("function", "closure"):
         expanded_params = ",".join(
-            expand_alias(gen, p, seen, checked, parameters)
-            for p in params
+            expand_alias(gen, item.spelling(), seen, checked, parameters)
+            for item in base_ref.items
         )
-        expanded = f"{'closure ' if closure else ''}fn({expanded_params})"
+        expanded = (
+            f"{'closure ' if base_ref.kind == 'closure' else ''}"
+            f"fn({expanded_params})")
 
-        if ret is not None:
+        if base_ref.result is not None:
             expanded += f"->{expand_alias(
-                gen, ret, seen, checked, parameters)}"
+                gen, base_ref.result.spelling(), seen, checked, parameters)}"
 
         return expanded + suffix
 
     # an unnamed struct or union expands its field types and registers
     # under its canonical name, so identical shapes are one type
-    if name.startswith("struct{") or name.startswith("union{"):
-        from siec.codegen.types import anonymous_struct
-
-        is_union, pairs, suffix = anonymous_struct(name)
+    if base_ref.kind in ("struct", "union"):
         pairs = [(field, expand_alias(
-            gen, type_, seen, checked, parameters))
-                 for field, type_ in pairs]
+            gen, type_.spelling(), seen, checked, parameters))
+                 for field, type_ in base_ref.fields]
 
-        kind = "union" if is_union else "struct"
+        is_union = base_ref.kind == "union"
+        kind = base_ref.kind
         canon = kind + "{" + ";".join(f"{f}:{t}" for f, t in pairs) + "}"
         register_anonymous(gen, canon, is_union, pairs)
         return canon + suffix
 
     # a raw array expands its element and settles its size to a decimal,
     # so 'raw<byte>[N]' and 'raw<u8>[8]' agree wherever they meet
-    if name.startswith("raw<"):
+    if base_ref.kind == "raw":
         # deferred import: the evaluator's module imports this one
         from siec.codegen.enums import evaluate_size
-        from siec.codegen.types import raw_array
 
-        element, size, suffix = raw_array(name)
-        element = expand_alias(gen, element, seen, checked, parameters)
+        element = expand_alias(
+            gen, base_ref.inner.spelling(), seen, checked, parameters)
+        size = base_ref.size
 
         if not size.isdigit():
             size = str(evaluate_size(gen, size))
 
         return f"raw<{element}>[{size}]{suffix}"
 
-    # peel derivation suffixes down to the base name; sizes pass through
-    # untouched for codegen to evaluate
-    base, suffix = name, ""
-    while True:
-        if base.endswith("*"):
-            base, suffix = base[:-1], f"*{suffix}"
-        elif base.endswith("]"):
-            head, _, size = base.rpartition("[")
-            base, suffix = head, f"[{size}{suffix}"
-        else:
-            break
+    # The shared type model peels derivations down to the base. Sizes remain
+    # text until the declaration that owns the storage evaluates them.
+    base = base_ref.spelling()
 
     # a dotted base reaches a type through the file's module bindings,
     # its membership validated against the module's exports
@@ -293,11 +294,12 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
 
     # a 'Name<args>' base instantiates a generic struct or expands a
     # generic alias, landing on the concrete canonical spelling
-    if "<" in base:
+    if parse_type_ref(base).kind == "generic":
         from siec.codegen.generics import instantiate_generic
 
         if (generic := instantiate_generic(gen, base, seen, checked)) is not None:
-            if suffix and (generic.startswith("const ") or generic.startswith("&")):
+            generic_kind = parse_type_ref(generic).kind
+            if suffix and generic_kind in ("const", "reference"):
                 raise TypeError(f"cannot derive {name!r} from {base!r}: its "
                                 f"target {generic!r} carries a modifier")
 
@@ -337,7 +339,8 @@ def expand_alias(gen: CodeGenerator, name: str | None, seen: tuple = (),
 
     # a modifier marks the whole written type; deriving a pointer or array
     # from a modified target would silently move where it applies
-    if suffix and (target.startswith("const ") or target.startswith("&")):
+    if (suffix
+            and parse_type_ref(target).kind in ("const", "reference")):
         raise TypeError(f"cannot derive {name!r} from alias {base!r}: "
                         f"its target {target!r} carries a modifier")
 

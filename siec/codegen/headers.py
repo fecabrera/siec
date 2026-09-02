@@ -5,13 +5,10 @@ import re
 from siec.ast import Program
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
+from siec.codegen.type_refs import TypeRef, parse_type_ref
 from siec.codegen.types import (
     SCALAR_TYPES,
-    anonymous_struct,
-    fn_type_parts,
     is_reference,
-    raw_array,
-    sized_array,
 )
 
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -58,154 +55,148 @@ def resolve_header_type(gen: CodeGenerator, spelling: str | None,
         return None
 
     parameters = frozenset(parameters)
+    ref = parse_type_ref(spelling)
 
-    if spelling.startswith("const "):
+    if ref.kind == "const":
         inner = resolve_header_type(
             gen,
-            spelling.removeprefix("const "),
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_opaque=allow_opaque,
             allow_free=allow_free,
         )
-        return inner if inner.startswith("const ") else f"const {inner}"
+        inner_ref = parse_type_ref(inner)
+        return (inner if inner_ref.kind == "const"
+                else TypeRef("const", inner=inner_ref).spelling())
 
-    if spelling.startswith("&"):
+    if ref.kind == "reference":
         inner = resolve_header_type(
             gen,
-            spelling[1:],
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_opaque=allow_opaque,
             allow_free=allow_free,
         )
-        return f"&{inner}"
+        return TypeRef(
+            "reference", inner=parse_type_ref(inner)).spelling()
 
-    if spelling.startswith("!"):
+    if ref.kind == "nonnull":
         inner = resolve_header_type(
             gen,
-            spelling[1:],
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_opaque=allow_opaque,
             allow_free=allow_free,
         )
-        if not inner.endswith("*"):
+        inner_ref = parse_type_ref(inner)
+        if inner_ref.kind != "pointer":
             raise TypeError("'!' can only qualify a pointer type")
-        return f"!{inner}"
+        return TypeRef("nonnull", inner=inner_ref).spelling()
 
-    if spelling.startswith("fn(") or spelling.startswith("closure fn("):
-        closure = spelling.startswith("closure ")
-        params, ret, suffix = fn_type_parts(spelling)
+    if ref.kind in ("function", "closure"):
         resolved = ",".join(
             resolve_header_type(
                 gen,
-                param,
+                param.spelling(),
                 parameters,
                 allow_interface=allow_interface,
                 allow_free=allow_free,
             )
-            for param in params
+            for param in ref.items
         )
-        result = f"{'closure ' if closure else ''}fn({resolved})"
-        if ret is not None:
+        result = f"{'closure ' if ref.kind == 'closure' else ''}fn({resolved})"
+        if ref.result is not None:
             result += "->" + resolve_header_type(
                 gen,
-                ret,
+                ref.result.spelling(),
                 parameters,
                 allow_interface=allow_interface,
                 allow_free=allow_free,
             )
-        return result + suffix
+        return result
 
-    if (anonymous := anonymous_struct(spelling)) is not None:
-        is_union, fields, suffix = anonymous
+    if ref.kind in ("struct", "union"):
         resolved = [
             (name, resolve_header_type(
                 gen,
-                type_,
+                type_.spelling(),
                 parameters,
                 allow_interface=allow_interface,
                 allow_free=allow_free,
             ))
-            for name, type_ in fields
+            for name, type_ in ref.fields
         ]
-        kind = "union" if is_union else "struct"
+        kind = ref.kind
         result = kind + "{" + ";".join(
             f"{name}:{type_}" for name, type_ in resolved) + "}"
-        return result + suffix
+        return result
 
-    if (raw := raw_array(spelling)) is not None:
+    if ref.kind == "raw":
         from siec.codegen.enums import evaluate_size
 
-        element, size, suffix = raw
         element = resolve_header_type(
             gen,
-            element,
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_free=allow_free,
         )
-        if not size.isdigit():
-            size = str(evaluate_size(gen, size))
-        return f"raw<{element}>[{size}]{suffix}"
+        size = (ref.size if ref.size.isdigit()
+                else str(evaluate_size(gen, ref.size)))
+        return f"raw<{element}>[{size}]"
 
-    if (sized := sized_array(spelling)) is not None:
+    if ref.kind == "sized":
         from siec.codegen.enums import evaluate_size
 
-        array, size = sized
         element = resolve_header_type(
             gen,
-            array[:-2],
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_opaque=True,
             allow_free=allow_free,
         )
-        if not size.isdigit():
-            size = str(evaluate_size(gen, size))
+        size = (ref.size if ref.size.isdigit()
+                else str(evaluate_size(gen, ref.size)))
         return f"{element}[{size}]"
 
-    if spelling.endswith("[]"):
+    if ref.kind == "array":
         element = resolve_header_type(
             gen,
-            spelling[:-2],
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_opaque=True,
             allow_free=allow_free,
         )
-        return f"{element}[]"
+        return TypeRef(
+            "array", inner=parse_type_ref(element)).spelling()
 
-    if spelling.endswith("*"):
+    if ref.kind == "pointer":
         base = resolve_header_type(
             gen,
-            spelling[:-1],
+            ref.inner.spelling(),
             parameters,
             allow_interface=allow_interface,
             allow_opaque=True,
             allow_free=allow_free,
         )
-        if base.startswith("const ") or base.startswith("&"):
+        base_ref = parse_type_ref(base)
+        if base_ref.kind in ("const", "reference"):
             raise TypeError(f"cannot derive {spelling!r}: its target "
                             f"{base!r} carries a modifier")
-        return f"{base}*"
+        return TypeRef("pointer", inner=base_ref).spelling()
 
-    head, angle, rest = spelling.partition("<")
-    head = imported_base(gen, head)
-    if angle:
-        spelling = head + angle + rest
-
-    from siec.codegen.generics import split_generic
-
-    if (parts := split_generic(spelling)) is not None:
-        base, raw_args = parts
-        base = imported_base(gen, base)
+    if ref.kind == "generic":
+        base = imported_base(gen, ref.name)
         interface = base in gen.interfaces
         args = [
             resolve_header_type(
                 gen,
-                arg,
+                arg.spelling(),
                 parameters,
                 allow_interface=allow_interface,
                 # A type argument names a type identity; whether it needs a
@@ -215,7 +206,7 @@ def resolve_header_type(gen: CodeGenerator, spelling: str | None,
                 allow_opaque=True,
                 allow_free=allow_free or interface,
             )
-            for arg in raw_args
+            for arg in ref.items
         ]
         rebuilt = f"{base}<{','.join(args)}>"
 
@@ -268,7 +259,9 @@ def resolve_header_type(gen: CodeGenerator, spelling: str | None,
             allow_free=allow_free,
         )
 
-    base = imported_base(gen, spelling)
+    if ref.kind != "name":
+        raise TypeError(f"unknown type {spelling!r}")
+    base = imported_base(gen, ref.name)
     if base in parameters:
         return base
 
@@ -439,10 +432,10 @@ def resolve_callable_header(gen: CodeGenerator, fn, *,
 
         if fn.receiver is not None and not interface_action:
             receiver = fn.receiver
+            receiver_ref = parse_type_ref(receiver)
             if (fn.receiver_params is not None
                     and receiver not in fn.receiver_params
-                    and "<" not in receiver
-                    and not receiver.endswith("[]")):
+                    and receiver_ref.kind not in ("generic", "array")):
                 receiver += f"<{','.join(fn.receiver_params)}>"
             resolve_header_type(gen, receiver, parameters)
 
