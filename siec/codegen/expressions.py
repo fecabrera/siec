@@ -45,6 +45,7 @@ from siec.ast import (
 )
 from siec.codegen.asm import emit_asm_block
 from siec.codegen.aliases import expand_alias
+from siec.codegen.arrays import empty_array_data, empty_array_value
 from siec.codegen.calls import emit_call
 from siec.codegen.coercion import (emit_cast, emit_coerced,
                                    emit_reinterpret_address)
@@ -1278,7 +1279,9 @@ def emit_named_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: Aggreg
 
     index_of = {name: index for index, name in enumerate(names)}
 
-    value = ir.Constant(expected_type, None)
+    value = (empty_array_value(gen, expected_type)
+             if is_array_struct(expected_type)
+             else ir.Constant(expected_type, None))
     seen = set()
     for name, element in zip(expr.names, expr.elements):
         if name not in index_of:
@@ -1329,7 +1332,12 @@ def default_value(gen: CodeGenerator, builder: ir.IRBuilder, type_name: str | No
     nested structs too, the rest zero; None when nothing declares one,
     leaving a bare declaration uninitialized as ever.
     """
-    info = gen.structs.get(strip_const(type_name) if type_name else None)
+    canonical = strip_const(type_name) if type_name else None
+    if canonical and canonical.endswith("[]"):
+        return empty_array_value(
+            gen, resolve_type(canonical, gen.structs))
+
+    info = gen.structs.get(canonical)
     if info is None or info.fields is None or info.is_union:
         return None
 
@@ -1561,8 +1569,12 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
 
     element_type = expected_type.elements[0].pointee
 
-    # store each element into a stack-allocated backing array
-    backing = entry_alloca(builder, ir.ArrayType(element_type, len(expr.elements)), "arr.lit")
+    # Store each element into stack backing. Empty values share a stable
+    # non-null sentinel because there is no element storage to reserve.
+    backing = None
+    if expr.elements:
+        backing = entry_alloca(
+            builder, ir.ArrayType(element_type, len(expr.elements)), "arr.lit")
     for index, element in enumerate(expr.elements):
         if element_name is not None:
             value = emit_coerced(gen, builder, element, element_name, scope)
@@ -1575,8 +1587,14 @@ def emit_array(gen: CodeGenerator, builder: ir.IRBuilder, expr: ArrayLiteral,
 
     # decay the backing array to a pointer at its first element, and pair it
     # with the element count in the fat array value
-    data = builder.gep(backing, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)],
-                       name="arr.lit.data")
+    data = (
+        builder.gep(
+            backing,
+            [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)],
+            name="arr.lit.data",
+        )
+        if backing is not None else empty_array_data(gen, element_type)
+    )
 
     value = ir.Constant(expected_type, ir.Undefined)
     value = builder.insert_value(value, data, 0)

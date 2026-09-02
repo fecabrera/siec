@@ -38,6 +38,26 @@ def test_static_global_defaults_to_zero(run):
     assert run(source).returncode == 42
 
 
+def test_static_default_arrays_have_nonnull_data(run):
+    """Static arrays and nested array fields use non-null empty sentinels."""
+    source = """
+    struct Holder { values: i32[]; }
+
+    @static let empty: i32[];
+    @static let holder: Holder;
+
+    fn present(data: !i32*) -> bool { return data as u64 != 0; }
+
+    fn main() -> i32 {
+        if (present(empty) and present(holder.values)) {
+            return 42;
+        }
+        return 1;
+    }
+    """
+    assert run(source).returncode == 42
+
+
 def test_static_global_initializers(compile_source):
     """
     Integers, floats, bools, strings, and enum members all initialize.

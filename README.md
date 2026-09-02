@@ -1567,12 +1567,16 @@ Use `-Wunchecked-dereference` to warn when `*pointer`, `pointer[index]`, or `poi
 
 #### Arrays
 
-Arrays are collections of values with the same type. They are written as `X[]` and have the internal form `{X*, u64}`. The `X*` value points to `X`, and the `u64` value contains the element count. The `data` and `length` members expose these values:
+Arrays are collections of values with the same type. They are written as `X[]`
+and have the semantic form `{!X*, u64}`. The data pointer is never null, and
+the `u64` value contains the element count. The LLVM and C ABI form remains
+`{X*, u64}` because `!` does not change pointer layout. The `data` and `length`
+members expose these values:
 
 ```
 let arr: i32[];
 
-let ptr: i32* = arr.data;   // the backing pointer
+let ptr: !i32* = arr.data;  // the non-null backing pointer
 let n: u64 = arr.length;    // the element count
 ```
 
@@ -1620,32 +1624,32 @@ let msgs: char[][] = ["hello", "world"];
 They can also be initialized with a pointer `ptr` and length `n` enclosed by `{}` and separated by commas.
 
 ```
-let ptr: i32* = [1, 2, 3];
+let ptr: !i32* = [1, 2, 3];
 let n: u64 = 3;
 let arr: i32[] = {ptr, n};
 ```
 
-It is possible to cast an array `X[]` to a pointer `X*`. When an array is used where a plain pointer is expected, it lowers to its `X*` contextually.
+An array `X[]` lowers to `!X*` or `X*` through its data pointer when either
+pointer type is expected.
 
 ```
-fn f(value: i32*);
+fn required(value: !i32*);
+fn optional(value: i32*);
 
 let arr: i32[] = [1, 2, 3];
-f(arr); // equivalent to f(arr as i32*);
+required(arr);
+optional(arr);
 ```
 
-A direct array or string literal can also lower to `!X*`. The compiler creates
-its backing storage, so its data pointer is not null. A general `X[]` value can
-contain a null data pointer and does not lower to `!X*`. Check its data field
-explicitly when a non-null pointer is required.
+Array literals, sized arrays, strings, slices, default arrays, and empty arrays
+all preserve the non-null data invariant. Empty and default arrays use a
+shared non-null sentinel. A raw `{data, length}` initializer requires `data`
+to have type `!X*`. Use postfix `!` when the source pointer needs a run-time
+check.
 
 ```
-fn first(values: const !i32*) -> i32;
-
-first([1, 2, 3]); // allowed
-
-let values: i32[] = [1, 2, 3];
-first(values.data!);
+let data: i32* = get_data();
+let values: i32[] = {data!, 3};
 ```
 
 An array can be sliced with `arr[from:to]`, where either bound can be omitted: `from` defaults to `0` and `to` defaults to `arr.length`. Slicing yields an `X[]` view over the same backing data, not a copy.

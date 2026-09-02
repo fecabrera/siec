@@ -1204,10 +1204,15 @@ def type_info(gen: CodeGenerator, type_name: str | None) -> StructInfo | None:
     if (sized := sized_array(type_name)) is not None:
         type_name = sized[0]
 
-    # an 'X[]' array exposes two synthetic fields: 'data' (X*) and 'length' (u64)
+    # an 'X[]' array exposes non-null data and its element count
     if type_name and type_name.endswith("[]"):
+        from siec.codegen.types import nonnull_pointer
+
         element = type_name[:-2]
-        fields = [Field("data", f"{element}*"), Field("length", "u64")]
+        fields = [
+            Field("data", nonnull_pointer(f"{element}*")),
+            Field("length", "u64"),
+        ]
         return StructInfo(None, fields)
 
     return gen.structs.get(type_name)

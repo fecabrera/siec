@@ -34,14 +34,14 @@ def array_scope(builder, name="a", element="i32"):
 
 def test_array_exposes_data_and_length_fields():
     """
-    An array's synthetic fields are 'data' (X*) at index 0 and 'length' (u64) at index 1.
+    An array exposes non-null data at index 0 and its length at index 1.
     """
     # member_field goes through a scope, but the field table itself is fixed
     from siec.codegen.inference import type_info
     from siec.codegen.generator import CodeGenerator
 
     info = type_info(CodeGenerator("t"), "i32[]")
-    assert info.field("data") == (0, "i32*")
+    assert info.field("data") == (0, "!i32*")
     assert info.field("length") == (1, "u64")
 
 

@@ -249,11 +249,11 @@ def test_builtin_iterable_interface(run):
     }
 
     fn List<T>::iterator(&self) -> StepIter<T> {
-        return StepIter<T>({self.data, self.length});
+        return StepIter<T>({self.data!, self.length});
     }
 
     fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
-        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        let it: ConstArrayIterator<T> = { {self.data!, self.length}, 0 };
         return it;
     }
 

@@ -13,6 +13,7 @@ from siec.ast import (
     StrLiteral,
 )
 from siec.codegen.aliases import expand_alias
+from siec.codegen.arrays import empty_array_value
 from siec.codegen.enums import evaluate, evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
@@ -227,9 +228,27 @@ def global_initializer(gen: CodeGenerator, glob: Global, symbol: str) -> ir.Cons
                                    ir.Constant(ir.IntType(64), size)])
 
     if glob.value is None:
-        return ir.Constant(type_, None)  # zero-initialized, C-style
+        return default_constant(gen, type_, glob.type)
 
     return constant_value(gen, glob.value, type_, glob.type)
+
+
+def default_constant(gen: CodeGenerator, type_: ir.Type,
+                     type_name: str) -> ir.Constant:
+    """Build a zero-like constant that preserves array non-null invariants."""
+    canonical = strip_const(type_name)
+    if canonical.endswith("[]"):
+        return empty_array_value(gen, type_)
+
+    info = gen.structs.get(canonical)
+    if (info is None or info.fields is None or info.is_union
+            or not hasattr(type_, "elements")):
+        return ir.Constant(type_, None)
+
+    return ir.Constant(type_, [
+        default_constant(gen, field_type, field.type)
+        for field_type, field in zip(type_.elements, info.fields)
+    ])
 
 
 def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
@@ -336,7 +355,10 @@ def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
         return ir.Constant(type_, values)
 
     fields = info.fields
-    values = [ir.Constant(field_type, None) for field_type in type_.elements]
+    values = [
+        default_constant(gen, field_type, field.type)
+        for field_type, field in zip(type_.elements, fields)
+    ]
 
     if literal.names is None:
         if len(literal.elements) != len(fields):

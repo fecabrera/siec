@@ -44,14 +44,43 @@ def test_literals_decay_to_nonnull_pointer_parameters(run):
     assert result.returncode == 42
 
 
-def test_general_array_does_not_decay_to_nonnull_pointer(compile_source):
-    """An array value needs an explicit assertion on its data pointer."""
-    with pytest.raises(
-            TypeError,
-            match=r"cannot implicitly convert i32\[\] to !i32\*"):
+def test_general_array_decays_to_nonnull_pointer(run):
+    """Every array value has non-null data and satisfies `!T*`."""
+    result = run(r'''
+    fn read(values: !i32*) -> i32 { return values[0]; }
+    fn pass(values: i32[]) -> i32 { return read(values); }
+    fn main() -> i32 { return pass([42]); }
+    ''')
+    assert result.returncode == 42
+
+
+def test_empty_and_default_arrays_have_nonnull_data(run):
+    """Compiler-created empty and default arrays use non-null sentinels."""
+    result = run(r'''
+    struct Holder { values: i32[]; }
+
+    fn present(data: !i32*) -> bool { return data as u64 != 0; }
+
+    fn main() -> i32 {
+        let empty: i32[] = [];
+        let defaulted: i32[];
+        let holder: Holder;
+        if (present(empty) and present(defaulted) and present(holder.values)) {
+            return 42;
+        }
+        return 1;
+    }
+    ''')
+    assert result.returncode == 42
+
+
+def test_raw_array_view_requires_nonnull_data(compile_source):
+    """A raw array descriptor cannot contain an unproved nullable pointer."""
+    with pytest.raises(TypeError, match="not definitely non-null"):
         compile_source(r'''
-        fn read(values: !i32*) -> i32 { return values[0]; }
-        fn pass(values: i32[]) -> i32 { return read(values); }
+        fn view(data: i32*, length: u64) -> i32[] {
+            return {data, length};
+        }
         fn main() -> i32 { return 0; }
         ''')
 

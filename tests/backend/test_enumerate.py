@@ -15,10 +15,10 @@ def test_enumerate_pairs_indices_with_values(run, compile_source):
     }
 
     fn List<T>::iterator(&self) -> ArrayIterator<T> {
-        return ArrayIterator<T>({self.data, self.length});
+        return ArrayIterator<T>({self.data!, self.length});
     }
     fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
-        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        let it: ConstArrayIterator<T> = { {self.data!, self.length}, 0 };
         return it;
     }
 
@@ -105,10 +105,10 @@ def test_enumerate_carried_foreign_types(tmp_path, monkeypatch):
     (coll / "list.sie").write_text("""
         struct List<T>: Iterable<T> { data: T*; length: u64; }
         fn List<T>::iterator(&self) -> ArrayIterator<T> {
-            return ArrayIterator<T>({self.data, self.length});
+            return ArrayIterator<T>({self.data!, self.length});
         }
         fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
-            let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+            let it: ConstArrayIterator<T> = { {self.data!, self.length}, 0 };
             return it;
         }
     """)
@@ -119,6 +119,11 @@ def test_enumerate_carried_foreign_types(tmp_path, monkeypatch):
         import { List } from coll.list;
 
         struct Info { include: List<List<u8>>; }
+        fn Info::init(&self) {
+            let empty: List<u8>[] = [];
+            self.include.data = empty.data;
+            self.include.length = 0;
+        }
     """)
 
     src = tmp_path / "main.sie"
@@ -126,9 +131,7 @@ def test_enumerate_carried_foreign_types(tmp_path, monkeypatch):
         import { Info } from pack.info;
 
         fn main() -> i32 {
-            let info: Info;
-            info.include.data = null;
-            info.include.length = 0;
+            let info = Info();
 
             let count: u64 = 0;
             foreach (el : enumerate(info.include)) {

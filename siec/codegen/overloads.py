@@ -399,12 +399,6 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
 
     if (source.endswith("[]")
             and strip_nonnull(target) == f"{source[:-2]}*"):
-        # A literal owns compiler-created backing storage, so its data
-        # pointer is known to be non-null. A general array value can carry a
-        # null data field and needs an explicit `.data!` assertion instead.
-        if (is_nonnull_pointer(target)
-                and not isinstance(arg, (ArrayLiteral, StrLiteral))):
-            return None
         return "implicit"
 
     # numbers widen within their prefix, enums through their backing type

@@ -48,7 +48,7 @@ def test_aggregate_initialization_from_pointer_and_length(run):
     """
     source = """
     fn main(argc: i32, argv: char**) -> i32 {
-        let name: char[] = {argv[0], 5};
+        let name: char[] = {argv[0]!, 5};
         // the array's data points at argv[0], so their first bytes match
         if (name.length == 5 and name.data[0] == argv[0][0]) {
             return 3;
@@ -225,7 +225,7 @@ def test_array_literal_initializes_a_pointer(run):
     """
     source = """
     fn main() -> i32 {
-        let ptr: i32* = [1, 2, 3];
+        let ptr: !i32* = [1, 2, 3];
         let n: u64 = 3;
         let arr: i32[] = {ptr, n};
 

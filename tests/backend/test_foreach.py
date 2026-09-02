@@ -15,10 +15,10 @@ def test_foreach_walks_iterables(run):
     }
 
     fn List<T>::iterator(&self) -> ArrayIterator<T> {
-        return ArrayIterator<T>({self.data, self.length});
+        return ArrayIterator<T>({self.data!, self.length});
     }
     fn List<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
-        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        let it: ConstArrayIterator<T> = { {self.data!, self.length}, 0 };
         return it;
     }
 
@@ -144,11 +144,11 @@ def test_foreach_picks_the_const_iterator_for_const_sources(run):
 
     fn Bag<T>::iterator(&self) -> ArrayIterator<T> {
         self.mutable_walks += 1;
-        return ArrayIterator<T>({self.data, self.length});
+        return ArrayIterator<T>({self.data!, self.length});
     }
 
     fn Bag<T>::const_iterator(const &self) -> ConstArrayIterator<T> {
-        let it: ConstArrayIterator<T> = { {self.data, self.length}, 0 };
+        let it: ConstArrayIterator<T> = { {self.data!, self.length}, 0 };
         return it;
     }
 

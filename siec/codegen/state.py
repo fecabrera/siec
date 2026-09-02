@@ -151,6 +151,7 @@ class TypeRegistry:
     checked_extensions: set[int] = field(default_factory=set)
     array_claims: list[tuple[str, str, dict | None, str]] = field(
         default_factory=list)
+    array_sentinels: dict[str, ir.GlobalVariable] = field(default_factory=dict)
     generic_claims: list[tuple[str, list[str], dict | None, str]] = field(
         default_factory=list)
     generic_struct_claims: dict[str, list[tuple]] = field(default_factory=dict)
