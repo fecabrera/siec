@@ -76,22 +76,8 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
         from siec.codegen.methods import takes_receiver
         from siec.codegen.worklist import activate_function_instance
 
-        params = gen.param_types.get(stamped, [])
-        arity_ok = (
-            len(call.args) == len(params)
-            or (stamped in gen.variadics and len(call.args) >= len(params) - 1)
-            or (stamped in gen.var_args and len(call.args) >= len(params))
-        )
-        # Defaults make trailing params optional.
-        if not arity_ok and stamped in gen.param_defaults:
-            defaults, _ = gen.param_defaults[stamped]
-            required = len(params)
-            while (required and required <= len(defaults)
-                   and defaults[required - 1] is not None):
-                required -= 1
-            arity_ok = len(call.args) >= required and len(call.args) <= len(params)
-
-        if arity_ok and not (
+        arity = gen.call_arities[stamped]
+        if arity.accepts(len(call.args)) and not (
                 takes_receiver(gen, stamped) and "." in call.name):
             if call.type_args is not None and "<" not in stamped:
                 raise TypeError(f"function {call.name!r} is not generic")
@@ -249,11 +235,14 @@ def _emit_resolved_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
     """Emit arguments and the call once the concrete LLVM callee is known."""
     from siec.codegen.expressions import emit_expression
 
-    # check arity, letting varargs functions take extra arguments; an
-    # indirect struct return hides its own first parameter
+    # Source arity is independent of parameters added or reshaped for the ABI.
+    arity = gen.call_arities[func.name]
+    count_error = arity.error(len(call.args))
+    if count_error is not None:
+        raise TypeError(
+            f"{count_error} arguments to function {call.name!r}")
+    expected = arity.parameter_count
     ret_lowering = gen.abi_returns.get(func.name)
-    hidden = 1 if ret_lowering is not None and ret_lowering[0] == "indirect" else 0
-    expected = len(func.function_type.args) - hidden
 
     # a 'name...' variadic packs the call's extra arguments into its
     # trailing const Any[]; an explicit Any[] argument forwards as-is
@@ -262,17 +251,6 @@ def _emit_resolved_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
 
     # trailing parameters with defaults are optional at the call
     defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))
-    required = expected
-    while (required and required <= len(defaults)
-           and defaults[required - 1] is not None):
-        required -= 1
-
-    if len(call.args) < required:
-        raise TypeError(f"too few arguments to function {call.name!r}")
-
-    if len(call.args) > expected and not func.function_type.var_arg:
-        raise TypeError(f"too many arguments to function {call.name!r}")
-
     # coerce each argument to its parameter's Sie type; vararg extras pass
     # as-is, except an f32, which promotes to f64 like C's default promotions
     sie_params = gen.param_types.get(func.name, [])

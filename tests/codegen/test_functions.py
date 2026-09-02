@@ -33,6 +33,21 @@ def test_declare_varargs(gen):
     assert func.function_type.var_arg
 
 
+def test_declare_records_source_arity(gen):
+    """Declaration records one normalized source-level arity value."""
+    fn = Function("f", [
+        Param("a", "i32"),
+        Param("b", "i32", IntLiteral(1)),
+    ], None, None)
+
+    func = declare_function(gen, fn)
+    arity = gen.call_arities[func.name]
+
+    assert arity.minimum == 1
+    assert arity.maximum == 2
+    assert arity.parameter_count == 2
+
+
 def test_matching_redeclaration_reuses_the_declaration(gen):
     """
     Redeclaring with the same signature returns the existing function.

@@ -900,20 +900,14 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
 
     func = gen.module.globals[symbol]
     sie_params = gen.param_types[func.name]
-    expected = len(func.function_type.args) - 1
+    arity = gen.call_arities[func.name].without_prefix(1)
+    expected = arity.parameter_count
 
     # trailing parameters with defaults are optional here too
     defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))
-    required = expected
-    while (required and required + 1 <= len(defaults)
-           and defaults[required] is not None):
-        required -= 1
-
-    if len(call.args) < required:
-        raise TypeError(f"too few arguments to function {symbol!r}")
-
-    if len(call.args) > expected:
-        raise TypeError(f"too many arguments to function {symbol!r}")
+    count_error = arity.error(len(call.args))
+    if count_error is not None:
+        raise TypeError(f"{count_error} arguments to function {symbol!r}")
 
     args = [slot]
     for i, arg in enumerate(call.args):

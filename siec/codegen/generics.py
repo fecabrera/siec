@@ -12,6 +12,7 @@ from dataclasses import fields as dataclass_fields, is_dataclass
 
 from siec.ast import (AggregateLiteral, ArrayLiteral, Call, Field, SizeOf,
                       TypeId, TypeName)
+from siec.codegen.arity import CallArity
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator, StructInfo
 from siec.codegen.types import (
@@ -662,16 +663,12 @@ def accepts_arity(template, count: int) -> bool:
     Whether a template's parameter list can take a call's argument count,
     trailing defaults making their parameters optional.
     """
-    params = template.params
-    required = len(params)
-    while required and params[required - 1].default is not None:
-        required -= 1
-
-    if template.variadic:
-        required = min(required, len(params) - 1)
-        return required <= count
-
-    return required <= count and (count <= len(params) or template.var_arg)
+    arity = CallArity.from_parameters(
+        template.params,
+        variadic=template.variadic,
+        var_arg=template.var_arg,
+    )
+    return arity.accepts(count)
 
 
 def pick_generic_call(gen: CodeGenerator, symbol: str, call, scope: dict,
@@ -822,17 +819,15 @@ def generic_fit(gen: CodeGenerator, template, type_args: list, call,
     mapping = dict(zip(template.type_params, type_args))
     params = [substitute(p.type, mapping) for p in template.params]
 
-    required = len(template.params)
-    while required and template.params[required - 1].default is not None:
-        required -= 1
-    if template.variadic:
-        required = min(required, len(params) - 1)
-    if (len(call.args) < required
-            or (len(call.args) > len(params)
-                and not template.var_arg and not template.variadic)):
+    arity = CallArity.from_parameters(
+        template.params,
+        variadic=template.variadic,
+        var_arg=template.var_arg,
+    )
+    if not arity.accepts(len(call.args)):
         return None
 
-    if template.variadic:
+    if arity.variadic:
         params = params[:-1]
 
     args = list(call.args)[:len(params)]

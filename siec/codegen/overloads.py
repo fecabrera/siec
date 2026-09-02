@@ -288,26 +288,13 @@ def candidate_fit(gen: CodeGenerator, symbol: str, args: list,
     """
     params = gen.param_types.get(symbol, [])
 
-    # trailing defaults make their parameters optional; varargs take extras
-    var_arg = symbol in gen.var_args
-    defaults = gen.param_defaults.get(symbol, ([], None))[0]
-
-    required = len(params)
-    while (required and required <= len(defaults)
-           and defaults[required - 1] is not None):
-        required -= 1
-
     # an 'args...' candidate takes any extras; only its fixed
     # parameters rank the fit, the pack coming after the pick
-    variadic = symbol in gen.variadics
-    if variadic:
-        required = min(required, len(params) - 1)
-
-    if len(args) < required or (len(args) > len(params)
-                                and not var_arg and not variadic):
+    arity = gen.call_arities[symbol]
+    if not arity.accepts(len(args)):
         return None
 
-    if variadic:
+    if arity.variadic:
         fixed = len(params) - 1
         args, arg_types, params = args[:fixed], arg_types[:fixed], params[:fixed]
 

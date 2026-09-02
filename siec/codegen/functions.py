@@ -5,6 +5,7 @@ from llvmlite import ir
 from siec.ast import Function
 from siec.codegen.abi import DIRECT, classify
 from siec.codegen.aliases import expand_alias
+from siec.codegen.arity import CallArity
 from siec.codegen.asm import emit_asm_function
 from siec.codegen.errors import error_call_trace, source_location
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
@@ -178,6 +179,8 @@ def resolve_function_body(gen: CodeGenerator, fn: Function) -> str:
 
     gen.return_types[symbol] = fn.return_type
     gen.param_types[symbol] = [p.type for p in fn.params]
+    gen.call_arities[symbol] = CallArity.from_parameters(
+        fn.params, variadic=fn.variadic, var_arg=fn.var_arg)
 
     # '@deprecated' advice travels with the symbol: its reachable uses
     # warn once the program is emitted, and a '@remove' one's fail

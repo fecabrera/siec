@@ -19,6 +19,7 @@ from llvmlite import ir
 
 if TYPE_CHECKING:
     from siec.ast import Function, Program
+    from siec.codegen.arity import CallArity
     from siec.codegen.generator import EnumInfo, StructInfo
 
 
@@ -74,6 +75,7 @@ class SymbolTable:
     return_types: dict[str, str | None] = field(default_factory=dict)
     param_types: dict[str, list[str]] = field(default_factory=dict)
     param_defaults: dict[str, tuple[list, str]] = field(default_factory=dict)
+    call_arities: dict[str, CallArity] = field(default_factory=dict)
     resolved_functions: dict[str, Function] = field(default_factory=dict)
     function_signatures: dict[str, tuple] = field(default_factory=dict)
     raw_callables: dict[str, list] = field(default_factory=dict)

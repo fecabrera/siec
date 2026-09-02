@@ -52,6 +52,7 @@ from siec.ast import (
     While,
 )
 from siec.codegen.aliases import expand_alias
+from siec.codegen.arity import CallArity
 from siec.codegen.errors import error_call_trace, source_location
 from siec.codegen.generator import CodeGenerator, Variable
 from siec.codegen.inference import (
@@ -1634,7 +1635,6 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                     call,
                     scope,
                     params,
-                    init in gen.var_args,
                     init,
                     default_offset=default_offset,
                 )
@@ -1656,7 +1656,6 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         call,
         scope,
         params,
-        symbol in gen.var_args,
         symbol,
     )
 
@@ -1693,14 +1692,13 @@ def check_indirect_call(gen: CodeGenerator, call: Call, scope: dict,
         raise TypeError(
             f"function reference {call.name!r} takes {len(params)} "
             f"arguments, got {len(call.args)}")
-    check_call_arguments(gen, call, scope, params, False)
+    check_call_arguments(gen, call, scope, params)
     gen.checked_call = None
     return strip_reference(ret)
 
 
 def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
-                         params: list[str], var_arg: bool,
-                         symbol: str | None = None, *,
+                         params: list[str], symbol: str | None = None, *,
                          default_offset: int = 0) -> None:
     """Check call arity and each fixed argument against its parameter."""
     all_defaults, defaults_file = gen.param_defaults.get(
@@ -1708,21 +1706,15 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
         ([], None),
     )
     defaults = all_defaults[default_offset:]
-    required = len(params)
-    while (required and required <= len(defaults)
-           and defaults[required - 1] is not None):
-        required -= 1
+    arity = (gen.call_arities[symbol].without_prefix(default_offset)
+             if symbol is not None else
+             CallArity.exact(len(params)))
+    count_error = arity.error(len(call.args))
+    if count_error is not None:
+        raise TypeError(
+            f"{count_error} arguments to function {call.name!r}")
 
-    variadic = symbol in gen.variadics
-    if variadic:
-        required = min(required, len(params) - 1)
-
-    if len(call.args) < required:
-        raise TypeError(f"too few arguments to function {call.name!r}")
-    if len(call.args) > len(params) and not var_arg and not variadic:
-        raise TypeError(f"too many arguments to function {call.name!r}")
-
-    fixed = len(params) - 1 if variadic else len(params)
+    fixed = len(params) - 1 if arity.variadic else len(params)
     for arg, param in zip(call.args[:fixed], params):
         if is_reference(param):
             check_reference_argument(gen, arg, param, scope)
@@ -1732,7 +1724,7 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
                 consume_owned_expression(gen, arg, actual or param, scope)
     for arg in call.args[fixed:]:
         actual = check_expression(gen, arg, scope)
-        if variadic and actual is not None:
+        if arity.variadic and actual is not None:
             wrapped = strip_const(strip_reference(actual))
             if wrapped != "Any":
                 gen.any_types.setdefault(gen.current_function, set()).add(
