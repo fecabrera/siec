@@ -1277,10 +1277,13 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
     if isinstance(expr, AggregateLiteral):
         if expected is not None:
+            from siec.codegen.aggregates import resolve_aggregate
             from siec.codegen.hir import CoercionPlan, stamp
 
+            aggregate_plan = resolve_aggregate(gen, expr, expected)
             stamp(
                 expr,
+                aggregate_plan=aggregate_plan,
                 coercion_plan=CoercionPlan(
                     None, expected, "aggregate",
                     const_target=is_const(expected),
@@ -1289,56 +1292,11 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 coerce_kind="aggregate",
                 overwrite=True,
             )
-            from siec.codegen.inference import type_info
-
-            info = type_info(gen, expected)
-            if info is not None and info.fields is not None:
-                if info.is_union:
-                    from siec.codegen.unions import literal_field
-
-                    _, field, value = literal_field(
-                        info, expr, strip_const(expected))
-                    pairs = [(value, field)]
-                    seen = {field.name}
-                elif expr.names is None:
-                    if len(expr.elements) != len(info.fields):
-                        raise TypeError(
-                            f"aggregate literal has {len(expr.elements)} "
-                            f"elements, expected {len(info.fields)}")
-                    pairs = zip(expr.elements, info.fields)
-                else:
-                    fields_by_name = {
-                        field.name: field for field in info.fields
-                    }
-                    seen = set()
-                    pairs = []
-                    for name, value in zip(expr.names, expr.elements):
-                        if name not in fields_by_name:
-                            raise TypeError(
-                                f"aggregate literal names unknown field "
-                                f"{name!r}")
-                        if name in seen:
-                            raise TypeError(
-                                f"aggregate literal sets field {name!r} "
-                                "more than once")
-                        seen.add(name)
-                        pairs.append((value, fields_by_name[name]))
-
-                for value, field in pairs:
-                    check_field_access(gen, expected, field)
-                    field_type = field.type
-                    if (is_const(expected)
-                            and is_aliasing(field_type)
-                            and not is_const(field_type)):
-                        field_type = f"const {field_type}"
-                    check_expression(gen, value, scope, field_type)
-                if expr.names is not None and not info.is_union:
-                    for field in info.fields:
-                        if field.name not in seen:
-                            check_field_default(gen, field)
-            else:
-                for value in expr.elements:
-                    check_expression(gen, value, scope)
+            for element in aggregate_plan.elements:
+                check_expression(
+                    gen, element.value, scope, element.target)
+            for omitted in aggregate_plan.omitted:
+                check_field_default(gen, omitted.field)
         return expected
 
     if isinstance(expr, ArrayLiteral):
@@ -1524,6 +1482,27 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 gen, expr, scope, "get_item")) is not None:
             expr.item_get_call = rewritten
             return check_expression(gen, rewritten, scope, expected)
+        base_context = None
+        if (expected is not None
+                and isinstance(expr.base, (AggregateLiteral, ArrayLiteral))):
+            base_context = f"{strip_const(expected)}[]"
+        check_expression(gen, expr.base, scope, base_context)
+        check_expression(gen, expr.index, scope)
+        base_type = strip_const(expr_sie_type(gen, expr.base, scope) or "")
+        if base_type.startswith("Tuple<"):
+            from siec.codegen.expressions import tuple_element
+
+            _, index, elements = tuple_element(gen, expr, scope)
+            actual = elements[index]
+        else:
+            actual = expr_sie_type(gen, expr, scope) or infer_type(
+                gen, expr, scope)
+        if actual is None and expected is not None:
+            actual = expected
+        if expected is not None:
+            require_fit(gen, expr, actual, expected)
+            return expected
+        return actual
 
     if isinstance(expr, Slice):
         from siec.codegen.inference import slice_call

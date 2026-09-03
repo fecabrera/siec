@@ -330,7 +330,7 @@ def test_arrays_index_directly(run):
         let arr: i32[] = [10, 20, 30];
         arr[1] = 22;
 
-        let prog: char* = {argv, argc as u64}[0];
+        let prog: char* = {argv!, argc as u64}[0];
         let inline: i32 = [7, 8, 9][2];
 
         if (arr[1] == 22 and arr.data[1] == 22 and prog[0] != 0 and inline == 9) {

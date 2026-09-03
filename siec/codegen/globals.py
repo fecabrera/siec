@@ -13,11 +13,11 @@ from siec.ast import (
     StrLiteral,
 )
 from siec.codegen.aliases import expand_alias
+from siec.codegen.aggregates import resolve_aggregate
 from siec.codegen.arrays import empty_array_value
 from siec.codegen.enums import evaluate, evaluate_size
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
-from siec.codegen.inference import check_field_access
 from siec.codegen.types import (
     is_const,
     INTEGER_TYPES,
@@ -96,6 +96,8 @@ def validate_global_initializer(gen: CodeGenerator, glob: Global) -> None:
 
     if glob.is_static and glob.value is not None:
         validate_constant_value(gen, glob.value, glob.type)
+    elif glob.is_static:
+        validate_constant_default_type(gen, glob.type)
 
 
 def validate_constant_value(gen: CodeGenerator, expr: Expr,
@@ -104,43 +106,12 @@ def validate_constant_value(gen: CodeGenerator, expr: Expr,
     target = strip_const(sie_type)
 
     if isinstance(expr, AggregateLiteral):
-        info = gen.structs.get(target)
-        if info is None or not info.fields:
-            raise TypeError(
-                f"aggregate initializer needs a struct type, not "
-                f"{sie_type!r}")
-        if info.is_union:
-            from siec.codegen.unions import literal_field
-
-            _, field, value = literal_field(info, expr, target)
-            check_field_access(gen, target, field)
-            validate_constant_value(gen, value, field.type)
-            return
-
-        if expr.names is None:
-            if len(expr.elements) != len(info.fields):
-                raise TypeError(
-                    f"aggregate literal has {len(expr.elements)} elements, "
-                    f"expected {len(info.fields)}")
-            pairs = zip(info.fields, expr.elements)
-        else:
-            fields = {field.name: field for field in info.fields}
-            seen = set()
-            pairs = []
-            for name, value in zip(expr.names, expr.elements):
-                if name not in fields:
-                    raise TypeError(
-                        f"aggregate literal names unknown field {name!r}")
-                if name in seen:
-                    raise TypeError(
-                        f"aggregate literal sets field {name!r} more than "
-                        "once")
-                seen.add(name)
-                pairs.append((fields[name], value))
-
-        for field, value in pairs:
-            check_field_access(gen, target, field)
-            validate_constant_value(gen, value, field.type)
+        plan = resolve_aggregate(gen, expr, sie_type)
+        expr.aggregate_plan = plan
+        for element in plan.elements:
+            validate_constant_value(gen, element.value, element.target)
+        for omitted in plan.omitted:
+            validate_constant_field_default(gen, omitted.field)
         return
 
     if isinstance(expr, FloatLiteral):
@@ -181,6 +152,34 @@ def validate_constant_value(gen: CodeGenerator, expr: Expr,
         raise TypeError(
             f"cannot initialize a {sie_type!r} value with an integer")
     evaluate(gen, expr)
+
+
+def validate_constant_field_default(gen: CodeGenerator, field) -> None:
+    """Validate one field default used by a static aggregate."""
+    if field.default is not None:
+        validate_constant_value(gen, field.default, field.type)
+    else:
+        validate_constant_default_type(gen, field.type)
+
+
+def validate_constant_default_type(gen: CodeGenerator, type_name: str,
+                                   seen: set[str] | None = None) -> None:
+    """Validate defaults recursively used by static initialization."""
+    from siec.codegen.inference import type_info
+
+    canonical = strip_const(type_name)
+    seen = set() if seen is None else seen
+    if canonical in seen:
+        return
+    seen.add(canonical)
+    info = type_info(gen, canonical)
+    if info is None or info.fields is None or info.is_union:
+        return
+    for field in info.fields:
+        if field.default is not None:
+            validate_constant_value(gen, field.default, field.type)
+        else:
+            validate_constant_default_type(gen, field.type, seen)
 
 
 def lower_globals(gen: CodeGenerator) -> None:
@@ -246,9 +245,17 @@ def default_constant(gen: CodeGenerator, type_: ir.Type,
         return ir.Constant(type_, None)
 
     return ir.Constant(type_, [
-        default_constant(gen, field_type, field.type)
+        constant_field_default(gen, field_type, field)
         for field_type, field in zip(type_.elements, info.fields)
     ])
+
+
+def constant_field_default(gen: CodeGenerator, field_type: ir.Type,
+                           field) -> ir.Constant:
+    """Build one declared or recursive field default as a constant."""
+    if field.default is not None:
+        return constant_value(gen, field.default, field_type, field.type)
+    return default_constant(gen, field_type, field.type)
 
 
 def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
@@ -295,22 +302,21 @@ def constant_value(gen: CodeGenerator, expr: Expr, type_: ir.Type,
 def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
                        type_: ir.Type, sie_type: str) -> ir.Constant:
     """
-    Build a struct's constant initial value from an aggregate literal:
-    positional fields fill in order, named fields wherever they sit, and
-    fields a named literal leaves out start at zero.
+    Build a constant aggregate from its checked field mapping and defaults.
     """
-    info = gen.structs.get(strip_const(sie_type))
-    if info is None or not info.fields:
-        raise TypeError(f"aggregate initializer needs a struct type, not {sie_type!r}")
+    from siec.codegen.hir import checked_aggregate
 
-    if info.is_union:
-        from siec.codegen.unions import literal_field
+    plan = checked_aggregate(literal)
+    if plan is None:
+        plan = resolve_aggregate(gen, literal, sie_type)
 
-        _, field, element = literal_field(info, literal, strip_const(sie_type))
-        check_field_access(gen, sie_type, field)
+    if plan.is_union:
+        selected_plan = plan.elements[0]
+        field = selected_plan.field
+        element = selected_plan.value
         field_type = resolve_type(field.type, gen.structs)
         selected = constant_value(
-            gen, element, field_type, field.type)
+            gen, element, field_type, selected_plan.target)
         storage = type_.elements[0]
 
         if selected.type == storage:
@@ -354,34 +360,20 @@ def constant_aggregate(gen: CodeGenerator, literal: AggregateLiteral,
                       for element_type in type_.elements[1:])
         return ir.Constant(type_, values)
 
-    fields = info.fields
-    values = [
-        default_constant(gen, field_type, field.type)
-        for field_type, field in zip(type_.elements, fields)
-    ]
-
-    if literal.names is None:
-        if len(literal.elements) != len(fields):
-            raise TypeError(f"aggregate literal has {len(literal.elements)} "
-                            f"elements, expected {len(fields)}")
-
-        pairs = list(enumerate(literal.elements))
+    if strip_const(sie_type).endswith("[]"):
+        values = list(empty_array_value(gen, type_).constant)
     else:
-        index_of = {field.name: index for index, field in enumerate(fields)}
-
-        pairs = []
-        for name, element in zip(literal.names, literal.elements):
-            if name not in index_of:
-                raise TypeError(f"aggregate literal names unknown field {name!r}")
-
-            if any(index == index_of[name] for index, _ in pairs):
-                raise TypeError(f"aggregate literal sets field {name!r} more than once")
-
-            pairs.append((index_of[name], element))
-
-    for index, element in pairs:
-        check_field_access(gen, sie_type, fields[index])
-        values[index] = constant_value(gen, element, type_.elements[index],
-                                       fields[index].type)
+        values = [
+            ir.Constant(field_type, None) for field_type in type_.elements]
+    for omitted in plan.omitted:
+        values[omitted.index] = constant_field_default(
+            gen, type_.elements[omitted.index], omitted.field)
+    for element in plan.elements:
+        values[element.index] = constant_value(
+            gen,
+            element.value,
+            type_.elements[element.index],
+            element.target,
+        )
 
     return ir.Constant(type_, values)

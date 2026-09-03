@@ -1195,16 +1195,27 @@ def emit_logical(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp, scop
 
 
 def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLiteral,
-                   expected_type: ir.Type | None, scope: dict, field_names: list | None = None):
+                   expected_type: ir.Type | None, scope: dict,
+                   plan=None):
     """
     Emit an aggregate literal, filling the expected struct or array type field by field.
 
-    A positional literal fills every field in order; a named one fills any
-    subset in any order, leaving the rest zero-initialized. When the field
-    Sie type names are known, each element is coerced to its field's type
-    with the same widening rules as any other typed context.
+    A positional literal fills every field in order. A named literal fills
+    any subset in any order, and omitted fields use their checked defaults.
     """
-    # the literal takes its shape from context: an array's '{ptr, length}', say
+    if plan is None:
+        from siec.codegen.hir import checked_aggregate
+
+        plan = checked_aggregate(expr)
+    if plan is not None:
+        return emit_planned_aggregate(
+            gen, builder, expr, expected_type, scope, plan)
+    if gen.emitting:
+        raise RuntimeError(
+            "aggregate literal reached Emit without a checked field plan")
+
+    # Low-level emitter tests do not run Check. Keep their LLVM-shaped
+    # fixture path separate from production emission.
     if not isinstance(expected_type, (ir.LiteralStructType, ir.IdentifiedStructType)):
         raise TypeError(f"aggregate literal needs a struct or array type, not {expected_type}")
 
@@ -1218,7 +1229,8 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
     field_types = expected_type.elements
 
     if expr.names is not None:
-        return emit_named_aggregate(gen, builder, expr, expected_type, scope, field_names)
+        return emit_named_aggregate(
+            gen, builder, expr, expected_type, scope, None)
 
     if len(expr.elements) != len(field_types):
         raise TypeError(f"aggregate literal has {len(expr.elements)} elements, "
@@ -1227,25 +1239,65 @@ def emit_aggregate(gen: CodeGenerator, builder: ir.IRBuilder, expr: AggregateLit
     # build the value by inserting each element into an initially-undefined aggregate
     value = ir.Constant(expected_type, ir.Undefined)
     for index, (element, field_type) in enumerate(zip(expr.elements, field_types)):
-        if field_names is not None:
-            field = emit_coerced(gen, builder, element, field_names[index], scope)
-        else:
-            field = emit_expression(gen, builder, element, field_type, scope)
+        field = emit_expression(gen, builder, element, field_type, scope)
 
         value = builder.insert_value(value, field, index)
 
     return value
 
 
+def emit_planned_aggregate(gen: CodeGenerator, builder: ir.IRBuilder,
+                           expr: AggregateLiteral, expected_type: ir.Type,
+                           scope: dict, plan):
+    """Build a non-union aggregate from its checked field plan."""
+    if not isinstance(expected_type, (ir.LiteralStructType,
+                                      ir.IdentifiedStructType)):
+        raise RuntimeError(
+            "checked aggregate target has no aggregate LLVM representation")
+    if len(expected_type.elements) < (
+            max((entry.index for entry in plan.elements + plan.omitted),
+                default=-1) + 1):
+        raise RuntimeError("checked aggregate field index is out of range")
+
+    value = (empty_array_value(gen, expected_type)
+             if is_array_struct(expected_type)
+             else ir.Constant(expected_type, None))
+    for omitted in plan.omitted:
+        filled = field_default(gen, builder, omitted.field)
+        if filled is not None:
+            value = builder.insert_value(value, filled, omitted.index)
+    for element in plan.elements:
+        filled = emit_coerced(
+            gen, builder, element.value, element.target, scope)
+        value = builder.insert_value(value, filled, element.index)
+    return value
+
+
 def emit_union_aggregate(gen: CodeGenerator, builder: ir.IRBuilder,
                          expr: AggregateLiteral, expected_type: ir.Type,
-                         scope: dict, info, field_names: list | None,
-                         union_name: str):
+                         scope: dict, plan=None, field_names: list | None = None,
+                         union_name: str | None = None):
     """Initialize a union's zeroed storage through one selected field."""
-    from siec.codegen.unions import literal_field
+    if plan is None:
+        from siec.codegen.hir import checked_aggregate
 
-    index, field, element = literal_field(info, expr, union_name)
-    field_name = field_names[index] if field_names is not None else field.type
+        plan = checked_aggregate(expr)
+    if plan is not None:
+        selected = plan.elements[0]
+        field = selected.field
+        element = selected.value
+        field_name = selected.target
+    else:
+        if gen.emitting:
+            raise RuntimeError(
+                "union literal reached Emit without a checked field plan")
+        from siec.codegen.inference import type_info
+        from siec.codegen.unions import literal_field
+
+        info = type_info(gen, union_name)
+        index, field, element = literal_field(info, expr, union_name)
+        field_name = (
+            field_names[index] if field_names is not None else field.type)
     value = emit_coerced(gen, builder, element, field_name, scope)
 
     storage = entry_alloca(builder, expected_type, "union.literal")

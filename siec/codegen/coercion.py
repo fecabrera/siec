@@ -396,22 +396,17 @@ def _emit_checked_coercion(gen: CodeGenerator, builder: ir.IRBuilder,
         return builder.extract_value(value, 1, name="option.value")
 
     if plan.kind == "aggregate":
-        info = type_info(gen, target_name)
-        field_names = (
-            [f"const {field.type}"
-             if plan.const_target and is_aliasing(field.type)
-             and not is_const(field.type) else field.type
-             for field in info.fields]
-            if info is not None else None
-        )
-        if info is not None and info.is_union:
+        aggregate_plan = getattr(expr, "aggregate_plan", None)
+        if aggregate_plan is None:
+            raise RuntimeError(
+                "aggregate coercion reached Emit without a field plan")
+        if aggregate_plan.is_union:
             from siec.codegen.expressions import emit_union_aggregate
 
             return emit_union_aggregate(
-                gen, builder, expr, target_type, scope, info,
-                field_names, target_name)
+                gen, builder, expr, target_type, scope, aggregate_plan)
         return emit_aggregate(
-            gen, builder, expr, target_type, scope, field_names)
+            gen, builder, expr, target_type, scope, aggregate_plan)
 
     if plan.kind == "block":
         return emit_block_expr(
@@ -573,9 +568,9 @@ def _emit_coerced_legacy(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             from siec.codegen.expressions import emit_union_aggregate
 
             return emit_union_aggregate(
-                gen, builder, expr, target_type, scope, info,
-                field_names, target_name)
-        return emit_aggregate(gen, builder, expr, target_type, scope, field_names)
+                gen, builder, expr, target_type, scope,
+                field_names=field_names, union_name=target_name)
+        return emit_aggregate(gen, builder, expr, target_type, scope)
 
     # a block expression coerces each emitted value to the target instead
     if isinstance(expr, BlockExpr):

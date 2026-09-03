@@ -81,6 +81,7 @@ class TypedExpr:
     coerce_to: str | None = None
     coerce_kind: CoerceKind | None = None
     coercion_plan: CoercionPlan | None = None
+    aggregate_plan: object | None = None
     resolved_symbol: str | None = None
     call_plan: CallPlan | None = None
     truthy_symbol: str | None = None
@@ -98,6 +99,7 @@ _TYPED_ATTRS = (
     "coerce_to",
     "coerce_kind",
     "coercion_plan",
+    "aggregate_plan",
     "resolved_symbol",
     "call_plan",
     "truthy_symbol",
@@ -119,6 +121,7 @@ def typed(expr: Expr | object) -> TypedExpr:
         coerce_to=getattr(expr, "coerce_to", None),
         coerce_kind=getattr(expr, "coerce_kind", None),
         coercion_plan=getattr(expr, "coercion_plan", None),
+        aggregate_plan=getattr(expr, "aggregate_plan", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
         call_plan=getattr(expr, "call_plan", None),
         truthy_symbol=getattr(expr, "truthy_symbol", None),
@@ -193,3 +196,8 @@ def checked_call(expr: Expr | object) -> CallPlan | None:
 def checked_coercion(expr: Expr | object) -> CoercionPlan | None:
     """Return the implicit conversion selected during Check, if present."""
     return getattr(expr, "coercion_plan", None)
+
+
+def checked_aggregate(expr: Expr | object):
+    """Return the aggregate field plan recorded during Check, if present."""
+    return getattr(expr, "aggregate_plan", None)
