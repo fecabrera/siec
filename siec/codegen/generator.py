@@ -1063,12 +1063,17 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # request concrete headers and bodies for the fixed-point worklist below.
     from siec.codegen.checking import check_function, resolved_symbol
 
+    ordinary = []
     for fn in program.functions:
         if (fn.type_params is None and fn.receiver_params is None
                 and (fn.body is not None or fn.asm is not None)
                 and id(fn) not in gen.overridden_functions
                 and (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
-            check_function(gen, fn)
+            with gen.in_file(fn.file):
+                ordinary.append((resolved_symbol(gen, fn), fn))
+
+    for _, fn in ordinary:
+        check_function(gen, fn)
 
     # Calls met while checking bodies request concrete generic instances.
     # Resolve their headers, claims, bounds, and bodies to a fixed point.
@@ -1084,14 +1089,7 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     from siec.codegen.functions import shown_signature
 
     defined_symbols = set()
-    for fn in program.functions:
-        if (fn.type_params is not None or fn.receiver_params is not None
-                or (fn.body is None and fn.asm is None)
-                or id(fn) in gen.overridden_functions
-                or not (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
-            continue
-        with gen.in_file(fn.file):
-            symbol = resolved_symbol(gen, fn)
+    for symbol, fn in ordinary:
         if symbol in defined_symbols:
             raise TypeError(
                 f"function '{shown_signature(fn)}' is defined more than once")
@@ -1120,18 +1118,8 @@ def codegen(program: Program, module_name: str, target: str | None = None,
     # cannot be reached from it need no body. Separate compilation and units
     # without a main keep every definition available to an eventual linker.
     from siec.codegen.functions import link_once
-    from siec.codegen.checking import resolved_symbol
     from siec.codegen.worklist import function_instance_symbol
 
-    ordinary = []
-    for fn in program.functions:
-        if (fn.type_params is not None or fn.receiver_params is not None
-                or (fn.body is None and fn.asm is None)
-                or id(fn) in gen.overridden_functions
-                or not (gen.defines(fn.file) or fn.is_static or fn.is_inline)):
-            continue
-        with gen.in_file(fn.file):
-            ordinary.append((resolved_symbol(gen, fn), fn))
     instances = [
         (function_instance_symbol(gen, instance), instance)
         for instance in gen.checked_instance_bodies
