@@ -109,7 +109,9 @@ def resolve_macro_use(gen: CodeGenerator, expr, scope: dict) -> MacroUse | None:
     # as part of declaration resolution so lvalue paths and value paths see
     # exactly the same macro use.
     if isinstance(expr, Member):
-        var = fold_qualified(gen, expr, scope)
+        var = getattr(expr, "qualified_value", None)
+        if var is None:
+            var = fold_qualified(gen, expr, scope)
         if var is None:
             return None
         return resolve_macro_use(gen, var, scope)

@@ -169,7 +169,11 @@ class ItemLValue:
         )
         self.scope = stable_scope
         previous = self.target
-        self.target = Index(Var(name), CachedExpr(previous.index))
+        cached_index = CachedExpr(previous.index)
+        from siec.codegen.hir import copy_typed
+
+        copy_typed(previous.index, cached_index)
+        self.target = Index(Var(name), cached_index)
         self.target.item_get_call = getattr(previous, "item_get_call", None)
         self.target.item_set_call = getattr(previous, "item_set_call", None)
 

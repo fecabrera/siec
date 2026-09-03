@@ -536,7 +536,10 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             return builder.extract_value(closure, 1, name="closure.env")
 
         # a pure name chain may be a module's member, spelled qualified
-        if (folded := fold_qualified(gen, expr, scope)) is not None:
+        folded = getattr(expr, "qualified_value", None)
+        if folded is None:
+            folded = fold_qualified(gen, expr, scope)
+        if folded is not None:
             return emit_expression(gen, builder, folded, expected_type, scope)
 
         # an unnamed member's fields hoist: 'r.value' reads through 'r.#n'
@@ -1705,7 +1708,8 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
         slot = entry_alloca(builder, resolve_type(value_type, gen.structs),
                             "try.value")
 
-    ok = emit_bool(gen, builder, Member(Var(HOLDER), "ok"), inner)
+    ok_member = getattr(expr, "ok_member", Member(Var(HOLDER), "ok"))
+    ok = emit_bool(gen, builder, ok_member, inner)
 
     func = builder.function
     ok_block = func.append_basic_block("try.ok")
@@ -1716,8 +1720,10 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     # the value the result carried, taken where its tag says it holds
     builder.position_at_end(ok_block)
     if slot is not None:
-        builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "value"),
-                                   value_type, inner), slot)
+        value_member = getattr(
+            expr, "value_member", Member(Var(HOLDER), "value"))
+        builder.store(emit_coerced(
+            gen, builder, value_member, value_type, inner), slot)
 
     builder.branch(end_block)
 
@@ -1737,8 +1743,10 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
 
         error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
                                   name)
-        builder.store(emit_coerced(gen, builder, Member(Var(HOLDER), "error"),
-                                   error_type, arm), error_slot)
+        error_member = getattr(
+            expr, "error_member", Member(Var(HOLDER), "error"))
+        builder.store(emit_coerced(
+            gen, builder, error_member, error_type, arm), error_slot)
         owned_error = destroyable(gen, error_type)
         error_flag = new_drop_flag(
             builder, name, initialized=owned_error) if owned_error else None

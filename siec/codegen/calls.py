@@ -112,11 +112,14 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     if plan.receiver is not None:
         if plan.passes_receiver:
+            written_call = call
             call = Call(
                 call.name,
                 [plan.receiver, *call.args],
                 call.type_args,
             )
+            if hasattr(written_call, "packed_variadic"):
+                call.packed_variadic = written_call.packed_variadic
         else:
             emit_expression(gen, builder, plan.receiver, None, scope)
 
@@ -152,7 +155,8 @@ def _emit_resolved_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
     # a 'name...' variadic packs the call's extra arguments into its
     # trailing const Any[]; an explicit Any[] argument forwards as-is
     if func.name in gen.variadics:
-        call = pack_variadic(gen, call, expected, scope)
+        call = getattr(call, "packed_variadic", None) or pack_variadic(
+            gen, call, expected, scope)
 
     # trailing parameters with defaults are optional at the call
     defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))

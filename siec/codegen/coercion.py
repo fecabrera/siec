@@ -321,6 +321,153 @@ def emit_cast(gen: CodeGenerator, builder: ir.IRBuilder, expr: Cast, scope: dict
 def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
                  target_name: str | None, scope: dict, *,
                  _inside_option: bool = False):
+    """Emit the implicit conversion selected during Check."""
+    from siec.codegen.expressions import emit_expression
+
+    if target_name is None:
+        return emit_expression(gen, builder, expr, None, scope)
+
+    from siec.codegen.macros import resolve_macro_use
+
+    use = resolve_macro_use(gen, expr, scope)
+    if use is not None:
+        from siec.codegen.expressions import emit_block_expr
+        from siec.codegen.macros import macro_expansion, macro_view
+
+        call = use.call
+        expansion = macro_expansion(gen, call)
+        if isinstance(expansion, Block):
+            raise TypeError(f"macro {call.name!r} does not 'emit' a value")
+        with macro_view(gen, call.name):
+            if isinstance(expansion, BlockExpr):
+                target_name = strip_const(target_name)
+                return emit_block_expr(
+                    gen, builder, expansion,
+                    resolve_type(target_name, gen.structs),
+                    scope, target_name)
+            return emit_coerced(gen, builder, expansion, target_name, scope)
+
+    if (copied := getattr(expr, "owned_copy", None)) is not None:
+        return emit_coerced(gen, builder, copied, target_name, scope)
+
+    from siec.codegen.hir import checked_coercion
+
+    plan = checked_coercion(expr)
+    if plan is None:
+        if not gen.emitting:
+            return _emit_coerced_legacy(
+                gen, builder, expr, target_name, scope,
+                _inside_option=_inside_option)
+        raise RuntimeError(
+            f"coercion to {target_name!r} reached Emit without a checked plan")
+    if strip_const(plan.target) != strip_const(target_name):
+        raise RuntimeError(
+            f"checked coercion targets {plan.target!r}, not {target_name!r}")
+    return _emit_checked_coercion(gen, builder, expr, plan, scope)
+
+
+def _emit_checked_coercion(gen: CodeGenerator, builder: ir.IRBuilder,
+                           expr: Expr, plan, scope: dict):
+    """Lower one checked coercion plan without source-language validation."""
+    from siec.codegen.expressions import (
+        emit_aggregate,
+        emit_array,
+        emit_block_expr,
+        emit_expression,
+    )
+
+    target_name = strip_const(plan.target)
+    target_type = resolve_type(target_name, gen.structs)
+
+    if plan.kind == "option_wrap":
+        value = _emit_checked_coercion(
+            gen, builder, expr, plan.nested, scope)
+        wrapped = ir.Constant(target_type, None)
+        wrapped = builder.insert_value(
+            wrapped, ir.Constant(ir.IntType(1), 1), 0,
+            name="option.present")
+        return builder.insert_value(
+            wrapped, value, 1, name="option.value")
+
+    if plan.kind == "option_decay":
+        value = emit_expression(
+            gen, builder, expr,
+            resolve_type(strip_const(plan.source), gen.structs), scope)
+        return builder.extract_value(value, 1, name="option.value")
+
+    if plan.kind == "aggregate":
+        info = type_info(gen, target_name)
+        field_names = (
+            [f"const {field.type}"
+             if plan.const_target and is_aliasing(field.type)
+             and not is_const(field.type) else field.type
+             for field in info.fields]
+            if info is not None else None
+        )
+        if info is not None and info.is_union:
+            from siec.codegen.expressions import emit_union_aggregate
+
+            return emit_union_aggregate(
+                gen, builder, expr, target_type, scope, info,
+                field_names, target_name)
+        return emit_aggregate(
+            gen, builder, expr, target_type, scope, field_names)
+
+    if plan.kind == "block":
+        return emit_block_expr(
+            gen, builder, expr, target_type, scope, target_name)
+
+    if plan.kind == "tuple":
+        from siec.codegen.expressions import emit_tuple
+
+        return emit_tuple(gen, builder, expr, scope, target_name)
+
+    if plan.kind in ("array", "array_literal_decay"):
+        if plan.kind == "array_literal_decay":
+            array_type = ir.LiteralStructType(
+                [target_type, ir.IntType(64)])
+            element_name = strip_nonnull(target_name).removesuffix("*")
+            value = emit_array(
+                gen, builder, expr, array_type, scope, element_name)
+            return builder.extract_value(value, 0, name="decay")
+        element_name = (
+            target_name[:-2] if target_name.endswith("[]") else None)
+        return emit_array(
+            gen, builder, expr, target_type, scope, element_name)
+
+    if plan.kind == "function_reference":
+        from siec.codegen.worklist import activate_function_instance
+
+        activate_function_instance(gen, plan.symbol)
+        func = gen.module.globals.get(plan.symbol)
+        if not isinstance(func, ir.Function):
+            raise RuntimeError(
+                f"checked function reference {plan.symbol!r} was not lowered")
+        return func
+
+    if plan.kind in ("identity", "adopt", "null"):
+        return emit_expression(gen, builder, expr, target_type, scope)
+
+    value = emit_expression(gen, builder, expr, None, scope)
+    if plan.kind == "array_decay":
+        return builder.extract_value(value, 0, name="decay")
+    if plan.kind == "opaque":
+        decayed = emit_opaque_pointer(builder, value, target_type)
+        if decayed is None:
+            raise RuntimeError("checked opaque-pointer coercion is not a pointer")
+        return decayed
+    if plan.kind == "sign_extend":
+        return builder.sext(value, target_type)
+    if plan.kind == "zero_extend":
+        return builder.zext(value, target_type)
+    if plan.kind == "float_extend":
+        return builder.fpext(value, target_type)
+    raise RuntimeError(f"unknown checked coercion kind {plan.kind!r}")
+
+
+def _emit_coerced_legacy(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
+                         target_name: str | None, scope: dict, *,
+                         _inside_option: bool = False):
     """
     Emit an expression for a typed context, implicitly widening it to the target when allowed.
 

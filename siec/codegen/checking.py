@@ -22,6 +22,7 @@ from siec.ast import (
     Emit,
     Expr,
     ExprStmt,
+    FloatLiteral,
     For,
     Foreach,
     Function,
@@ -972,13 +973,12 @@ def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
     # checks and alias expansion, rather than only to qualified-name lookup.
     with expression_view(gen, expr):
         result = _check_expression(gen, expr, scope, expected)
-        # Calls return their declared type even when an expected type drove
-        # generic resolution.  Apply the ordinary value conversion here as
-        # the common boundary so constructors and method calls receive the
-        # same coercion stamps as literals and variable reads.
-        if (isinstance(expr, (Call, MethodCall))
-                and expected is not None and result is not None
-                and result != expected):
+        # Some expression checks return the contextual type after they check
+        # their children.  Record an identity plan on that outer expression
+        # too.  This gives Emit one complete instruction for every contextual
+        # expression, including calls whose declared type equals the target.
+        if (expected is not None and result is not None
+                and getattr(expr, "coercion_plan", None) is None):
             require_fit(gen, expr, result, expected)
         return annotate_result(
             expr,
@@ -1042,6 +1042,8 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         if expected is not None and strip_const(expected) != actual:
             raise TypeError(f"cannot use a {actual!r} value where "
                             f"{expected!r} is expected")
+        if expected is not None:
+            require_fit(gen, expr, actual, expected)
         return actual
 
     if isinstance(expr, Var):
@@ -1068,18 +1070,37 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 return reference_type(gen, expr)
 
         if (expected is not None
-                and strip_const(expected).startswith("fn(")
-                and reference_for_target(gen, expr, expected) is not None):
-            return expected
+                and strip_const(expected).startswith("fn(")):
+            module_file = getattr(expr, "module_file", None)
+            with gen.in_file(module_file or gen.current_file):
+                reference = reference_for_target(gen, expr, expected)
+            if reference is not None:
+                from siec.codegen.hir import CoercionPlan, stamp
+
+                symbol = getattr(reference, "name", reference)
+                stamp(
+                    expr,
+                    coercion_plan=CoercionPlan(
+                        expected, expected, "function_reference",
+                        symbol=symbol,
+                    ),
+                    coerce_to=expected,
+                    coerce_kind="function_reference",
+                    overwrite=True,
+                )
+                return expected
 
         const = (find_constant(
             gen,
             expr.name,
             getattr(expr, "module_file", None),
         ) if expr.name not in scope else None)
-        if const is not None and const.type is None:
+        if const is not None:
             with constant_view(gen, const):
-                return check_expression(gen, const.value, scope, expected)
+                if const.type is not None:
+                    check_expression(gen, const.value, scope, const.type)
+                else:
+                    return check_expression(gen, const.value, scope, expected)
 
     if isinstance(expr, MethodCall):
         from siec.codegen.methods import resolve_method
@@ -1110,6 +1131,8 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             call_plan=getattr(call, "call_plan", None),
             overwrite=True,
         )
+        if hasattr(call, "packed_variadic"):
+            expr.packed_variadic = call.packed_variadic
         from siec.codegen.ownership import mark_self_returned_temporary
 
         mark_self_returned_temporary(gen, expr)
@@ -1123,7 +1146,12 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         from siec.codegen.resolution import fold_qualified
 
         if (folded := fold_qualified(gen, expr, scope)) is not None:
-            return check_expression(gen, folded, scope, expected)
+            result = check_expression(gen, folded, scope, expected)
+            from siec.codegen.hir import copy_typed
+
+            copy_typed(folded, expr)
+            expr.qualified_value = folded
+            return result
 
         from siec.codegen.types import raw_array
 
@@ -1164,6 +1192,16 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
     if isinstance(expr, BlockExpr):
         target = expected or block_emit_type(gen, expr.body, scope)
         check_block_expression(gen, expr, scope, target)
+        if target is not None:
+            from siec.codegen.hir import CoercionPlan, stamp
+
+            stamp(
+                expr,
+                coercion_plan=CoercionPlan(target, target, "block"),
+                coerce_to=target,
+                coerce_kind="block",
+                overwrite=True,
+            )
         return target
 
     if isinstance(expr, Try):
@@ -1172,12 +1210,23 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         value_type, error_type = try_arms(gen, expr, scope)
         consume_owned_expression(gen, expr.result, result_type, scope)
 
+        result_scope = dict(scope)
+        result_scope["try.result"] = checked_variable(result_type)
+        expr.ok_member = Member(Var("try.result"), "ok")
+        check_expression(gen, expr.ok_member, result_scope, "bool")
+        if value_type is not None:
+            expr.value_member = Member(Var("try.result"), "value")
+            check_expression(
+                gen, expr.value_member, result_scope, value_type)
+        expr.error_member = Member(Var("try.result"), "error")
+        check_expression(gen, expr.error_member, result_scope, error_type)
+
         if value_type is None and expected is not None:
             from siec.codegen.inference import valueless_try
 
             raise valueless_try(result_type)
         if value_type is not None and expected is not None:
-            require_fit(gen, Var(".try.value"), value_type, expected)
+            require_fit(gen, expr, value_type, expected)
 
         if expr.propagates:
             check_try_propagation(gen, error_type)
@@ -1228,6 +1277,18 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
     if isinstance(expr, AggregateLiteral):
         if expected is not None:
+            from siec.codegen.hir import CoercionPlan, stamp
+
+            stamp(
+                expr,
+                coercion_plan=CoercionPlan(
+                    None, expected, "aggregate",
+                    const_target=is_const(expected),
+                ),
+                coerce_to=expected,
+                coerce_kind="aggregate",
+                overwrite=True,
+            )
             from siec.codegen.inference import type_info
 
             info = type_info(gen, expected)
@@ -1282,22 +1343,78 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
     if isinstance(expr, ArrayLiteral):
         element = None
-        if expected is not None and strip_const(expected).endswith("[]"):
-            element = strip_const(expected)[:-2]
+        if expected is not None:
+            target = strip_const(expected)
+            if target.endswith("[]"):
+                element = target[:-2]
+                kind = "array"
+            elif target.endswith("*"):
+                from siec.codegen.types import strip_nonnull
+
+                element = strip_nonnull(target).removesuffix("*")
+                kind = "array_literal_decay"
+            else:
+                kind = "array"
+            from siec.codegen.hir import CoercionPlan, stamp
+
+            stamp(
+                expr,
+                coercion_plan=CoercionPlan(None, expected, kind),
+                coerce_to=expected,
+                coerce_kind=kind,
+                overwrite=True,
+            )
         for value in expr.elements:
             check_expression(gen, value, scope, element)
         return expected or infer_type(gen, expr, scope)
 
     if isinstance(expr, TupleLiteral):
-        for value in expr.elements:
-            check_expression(gen, value, scope)
-        return expr_sie_type(gen, expr, scope)
+        element_types = None
+        result = expr_sie_type(gen, expr, scope)
+        if expected is not None:
+            from siec.codegen.generics import split_generic
+
+            parts = split_generic(strip_const(expected))
+            if parts is not None and parts[0] == "Tuple":
+                element_types = parts[1]
+        elif result is not None:
+            from siec.codegen.generics import split_generic
+
+            parts = split_generic(strip_const(result))
+            if parts is not None and parts[0] == "Tuple":
+                element_types = parts[1]
+        for index, value in enumerate(expr.elements):
+            target = (element_types[index]
+                      if element_types is not None
+                      and index < len(element_types) else None)
+            check_expression(gen, value, scope, target)
+        if expected is not None:
+            from siec.codegen.hir import CoercionPlan, stamp
+
+            stamp(
+                expr,
+                coercion_plan=CoercionPlan(result, expected, "tuple"),
+                coerce_to=expected,
+                coerce_kind="tuple",
+                overwrite=True,
+            )
+            return expected
+        return result
 
     if isinstance(expr, Ternary):
         check_truth(gen, expr.condition, scope)
         if expected is not None:
             check_expression(gen, expr.then, scope, expected)
             check_expression(gen, expr.orelse, scope, expected)
+            from siec.codegen.hir import CoercionPlan, stamp
+
+            stamp(
+                expr,
+                coercion_plan=CoercionPlan(expected, expected, "identity"),
+                coerce_to=expected,
+                coerce_kind="identity",
+                overwrite=True,
+            )
             return expected
 
         target = (
@@ -1314,6 +1431,15 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             )
             raise TypeError(
                 f"ternary arms disagree: {target} vs {other}") from None
+        from siec.codegen.hir import CoercionPlan, stamp
+
+        stamp(
+            expr,
+            coercion_plan=CoercionPlan(target, target, "identity"),
+            coerce_to=target,
+            coerce_kind="identity",
+            overwrite=True,
+        )
         return target
 
     if isinstance(expr, Cast):
@@ -1321,7 +1447,16 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             expr.type = expand_alias(gen, expr.type)
             expr.expanded = True
         validate_type(expr.type, gen.structs)
-        operand_type = check_expression(gen, expr.operand, scope)
+        contextual_operand = (
+            expr.type
+            if isinstance(
+                expr.operand,
+                (AggregateLiteral, ArrayLiteral, TupleLiteral, BlockExpr),
+            )
+            else None
+        )
+        operand_type = check_expression(
+            gen, expr.operand, scope, contextual_operand)
         from siec.codegen.types import is_nonnull_pointer
 
         if (is_nonnull_pointer(expr.type)
@@ -1352,6 +1487,8 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 and not (target.startswith("fn(")
                          and not fn_type_parts(target)[2])):
             raise TypeError("'null' needs a pointer context")
+        if expected is not None:
+            require_fit(gen, expr, "opaque*", expected)
         return expected or "opaque*"
 
     if isinstance(expr, SizeOf):
@@ -1394,6 +1531,16 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         if (rewritten := slice_call(gen, expr, scope)) is not None:
             expr.slice_call = rewritten
             return check_expression(gen, rewritten, scope, expected)
+        base_type = check_expression(gen, expr.base, scope, expected)
+        if expr.start is not None:
+            check_expression(gen, expr.start, scope, "u64")
+        if expr.stop is not None:
+            check_expression(gen, expr.stop, scope, "u64")
+        actual = base_type or expr_sie_type(gen, expr, scope)
+        if expected is not None:
+            require_fit(gen, expr, actual, expected)
+            return expected
+        return actual
 
     if isinstance(expr, UnaryOp) and expr.op == "&":
         lvalue_type(gen, expr.operand, scope)
@@ -1746,6 +1893,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                     init,
                     default_offset=default_offset,
                 )
+                if hasattr(call, "packed_variadic"):
+                    written_call.packed_variadic = call.packed_variadic
                 from siec.codegen.deprecation import note_use
 
                 note_use(gen, init)
@@ -1785,6 +1934,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         params,
         symbol,
     )
+    if hasattr(call, "packed_variadic"):
+        written_call.packed_variadic = call.packed_variadic
 
     from siec.codegen.deprecation import note_use
 
@@ -1802,10 +1953,6 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
           expected_type=expected, overwrite=True)
     stamp(written_call, resolved_symbol=symbol, call_plan=plan, sie_type=result,
           expected_type=expected, overwrite=True)
-    if expected is not None and result is not None and expected != result:
-        stamp(call, coerce_to=expected, coerce_kind="widen", overwrite=True)
-        stamp(written_call, coerce_to=expected, coerce_kind="widen",
-              overwrite=True)
     return result
 
 
@@ -1868,13 +2015,28 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
             actual = check_expression(gen, arg, scope, param)
             if not is_const(param):
                 consume_owned_expression(gen, arg, actual or param, scope)
-    for arg in call.args[fixed:]:
-        actual = check_expression(gen, arg, scope)
+    packed = None
+    if arity.variadic:
+        from siec.codegen.calls import pack_variadic
+
+        packed = pack_variadic(gen, call, len(params), scope)
+
+    for index, arg in enumerate(call.args[fixed:], start=fixed):
+        forwarded = (
+            packed is call and index == len(params) - 1
+            and len(call.args) == len(params)
+        )
+        actual = check_expression(
+            gen, arg, scope, params[-1] if forwarded else None)
         if arity.variadic and actual is not None:
             wrapped = strip_const(strip_reference(actual))
             if wrapped != "Any":
                 gen.any_types.setdefault(gen.current_function, set()).add(
                     wrapped)
+
+    if packed is not None and packed is not call:
+        check_expression(gen, packed.args[-1], scope, params[-1])
+        call.packed_variadic = packed
 
     # Omitted defaults are part of this call's checked expression graph.
     # Resolve them in the declaration's file view and without caller locals,
@@ -1939,51 +2101,93 @@ def check_reference_argument(gen: CodeGenerator, arg: Expr, param: str,
 
 
 def require_fit(gen: CodeGenerator, expr: Expr, actual: str,
-                expected: str) -> None:
-    """Require an expression to fit a semantic target type."""
+                expected: str):
+    """Require a fit and record the exact implicit conversion operation."""
     from siec.codegen.overloads import parameter_fit
     from siec.codegen.types import is_nonnull_pointer, strip_nonnull
+    from siec.codegen.hir import CoercionPlan, stamp
+
+    source = strip_const(actual)
+    target = strip_const(expected)
+
+    def accept(kind, *, nested=None):
+        plan = CoercionPlan(
+            actual,
+            expected,
+            kind,
+            nested=nested,
+            const_target=is_const(expected),
+        )
+        stamp(
+            expr,
+            coerce_to=expected,
+            coerce_kind=kind,
+            coercion_plan=plan,
+            overwrite=True,
+        )
+        return plan
 
     if parameter_fit(gen, expr, actual, expected) is not None:
-        source = strip_const(actual)
-        target = strip_const(expected)
         if (is_nonnull_pointer(target) and not is_nonnull_pointer(source)
                 and strip_nonnull(source) == strip_nonnull(target)):
             expr.requires_nonnull = True
-        return
+        if isinstance(expr, NullLiteral):
+            return accept("null")
+        if target == "opaque*" and (
+                source.endswith("*") or source.endswith("[]")):
+            return accept("opaque")
+        if (source.endswith("[]")
+                and strip_nonnull(target) == f"{source[:-2]}*"):
+            return accept("array_decay")
+
+        from siec.codegen.inference import enum_backing, numeric_class
+
+        source_class = numeric_class(enum_backing(gen, source))
+        target_class = numeric_class(enum_backing(gen, target))
+        literal = isinstance(expr, (IntLiteral, SizeOf, TypeId)) or (
+            isinstance(expr, FloatLiteral)
+            and target_class is not None and target_class[0] == "f"
+        )
+        if literal and target_class is not None:
+            return accept("adopt")
+        if (source_class is not None and target_class is not None
+                and source_class[1] < target_class[1]):
+            return accept({
+                "i": "sign_extend",
+                "u": "zero_extend",
+                "f": "float_extend",
+            }[target_class[0]])
+        return accept("identity")
 
     # a bare integer literal fills a 'char' or 'bool' target like the
     # small integer it emits as; overload ranking still prefers a numeric
     # candidate, so only the direct fit widens here
     if (strip_const(expected) in ("char", "bool")
             and isinstance(expr, IntLiteral)):
-        return
+        return accept("adopt")
 
     if isinstance(expr, NullLiteral):
         # a bare function reference is a pointer at heart: 'null' clears
         # a callback the same way it clears any pointer target
         target = strip_const(expected)
         if target.startswith("fn(") and not fn_type_parts(target)[2]:
-            return
+            return accept("null")
         raise TypeError("'null' needs a pointer context")
-
-    source = strip_const(actual)
-    target = strip_const(expected)
 
     from siec.codegen.inference import option_value
 
     # Any value fitting T fills an Option<T>; after flow checking has proven
     # presence, an Option<T> expression may in turn stand in for its T.
     if (carried := option_value(target)) is not None:
-        require_fit(gen, expr, actual, carried)
+        nested = require_fit(gen, expr, actual, carried)
         expr.option_wrap_type = carried
-        return
+        return accept("option_wrap", nested=nested)
     if (carried := option_value(source)) is not None:
         if strip_const(carried) != target:
             raise TypeError(f"cannot implicitly convert {actual} to {target}")
         expr.option_source_type = source
         expr.option_decay_type = carried
-        return
+        return accept("option_decay")
 
     if (is_const(actual) and is_aliasing(source)
             and not is_const(expected)):

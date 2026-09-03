@@ -812,6 +812,8 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
         call.expected_type = context
     if (sie_type := getattr(expr, "sie_type", None)) is not None:
         stamp(call, sie_type=sie_type, overwrite=True)
+    if hasattr(expr, "packed_variadic"):
+        call.packed_variadic = expr.packed_variadic
 
     return emit_call(gen, builder, call, scope, as_address)
 

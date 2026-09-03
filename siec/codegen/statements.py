@@ -599,13 +599,29 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
         return
 
     def bind_operator_rewrite(replacement, checked_value) -> None:
-        """Rebind a checked operator method to a cached assignment target."""
+        """Transfer checked plans to a cached assignment replacement."""
         from dataclasses import replace
-        from siec.codegen.hir import checked_call, stamp
+        from siec.codegen.hir import checked_call, checked_coercion, stamp
+
+        stamp(
+            replacement,
+            sie_type=getattr(checked_value, "sie_type", None),
+            expected_type=getattr(checked_value, "expected_type", None),
+            coercion_plan=checked_coercion(checked_value),
+            overwrite=True,
+        )
 
         checked_rewrite = getattr(checked_value, "operator_rewrite", None)
         if not isinstance(checked_rewrite, MethodCall):
             return
+        stamp(
+            replacement.left,
+            sie_type=getattr(checked_rewrite.receiver, "sie_type", None),
+            expected_type=getattr(
+                checked_rewrite.receiver, "expected_type", None),
+            coercion_plan=checked_coercion(checked_rewrite.receiver),
+            overwrite=True,
+        )
         rewritten = MethodCall(
             replacement.left,
             checked_rewrite.method,

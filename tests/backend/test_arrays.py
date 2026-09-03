@@ -423,7 +423,7 @@ def test_aggregate_literal_slices_in_place(run):
     """
     source = """
     fn main(argc: i32, argv: char**) -> i32 {
-        let args: char*[] = {argv, argc as u64}[1:];
+        let args: char*[] = {argv!, argc as u64}[1:];
         return args.length as i32;
     }
     """

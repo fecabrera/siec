@@ -3,7 +3,8 @@
 Checking records semantic decisions once; emission reads them instead of
 re-inferring. Annotations live on the expression nodes themselves (dynamic
 attributes) so macro identity, hoisting, and deepcopy paths stay unchanged.
-Missing stamps still allow emit to fall back to the legacy resolution path.
+Production emission requires these stamps. Isolated emitter tests can use
+the legacy path when they do not run the compiler phases.
 """
 
 from __future__ import annotations
@@ -15,11 +16,21 @@ from siec.ast import Expr
 
 CoerceKind = Literal[
     "identity",
-    "widen",
+    "sign_extend",
+    "zero_extend",
+    "float_extend",
     "array_decay",
     "opaque",
     "null",
     "adopt",
+    "option_wrap",
+    "option_decay",
+    "aggregate",
+    "block",
+    "tuple",
+    "array",
+    "array_literal_decay",
+    "function_reference",
 ]
 
 ValueCategory = Literal[
@@ -45,6 +56,18 @@ class CallPlan:
 
 
 @dataclass(frozen=True)
+class CoercionPlan:
+    """One implicit conversion selected during Check."""
+
+    source: str | None
+    target: str
+    kind: CoerceKind
+    nested: CoercionPlan | None = None
+    symbol: str | None = None
+    const_target: bool = False
+
+
+@dataclass(frozen=True)
 class TypedExpr:
     """
     View of the typed-HIR fields stamped on an expression.
@@ -57,6 +80,7 @@ class TypedExpr:
     expected_type: str | None = None
     coerce_to: str | None = None
     coerce_kind: CoerceKind | None = None
+    coercion_plan: CoercionPlan | None = None
     resolved_symbol: str | None = None
     call_plan: CallPlan | None = None
     truthy_symbol: str | None = None
@@ -73,6 +97,7 @@ _TYPED_ATTRS = (
     "expected_type",
     "coerce_to",
     "coerce_kind",
+    "coercion_plan",
     "resolved_symbol",
     "call_plan",
     "truthy_symbol",
@@ -93,6 +118,7 @@ def typed(expr: Expr | object) -> TypedExpr:
         expected_type=getattr(expr, "expected_type", None),
         coerce_to=getattr(expr, "coerce_to", None),
         coerce_kind=getattr(expr, "coerce_kind", None),
+        coercion_plan=getattr(expr, "coercion_plan", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
         call_plan=getattr(expr, "call_plan", None),
         truthy_symbol=getattr(expr, "truthy_symbol", None),
@@ -126,14 +152,18 @@ def stamp(expr: Expr | object, **fields) -> None:
         setattr(expr, name, value)
 
 
+def copy_typed(source: Expr | object, target: Expr | object) -> None:
+    """Copy all checked expression annotations to an equivalent HIR node."""
+    for name in _TYPED_ATTRS:
+        if (value := getattr(source, name, None)) is not None:
+            setattr(target, name, value)
+
+
 def annotate_result(expr: Expr | object, result: str | None,
                     expected: str | None = None, *,
                     line: int = 0, file: str | None = None) -> str | None:
     """
     Stamp an expression's resolved type after a successful check.
-
-    When ``expected`` differs from ``result``, record the coercion target
-    so emission can widen without re-validating the fit.
 
     Returns ``result`` unchanged: callers that bind inferred types (including
     ``const`` views) must see the checked type, not the expectation that
@@ -143,9 +173,7 @@ def annotate_result(expr: Expr | object, result: str | None,
         stamp(expr, sie_type=result)
     if expected is not None:
         stamp(expr, expected_type=expected)
-        if result is not None and result != expected:
-            stamp(expr, coerce_to=expected, coerce_kind="widen")
-        elif result is None:
+        if result is None:
             stamp(expr, sie_type=expected)
     if line or file:
         stamp(expr, span=(file, line))
@@ -160,3 +188,8 @@ def resolved_callee(expr: Expr | object) -> str | None:
 def checked_call(expr: Expr | object) -> CallPlan | None:
     """Return the call plan recorded during Check, if present."""
     return getattr(expr, "call_plan", None)
+
+
+def checked_coercion(expr: Expr | object) -> CoercionPlan | None:
+    """Return the implicit conversion selected during Check, if present."""
+    return getattr(expr, "coercion_plan", None)
