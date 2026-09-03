@@ -413,15 +413,9 @@ def parse_primary(ts: TokenStream) -> Expr:
             if method_args is None and ts.peek().syntax != "(":
                 return parse_postfix(
                     ts, EnumMember(f"{tok.value}<{','.join(type_args)}>", member))
-            ts.next()
-
-            args = []
-            while ts.peek().syntax != ")":
-                if args:
-                    ts.expect("sym", ",")
-
-                args.append(parse_expression(ts))
-            ts.expect("sym", ")")
+            ts.expect("sym", "(")
+            args = parse_delimited(
+                ts, ")", lambda _: parse_expression(ts))
 
             return parse_postfix(ts, Call(name, args, method_args))
 
@@ -435,16 +429,9 @@ def parse_primary(ts: TokenStream) -> Expr:
             return parse_postfix(ts, Var(tok.value, type_args=type_args))
 
         if type_args is not None or ts.peek().syntax == "(":
-            ts.next()
-
-            # comma-separated argument expressions up to the closing ')'
-            args = []
-            while ts.peek().syntax != ")":
-                if args:
-                    ts.expect("sym", ",")
-
-                args.append(parse_expression(ts))
-            ts.expect("sym", ")")
+            ts.expect("sym", "(")
+            args = parse_delimited(
+                ts, ")", lambda _: parse_expression(ts))
 
             expr = Call(tok.value, args, type_args)
         else:
@@ -453,6 +440,23 @@ def parse_primary(ts: TokenStream) -> Expr:
         return parse_postfix(ts, expr)
 
     raise SyntaxError(f"line {tok.line}: unexpected token {tok.value!r} in expression")
+
+
+def parse_delimited(ts: TokenStream, closing: str, parse_item) -> list:
+    """
+    Parse comma-separated items after their opening delimiter.
+
+    The item callback receives its zero-based index. The closing delimiter is
+    consumed. Trailing commas are rejected.
+    """
+    items = []
+    while ts.peek().syntax != closing:
+        if items:
+            ts.expect("sym", ",")
+        items.append(parse_item(len(items)))
+
+    ts.expect("sym", closing)
+    return items
 
 
 def parse_qualified_tail(ts: TokenStream, receiver: str) -> Expr:
@@ -468,12 +472,7 @@ def parse_qualified_tail(ts: TokenStream, receiver: str) -> Expr:
         return EnumMember(receiver, member)
 
     ts.expect("sym", "(")
-    args = []
-    while ts.peek().syntax != ")":
-        if args:
-            ts.expect("sym", ",")
-        args.append(parse_expression(ts))
-    ts.expect("sym", ")")
+    args = parse_delimited(ts, ")", lambda _: parse_expression(ts))
     return Call(f"{receiver}::{member}", args, method_args)
 
 
@@ -495,21 +494,24 @@ def parse_typed_param(ts: TokenStream, index: int) -> Param:
     return Param(name, parse_type(ts), pattern=pattern)
 
 
-def parse_closure_tail(ts: TokenStream, line: int,
-                       name: str | None = None) -> ClosureExpr:
-    """Parse the signature and body after an anonymous or local ``fn``."""
-    ts.expect("sym", "(")
-    params = []
-    while ts.peek().syntax != ")":
-        if params:
-            ts.expect("sym", ",")
-        params.append(parse_typed_param(ts, len(params)))
-    ts.next()
+def parse_closure_signature(ts: TokenStream) -> tuple[list[Param], str | None]:
+    """Parse closure parameters and their optional return type."""
+    params = parse_delimited(
+        ts, ")", lambda index: parse_typed_param(ts, index))
 
     return_type = None
     if ts.peek().value == "->":
         ts.next()
         return_type = parse_type(ts)
+
+    return params, return_type
+
+
+def parse_closure_tail(ts: TokenStream, line: int,
+                       name: str | None = None) -> ClosureExpr:
+    """Parse the signature and body after an anonymous or local ``fn``."""
+    ts.expect("sym", "(")
+    params, return_type = parse_closure_signature(ts)
 
     from siec.parser.statements import parse_block
 
@@ -525,17 +527,7 @@ def parse_lambda_tail(ts: TokenStream, line: int) -> ClosureExpr:
     that function's statement list. An expression body is one statement,
     ``return expr`` when a return type is written and ``expr`` otherwise.
     """
-    params = []
-    while ts.peek().syntax != ")":
-        if params:
-            ts.expect("sym", ",")
-        params.append(parse_typed_param(ts, len(params)))
-    ts.next()
-
-    return_type = None
-    if ts.peek().value == "->":
-        ts.next()
-        return_type = parse_type(ts)
+    params, return_type = parse_closure_signature(ts)
     ts.expect("sym", "=>")
 
     from siec.parser.statements import parse_block, parse_step
@@ -659,12 +651,8 @@ def parse_asm_tail(ts: TokenStream) -> AsmBlock:
     args = []
     if ts.peek().syntax == "(":
         ts.next()
-        while ts.peek().syntax != ")":
-            if args:
-                ts.expect("sym", ",")
-
-            args.append(ts.expect("ident").value)
-        ts.next()
+        args = parse_delimited(
+            ts, ")", lambda _: ts.expect("ident").value)
 
     return_type = None
     if ts.peek().value == "->":
@@ -760,13 +748,9 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 method_args = parse_type_arguments(ts)
 
             if method_args is not None or ts.peek().syntax == "(":
-                ts.next()
-                args = []
-                while ts.peek().syntax != ")":
-                    if args:
-                        ts.expect("sym", ",")
-                    args.append(parse_expression(ts))
-                ts.expect("sym", ")")
+                ts.expect("sym", "(")
+                args = parse_delimited(
+                    ts, ")", lambda _: parse_expression(ts))
                 expr = Call(f"{receiver}::{member}", args, method_args)
             else:
                 expr = EnumMember(receiver, member)
@@ -786,15 +770,9 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 continue
 
             if type_args is not None or ts.peek().syntax == "(":
-                ts.next()
-
-                args = []
-                while ts.peek().syntax != ")":
-                    if args:
-                        ts.expect("sym", ",")
-
-                    args.append(parse_expression(ts))
-                ts.expect("sym", ")")
+                ts.expect("sym", "(")
+                args = parse_delimited(
+                    ts, ")", lambda _: parse_expression(ts))
 
                 expr = Call(".".join(names), args, type_args)
                 continue
@@ -808,15 +786,9 @@ def parse_postfix(ts: TokenStream, expr: Expr) -> Expr:
                 type_args = parse_type_arguments(ts)
 
             if type_args is not None or ts.peek().syntax == "(":
-                ts.next()
-
-                args = []
-                while ts.peek().syntax != ")":
-                    if args:
-                        ts.expect("sym", ",")
-
-                    args.append(parse_expression(ts))
-                ts.expect("sym", ")")
+                ts.expect("sym", "(")
+                args = parse_delimited(
+                    ts, ")", lambda _: parse_expression(ts))
 
                 expr = MethodCall(expr.base, expr.field, args, type_args)
                 continue

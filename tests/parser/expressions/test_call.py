@@ -2,7 +2,7 @@
 
 import pytest
 
-from siec.ast import BinaryOp, Call, Index, IntLiteral, StrLiteral, Var
+from siec.ast import BinaryOp, Call, Index, IntLiteral, MethodCall, StrLiteral, Var
 from siec.parser.expressions import parse_expression, parse_primary
 
 
@@ -19,6 +19,22 @@ def test_call_with_arguments(ts):
     """
     assert parse_primary(ts('f(1, x, "s")')) == Call(
         "f", [IntLiteral(1), Var("x"), StrLiteral("s")])
+
+
+@pytest.mark.parametrize(("source", "expected"), (
+    ("f(1, 2)", Call("f", [IntLiteral(1), IntLiteral(2)])),
+    ("S::f(1, 2)", Call("S::f", [IntLiteral(1), IntLiteral(2)])),
+    ("S<i32>::f(1, 2)",
+     Call("S<i32>::f", [IntLiteral(1), IntLiteral(2)])),
+    ("mod.S::f(1, 2)",
+     Call("mod.S::f", [IntLiteral(1), IntLiteral(2)])),
+    ("mod.f(1, 2)", Call("mod.f", [IntLiteral(1), IntLiteral(2)])),
+    ("make().f(1, 2)",
+     MethodCall(Call("make", []), "f", [IntLiteral(1), IntLiteral(2)])),
+))
+def test_call_forms_share_argument_parsing(ts, source, expected):
+    """Every call form parses the same comma-separated arguments."""
+    assert parse_expression(ts(source)) == expected
 
 
 def test_nested_calls(ts):

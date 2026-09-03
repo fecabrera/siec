@@ -59,3 +59,22 @@ def test_expression_bodied_arrow_closure_returns_when_annotated():
     assert isinstance(statement.value, ClosureExpr)
     assert statement.value.return_type == "i32"
     assert isinstance(statement.value.body[0], Return)
+
+
+def test_named_and_arrow_closures_share_signature_parsing():
+    """Named and arrow closures parse the same parameters and return type."""
+    program = parse(lex("""
+    fn main() {
+        fn named(a: i32, b: u64) -> i32 { return a; }
+        let arrow = (a: i32, b: u64) -> i32 => a;
+    }
+    """))
+    named = program.functions[0].body[0].value
+    arrow = program.functions[0].body[1].value
+
+    for closure in (named, arrow):
+        assert [(param.name, param.type) for param in closure.params] == [
+            ("a", "i32"),
+            ("b", "u64"),
+        ]
+        assert closure.return_type == "i32"
