@@ -428,7 +428,8 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                     from siec.codegen.statements import bind_tuple_value
 
                     bind_tuple_value(
-                        gen, builder, param.pattern, arg, param.type, scope,
+                        gen, builder, param.pattern, param.pattern_types,
+                        arg, scope,
                         line=fn.line)
 
         # describe each parameter's slot to the debugger; a '&T' reference

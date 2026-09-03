@@ -209,7 +209,7 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
                 from siec.codegen.statements import bind_tuple_value
 
                 bind_tuple_value(
-                    gen, inner_builder, param.pattern, arg, param.type,
+                    gen, inner_builder, param.pattern, param.pattern_types, arg,
                     inner_scope, line=expr.line)
 
     from siec.codegen.statements import emit_block

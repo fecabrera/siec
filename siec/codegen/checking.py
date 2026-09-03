@@ -364,7 +364,8 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
 
         if isinstance(stmt, LetTuple):
             value_type = check_expression(gen, stmt.value, scope)
-            bind_tuple_pattern(gen, stmt.pattern, value_type, scope)
+            stmt.pattern_types = bind_tuple_pattern(
+                gen, stmt.pattern, value_type, scope)
             return False
 
         if isinstance(stmt, (Assign, MemberAssign, RefAssign, IndexAssign)):
@@ -788,8 +789,8 @@ def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict, *,
 
 
 def bind_tuple_pattern(gen: CodeGenerator, pattern: list,
-                       type_name: str | None, scope: dict) -> None:
-    """Bind a nested tuple pattern from its resolved generic arguments."""
+                       type_name: str | None, scope: dict) -> list:
+    """Bind a tuple pattern and return its resolved element-type tree."""
     from siec.codegen.generics import split_generic
 
     parts = split_generic(strip_const(type_name or ""))
@@ -805,11 +806,15 @@ def bind_tuple_pattern(gen: CodeGenerator, pattern: list,
             f"{strip_const(type_name)!r} has {take} "
             f"element{'s' if take != 1 else ''}")
 
+    pattern_types = []
     for name, arg in zip(pattern, args):
         if isinstance(name, list):
-            bind_tuple_pattern(gen, name, arg, scope)
+            pattern_types.append(bind_tuple_pattern(gen, name, arg, scope))
         else:
             scope[name] = checked_variable(arg)
+            pattern_types.append(arg)
+
+    return pattern_types
 
 
 def bind_param_pattern(gen: CodeGenerator, param, scope: dict) -> None:
@@ -822,7 +827,8 @@ def bind_param_pattern(gen: CodeGenerator, param, scope: dict) -> None:
             f"cannot destructure a {param.type!r} parameter: "
             "tuple patterns take the argument by value")
 
-    bind_tuple_pattern(gen, param.pattern, param.type, scope)
+    param.pattern_types = bind_tuple_pattern(
+        gen, param.pattern, param.type, scope)
 
 
 def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,

@@ -405,11 +405,13 @@ class LetTuple:
     """
     A destructuring declaration, 'let (a, b) = pair;': each name binds
     the matching tuple element. Patterns nest as lists: '(a, (b, c))'
-    is ['a', ['b', 'c']].
+    is ['a', ['b', 'c']]. Semantic checking records a parallel nested
+    ``pattern_types`` list for emission.
     """
     pattern: list
     value: Expr
     line: int = _line()
+    pattern_types: list | None = None
 
 
 @dataclass
@@ -609,12 +611,14 @@ class Param:
     With 'pattern', the parameter is still one by-value tuple at the
     ABI, but the body binds each pattern name to the matching element
     ('fn f((a, b): Tuple<i32, i32>)'). 'name' is then a synthetic
-    placeholder (e.g. '#0') used only for the spilled tuple slot.
+    placeholder (e.g. '#0') used only for the spilled tuple slot. Semantic
+    checking records the resolved element types in ``pattern_types``.
     """
     name: str
     type: str
     default: object | None = None
     pattern: list | None = None
+    pattern_types: list | None = None
 
 
 @dataclass

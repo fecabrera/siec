@@ -189,6 +189,26 @@ def test_destructured_tuple_parameter_default_and_closure(run):
     assert run(source).returncode == 42
 
 
+def test_generic_tuple_patterns_emit_with_their_checked_types(run):
+    """Generic tuple patterns use the concrete types recorded by Check."""
+    source = """
+    fn first<T>((value, ignored): Tuple<T, i32>) -> T {
+        return value;
+    }
+
+    fn add<T: Scalar>(pair: Tuple<T, T>) -> T {
+        let (left, right) = pair;
+        return left + right;
+    }
+
+    fn main() -> i32 {
+        if (first<i32>((42, 0)) != 42) { return 1; }
+        return add<i32>((20, 22)) - 42;
+    }
+    """
+    assert run(source).returncode == 0
+
+
 def test_destructured_tuple_parameter_errors(compile_source):
     """Patterned params require a by-value Tuple of matching arity."""
     with pytest.raises(TypeError, match="cannot destructure a 'i32'"):

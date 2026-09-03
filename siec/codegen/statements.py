@@ -695,39 +695,28 @@ def emit_while(gen: CodeGenerator, builder: ir.IRBuilder, stmt: While, scope: di
 
 
 def bind_tuple_value(gen: CodeGenerator, builder: ir.IRBuilder, pattern: list,
-                     value, type_name: str, scope: dict,
+                     pattern_types: list, value, scope: dict,
                      line: int | None = None) -> None:
     """
-    Bind a nested tuple pattern from an already-emitted tuple value:
-    each name gets a fresh local holding its element copy.
+    Bind a checked tuple pattern from an already-emitted tuple value.
+
+    Each name gets a fresh local holding its element copy. ``pattern_types``
+    is the resolved tree recorded during semantic checking.
     """
-    from siec.codegen.generics import split_generic
-
-    args = split_generic(strip_const(type_name))[1]
-    if len(pattern) != len(args):
-        take = len(args)
-        raise TypeError(f"the pattern binds {len(pattern)} "
-                        f"name{'s' if len(pattern) != 1 else ''}; "
-                        f"{strip_const(type_name)!r} has {take} "
-                        f"element{'s' if take != 1 else ''}")
-
-    for i, sub in enumerate(pattern):
+    for i, (sub, element_type) in enumerate(zip(pattern, pattern_types)):
         element = builder.extract_value(value, i)
         if isinstance(sub, list):
-            if not strip_const(args[i]).startswith("Tuple<"):
-                raise TypeError(f"cannot destructure a {args[i]!r} "
-                                "element: it is not a tuple")
-
-            bind_tuple_value(gen, builder, sub, element, args[i], scope,
-                             line=line)
+            bind_tuple_value(
+                gen, builder, sub, element_type, element, scope, line=line)
             continue
 
         slot = entry_alloca(builder, element.type, sub)
         builder.store(element, slot)
-        scope[sub] = Variable(slot, args[i])
+        scope[sub] = Variable(slot, element_type)
 
         if gen.debug is not None and line is not None:
-            gen.debug.declare_variable(builder, slot, sub, args[i], line)
+            gen.debug.declare_variable(
+                builder, slot, sub, element_type, line)
 
 
 def emit_let_tuple(gen: CodeGenerator, builder: ir.IRBuilder, stmt: LetTuple,
@@ -739,14 +728,10 @@ def emit_let_tuple(gen: CodeGenerator, builder: ir.IRBuilder, stmt: LetTuple,
     """
     from siec.codegen.expressions import emit_expression
 
-    value_type = strip_reference(infer_type(gen, stmt.value, scope) or "")
-    if not strip_const(value_type).startswith("Tuple<"):
-        raise TypeError(f"cannot destructure a {value_type or '?'!r} value: "
-                        "it is not a tuple")
-
     value = emit_expression(gen, builder, stmt.value, None, scope)
-    bind_tuple_value(gen, builder, stmt.pattern, value, value_type, scope,
-                     line=stmt.line)
+    bind_tuple_value(
+        gen, builder, stmt.pattern, stmt.pattern_types, value, scope,
+        line=stmt.line)
 
 
 def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
