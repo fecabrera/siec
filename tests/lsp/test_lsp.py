@@ -1576,7 +1576,7 @@ struct Point {
     fn contains(&self, x: f64, y: f64) -> bool { return true; }
 }
 
-@macro choose<T>(left, right) = left as T;
+@macro choose<T: Scalar>(left, right) = left as T;
 
 fn main() -> i32 {
     let point: Point = {};
@@ -1610,7 +1610,7 @@ fn main() -> i32 {
     )
     assert macro.active_parameter == 1
     assert macro.signatures[0].label == \
-        "@macro choose<T>(left, right)"
+        "@macro choose<T: Scalar>(left, right)"
     assert macro.signatures[0].parameters == ("left", "right")
 
 
@@ -2042,6 +2042,37 @@ fn main() -> i32 {
     assert items["answer"].kind == "method"
     assert items["answer"].detail == \
         "fn Box::answer(const &Box) -> i32"
+
+
+def test_complete_lists_generic_receiver_methods_in_both_member_forms(
+        tmp_path):
+    """Scoped and value completion include matching receiver templates."""
+    source = """\
+interface Hashable {
+    fn hash(const &self) -> u64;
+}
+
+@extend<T: Scalar> T: Hashable {
+    fn hash(const &self) -> u64 { return self as u64; }
+}
+
+fn main() -> i32 {
+    let value: u8 = 42;
+    return value.hash() as i32;
+}
+"""
+    analysis, _ = unit(tmp_path, source)
+    value_edit = source.replace(
+        "return value.hash() as i32;", "value.ha")
+    scoped_edit = value_edit.replace("value.ha", "u8::ha")
+
+    value = complete(analysis, value_edit, 10, len("    value.ha"))
+    scoped = complete(analysis, scoped_edit, 10, len("    u8::ha"))
+
+    assert [item.label for item in value] == ["hash"]
+    assert [item.label for item in scoped] == ["hash"]
+    assert value[0].detail == scoped[0].detail == \
+        "fn T::hash(const &T) -> u64"
 
 
 def test_complete_type_context_excludes_value_names(tmp_path):

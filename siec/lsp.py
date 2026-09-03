@@ -897,6 +897,12 @@ def source_spelling(gen: CodeGenerator | None, spelling: str | None
     )
 
 
+def bound_text(value, gen: CodeGenerator | None = None) -> str:
+    """Render one or more generic bounds in Sie source form."""
+    bounds = value if isinstance(value, tuple) else (value,)
+    return " & ".join(source_spelling(gen, bound) for bound in bounds)
+
+
 def signature_parts(fn: Function, gen: CodeGenerator | None = None
                     ) -> tuple[str, tuple[str, ...], str]:
     """
@@ -908,10 +914,6 @@ def signature_parts(fn: Function, gen: CodeGenerator | None = None
     rather than the synthetic '#N' spill name.
     """
     from siec.codegen.generics import substitute
-
-    def bound_text(value) -> str:
-        bounds = value if isinstance(value, tuple) else (value,)
-        return " & ".join(source_spelling(gen, bound) for bound in bounds)
 
     mapping = {}
     type_params = list(fn.type_params or ())
@@ -926,7 +928,7 @@ def signature_parts(fn: Function, gen: CodeGenerator | None = None
             and fn.receiver not in fn.receiver_params
             and not fn.receiver.endswith("[]")):
         receiver_params = ", ".join(
-            p + (f": {bound_text(fn.receiver_constraints[p])}"
+            p + (f": {bound_text(fn.receiver_constraints[p], gen)}"
                  if p in (fn.receiver_constraints or {}) else "")
             for p in fn.receiver_params
         )
@@ -935,7 +937,7 @@ def signature_parts(fn: Function, gen: CodeGenerator | None = None
 
     if type_params:
         shown = ", ".join(
-            p + (f": {bound_text(fn.constraints[p])}"
+            p + (f": {bound_text(fn.constraints[p], gen)}"
                  if p in (fn.constraints or {}) else "")
             for p in type_params
         )
@@ -972,10 +974,6 @@ def struct_text(node) -> str:
         "union" if getattr(node, "is_union", False) else "struct"
     name = node.name
     if node.params:
-        def bound_text(value) -> str:
-            bounds = value if isinstance(value, tuple) else (value,)
-            return " & ".join(bounds)
-
         params = ", ".join(
             p + (f": {bound_text(node.constraints[p])}"
                  if p in (node.constraints or {}) else "")
@@ -1483,6 +1481,27 @@ def complete_aggregate_fields(analysis: Analysis, sites: dict, text: str,
     return [candidates[name] for name in sorted(candidates)]
 
 
+def method_completions(analysis: Analysis, sites: dict, receiver_type: str,
+                       partial: str) -> list[Completion]:
+    """Complete methods that apply to a receiver type and name prefix."""
+    gen = analysis.gen
+    method_names = set(gen.generic_receiver_methods)
+    method_names.update(method for _receiver, method in gen.generic_methods)
+    for declared in sites:
+        if "::" in declared:
+            method_names.add(declared.rpartition("::")[2])
+
+    candidates: dict[str, Completion] = {}
+    for name in method_names:
+        if not name.startswith(partial):
+            continue
+        finding = method_finding(analysis, sites, receiver_type, name)
+        if finding is not None:
+            candidates[name] = Completion(name, "method", finding.text)
+
+    return [candidates[name] for name in sorted(candidates)]
+
+
 def complete_scoped_members(analysis: Analysis, sites: dict, base: str,
                             partial: str) -> list[Completion]:
     """Complete enum members or type methods after ``Type::``."""
@@ -1500,21 +1519,7 @@ def complete_scoped_members(analysis: Analysis, sites: dict, base: str,
                     name, "enumMember", f"{type_name}::{name} = {value}")
         return [candidates[name] for name in sorted(candidates)]
 
-    method_names = set(gen.generic_receiver_methods)
-    method_names.update(method for _receiver, method in gen.generic_methods)
-    for declared in sites:
-        if "::" in declared:
-            method_names.add(declared.rpartition("::")[2])
-
-    for name in method_names:
-        if not name.startswith(partial):
-            continue
-        finding = method_finding(analysis, sites, type_name, name)
-        if finding is not None:
-            candidates.setdefault(
-                name, Completion(name, "method", finding.text))
-
-    return [candidates[name] for name in sorted(candidates)]
+    return method_completions(analysis, sites, type_name, partial)
 
 
 def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
@@ -1560,19 +1565,8 @@ def complete_value_members(analysis: Analysis, sites: dict, receiver: str,
             candidates[field_.name] = Completion(
                 field_.name, "field", detail)
 
-    method_names = set(gen.generic_receiver_methods)
-    method_names.update(method for _receiver, method in gen.generic_methods)
-    for declared in sites:
-        if "::" in declared:
-            method_names.add(declared.rpartition("::")[2])
-
-    for name in method_names:
-        if not name.startswith(partial):
-            continue
-        finding = method_finding(analysis, sites, base, name)
-        if finding is not None:
-            candidates.setdefault(
-                name, Completion(name, "method", finding.text))
+    for item in method_completions(analysis, sites, base, partial):
+        candidates.setdefault(item.label, item)
 
     return [candidates[name] for name in sorted(candidates)]
 
@@ -1741,10 +1735,6 @@ def macro_signature(node) -> CallSignature:
     """Render a function-like macro and its value parameters."""
     name = node.name
     if node.type_params:
-        def bound_text(value) -> str:
-            bounds = value if isinstance(value, tuple) else (value,)
-            return " & ".join(bounds)
-
         params = ", ".join(
             param + (f": {bound_text(node.constraints[param])}"
                      if param in (node.constraints or {}) else "")
