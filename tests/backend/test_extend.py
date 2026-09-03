@@ -859,6 +859,40 @@ def test_extend_needs_an_interface(compile_source):
         """)
 
 
+@pytest.mark.parametrize("claim", (
+    "@extend<T> T: Pair<T>;",
+    "@extend T[]: Pair<T>;",
+))
+def test_family_claims_share_interface_arity_validation(
+        compile_source, claim):
+    """Blanket and array claims use the same interface arity rule."""
+    with pytest.raises(TypeError, match="interface 'Pair' takes 2 type "
+                                        "arguments, got 1"):
+        compile_source(f"""
+        interface Pair<A, B>;
+
+        {claim}
+
+        fn main() -> i32 {{ return 0; }}
+        """)
+
+
+@pytest.mark.parametrize("claim", (
+    "@extend<T> T: Scalar;",
+    "@extend T[]: Scalar;",
+))
+def test_family_claims_share_sealed_interface_validation(
+        compile_source, claim):
+    """Blanket and array claims cannot claim compiler-owned interfaces."""
+    with pytest.raises(TypeError, match="'Scalar' is a sealed builtin "
+                                        "interface"):
+        compile_source(f"""
+        {claim}
+
+        fn main() -> i32 {{ return 0; }}
+        """)
+
+
 def test_concrete_array_extends_claim_one_element(run):
     """
     '@extend char[]' claims for exactly that array: 'char[]' passes

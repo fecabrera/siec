@@ -297,6 +297,35 @@ def noun(gen: CodeGenerator, name: str) -> str:
             else "type")
 
 
+def validate_interface_claim(gen: CodeGenerator, spelling: str,
+                             receiver: str):
+    """
+    Validate the shared rules for one interface claim.
+
+    The receiver-specific caller checks constraints, fields, and required
+    methods after this returns the interface base, arguments, and declaration.
+    """
+    base, args = split_generic(spelling) or (spelling, [])
+    iface = gen.interfaces.get(base)
+    if iface is None:
+        kind = ("a struct, not" if base in gen.structs
+                or base in gen.generic_structs else "not")
+        raise TypeError(f"{base!r} is {kind} an interface: "
+                        f"{receiver!r} cannot implement it")
+
+    if base in SEALED_BUILTIN_INTERFACES:
+        raise TypeError(f"{base!r} is a sealed builtin interface: "
+                        "only compiler-defined primitive types implement it")
+
+    declared = len(iface.params or ())
+    if declared != len(args):
+        raise TypeError(f"interface {base!r} takes {declared} type "
+                        f"argument{'s' if declared != 1 else ''}, "
+                        f"got {len(args)}")
+
+    return base, args, iface
+
+
 def check_conformance(gen: CodeGenerator, name: str, template_base: str,
                       spellings: list[str], line: int, file: str) -> None:
     """
@@ -308,24 +337,8 @@ def check_conformance(gen: CodeGenerator, name: str, template_base: str,
         fields = info.fields if info is not None else None
 
         for spelling in spellings:
-            base, args = split_generic(spelling) or (spelling, [])
-            iface = gen.interfaces.get(base)
-            if iface is None:
-                kind = ("a struct, not" if base in gen.structs
-                        or base in gen.generic_structs else "not")
-                raise TypeError(f"{base!r} is {kind} an interface: "
-                                f"{name!r} cannot implement it")
-
-            if base in SEALED_BUILTIN_INTERFACES:
-                raise TypeError(f"{base!r} is a sealed builtin interface: "
-                                "only compiler-defined primitive types "
-                                "implement it")
-
-            declared = len(iface.params or ())
-            if declared != len(args):
-                raise TypeError(f"interface {base!r} takes {declared} type "
-                                f"argument{'s' if declared != 1 else ''}, "
-                                f"got {len(args)}")
+            base, args, iface = validate_interface_claim(
+                gen, spelling, name)
 
             mapping = dict(zip(iface.params or (), args))
             mapping["Self"] = name
@@ -1038,24 +1051,7 @@ def resolve_type_family_extend(gen: CodeGenerator, ext) -> None:
                         "be its one declared type parameter")
 
     for spelling in ext.interfaces:
-        base, args = split_generic(spelling) or (spelling, [])
-        iface = gen.interfaces.get(base)
-        if iface is None:
-            kind = ("a struct, not" if base in gen.structs
-                    or base in gen.generic_structs else "not")
-            raise TypeError(f"{base!r} is {kind} an interface: "
-                            f"{ext.name!r} cannot implement it")
-
-        if base in SEALED_BUILTIN_INTERFACES:
-            raise TypeError(f"{base!r} is a sealed builtin interface: "
-                            "only compiler-defined primitive types "
-                            "implement it")
-
-        declared = len(iface.params or ())
-        if declared != len(args):
-            raise TypeError(f"interface {base!r} takes {declared} type "
-                            f"argument{'s' if declared != 1 else ''}, "
-                            f"got {len(args)}")
+        _, _, iface = validate_interface_claim(gen, spelling, ext.name)
 
         if iface.fields:
             raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
@@ -1153,24 +1149,7 @@ def resolve_array_extend(gen: CodeGenerator, ext) -> None:
                             "use its one declared type parameter")
 
     for spelling in ext.interfaces:
-        base, args = split_generic(spelling) or (spelling, [])
-        iface = gen.interfaces.get(base)
-        if iface is None:
-            kind = ("a struct, not" if base in gen.structs
-                    or base in gen.generic_structs else "not")
-            raise TypeError(f"{base!r} is {kind} an interface: "
-                            f"{ext.name!r} cannot implement it")
-
-        if base in SEALED_BUILTIN_INTERFACES:
-            raise TypeError(f"{base!r} is a sealed builtin interface: "
-                            "only compiler-defined primitive types "
-                            "implement it")
-
-        declared = len(iface.params or ())
-        if declared != len(args):
-            raise TypeError(f"interface {base!r} takes {declared} type "
-                            f"argument{'s' if declared != 1 else ''}, "
-                            f"got {len(args)}")
+        _, _, iface = validate_interface_claim(gen, spelling, ext.name)
 
         if iface.fields:
             raise TypeError(f"{ext.name!r} cannot implement {spelling!r}: "
