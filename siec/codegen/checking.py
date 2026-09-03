@@ -20,6 +20,7 @@ from siec.ast import (
     Defer,
     Drop,
     Emit,
+    EnumMember,
     Expr,
     ExprStmt,
     FloatLiteral,
@@ -769,11 +770,23 @@ def lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str:
         raise NameError(f"undefined variable {expr.name!r}")
 
     if isinstance(expr, Member):
+        check_expression(gen, expr.base, scope)
         return check_member_field(gen, expr, scope)[1]
 
     if not (isinstance(expr, (Index, Call, MethodCall))
             or isinstance(expr, UnaryOp) and expr.op == "*"):
         raise TypeError("expression is not assignable")
+
+    # A place can contain ordinary expressions that Emit must lower. Check
+    # them even when the place is used only through '&' or a reference
+    # argument and never passes through the rvalue expression path.
+    if isinstance(expr, Index):
+        check_expression(gen, expr.base, scope)
+        check_expression(gen, expr.index, scope)
+    elif isinstance(expr, UnaryOp):
+        check_expression(gen, expr.operand, scope)
+    else:
+        check_expression(gen, expr, scope)
 
     type_name = expr_sie_type(gen, expr, scope)
     if type_name is None:
@@ -1027,6 +1040,207 @@ def check_truth(gen: CodeGenerator, expr: Expr, scope: dict) -> None:
         return
 
     raise TypeError(f"cannot test a value of type {actual or '?'} for truth")
+
+
+def check_binary_expression(gen: CodeGenerator, expr: BinaryOp,
+                            scope: dict, expected: str | None = None) -> str:
+    """Classify and check one binary expression, then record its Emit plan."""
+    from siec.codegen.hir import BinaryPlan, stamp
+    from siec.codegen.inference import (
+        ARITHMETIC,
+        COMPARISONS,
+        FLOAT_ARITHMETIC,
+        UNSIGNED_ARITHMETIC,
+        adapts_in_arithmetic,
+        adaptive_default_type,
+        arithmetic_type,
+        check_signedness,
+        enum_backing,
+        numeric_class,
+        operator_call,
+        option_none_test,
+    )
+    from siec.codegen.types import strip_nonnull
+
+    def record(plan: BinaryPlan) -> str:
+        stamp(expr, binary_plan=plan, overwrite=True)
+        return plan.result
+
+    if (rewritten := option_none_test(gen, expr, scope)) is not None:
+        result = check_expression(gen, rewritten, scope, expected)
+        return record(BinaryPlan(
+            "rewrite", result or expected or "bool", replacement=rewritten))
+
+    if (rewritten := operator_call(gen, expr, scope)) is not None:
+        expr.operator_rewrite = rewritten
+        result = check_expression(gen, rewritten, scope, expected)
+        if result is None and expected is None:
+            raise TypeError(f"cannot infer the result of {expr.op!r}")
+        return record(BinaryPlan(
+            "rewrite", result or expected, replacement=rewritten))
+
+    if expr.op in ("and", "or"):
+        check_truth(gen, expr.left, scope)
+        check_truth(gen, expr.right, scope)
+        return record(BinaryPlan(
+            "logical", "bool", instruction=expr.op))
+
+    left_declared = expr_sie_type(gen, expr.left, scope)
+    right_declared = expr_sie_type(gen, expr.right, scope)
+    left_type = left_declared or infer_type(gen, expr.left, scope)
+    right_type = right_declared or infer_type(gen, expr.right, scope)
+    left_operand_type = (None if adapts_in_arithmetic(
+        gen, expr.left, scope) else left_type)
+    right_operand_type = (None if adapts_in_arithmetic(
+        gen, expr.right, scope) else right_type)
+    left_name = strip_const(strip_nonnull(expand_alias(
+        gen, left_type, checked=False) or ""))
+    right_name = strip_const(strip_nonnull(expand_alias(
+        gen, right_type, checked=False) or ""))
+    left_pointer = left_name.endswith("*") or left_name.startswith("fn(")
+    right_pointer = right_name.endswith("*") or right_name.startswith("fn(")
+
+    def operand_target() -> str | None:
+        """Select the shared scalar type while literals remain adaptive."""
+        left_scalar = strip_const(left_operand_type or "")
+        right_scalar = strip_const(right_operand_type or "")
+        expected_class = numeric_class(enum_backing(gen, expected))
+        if (left_operand_type is None and right_operand_type is None
+                and expected_class is not None):
+            return expected
+        if left_scalar in ("char", "bool") and right_operand_type is None:
+            return left_type
+        if right_scalar in ("char", "bool") and left_operand_type is None:
+            return right_type
+        return arithmetic_type(
+            gen, expr.left, expr.right, scope, expr.op,
+            left_operand_type, right_operand_type)
+
+    if expr.op in ("+", "-") and (left_pointer or right_pointer):
+        if left_pointer and right_pointer:
+            raise TypeError(
+                f"cannot apply {expr.op!r} to two pointer operands")
+        if expr.op == "-" and right_pointer:
+            raise TypeError("cannot subtract a pointer from a value")
+
+        pointer = expr.left if left_pointer else expr.right
+        index = expr.right if left_pointer else expr.left
+        pointer_type = left_type if left_pointer else right_type
+        index_type = right_type if left_pointer else left_type
+        index_class = numeric_class(enum_backing(gen, index_type))
+        index_target = index_type
+        integer_index = (index_class is not None
+                         and index_class[0] in ("i", "u"))
+        if not integer_index and strip_const(index_type or "") not in (
+                "char", "bool"):
+            adaptive_class = numeric_class(enum_backing(
+                gen, adaptive_default_type(gen, index, scope)))
+            if (adapts_in_arithmetic(gen, index, scope)
+                    and adaptive_class is not None
+                    and adaptive_class[0] in ("i", "u")):
+                index_target = "u64"
+            else:
+                raise TypeError(
+                    "pointer arithmetic requires an integer offset")
+        check_expression(gen, pointer, scope)
+        check_expression(gen, index, scope, index_target)
+        result = strip_nonnull(pointer_type)
+        return record(BinaryPlan(
+            "pointer_offset",
+            result,
+            pointer=pointer,
+            index=index,
+            index_target=index_target,
+            subtract=expr.op == "-",
+        ))
+
+    if expr.op in ARITHMETIC or expr.op == "**":
+        if left_pointer or right_pointer:
+            raise TypeError(f"cannot apply {expr.op!r} to pointer operands")
+        signedness = check_signedness(gen, expr, scope)
+        result = operand_target()
+        if result is None:
+            raise TypeError(f"cannot infer operands for {expr.op!r}")
+        operand_types = (left_operand_type, right_operand_type)
+        for position, operand_type in enumerate(operand_types):
+            operand = strip_const(operand_type or "")
+            other = strip_const(operand_types[1 - position] or "")
+            if (numeric_class(enum_backing(gen, operand)) is None
+                    and operand in ("char", "bool")
+                    and other
+                    and operand != other):
+                raise TypeError(
+                    f"cannot apply {expr.op!r} to a {operand!r} operand "
+                    "of a different width")
+        check_expression(gen, expr.left, scope, result)
+        check_expression(gen, expr.right, scope, result)
+        result_class = numeric_class(enum_backing(gen, result))
+        float_operation = result_class is not None and result_class[0] == "f"
+        if float_operation and expr.op == "**":
+            raise TypeError("cannot apply '**' to float operands")
+        if float_operation and expr.op not in FLOAT_ARITHMETIC:
+            raise TypeError(f"cannot apply {expr.op!r} to float operands")
+        instruction = None
+        if expr.op in ARITHMETIC:
+            instruction = (FLOAT_ARITHMETIC[expr.op]
+                           if float_operation else
+                           UNSIGNED_ARITHMETIC[expr.op]
+                           if signedness == "unsigned"
+                           and expr.op in UNSIGNED_ARITHMETIC else
+                           ARITHMETIC[expr.op])
+        return record(BinaryPlan(
+            "power" if expr.op == "**" else "arithmetic",
+            result,
+            left_target=result,
+            right_target=result,
+            instruction=instruction,
+            unsigned=signedness == "unsigned",
+            float_operation=float_operation,
+        ))
+
+    if expr.op not in COMPARISONS:
+        raise TypeError(f"unknown binary operator {expr.op!r}")
+
+    pointer_comparison = left_pointer or right_pointer
+    if (pointer_comparison
+            and (not left_pointer or not right_pointer
+                 or (left_name != right_name
+                     and "opaque*" not in (left_name, right_name)))):
+        raise TypeError(
+            f"cannot apply {expr.op!r} to {left_name} and {right_name}")
+
+    signedness = check_signedness(gen, expr, scope)
+    if pointer_comparison:
+        if "opaque*" in (left_name, right_name):
+            target = ("const opaque*"
+                      if is_const(left_type or "")
+                      or is_const(right_type or "") else "opaque*")
+        else:
+            target = left_type
+        left_target = right_target = target
+        float_operation = False
+    else:
+        target = operand_target()
+        target_class = numeric_class(enum_backing(gen, target))
+        scalar = target_class is not None or strip_const(target or "") in (
+            "char", "bool")
+        if not scalar:
+            raise TypeError(
+                f"cannot apply {expr.op!r} to a value of type {left_type}")
+        left_target = right_target = target
+        float_operation = target_class is not None and target_class[0] == "f"
+
+    check_expression(gen, expr.left, scope, left_target)
+    check_expression(gen, expr.right, scope, right_target)
+    return record(BinaryPlan(
+        "comparison",
+        "bool",
+        left_target=left_target,
+        right_target=right_target,
+        instruction=expr.op,
+        unsigned=signedness == "unsigned",
+        float_operation=float_operation,
+    ))
 
 
 def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
@@ -1538,39 +1752,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         expr.right = type_operand(gen, expr.right, scope)
 
     if isinstance(expr, BinaryOp):
-        from siec.codegen.inference import operator_call, option_none_test
-
-        if (rewritten := option_none_test(gen, expr, scope)) is not None:
-            return check_expression(gen, rewritten, scope, expected)
-
-        if (rewritten := operator_call(gen, expr, scope)) is not None:
-            expr.operator_rewrite = rewritten
-            return check_expression(gen, rewritten, scope, expected)
-
-        if expr.op in ("and", "or"):
-            check_truth(gen, expr.left, scope)
-            check_truth(gen, expr.right, scope)
-            return "bool"
-
-        # Pointer compatibility is a Sie type rule, not an LLVM lowering
-        # detail. Check it here even when this function will not be emitted.
-        from siec.codegen.types import strip_nonnull
-
-        left_name = strip_const(strip_nonnull(expand_alias(
-            gen, expr_sie_type(gen, expr.left, scope)
-            or infer_type(gen, expr.left, scope), checked=False) or ""))
-        right_name = strip_const(strip_nonnull(expand_alias(
-            gen, expr_sie_type(gen, expr.right, scope)
-            or infer_type(gen, expr.right, scope), checked=False) or ""))
-        left_pointer = left_name.endswith("*") or left_name.startswith("fn(")
-        right_pointer = right_name.endswith("*") or right_name.startswith("fn(")
-        if ((left_pointer or right_pointer)
-                and expr.op not in ("+", "-")
-                and (not left_pointer or not right_pointer
-                     or (left_name != right_name
-                         and "opaque*" not in (left_name, right_name)))):
-            raise TypeError(
-                f"cannot apply {expr.op!r} to {left_name} and {right_name}")
+        return check_binary_expression(gen, expr, scope, expected)
 
     if isinstance(expr, UnaryOp) and expr.op == "not":
         check_truth(gen, expr.operand, scope)
@@ -2113,7 +2295,8 @@ def require_fit(gen: CodeGenerator, expr: Expr, actual: str,
         if isinstance(expr, NullLiteral):
             return accept("null")
         if target == "opaque*" and (
-                source.endswith("*") or source.endswith("[]")):
+                source.endswith("*") or source.endswith("[]")
+                or source.startswith("fn(")):
             return accept("opaque")
         if (source.endswith("[]")
                 and strip_nonnull(target) == f"{source[:-2]}*"):
@@ -2142,7 +2325,7 @@ def require_fit(gen: CodeGenerator, expr: Expr, actual: str,
     # small integer it emits as; overload ranking still prefers a numeric
     # candidate, so only the direct fit widens here
     if (strip_const(expected) in ("char", "bool")
-            and isinstance(expr, IntLiteral)):
+            and isinstance(expr, (IntLiteral, EnumMember))):
         return accept("adopt")
 
     if isinstance(expr, NullLiteral):

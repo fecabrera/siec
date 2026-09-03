@@ -394,7 +394,8 @@ def parameter_fit(gen: CodeGenerator, arg, arg_type: str | None,
         return "implicit"
 
     # any pointer or array decays to 'opaque*', an array to its element pointer
-    if target == "opaque*" and (source.endswith("*") or source.endswith("[]")):
+    if target == "opaque*" and (source.endswith("*") or source.endswith("[]")
+                                or source.startswith("fn(")):
         return "implicit"
 
     if (source.endswith("[]")

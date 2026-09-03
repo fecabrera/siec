@@ -658,6 +658,15 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return emit_ternary(gen, builder, expr, expected_type, scope)
 
     if isinstance(expr, BinaryOp):
+        from siec.codegen.hir import checked_binary
+
+        if (plan := checked_binary(expr)) is not None:
+            return emit_binary_plan(gen, builder, expr, plan,
+                                    expected_type, scope)
+        if gen.emitting:
+            raise RuntimeError(
+                "binary expression reached Emit without a checked plan")
+
         # comparing '@typeof' against a bare type name means its id:
         # '@typeof(v) == T' is '@typeof(v) == @typeid(T)'
         if expr.op in ("==", "!=") and (isinstance(expr.left, TypeOf)
@@ -1001,6 +1010,61 @@ def pointer_offset_parts(gen: CodeGenerator, expr: BinaryOp,
     return expr.right, expr.left, False
 
 
+def emit_binary_plan(gen: CodeGenerator, builder: ir.IRBuilder,
+                     expr: BinaryOp, plan, expected_type: ir.Type | None,
+                     scope: dict):
+    """Lower a binary operation from the decision recorded by Check."""
+    if plan.kind == "rewrite":
+        if plan.replacement is None:
+            raise RuntimeError("checked binary rewrite has no replacement")
+        return emit_expression(
+            gen, builder, plan.replacement, expected_type, scope)
+
+    if plan.kind == "logical":
+        return emit_logical(gen, builder, expr, scope)
+
+    if plan.kind == "pointer_offset":
+        if plan.pointer is None or plan.index is None:
+            raise RuntimeError("checked pointer offset has no operands")
+        pointer = emit_expression(gen, builder, plan.pointer, None, scope)
+        index = (emit_coerced(
+            gen, builder, plan.index, plan.index_target, scope)
+            if plan.index_target is not None else
+            emit_expression(gen, builder, plan.index, None, scope))
+        if not isinstance(pointer.type, ir.PointerType):
+            raise RuntimeError("checked pointer offset did not emit a pointer")
+        if not isinstance(index.type, ir.IntType):
+            raise RuntimeError("checked pointer offset did not emit an integer")
+        if plan.subtract:
+            index = builder.neg(index)
+        return builder.gep(pointer, [index])
+
+    if plan.left_target is None or plan.right_target is None:
+        raise RuntimeError("checked binary operation has no operand targets")
+    left = emit_coerced(gen, builder, expr.left, plan.left_target, scope)
+    right = emit_coerced(gen, builder, expr.right, plan.right_target, scope)
+    if left.type != right.type:
+        raise RuntimeError("checked binary operands lowered to different types")
+
+    if plan.kind == "arithmetic":
+        if plan.instruction is None:
+            raise RuntimeError("checked arithmetic operation has no instruction")
+        return getattr(builder, plan.instruction)(left, right)
+
+    if plan.kind == "power":
+        return emit_power_values(builder, left, right, plan.unsigned)
+
+    if plan.kind == "comparison":
+        if plan.instruction is None:
+            raise RuntimeError("checked comparison has no predicate")
+        if plan.float_operation:
+            return builder.fcmp_ordered(plan.instruction, left, right)
+        compare = builder.icmp_unsigned if plan.unsigned else builder.icmp_signed
+        return compare(plan.instruction, left, right)
+
+    raise RuntimeError(f"unknown checked binary kind {plan.kind!r}")
+
+
 def emit_pointer_offset(gen: CodeGenerator, builder: ir.IRBuilder,
                         offset: tuple[Expr, Expr, bool], scope: dict):
     """Emit ``p ± n`` as a getelementptr of the pointer by the index."""
@@ -1061,6 +1125,13 @@ def emit_power(gen: CodeGenerator, builder: ir.IRBuilder, expr: BinaryOp,
         raise TypeError("cannot apply '**' to float operands")
 
     exp = emit_expression(gen, builder, expr.right, base.type, scope)
+
+    return emit_power_values(builder, base, exp, unsigned)
+
+
+def emit_power_values(builder: ir.IRBuilder, base: ir.Value, exp: ir.Value,
+                      unsigned: bool = False):
+    """Lower integer power for operands already selected and emitted."""
 
     # the result and the remaining exponent live in slots driven by the loop
     result = entry_alloca(builder, base.type, "pow.result")

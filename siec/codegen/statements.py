@@ -601,7 +601,13 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
     def bind_operator_rewrite(replacement, checked_value) -> None:
         """Transfer checked plans to a cached assignment replacement."""
         from dataclasses import replace
-        from siec.codegen.hir import checked_call, checked_coercion, stamp
+        from siec.codegen.hir import (
+            BinaryPlan,
+            checked_binary,
+            checked_call,
+            checked_coercion,
+            stamp,
+        )
 
         stamp(
             replacement,
@@ -610,6 +616,34 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
             coercion_plan=checked_coercion(checked_value),
             overwrite=True,
         )
+
+        checked_plan = checked_binary(checked_value)
+        if checked_plan is not None and isinstance(checked_value, BinaryOp):
+            stamp(
+                replacement.left,
+                sie_type=getattr(checked_value.left, "sie_type", None),
+                expected_type=getattr(
+                    checked_value.left, "expected_type", None),
+                coercion_plan=checked_coercion(checked_value.left),
+                overwrite=True,
+            )
+            if checked_plan.kind != "rewrite":
+                pointer = checked_plan.pointer
+                index = checked_plan.index
+                if pointer is checked_value.left:
+                    pointer = replacement.left
+                elif pointer is checked_value.right:
+                    pointer = replacement.right
+                if index is checked_value.left:
+                    index = replacement.left
+                elif index is checked_value.right:
+                    index = replacement.right
+                stamp(
+                    replacement,
+                    binary_plan=replace(
+                        checked_plan, pointer=pointer, index=index),
+                    overwrite=True,
+                )
 
         checked_rewrite = getattr(checked_value, "operator_rewrite", None)
         if not isinstance(checked_rewrite, MethodCall):
@@ -638,6 +672,15 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
             overwrite=True,
         )
         replacement.operator_rewrite = rewritten
+        stamp(
+            replacement,
+            binary_plan=BinaryPlan(
+                "rewrite",
+                getattr(checked_value, "sie_type", None),
+                replacement=rewritten,
+            ),
+            overwrite=True,
+        )
 
     if isinstance(stmt.target, Index):
         stmt.target.item_get_call = getattr(stmt, "item_get_call", None)

@@ -40,6 +40,15 @@ ValueCategory = Literal[
     "temporary",
 ]
 
+BinaryKind = Literal[
+    "rewrite",
+    "logical",
+    "pointer_offset",
+    "arithmetic",
+    "power",
+    "comparison",
+]
+
 
 @dataclass(frozen=True)
 class CallPlan:
@@ -68,6 +77,24 @@ class CoercionPlan:
 
 
 @dataclass(frozen=True)
+class BinaryPlan:
+    """One binary operation selected during Check."""
+
+    kind: BinaryKind
+    result: str
+    left_target: str | None = None
+    right_target: str | None = None
+    instruction: str | None = None
+    unsigned: bool = False
+    float_operation: bool = False
+    pointer: Expr | None = None
+    index: Expr | None = None
+    index_target: str | None = None
+    subtract: bool = False
+    replacement: Expr | None = None
+
+
+@dataclass(frozen=True)
 class TypedExpr:
     """
     View of the typed-HIR fields stamped on an expression.
@@ -82,6 +109,7 @@ class TypedExpr:
     coerce_kind: CoerceKind | None = None
     coercion_plan: CoercionPlan | None = None
     aggregate_plan: object | None = None
+    binary_plan: BinaryPlan | None = None
     resolved_symbol: str | None = None
     call_plan: CallPlan | None = None
     truthy_symbol: str | None = None
@@ -100,6 +128,7 @@ _TYPED_ATTRS = (
     "coerce_kind",
     "coercion_plan",
     "aggregate_plan",
+    "binary_plan",
     "resolved_symbol",
     "call_plan",
     "truthy_symbol",
@@ -122,6 +151,7 @@ def typed(expr: Expr | object) -> TypedExpr:
         coerce_kind=getattr(expr, "coerce_kind", None),
         coercion_plan=getattr(expr, "coercion_plan", None),
         aggregate_plan=getattr(expr, "aggregate_plan", None),
+        binary_plan=getattr(expr, "binary_plan", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
         call_plan=getattr(expr, "call_plan", None),
         truthy_symbol=getattr(expr, "truthy_symbol", None),
@@ -201,3 +231,8 @@ def checked_coercion(expr: Expr | object) -> CoercionPlan | None:
 def checked_aggregate(expr: Expr | object):
     """Return the aggregate field plan recorded during Check, if present."""
     return getattr(expr, "aggregate_plan", None)
+
+
+def checked_binary(expr: Expr | object) -> BinaryPlan | None:
+    """Return the binary-operation plan recorded during Check, if present."""
+    return getattr(expr, "binary_plan", None)

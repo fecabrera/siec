@@ -694,6 +694,11 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
     # a struct operand's binary operator types as the method call it
     # desugars to: 'a + b' is 'a.add(b)'
     if isinstance(expr, BinaryOp):
+        from siec.codegen.hir import checked_binary
+
+        if (plan := checked_binary(expr)) is not None:
+            return plan.result
+
         # Resolve each operand at most once here. Previously operator lookup,
         # pointer classification, and arithmetic promotion each walked the
         # left subtree again, making a left-associated expression exponential.
@@ -828,6 +833,9 @@ def infer_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
     # context, and a '@typeid' hash types the same way
     if isinstance(expr, (SizeOf, TypeId)):
         return "u64"
+
+    if isinstance(expr, EnumMember):
+        return enum_backing(gen, infer_type(gen, expr, scope))
 
     # a bare 'null' is an opaque pointer until a context types it
     if isinstance(expr, NullLiteral):
@@ -1099,6 +1107,12 @@ def adaptive_default_type(gen: CodeGenerator, expr: Expr,
     if isinstance(expr, UnaryOp) and expr.op in ("-", "~"):
         return adaptive_default_type(gen, expr.operand, scope)
 
+    if (isinstance(expr, BinaryOp)
+            and (expr.op in ARITHMETIC or expr.op == "**")
+            and adapts_in_arithmetic(gen, expr, scope)):
+        return (adaptive_default_type(gen, expr.left, scope)
+                or adaptive_default_type(gen, expr.right, scope))
+
     if isinstance(expr, Member):
         if (folded := fold_qualified(gen, expr, scope)) is not None:
             return adaptive_default_type(gen, folded, scope)
@@ -1119,8 +1133,17 @@ def adapts_in_arithmetic(gen: CodeGenerator, expr: Expr, scope: dict) -> bool:
     Whether an operand has no fixed numeric type during promotion and
     adopts its partner's type, like a literal or unannotated constant.
     """
-    if isinstance(expr, (IntLiteral, FloatLiteral, SizeOf, TypeId)):
+    if isinstance(expr, (IntLiteral, FloatLiteral, SizeOf, TypeId,
+                         EnumMember)):
         return True
+
+    if isinstance(expr, UnaryOp) and expr.op in ("-", "~"):
+        return adapts_in_arithmetic(gen, expr.operand, scope)
+
+    if isinstance(expr, BinaryOp) and (
+            expr.op in ARITHMETIC or expr.op == "**"):
+        return (adapts_in_arithmetic(gen, expr.left, scope)
+                and adapts_in_arithmetic(gen, expr.right, scope))
 
     if isinstance(expr, Var):
         from siec.codegen.constants import find_constant
