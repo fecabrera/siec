@@ -58,7 +58,6 @@ from siec.codegen.generator import CodeGenerator, Variable
 from siec.codegen.inference import (
     check_field_access,
     expr_sie_type,
-    hoist_member,
     infer_type,
     member_field,
     try_arms,
@@ -83,16 +82,9 @@ def check_member_field(gen: CodeGenerator, expr: Member, scope: dict) -> tuple[i
     """Resolve a member access and enforce private-field visibility."""
     from siec.codegen.hir import stamp
 
-    hoist_member(gen, expr, scope)
+    index, field_type = member_field(gen, expr, scope)
     base_type = expr_sie_type(gen, expr.base, scope)
     info = type_info(gen, base_type)
-    if info is None:
-        if base_type is None and (reason := untyped_reason(gen, expr.base, scope)):
-            raise reason
-        raise TypeError(f"cannot access field {expr.field!r} on non-struct "
-                        f"type {base_type or '?'}")
-
-    index, field_type = info.field(expr.field)
     check_field_access(gen, base_type, info.fields[index])
     stamp(expr, field_index=index, field_type=field_type, sie_type=field_type)
     return index, field_type
