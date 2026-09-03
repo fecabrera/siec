@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from siec.codegen.errors import display_path
+from siec.compiler_options import add_compiler_options, compiler_arguments
 from siec.diagnostics import PackageInputError
 
 MANIFEST = "package.toml"
@@ -1530,14 +1531,7 @@ def build(argv: list[str]) -> int:
     args.add_argument("path", nargs="?", default=".",
                       help="the package to build (the working directory "
                            "by default)")
-    args.add_argument("-O", default=0, type=int, choices=[0, 1, 2, 3], dest="opt",
-                      metavar="N", help="optimization level, cc-style (default 0)")
-    args.add_argument("-g", "--debug", action="store_true", dest="debug",
-                      help="emit DWARF debug info, for source-level debugging")
-    args.add_argument("-Wunchecked-dereference", action="store_true",
-                      dest="warn_unchecked_dereference",
-                      help="warn when a nullable pointer is dereferenced "
-                           "without a non-null proof")
+    add_compiler_options(args)
     args.add_argument("-s", "--silent", action="store_true",
                       help="hide build progress and dependency output")
     args.add_argument("--run", nargs=argparse.REMAINDER, metavar="ARG",
@@ -1625,12 +1619,7 @@ def build_from_store(root: PackageManifest, sources: list[Path],
         command += ["-I", directory]
     for lib in libs:
         command += ["-l", lib]
-    if opts.opt:
-        command += [f"-O{opts.opt}"]
-    if opts.debug:
-        command += ["-g"]
-    if opts.warn_unchecked_dereference:
-        command += ["-Wunchecked-dereference"]
+    command += compiler_arguments(opts)
     if opts.run is not None:
         command += ["--run", *opts.run]
     else:

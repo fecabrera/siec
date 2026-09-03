@@ -16,6 +16,7 @@ from siec.backend import (
 )
 from siec.codegen import codegen
 from siec.codegen.errors import display_path, format_diagnostic
+from siec.compiler_options import add_compiler_options
 from siec.diagnostics import DiagnosticError
 from siec.loader import discover_program
 
@@ -93,14 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     args.add_argument("-o", "--output", default=None)
     args.add_argument("-c", action="store_true", dest="compile_only",
                       help="compile to an object file, without linking")
-    args.add_argument("-O", default=0, type=int, choices=[0, 1, 2, 3], dest="opt",
-                      metavar="N", help="optimization level, cc-style (default 0)")
-    args.add_argument("-g", "--debug", action="store_true", dest="debug",
-                      help="emit DWARF debug info, for source-level debugging")
-    args.add_argument("-Wunchecked-dereference", action="store_true",
-                      dest="warn_unchecked_dereference",
-                      help="warn when a nullable pointer is dereferenced "
-                           "without a non-null proof")
+    add_compiler_options(args)
     args.add_argument("-I", "--include", action="append", default=[],
                       help="add a directory to the include search path")
     args.add_argument("-l", action="append", default=[], dest="libs", metavar="LIB",

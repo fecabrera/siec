@@ -637,17 +637,19 @@ def test_the_sources_and_the_output_are_the_packages_own(
     assert flags(argv, "-o") == [str(app / "build" / "app")]
 
 
-def test_optimization_and_debug_flags_reach_the_compiler(
+def test_shared_compiler_flags_reach_the_compiler(
         home, monkeypatch, command):  # noqa: F811
     """
-    A build passes on the two flags that change what is emitted.
+    A build passes all shared compiler options to the compiler.
     """
     app = package(home, "app")
 
-    assert run_sie(monkeypatch, "build", app, "-O2", "-g") == 0
+    assert run_sie(monkeypatch, "build", app, "-O2", "-g",
+                   "-Wunchecked-dereference") == 0
 
     assert "-O2" in command[0]
     assert "-g" in command[0]
+    assert "-Wunchecked-dereference" in command[0]
 
 
 def test_debug_long_option_reaches_the_compiler(
