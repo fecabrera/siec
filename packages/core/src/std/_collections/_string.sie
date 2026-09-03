@@ -116,7 +116,8 @@ import { Formattable } from std.format;
     */
     @inline
     fn as_bytes(&self) -> u8[] {
-        return {self.data as u8*, self.length};
+        if (self.capacity == 0) return [];
+        return {(self.data as u8*)!, self.length};
     }
 
     /**
@@ -126,7 +127,8 @@ import { Formattable } from std.format;
     */
     @inline
     fn as_const_bytes(const &self) -> const u8[] {
-        return {self.data as const u8*, self.length};
+        if (self.capacity == 0) return [];
+        return {(self.data as const u8*)!, self.length};
     }
 
     /**
@@ -138,16 +140,5 @@ import { Formattable } from std.format;
     fn c_str(&self) -> char* {
         self.null_terminate();
         return self.data as char*;
-    }
-
-    /**
-    * Get the List as a null-terminated array.
-    *
-    * @return The List as a null-terminated array.
-    */
-    @inline
-    fn as_null_terminated_array(&self) -> char[] {
-        self.null_terminate();
-        return {self.data as char*, self.length};
     }
 }

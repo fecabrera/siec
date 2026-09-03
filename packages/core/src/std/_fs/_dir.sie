@@ -46,7 +46,7 @@ struct DirectoryIterator: Destroy, Iterator<Path> {
             return false;
         }
 
-        self.path = Path(direntp->d_name as char*);
+        self.path = Path((direntp->d_name as char*)!);
 
         return true;
     }
@@ -158,7 +158,7 @@ struct Directory {
                 }
             }
 
-            callback(Path(d->d_name as char*));
+            callback(Path((d->d_name as char*)!));
 
             i += 1;
         }

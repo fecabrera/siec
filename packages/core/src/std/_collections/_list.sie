@@ -133,7 +133,8 @@ fn List<T>::clone(const &self) -> List<T> {
  * @return The List as an array.
  */
 fn List<T>::as_array(&self) -> T[] {
-    return {self.data as T*, self.length};
+    if (self.capacity == 0) return [];
+    return {(self.data as T*)!, self.length};
 }
 
 /**
@@ -142,7 +143,8 @@ fn List<T>::as_array(&self) -> T[] {
  * @return The List as an array.
  */
 fn List<T>::as_const_array(const &self) -> const T[] {
-    return {self.data as const T*, self.length};
+    if (self.capacity == 0) return [];
+    return {(self.data as const T*)!, self.length};
 }
 
 /**
