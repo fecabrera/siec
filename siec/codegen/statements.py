@@ -290,8 +290,7 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
         # later shadowing declarations stay out of sight
         gen.defer_frames[-1].append((stmt.stmt, dict(scope)))
     elif isinstance(stmt, Drop):
-        emit_expression(
-            gen, builder, MethodCall(stmt.target, "destroy", []), None, scope)
+        emit_expression(gen, builder, stmt.drop_call, None, scope)
         if isinstance(stmt.target, Var) and stmt.target.name in scope:
             from siec.codegen.ownership import set_drop_flag
 
@@ -486,35 +485,47 @@ def emit_assignment(gen: CodeGenerator, builder: ir.IRBuilder,
     else:
         raise TypeError(f"not an assignment statement: {stmt!r}")
 
+    if isinstance(target, Index):
+        target.item_set_call = getattr(stmt, "item_set_call", None)
+        target.item_get_call = getattr(stmt, "item_get_call", None)
+
     # A complete macro place expands before resolution. Members and indices
     # rooted in a macro remain normal lvalue chains; emit_lvalue expands their
     # base at the point its address is needed.
-    place = (None if isinstance(target, Var) and target.qualified
-             else macro_place(gen, target, scope))
+    place = (
+        (stmt.macro_name, stmt.macro_target)
+        if hasattr(stmt, "macro_target")
+        else (None if isinstance(target, Var) and target.qualified
+              else macro_place(gen, target, scope))
+    )
     if place is not None:
         name, expansion = place
         emit_macro_assignment(
-            gen, builder, name, expansion, stmt.value, stmt.line, scope)
+            gen, builder, name, expansion, stmt.value, stmt.line, scope, stmt)
         return
 
     place = resolve_lvalue(
         gen, builder, target, scope,
         allow_const_init=getattr(stmt, "const_init", False))
-    from siec.codegen.assignment import (
-        AssignmentAction,
-        assignment_action,
-        initializes_uninitialized_member,
-    )
+    if hasattr(stmt, "assignment_action"):
+        initializing = stmt.initialization
+        action = stmt.assignment_action
+    elif not gen.emitting:
+        from siec.codegen.assignment import (
+            AssignmentAction,
+            assignment_action,
+            initializes_uninitialized_member,
+        )
 
-    initializing = getattr(
-        stmt, "initialization",
-        initializes_uninitialized_member(target, scope),
-    )
-    action = (
-        AssignmentAction(None, stmt.value)
-        if initializing
-        else assignment_action(gen, target, place.type, stmt.value, scope)
-    )
+        initializing = initializes_uninitialized_member(target, scope)
+        action = (
+            AssignmentAction(None, stmt.value)
+            if initializing
+            else assignment_action(
+                gen, target, place.type, stmt.value, scope)
+        )
+    else:
+        raise RuntimeError("assignment reached Emit without a checked action")
     if action.call is not None:
         emit_expression(gen, builder, action.call, None, scope)
         return
@@ -568,43 +579,70 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
     reassign. Without that method the operator's result assigns back,
     'dec = dec + 1', the way every numeric target works.
     """
-    from siec.codegen.methods import resolve_method
-
-    if (macro := macro_place(gen, stmt.target, scope)) is not None:
+    macro = (
+        (stmt.macro_name, stmt.macro_target)
+        if hasattr(stmt, "macro_target")
+        else macro_place(gen, stmt.target, scope)
+    )
+    if macro is not None:
         name, expansion = macro
+        expanded = CompoundAssign(
+            expansion, stmt.op, stmt.value, line=stmt.line)
+        for attr in (
+                "compound_call", "compound_action", "item_get_call",
+                "item_set_call"):
+            if hasattr(stmt, attr):
+                setattr(expanded, attr, getattr(stmt, attr))
         with macro_view(gen, name):
             emit_compound_assign(
-                gen,
-                builder,
-                CompoundAssign(expansion, stmt.op, stmt.value, line=stmt.line),
-                scope,
-            )
+                gen, builder, expanded, scope)
         return
+
+    def bind_operator_rewrite(replacement, checked_value) -> None:
+        """Rebind a checked operator method to a cached assignment target."""
+        from dataclasses import replace
+        from siec.codegen.hir import checked_call, stamp
+
+        checked_rewrite = getattr(checked_value, "operator_rewrite", None)
+        if not isinstance(checked_rewrite, MethodCall):
+            return
+        rewritten = MethodCall(
+            replacement.left,
+            checked_rewrite.method,
+            [replacement.right],
+            checked_rewrite.type_args,
+        )
+        plan = checked_call(checked_rewrite)
+        if plan.receiver is not None:
+            plan = replace(plan, receiver=replacement.left)
+        stamp(
+            rewritten,
+            resolved_symbol=checked_rewrite.resolved_symbol,
+            call_plan=plan,
+            overwrite=True,
+        )
+        replacement.operator_rewrite = rewritten
+
+    if isinstance(stmt.target, Index):
+        stmt.target.item_get_call = getattr(stmt, "item_get_call", None)
+        stmt.target.item_set_call = getattr(stmt, "item_set_call", None)
 
     place = resolve_lvalue(
         gen, builder, stmt.target, scope, item_mode="update")
-    method = COMPOUND_METHODS.get(stmt.op)
-    target_type = strip_const(place.type or "")
-
     # a struct's indexed getter returns a value, not its storage: update
     # that value through the binary operator, then hand it back to the
     # indexed setter. Do this before considering V's own in-place method,
     # which would otherwise try to mutate the temporary get_item returned.
     if isinstance(place, ItemLValue):
         place.stabilize()
-        place.store(BinaryOp(stmt.op, place.cached_load(), stmt.value))
+        replacement = BinaryOp(stmt.op, place.cached_load(), stmt.value)
+        bind_operator_rewrite(replacement, stmt.compound_action.value)
+        place.store(replacement)
         return
 
-    # only a struct or an array carries methods; anything else takes the
-    # operator's own instructions
-    if method is not None and (target_type in gen.structs
-                               or target_type.endswith("[]")):
-        if resolve_method(gen, target_type, method) is not None:
-            emit_statement_body(gen, builder,
-                                ExprStmt(MethodCall(place.target, method,
-                                                    [stmt.value]),
-                                         line=stmt.line), scope)
-            return
+    if stmt.compound_call is not None:
+        emit_expression(gen, builder, stmt.compound_call, None, scope)
+        return
 
     if place.type is None:
         raise TypeError("cannot determine the type of compound assignment "
@@ -613,15 +651,32 @@ def emit_compound_assign(gen: CodeGenerator, builder: ir.IRBuilder,
     # The address is emitted by cached_load() and retained for store(), so a
     # complex target is evaluated exactly once without a synthetic scope name.
     replacement = BinaryOp(stmt.op, place.cached_load(), stmt.value)
-    from siec.codegen.assignment import assignment_action
+    checked_action = stmt.compound_action
+    checked_value = (
+        checked_action.call.args[0]
+        if checked_action.call is not None
+        else checked_action.value
+    )
+    bind_operator_rewrite(replacement, checked_value)
+    if checked_action.call is not None:
+        from dataclasses import replace
+        from siec.codegen.hir import checked_call, stamp
 
-    action = assignment_action(
-        gen, place.target, place.type, replacement, scope)
-    if action.call is not None:
-        emit_expression(gen, builder, action.call, None, scope)
+        call = MethodCall(
+            place.target, checked_action.call.method, [replacement])
+        plan = checked_call(checked_action.call)
+        if plan.receiver is not None:
+            plan = replace(plan, receiver=place.target)
+        stamp(
+            call,
+            resolved_symbol=checked_action.call.resolved_symbol,
+            call_plan=plan,
+            overwrite=True,
+        )
+        emit_expression(gen, builder, call, None, scope)
         return
 
-    place.store(action.value)
+    place.store(replacement)
 
 
 def emit_sized_array_let(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Let,
@@ -742,15 +797,9 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     'v' to the address 'next()' returns - a true reference into the
     collection, not a copy, exactly like a reference parameter.
     """
-    from siec.ast import Call, MethodCall, Var
+    from siec.ast import Var
     from siec.codegen.calls import emit_call
-    from siec.codegen.methods import iteration_getter, resolve_method
     from siec.codegen.types import resolve_type
-
-    source_type = expr_sie_type(gen, stmt.iterable, scope)
-    source = strip_reference(source_type) if source_type else None
-    if not source:
-        raise TypeError("cannot iterate: the expression has no type")
 
     loop_scope = dict(scope)
     it_name = "__foreach_it"
@@ -758,16 +807,12 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     # an Iterable hands out its iterator - a const source its
     # const_iterator; a value that already is an iterator iterates
     # itself, from a copy of its state
-    if (getter_name := iteration_getter(gen, source)) is not None:
-        getter = MethodCall(stmt.iterable, getter_name, [], None)
-        it_type = expr_sie_type(gen, getter, scope)
-        it_value = emit_expression(gen, builder, getter, None, scope)
-    elif resolve_method(gen, source, "has_next") is not None:
-        it_type = strip_const(source)
-        it_value = emit_expression(gen, builder, stmt.iterable, None, scope)
+    it_type = stmt.iterator_type
+    if stmt.iterator_call is not None:
+        it_value = emit_expression(
+            gen, builder, stmt.iterator_call, None, scope)
     else:
-        raise TypeError(f"cannot iterate a {source_type!r} value: it is "
-                        "neither an Iterable nor an Iterator")
+        it_value = emit_expression(gen, builder, stmt.iterable, None, scope)
 
     slot = entry_alloca(builder, resolve_type(it_type, gen.structs), "foreach.it")
     if (align := gen.struct_align(it_type)) is not None:
@@ -776,20 +821,8 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     builder.store(it_value, slot)
     loop_scope[it_name] = Variable(slot, it_type)
 
-    has_next = resolve_method(gen, it_type, "has_next")
-    next_ = resolve_method(gen, it_type, "next")
-    if has_next is None or next_ is None:
-        raise TypeError(f"cannot iterate: type {it_type!r} has no "
-                        f"{'has_next' if has_next is None else 'next'!r} method")
-
-    # 'v' aliases storage, so the elements must come as references; any
-    # overload set's first candidate answers for the signature
-    from siec.codegen.overloads import overload_candidates
-
-    next_ret = gen.return_types.get(overload_candidates(gen, next_)[0])
-    if not is_reference(next_ret):
-        raise TypeError(f"'foreach' needs {it_type!r}'s 'next' to return "
-                        "a reference '&T'")
+    next_symbol = stmt.next_call.resolved_symbol
+    next_ret = gen.return_types[next_symbol]
 
     func = builder.function
     cond_block = func.append_basic_block("foreach.cond")
@@ -799,15 +832,15 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     builder.branch(cond_block)
 
     builder.position_at_end(cond_block)
-    builder.cbranch(emit_bool(gen, builder, Call(has_next, [Var(it_name)]),
-                              loop_scope),
+    builder.cbranch(emit_bool(
+                        gen, builder, stmt.has_next_call, loop_scope),
                     body_block, end_block)
 
     # each pass takes the next element's address and binds 'v' to it,
     # the way a reference parameter binds its caller's storage
     builder.position_at_end(body_block)
-    address = emit_call(gen, builder, Call(next_, [Var(it_name)]),
-                        loop_scope, as_address=True)
+    address = emit_call(
+        gen, builder, stmt.next_call, loop_scope, as_address=True)
 
     body_scope = dict(loop_scope)
     body_scope[stmt.name] = Variable(address, next_ret)

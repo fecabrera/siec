@@ -6,8 +6,6 @@ from siec.ast import Block, BlockExpr, Call, Expr, Var
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
-from siec.codegen.generics import instantiate_function, pick_call_candidate
-from siec.codegen.methods import method_call, qualified_method
 from siec.codegen.inference import expr_sie_type
 from siec.codegen.types import (
     fn_type_parts,
@@ -22,7 +20,7 @@ from siec.codegen.types import (
 def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict,
               as_address: bool = False):
     """
-    Emit a call to a declared function, checking the argument count.
+    Emit a call from the target and receiver action selected during Check.
 
     A '&T'-returning callee yields the T's address: reading the call
     loads through it, while 'as_address' keeps the address itself, for
@@ -30,13 +28,7 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
     """
     # deferred import: calls and expressions are mutually recursive
     from siec.codegen.expressions import emit_expression
-    from siec.codegen.hir import resolved_callee
-
-    # a typed context (a coercion target) may drive a generic callee's
-    # type arguments; prefer the HIR stamp checking left, then any
-    # coercion-side annotation
-    expected = getattr(call, "expected_type", None)
-    method_receiver = getattr(call, "method_receiver", None)
+    from siec.codegen.hir import checked_call
 
     # a macro call expands in place instead of resolving a function; in
     # an untyped context its 'emit' value types the block
@@ -63,165 +55,81 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
             # an expression macro substitutes its expression in place
             return emit_expression(gen, builder, expansion, None, scope)
 
-    # Checking already picked the concrete callee: skip name / overload /
-    # generic resolution and go straight to ABI and argument emission.
-    # Method sugar 'p.m(a)' keeps the written args without the receiver, so
-    # dotted calls that take a receiver always fall through to re-attach it.
-    stamped = resolved_callee(call)
-    if (stamped is not None and stamped in gen.return_types
-            and (call.type_args is None
-                 or stamped in gen.instantiated_functions
-                 or "<" in stamped)):
-        from siec.codegen.deprecation import check_removed, note_use
-        from siec.codegen.methods import takes_receiver
-        from siec.codegen.worklist import activate_function_instance
+    plan = checked_call(call)
+    if plan is None:
+        # Low-level emitter tests construct a generator without entering the
+        # compiler's Emit phase. Keep their direct-call fixture useful while
+        # the production pipeline requires Check to supply every plan.
+        if not gen.emitting:
+            from siec.codegen.hir import CallPlan
 
-        arity = gen.call_arities[stamped]
-        if arity.accepts(len(call.args)) and not (
-                takes_receiver(gen, stamped) and "." in call.name):
-            if call.type_args is not None and "<" not in stamped:
-                raise TypeError(f"function {call.name!r} is not generic")
+            symbol, _ = gen.resolve_callee(call.name)
+            if not isinstance(gen.module.globals.get(symbol), ir.Function):
+                from siec.codegen.overloads import overload_candidates
 
-            check_removed(gen, stamped)
-            activate_function_instance(gen, stamped)
-            symbol = stamped
-            note_use(gen, symbol)
-
+                candidates = overload_candidates(gen, symbol)
+                symbol = candidates[0] if candidates else symbol
             func = gen.module.globals.get(symbol)
             if not isinstance(func, ir.Function):
                 raise NameError(f"undefined function {call.name!r}")
-
-            if as_address and not is_reference(gen.return_types.get(func.name)):
-                raise TypeError("cannot take the address of a call's value")
-
-            if method_receiver is not None:
-                emit_expression(gen, builder, method_receiver, None, scope)
-
-            return _emit_resolved_call(gen, builder, call, scope, func,
-                                       as_address)
-
-    # the builtin 'enumerate(x)' resolves to its '__enumerate' instance
-    if call.name == "enumerate":
-        from siec.codegen.methods import rewrite_enumerate
-
-        if (rewritten := rewrite_enumerate(gen, call, scope)) is not None:
-            call = rewritten
-
-    # a dotted name is a method on its receiver chain, or resolves
-    # through the file's module bindings; a scoped receiver shadows any
-    # module prefix
-    receiver = method_receiver
-    module = None
-    if "::" in call.name:
-        # 'S::method(s)' passes its receiver explicitly, and a static's
-        # arguments pass as-is; the type name resolves like any written
-        # type, so it may carry dotted generic arguments
-        symbol = qualified_method(gen, call.name)
-        if symbol is None:
-            from siec.codegen.deprecation import check_removed_method
-
-            base = call.name.partition("::")[0]
-
-            # a removed method leaves no declaration to resolve; its
-            # name still answers for the advice
-            check_removed_method(gen, base, call.name.partition("::")[2])
-            raise NameError(f"type {base!r} has no method "
-                            f"{call.name.partition('::')[2]!r}")
-    elif "." in call.name:
-        symbol = None
-        if call.name.split(".", 1)[0] in scope:
-            if (found := method_call(gen, call, scope)) is not None:
-                symbol, receiver = found
-
-        if symbol is None:
-            if (found := gen.resolve_member(call.name.split("."))) is not None:
-                symbol, module = found
-
-        if symbol is None and (found := method_call(gen, call, scope)) is not None:
-            symbol, receiver = found
-
-        if symbol is None:
-            from siec.codegen.deprecation import check_removed_method
-            from siec.codegen.inference import expr_sie_type
-
-            # a removed method leaves no declaration to resolve; the
-            # receiver's type still names it for the advice
-            base, _, method = call.name.rpartition(".")
-            if base in scope:
-                check_removed_method(gen, expr_sie_type(gen, Var(base), scope),
-                                     method)
-
-            raise NameError(f"undefined function {call.name!r}")
-
-        if receiver is None and symbol in gen.globals:
-            return emit_indirect_call(gen, builder, call, scope, symbol)
-    else:
-        # a name in scope is always in view; anything else must be visible
-        # to this file: an imported module's names need their qualified
-        # spelling or a member import. A name carrying '<' is a resolved
-        # instance the compiler wrote; no file's view gates it
-        if (call.name not in scope and "<" not in call.name
-                and not gen.sees(call.name)):
-            raise NameError(f"undefined function {call.name!r}")
-
-        # a variable or global holding a function reference is called through
-        # its value; the current file's statics resolve first, other files' never
-        symbol, module = gen.resolve_call_target(call.name)
-        if call.name in scope or symbol in gen.globals:
-            return emit_indirect_call(gen, builder, call, scope)
-
-    # a removed generic leaves no template to resolve, so its name is
-    # checked before the lookups that would call it undefined
-    from siec.codegen.deprecation import check_removed
-
-    check_removed(gen, symbol)
-
-    # Concrete and generic overloads share one strength ordering: exact,
-    # implicit, then literal adoption. Concrete wins only an equal-strength
-    # tie, rather than every viable concrete conversion winning up front.
-    kind, candidate = pick_call_candidate(
-        gen, symbol, call, scope, expected, module=module,
-        method_receiver=receiver)
-    if kind == "generic":
-        template, type_args = candidate
-        symbol = instantiate_function(gen, template, type_args)
-    else:
-        symbol = candidate
-
-    if receiver is not None:
-        from siec.codegen.methods import takes_receiver
-
-        if takes_receiver(gen, symbol):
-            call = Call(call.name, [receiver, *call.args], call.type_args)
+            count_error = gen.call_arities[symbol].error(len(call.args))
+            if count_error is not None:
+                raise TypeError(
+                    f"{count_error} arguments to function {call.name!r}")
+            plan = CallPlan("direct", symbol=symbol)
         else:
-            emit_expression(gen, builder, receiver, None, scope)
+            raise RuntimeError(
+                f"call {call.name!r} reached Emit without a checked call plan")
 
-    # a stamped overload's body waits for its first picked call
+    if plan.kind == "rewrite":
+        return emit_expression(gen, builder, plan.replacement, None, scope)
+
+    if plan.kind == "indirect":
+        return emit_indirect_call(
+            gen,
+            builder,
+            call,
+            scope,
+            plan.indirect_type,
+            plan.indirect_symbol,
+        )
+
+    if plan.kind == "constructor":
+        from siec.codegen.methods import emit_constructor
+
+        return emit_constructor(
+            gen,
+            builder,
+            plan.constructor_type,
+            plan.symbol,
+            call,
+            scope,
+            as_address,
+        )
+
+    if plan.kind != "direct" or plan.symbol is None:
+        raise RuntimeError(f"invalid checked call plan for {call.name!r}")
+
+    if plan.receiver is not None:
+        if plan.passes_receiver:
+            call = Call(
+                call.name,
+                [plan.receiver, *call.args],
+                call.type_args,
+            )
+        else:
+            emit_expression(gen, builder, plan.receiver, None, scope)
+
+    symbol = plan.symbol
+    from siec.codegen.deprecation import note_use
     from siec.codegen.worklist import activate_function_instance
 
     activate_function_instance(gen, symbol)
+    note_use(gen, symbol)
 
-    if not isinstance(gen.module.globals.get(symbol), ir.Function):
-        # no function by this name: 'S(...)' may construct a struct
-        from siec.codegen.methods import constructor_type, emit_constructor
-
-        if (ctor := constructor_type(gen, call, symbol)) is not None:
-            return emit_constructor(gen, builder, ctor, call, scope, as_address)
-
-        if call.type_args is not None:
-            raise TypeError(f"function {call.name!r} is not generic")
-    elif call.type_args is not None and kind != "generic":
-        raise TypeError(f"function {call.name!r} is not generic")
-
-    # look up the callee among the module's declared functions
     func = gen.module.globals.get(symbol)
     if not isinstance(func, ir.Function):
-        raise NameError(f"undefined function {call.name!r}")
-
-    # the caller reaches this callee: an edge for the deprecation walk
-    from siec.codegen.deprecation import note_use
-
-    note_use(gen, symbol)
+        raise RuntimeError(f"checked callee {symbol!r} was not lowered")
 
     # only a reference-returning call has an address to keep
     if as_address and not is_reference(gen.return_types.get(func.name)):
@@ -235,12 +143,9 @@ def _emit_resolved_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
     """Emit arguments and the call once the concrete LLVM callee is known."""
     from siec.codegen.expressions import emit_expression
 
-    # Source arity is independent of parameters added or reshaped for the ABI.
+    # Source arity is already checked. Its parameter count still controls
+    # variadic packing and default insertion during lowering.
     arity = gen.call_arities[func.name]
-    count_error = arity.error(len(call.args))
-    if count_error is not None:
-        raise TypeError(
-            f"{count_error} arguments to function {call.name!r}")
     expected = arity.parameter_count
     ret_lowering = gen.abi_returns.get(func.name)
 
@@ -475,29 +380,19 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
 
 
 def emit_indirect_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call,
-                       scope: dict, symbol: str | None = None):
+                       scope: dict, type_name: str,
+                       symbol: str | None = None):
     """
-    Emit a call through a function reference held in a variable or a global,
-    the latter under an already-resolved symbol when one is given.
+    Emit a checked call through a local or global function reference.
     """
+    var_type = strip_const(type_name)
     if symbol is not None:
-        var_type, slot = strip_const(gen.globals[symbol]), gen.module.globals[symbol]
-    elif call.name in scope:
-        var = scope[call.name]
-        var_type, slot = strip_const(var.type), var.slot
+        slot = gen.module.globals[symbol]
     else:
-        symbol = gen.resolve_symbol(call.name)
-        var_type, slot = strip_const(gen.globals[symbol]), gen.module.globals[symbol]
+        slot = scope[call.name].slot
 
     closure = var_type.startswith("closure fn(")
-    if (not var_type.startswith(("fn(", "closure fn("))
-            or fn_type_parts(var_type)[2]):
-        raise TypeError(f"cannot call non-function variable {call.name!r}")
-
     sie_params = fn_type_parts(var_type)[0]
-    if len(call.args) != len(sie_params):
-        raise TypeError(f"function reference {call.name!r} takes "
-                        f"{len(sie_params)} arguments, got {len(call.args)}")
 
     callee = builder.load(slot, name=call.name)
     if closure:

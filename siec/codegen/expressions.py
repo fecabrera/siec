@@ -490,9 +490,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
             gen, builder, expr, value, expr_sie_type(gen, expr, scope))
 
     if isinstance(expr, Index):
-        from siec.codegen.inference import item_call
-
-        if (rewritten := item_call(gen, expr, scope, "get_item")) is not None:
+        if (rewritten := getattr(expr, "item_get_call", None)) is not None:
             return emit_expression(gen, builder, rewritten, expected_type, scope)
 
         # a tuple's element reads by its constant index
@@ -527,9 +525,7 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         return load
 
     if isinstance(expr, Slice):
-        from siec.codegen.inference import slice_call
-
-        if (rewritten := slice_call(gen, expr, scope)) is not None:
+        if (rewritten := getattr(expr, "slice_call", None)) is not None:
             return emit_expression(gen, builder, rewritten, expected_type, scope)
         return emit_slice(gen, builder, expr, expected_type, scope)
 
@@ -674,7 +670,8 @@ def emit_expression(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
         # a struct operand's operator is the method call it desugars to:
         # 'a + b' is 'a.add(b)', each overload picked by b's type, and
         # 'a != b' the negated 'not a.eq(b)'
-        if (rewritten := operator_call(gen, expr, scope)) is not None:
+        rewritten = getattr(expr, "operator_rewrite", None)
+        if rewritten is not None:
             return emit_expression(gen, builder, rewritten, expected_type, scope)
 
         # logical operators coerce each side to a bool on its own terms
@@ -902,11 +899,18 @@ def emit_bool(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: dict
     C-style, pointers against null, and a Truthy struct through its
     semantically resolved method.
     """
-    if (symbol := getattr(expr, "truthy_symbol", None)) is not None:
+    if (plan := getattr(expr, "truthy_plan", None)) is not None:
+        symbol = plan.symbol
         call = Call(symbol, [expr])
         from siec.codegen.hir import stamp
 
-        stamp(call, resolved_symbol=symbol, sie_type="bool", overwrite=True)
+        stamp(
+            call,
+            resolved_symbol=symbol,
+            call_plan=plan,
+            sie_type="bool",
+            overwrite=True,
+        )
         return emit_expression(gen, builder, call, ir.IntType(1), scope)
 
     value = emit_expression(gen, builder, expr, ir.IntType(1), scope)
@@ -1750,7 +1754,7 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     # rebuilt as the Result the function around it returns
     body = expr.body
     if body is None:
-        body = [Return(Call("Error", [Var(ERROR)]), line=expr.line)]
+        body = [Return(expr.propagated_call, line=expr.line)]
 
     # a fallback expression is the value to take, so it emits; where the
     # result carries none to take, it is simply run for its effects

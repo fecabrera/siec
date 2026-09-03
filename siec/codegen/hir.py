@@ -31,6 +31,20 @@ ValueCategory = Literal[
 
 
 @dataclass(frozen=True)
+class CallPlan:
+    """The call target and receiver action selected during Check."""
+
+    kind: Literal["direct", "indirect", "constructor", "rewrite"]
+    symbol: str | None = None
+    receiver: Expr | None = None
+    passes_receiver: bool = False
+    constructor_type: str | None = None
+    indirect_type: str | None = None
+    indirect_symbol: str | None = None
+    replacement: Expr | None = None
+
+
+@dataclass(frozen=True)
 class TypedExpr:
     """
     View of the typed-HIR fields stamped on an expression.
@@ -44,7 +58,9 @@ class TypedExpr:
     coerce_to: str | None = None
     coerce_kind: CoerceKind | None = None
     resolved_symbol: str | None = None
+    call_plan: CallPlan | None = None
     truthy_symbol: str | None = None
+    truthy_plan: CallPlan | None = None
     field_index: int | None = None
     field_type: str | None = None
     value_category: ValueCategory | None = None
@@ -58,7 +74,9 @@ _TYPED_ATTRS = (
     "coerce_to",
     "coerce_kind",
     "resolved_symbol",
+    "call_plan",
     "truthy_symbol",
+    "truthy_plan",
     "field_index",
     "field_type",
     "value_category",
@@ -76,7 +94,9 @@ def typed(expr: Expr | object) -> TypedExpr:
         coerce_to=getattr(expr, "coerce_to", None),
         coerce_kind=getattr(expr, "coerce_kind", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
+        call_plan=getattr(expr, "call_plan", None),
         truthy_symbol=getattr(expr, "truthy_symbol", None),
+        truthy_plan=getattr(expr, "truthy_plan", None),
         field_index=getattr(expr, "field_index", None),
         field_type=getattr(expr, "field_type", None),
         value_category=getattr(expr, "value_category", None),
@@ -135,3 +155,8 @@ def annotate_result(expr: Expr | object, result: str | None,
 def resolved_callee(expr: Expr | object) -> str | None:
     """The callee symbol stamped during checking, if any."""
     return getattr(expr, "resolved_symbol", None)
+
+
+def checked_call(expr: Expr | object) -> CallPlan | None:
+    """Return the call plan recorded during Check, if present."""
+    return getattr(expr, "call_plan", None)

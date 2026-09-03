@@ -71,11 +71,15 @@ def _resolve_macro_var(gen: CodeGenerator, var: Var) -> str | None:
 
 def _object_macro_call(var: Var, name: str) -> Call:
     """Build the resolved zero-value-argument call for an object macro."""
+    if (cached := getattr(var, "macro_call", None)) is not None:
+        return cached
+
     call = Call(name, [], var.type_args)
     call.macro_resolved = True
     for attr in ("macro_argument_file", "macro_type_args_resolved"):
         if hasattr(var, attr):
             setattr(call, attr, getattr(var, attr))
+    var.macro_call = call
     return call
 
 
@@ -247,7 +251,7 @@ def macro_place(gen: CodeGenerator, expr, scope: dict):
 
 
 def emit_macro_assignment(gen: CodeGenerator, builder, name: str, target,
-                          value, line: int, scope: dict) -> None:
+                          value, line: int, scope: dict, checked_stmt) -> None:
     """
     Assign through a macro's expansion: the expanded target rebuilds
     into the assignment it means, emitted in the macro's view.
@@ -262,6 +266,10 @@ def emit_macro_assignment(gen: CodeGenerator, builder, name: str, target,
     except SyntaxError:
         raise TypeError(f"macro {name!r} does not expand to an "
                         "assignable place") from None
+
+    if hasattr(checked_stmt, "assignment_action"):
+        assignment.initialization = checked_stmt.initialization
+        assignment.assignment_action = checked_stmt.assignment_action
 
     with macro_view(gen, name):
         emit_statement_body(gen, builder, assignment, scope)

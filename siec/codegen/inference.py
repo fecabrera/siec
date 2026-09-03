@@ -296,6 +296,12 @@ def expr_sie_type(gen: CodeGenerator, expr: Expr, scope: dict) -> str | None:
 def _expr_sie_type(gen: CodeGenerator, expr: Expr,
                    scope: dict) -> str | None:
     """Implementation of :func:`expr_sie_type` under its source view."""
+    # Check records the final value type. Emit must not repeat name,
+    # overload, generic, method, or constructor selection to recover it.
+    if (isinstance(expr, (Call, MethodCall))
+            and (checked := getattr(expr, "sie_type", None)) is not None):
+        return checked
+
     if isinstance(expr, CachedExpr):
         return expr_sie_type(gen, expr.expr, scope)
 

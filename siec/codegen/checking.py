@@ -195,8 +195,12 @@ def check_owned_cleanup(gen: CodeGenerator, name: str, scope: dict) -> None:
     from siec.codegen.ownership import destroyable
 
     if destroyable(gen, scope[name].type):
-        check_expression(
-            gen, MethodCall(Var(name), "destroy", []), scope)
+        call = MethodCall(Var(name), "destroy", [])
+        check_expression(gen, call, scope)
+        plans = getattr(gen, "drop_call_plans", None)
+        if plans is None:
+            plans = gen.drop_call_plans = {}
+        plans[strip_const(scope[name].type)] = call.call_plan
 
 
 def check_temporary_cleanup(gen: CodeGenerator, type_name: str | None,
@@ -209,7 +213,12 @@ def check_temporary_cleanup(gen: CodeGenerator, type_name: str | None,
     name = ".temporary.drop"
     inner = dict(scope)
     inner[name] = checked_variable(strip_const(type_name))
-    check_expression(gen, MethodCall(Var(name), "destroy", []), inner)
+    call = MethodCall(Var(name), "destroy", [])
+    check_expression(gen, call, inner)
+    plans = getattr(gen, "drop_call_plans", None)
+    if plans is None:
+        plans = gen.drop_call_plans = {}
+    plans[strip_const(type_name)] = call.call_plan
 
 
 def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
@@ -370,6 +379,19 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
 
         if isinstance(stmt, (Assign, MemberAssign, RefAssign, IndexAssign)):
             target = assignment_target(stmt)
+            from siec.codegen.macros import macro_place, macro_view
+
+            if (macro := macro_place(gen, target, scope)) is not None:
+                name, expansion = macro
+                stmt.macro_name = name
+                stmt.macro_target = expansion
+                with macro_view(gen, name):
+                    try:
+                        mutable_lvalue_type(gen, expansion, scope)
+                    except (NameError, TypeError):
+                        raise TypeError(
+                            f"macro {name!r} does not expand to an "
+                            "assignable place") from None
             const_init = (
                 isinstance(target, Var)
                 and target.name in scope
@@ -387,18 +409,30 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
 
             stmt.initialization = initializes_uninitialized_member(
                 target, scope)
+            item_setter = None
+            if isinstance(target, Index):
+                from siec.codegen.inference import item_call
+
+                item_setter = item_call(
+                    gen, target, scope, "set_item", stmt.value)
             action = (
                 AssignmentAction(None, stmt.value)
                 if stmt.initialization
                 else assignment_action(
                     gen, target, target_type, stmt.value, scope)
             )
-            if action.call is not None:
-                check_expression(gen, action.call, scope)
-            else:
-                check_expression(gen, action.value, scope, target_type)
-                consume_owned_expression(
-                    gen, action.value, target_type, scope)
+            if item_setter is not None:
+                check_expression(gen, item_setter, scope)
+                stmt.item_set_call = item_setter
+                target.item_set_call = item_setter
+            stmt.assignment_action = action
+            if item_setter is None:
+                if action.call is not None:
+                    check_expression(gen, action.call, scope)
+                else:
+                    check_expression(gen, action.value, scope, target_type)
+                    consume_owned_expression(
+                        gen, action.value, target_type, scope)
 
             if isinstance(target, Var) and target.name in scope:
                 variable = scope[target.name]
@@ -407,7 +441,28 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             return False
 
         if isinstance(stmt, CompoundAssign):
+            from siec.codegen.macros import macro_place
+
+            if (macro := macro_place(gen, stmt.target, scope)) is not None:
+                stmt.macro_name, stmt.macro_target = macro
             target_type = mutable_lvalue_type(gen, stmt.target, scope)
+            replacement = BinaryOp(stmt.op, stmt.target, stmt.value)
+            if isinstance(stmt.target, Index):
+                from siec.codegen.inference import item_call
+
+                setter = item_call(
+                    gen, stmt.target, scope, "set_item", replacement)
+                if setter is not None:
+                    from siec.codegen.assignment import AssignmentAction
+
+                    check_expression(gen, setter, scope)
+                    stmt.item_get_call = getattr(
+                        stmt.target, "item_get_call", None)
+                    stmt.item_set_call = setter
+                    stmt.compound_call = None
+                    stmt.compound_action = AssignmentAction(None, replacement)
+                    return False
+
             from siec.codegen.methods import resolve_method
             from siec.codegen.statements import COMPOUND_METHODS
 
@@ -417,18 +472,18 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     and (concrete in gen.structs
                          or concrete.endswith("[]"))
                     and resolve_method(gen, concrete, method) is not None):
-                check_expression(
-                    gen,
-                    MethodCall(stmt.target, method, [stmt.value]),
-                    scope,
-                )
+                call = MethodCall(stmt.target, method, [stmt.value])
+                check_expression(gen, call, scope)
+                stmt.compound_call = call
+                stmt.compound_action = None
                 return False
 
-            replacement = BinaryOp(stmt.op, stmt.target, stmt.value)
             from siec.codegen.assignment import assignment_action
 
             action = assignment_action(
                 gen, stmt.target, target_type, replacement, scope)
+            stmt.compound_call = None
+            stmt.compound_action = action
             if action.call is not None:
                 check_expression(gen, action.call, scope)
             else:
@@ -650,8 +705,9 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             # bounded receiver family is instantiated; there is no method
             # symbol for the bare T during template-body checking.
             if not bounded_destroy:
-                check_expression(
-                    gen, MethodCall(stmt.target, "destroy", []), scope)
+                call = MethodCall(stmt.target, "destroy", [])
+                check_expression(gen, call, scope)
+                stmt.drop_call = call
             if isinstance(stmt.target, Var) and stmt.target.name in scope:
                 variable = scope[stmt.target.name]
                 if not is_reference(variable.type):
@@ -771,8 +827,10 @@ def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict, *,
         return declared
 
     if isinstance(expr, Index):
+        check_expression(gen, expr.base, scope)
         reject_const_base(gen, scope, expr.base)
     elif isinstance(expr, UnaryOp) and expr.op == "*":
+        check_expression(gen, expr.operand, scope)
         reject_const_base(gen, scope, expr.operand)
     elif isinstance(expr, Cast):
         declared = expr_sie_type(gen, expr, scope)
@@ -780,6 +838,13 @@ def mutable_lvalue_type(gen: CodeGenerator, expr: Expr, scope: dict, *,
             raise TypeError("cannot assign through a const cast")
         reject_const_base(gen, scope, expr.operand)
     elif isinstance(expr, (Call, MethodCall)):
+        # A call used only as a place does not pass through the ordinary
+        # expression checker. Check it here so Emit receives its call plan.
+        check_expression(gen, expr, scope)
+        from siec.codegen.ownership import expression_returns_reference
+
+        if not expression_returns_reference(gen, expr):
+            raise TypeError("cannot take the address of a call's value")
         declared = expr_sie_type(gen, expr, scope)
         if is_const(declared):
             raise TypeError(
@@ -835,7 +900,6 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
                   fn: Function, emit_type: str | None) -> None:
     """Resolve iterator methods and check a foreach body semantically."""
     from siec.codegen.methods import iteration_getter, resolve_method
-    from siec.codegen.overloads import overload_candidates
 
     source_type = check_expression(gen, stmt.iterable, scope)
     source = strip_reference(source_type) if source_type else None
@@ -845,8 +909,10 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
     if (getter := iteration_getter(gen, source)) is not None:
         call = MethodCall(stmt.iterable, getter, [])
         it_type = check_expression(gen, call, scope)
+        stmt.iterator_call = call
     elif resolve_method(gen, source, "has_next") is not None:
         it_type = strip_const(source)
+        stmt.iterator_call = None
     else:
         raise TypeError(f"cannot iterate a {source_type!r} value: it is "
                         "neither an Iterable nor an Iterator")
@@ -858,7 +924,19 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
                         f"{'has_next' if has_next is None else 'next'!r} "
                         "method")
 
-    next_ret = gen.return_types.get(overload_candidates(gen, next_)[0])
+    iterator_scope = dict(scope)
+    iterator_scope["__foreach_it"] = checked_variable(it_type)
+    has_next_call = Call(has_next, [Var("__foreach_it")])
+    next_call = Call(next_, [Var("__foreach_it")])
+    check_call(
+        gen, has_next_call, iterator_scope, "bool", resolved=has_next)
+    check_call(gen, next_call, iterator_scope, None, resolved=next_)
+    stmt.iterator_type = it_type
+    stmt.has_next_call = has_next_call
+    stmt.next_call = next_call
+
+    next_symbol = getattr(next_call, "resolved_symbol", None)
+    next_ret = gen.return_types.get(next_symbol)
     if not is_reference(next_ret):
         raise TypeError(f"'foreach' needs {it_type!r}'s 'next' to return "
                         "a reference '&T'")
@@ -940,7 +1018,12 @@ def check_truth(gen: CodeGenerator, expr: Expr, scope: dict) -> None:
 
         from siec.codegen.hir import stamp
 
-        stamp(expr, truthy_symbol=symbol, overwrite=True)
+        stamp(
+            expr,
+            truthy_symbol=call.call_plan.symbol,
+            truthy_plan=call.call_plan,
+            overwrite=True,
+        )
         return
 
     raise TypeError(f"cannot test a value of type {actual or '?'} for truth")
@@ -1019,7 +1102,14 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             resolved=symbol,
             method_receiver=expr.receiver,
         )
-        expr.resolved_symbol = getattr(call, "resolved_symbol", symbol)
+        from siec.codegen.hir import stamp
+
+        stamp(
+            expr,
+            resolved_symbol=getattr(call, "resolved_symbol", symbol),
+            call_plan=getattr(call, "call_plan", None),
+            overwrite=True,
+        )
         from siec.codegen.ownership import mark_self_returned_temporary
 
         mark_self_returned_temporary(gen, expr)
@@ -1098,6 +1188,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             propagated = Call("Error", [Var("try.error")])
             check_expression(
                 gen, propagated, propagated_scope, returned)
+            expr.propagated_call = propagated
             consume_owned_expression(
                 gen, propagated, returned, propagated_scope)
             return value_type
@@ -1294,12 +1385,14 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
         if (rewritten := item_call(
                 gen, expr, scope, "get_item")) is not None:
+            expr.item_get_call = rewritten
             return check_expression(gen, rewritten, scope, expected)
 
     if isinstance(expr, Slice):
         from siec.codegen.inference import slice_call
 
         if (rewritten := slice_call(gen, expr, scope)) is not None:
+            expr.slice_call = rewritten
             return check_expression(gen, rewritten, scope, expected)
 
     if isinstance(expr, UnaryOp) and expr.op == "&":
@@ -1325,6 +1418,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             return check_expression(gen, rewritten, scope, expected)
 
         if (rewritten := operator_call(gen, expr, scope)) is not None:
+            expr.operator_rewrite = rewritten
             return check_expression(gen, rewritten, scope, expected)
 
         if expr.op in ("and", "or"):
@@ -1498,6 +1592,7 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         takes_receiver,
     )
     from siec.codegen.worklist import activate_function_instance
+    from siec.codegen.hir import CallPlan, stamp
 
     written_call = call
     method_receiver = (method_receiver if method_receiver is not None
@@ -1525,18 +1620,29 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         from siec.codegen.methods import rewrite_enumerate
 
         if (rewritten := rewrite_enumerate(gen, call, scope)) is not None:
-            return check_expression(gen, rewritten, scope, expected)
+            result = check_expression(gen, rewritten, scope, expected)
+            stamp(
+                call,
+                call_plan=CallPlan("rewrite", replacement=rewritten),
+                sie_type=result,
+                expected_type=expected,
+                overwrite=True,
+            )
+            return result
 
     indirect = None
+    indirect_symbol = None
     if call.name in scope:
         indirect = scope[call.name].type
     elif "." not in call.name and "::" not in call.name:
         global_symbol = gen.resolve_symbol(call.name)
         if global_symbol in gen.globals:
             indirect = gen.globals[global_symbol]
+            indirect_symbol = global_symbol
 
     if indirect is not None:
-        return check_indirect_call(gen, call, scope, indirect)
+        return check_indirect_call(
+            gen, call, scope, indirect, symbol=indirect_symbol)
 
     symbol = resolved
     module = None
@@ -1549,7 +1655,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
             symbol, method_receiver = found
         if (symbol is not None and method_receiver is None
                 and symbol in gen.globals):
-            return check_indirect_call(gen, call, scope, gen.globals[symbol])
+            return check_indirect_call(
+                gen, call, scope, gen.globals[symbol], symbol=symbol)
         if symbol is None:
             from siec.codegen.deprecation import check_removed_method
 
@@ -1579,7 +1686,9 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         symbol = candidate
     activate_function_instance(gen, symbol)
 
-    if method_receiver is not None and takes_receiver(gen, symbol):
+    passes_receiver = (
+        method_receiver is not None and takes_receiver(gen, symbol))
+    if passes_receiver:
         call = Call(
             call.name,
             [method_receiver, *call.args],
@@ -1620,6 +1729,7 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
                     inner,
                     resolved=init,
                 )
+                init = getattr(generic_call, "resolved_symbol", init)
             else:
                 init = init_candidate
                 activate_function_instance(gen, init)
@@ -1640,6 +1750,25 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
                 note_use(gen, init)
             gen.checked_call = None
+            plan = CallPlan(
+                "constructor",
+                symbol=init,
+                constructor_type=ctor,
+            )
+            stamp(
+                call,
+                call_plan=plan,
+                sie_type=ctor,
+                expected_type=expected,
+                overwrite=True,
+            )
+            stamp(
+                written_call,
+                call_plan=plan,
+                sie_type=ctor,
+                expected_type=expected,
+                overwrite=True,
+            )
             return ctor
         if call.type_args is not None:
             raise TypeError(f"function {call.name!r} is not generic")
@@ -1661,12 +1790,17 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
     note_use(gen, symbol)
     gen.checked_call = symbol
-    from siec.codegen.hir import stamp
 
     result = strip_reference(gen.return_types.get(symbol))
-    stamp(call, resolved_symbol=symbol, sie_type=result,
+    plan = CallPlan(
+        "direct",
+        symbol=symbol,
+        receiver=method_receiver,
+        passes_receiver=passes_receiver,
+    )
+    stamp(call, resolved_symbol=symbol, call_plan=plan, sie_type=result,
           expected_type=expected, overwrite=True)
-    stamp(written_call, resolved_symbol=symbol, sie_type=result,
+    stamp(written_call, resolved_symbol=symbol, call_plan=plan, sie_type=result,
           expected_type=expected, overwrite=True)
     if expected is not None and result is not None and expected != result:
         stamp(call, coerce_to=expected, coerce_kind="widen", overwrite=True)
@@ -1676,7 +1810,8 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
 
 
 def check_indirect_call(gen: CodeGenerator, call: Call, scope: dict,
-                        type_name: str) -> str | None:
+                        type_name: str, *, symbol: str | None = None
+                        ) -> str | None:
     """Check a call through a function-typed variable or global."""
     type_name = strip_const(type_name)
     if not type_name.startswith(("fn(", "closure fn(")):
@@ -1692,7 +1827,20 @@ def check_indirect_call(gen: CodeGenerator, call: Call, scope: dict,
             f"arguments, got {len(call.args)}")
     check_call_arguments(gen, call, scope, params)
     gen.checked_call = None
-    return strip_reference(ret)
+    result = strip_reference(ret)
+    from siec.codegen.hir import CallPlan, stamp
+
+    stamp(
+        call,
+        call_plan=CallPlan(
+            "indirect",
+            indirect_type=type_name,
+            indirect_symbol=symbol,
+        ),
+        sie_type=result,
+        overwrite=True,
+    )
+    return result
 
 
 def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,

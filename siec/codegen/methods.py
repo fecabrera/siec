@@ -770,12 +770,14 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
     picks the method, and joins the arguments as the hidden first one.
     """
     from siec.codegen.calls import emit_call
-    from siec.codegen.hir import resolved_callee, stamp
+    from siec.codegen.hir import CallPlan, checked_call, stamp
     from siec.codegen.inference import expr_sie_type
 
-    # Prefer the callee checking already selected.
-    symbol = resolved_callee(expr)
-    if symbol is None:
+    # User-written methods carry the selection made during Check. Compiler
+    # rewrites can create a method call during Emit, after semantic checking.
+    plan = checked_call(expr)
+    symbol = plan.symbol if plan is not None else None
+    if plan is None:
         receiver_type = expr_sie_type(gen, expr.receiver, scope)
         symbol = resolve_method(gen, receiver_type, expr.method)
     if symbol is None:
@@ -789,7 +791,9 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
                         f"{expr.method!r}")
 
     # a static's receiver expression evaluates only for its effects
-    if not takes_receiver(gen, symbol):
+    passes_receiver = (plan.passes_receiver if plan is not None
+                       else takes_receiver(gen, symbol))
+    if not passes_receiver:
         from siec.codegen.expressions import emit_expression
 
         emit_expression(gen, builder, expr.receiver, None, scope)
@@ -798,7 +802,12 @@ def emit_method_call(gen: CodeGenerator, builder, expr, scope: dict,
         call = Call(symbol, [expr.receiver, *expr.args], expr.type_args)
 
     # Carry HIR stamps onto the synthetic call so emit_call skips re-pick.
-    stamp(call, resolved_symbol=symbol, overwrite=True)
+    stamp(
+        call,
+        resolved_symbol=symbol,
+        call_plan=CallPlan("direct", symbol=symbol),
+        overwrite=True,
+    )
     if (context := getattr(expr, "expected_type", None)) is not None:
         call.expected_type = context
     if (sie_type := getattr(expr, "sie_type", None)) is not None:
@@ -837,16 +846,18 @@ def constructor_type(gen: CodeGenerator, call, symbol: str | None) -> str | None
     return canonical if strip_const(canonical) in gen.structs else None
 
 
-def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
-                     scope: dict, as_address: bool = False):
+def emit_constructor(gen: CodeGenerator, builder, type_name: str,
+                     init_symbol: str, call, scope: dict,
+                     as_address: bool = False):
     """
     Emit 'S(args)': stack space for an instance, its field defaults, then
     'S::init(self, args...)' - the expression form of
     'let s: S; s.init(args...);', yielding the instance.
     """
-    from siec.codegen.calls import emit_argument
+    from siec.codegen.calls import emit_call
     from siec.codegen.expressions import default_value
-    from siec.codegen.generator import entry_alloca
+    from siec.codegen.generator import Variable, entry_alloca
+    from siec.codegen.hir import CallPlan, stamp
     from siec.codegen.types import resolve_type
 
     llvm_type = resolve_type(type_name, gen.structs)
@@ -858,71 +869,17 @@ def emit_constructor(gen: CodeGenerator, builder, type_name: str, call,
     if (default := default_value(gen, builder, type_name)) is not None:
         builder.store(default, slot)
 
-    symbol = resolve_method(gen, type_name, "init")
-    if symbol is None:
-        raise TypeError(f"type {type_name!r} has no 'init' method to "
-                        "construct it")
-
-    if not takes_receiver(gen, symbol):
-        raise TypeError(f"a static 'init' cannot construct {type_name!r}: "
-                        "the constructor passes the instance as its receiver")
-
-    # Rank constructor overloads together. The generic call carries the
-    # materialized receiver while concrete ranking can use its type directly.
-    from siec.codegen.generics import pick_call_candidate
-    from siec.codegen.generator import Variable
-
     inner = dict(scope)
     inner[".ctor.self"] = Variable(slot, type_name)
-    generic_call = Call(
-        f"{type_name}::init", [Var(".ctor.self"), *call.args])
-    kind, candidate = pick_call_candidate(
-        gen, symbol, call, scope, receiver=type_name,
-        generic_call=generic_call, generic_scope=inner)
-
-    # a generic 'init' instantiates through the ordinary call path, with the
-    # fresh instance supplied as its explicit receiver.
-    if kind == "generic":
-        from siec.codegen.calls import emit_call
-
-        emit_call(gen, builder, generic_call, inner)
-
-        return slot if as_address else builder.load(slot)
-
-    symbol = candidate
-
-    # a stamped overload's body waits for its first picked call
-    from siec.codegen.deprecation import note_use
-    from siec.codegen.worklist import activate_function_instance
-
-    activate_function_instance(gen, symbol)
-    note_use(gen, symbol)
-
-    func = gen.module.globals[symbol]
-    sie_params = gen.param_types[func.name]
-    arity = gen.call_arities[func.name].without_prefix(1)
-    expected = arity.parameter_count
-
-    # trailing parameters with defaults are optional here too
-    defaults, defaults_file = gen.param_defaults.get(func.name, ([], None))
-    count_error = arity.error(len(call.args))
-    if count_error is not None:
-        raise TypeError(f"{count_error} arguments to function {symbol!r}")
-
-    args = [slot]
-    for i, arg in enumerate(call.args):
-        args.append(emit_argument(gen, builder, arg, sie_params[i + 1], scope))
-
-    # omitted arguments take init's declared defaults, emitted under the
-    # declaring file's view, away from any local names
-    if len(call.args) < expected:
-        previous, gen.current_file = gen.current_file, defaults_file
-        try:
-            for i in range(len(call.args), expected):
-                args.append(emit_argument(gen, builder, defaults[i + 1],
-                                          sie_params[i + 1], {}))
-        finally:
-            gen.current_file = previous
-
-    builder.call(func, args)
+    init_call = Call(
+        init_symbol,
+        [Var(".ctor.self"), *call.args],
+    )
+    stamp(
+        init_call,
+        resolved_symbol=init_symbol,
+        call_plan=CallPlan("direct", symbol=init_symbol),
+        overwrite=True,
+    )
+    emit_call(gen, builder, init_call, inner)
     return slot if as_address else builder.load(slot)

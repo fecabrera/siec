@@ -8,7 +8,7 @@ from llvmlite import ir
 from siec.ast import (CachedExpr, Call, Cast, Index, Member, MethodCall,
                       UnaryOp, Var)
 from siec.codegen.generator import CodeGenerator, Variable, make_volatile
-from siec.codegen.inference import expr_sie_type, item_call, member_field
+from siec.codegen.inference import expr_sie_type, member_field
 from siec.codegen.resolution import fold_qualified
 from siec.codegen.types import is_const, strip_reference
 
@@ -168,13 +168,33 @@ class ItemLValue:
             volatile_chain(self.gen, self.target.base, self.scope),
         )
         self.scope = stable_scope
-        self.target = Index(Var(name), CachedExpr(self.target.index))
+        previous = self.target
+        self.target = Index(Var(name), CachedExpr(previous.index))
+        self.target.item_get_call = getattr(previous, "item_get_call", None)
+        self.target.item_set_call = getattr(previous, "item_set_call", None)
+
+    def planned_method(self, source, method: str, args: list):
+        """Rebind a checked item-method plan to this stabilized target."""
+        from dataclasses import replace
+        from siec.codegen.hir import checked_call, stamp
+
+        call = MethodCall(self.target.base, method, args)
+        plan = checked_call(source)
+        if plan.receiver is not None:
+            plan = replace(plan, receiver=self.target.base)
+        stamp(
+            call,
+            resolved_symbol=source.resolved_symbol,
+            call_plan=plan,
+            overwrite=True,
+        )
+        return call
 
     def getter(self):
         if not self.has_getter:
             raise TypeError("indexed compound assignment requires get_item")
-        return MethodCall(
-            self.target.base, "get_item", [self.target.index])
+        return self.planned_method(
+            self.target.item_get_call, "get_item", [self.target.index])
 
     def load(self):
         """Read the indexed value through get_item."""
@@ -199,8 +219,11 @@ class ItemLValue:
 
         from siec.codegen.expressions import emit_expression
 
-        setter = MethodCall(
-            self.target.base, "set_item", [self.target.index, value])
+        setter = self.planned_method(
+            self.target.item_set_call,
+            "set_item",
+            [self.target.index, value],
+        )
         emit_expression(self.gen, self.builder, setter, None, self.scope)
 
 
@@ -248,8 +271,8 @@ def resolve_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, target,
 
     elif isinstance(target, Index):
         reject_const_base(gen, scope, target.base)
-        setter = item_call(gen, target, scope, "set_item")
-        getter = item_call(gen, target, scope, "get_item")
+        setter = getattr(target, "item_set_call", None)
+        getter = getattr(target, "item_get_call", None)
         if setter is not None and (item_mode != "update" or getter is not None):
             return ItemLValue(
                 gen, builder, target, scope, value_type, declared_type,

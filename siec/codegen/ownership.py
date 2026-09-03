@@ -80,13 +80,23 @@ def set_drop_flag(builder, variable: Variable, active: bool) -> None:
 
 def emit_drop_slot(gen: CodeGenerator, builder, slot, type_name: str) -> None:
     """Invoke Destroy::destroy for one known-initialized storage slot."""
+    from siec.ast import Call
     from siec.codegen.expressions import emit_expression
+    from siec.codegen.hir import CallPlan, stamp
 
     name = f".drop.value.{gen.temporary_count}"
     gen.temporary_count += 1
     scope = {name: Variable(slot, type_name)}
-    emit_expression(
-        gen, builder, MethodCall(Var(name), "destroy", []), None, scope)
+    checked = gen.drop_call_plans[strip_const(type_name)]
+    symbol = checked.symbol
+    call = Call(symbol, [Var(name)])
+    stamp(
+        call,
+        resolved_symbol=symbol,
+        call_plan=CallPlan("direct", symbol=symbol),
+        overwrite=True,
+    )
+    emit_expression(gen, builder, call, None, scope)
 
 
 def emit_drop_cleanup(gen: CodeGenerator, builder,

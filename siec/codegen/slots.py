@@ -39,18 +39,13 @@ def check_slot_function(gen: CodeGenerator, fn) -> bool:
             target: checked_variable(f"&{element}"),
         }
         if type_implements(gen, element, f"AssignFrom<{element}>"):
-            check_expression(
-                gen,
-                MethodCall(Var(target), "assign_from", [Var(source)]),
-                scope,
-            )
+            call = MethodCall(Var(target), "assign_from", [Var(source)])
+            check_expression(gen, call, scope)
+            fn.slot_assign_call = call
         elif type_implements(gen, element, "Clone"):
-            check_expression(
-                gen,
-                MethodCall(Var(source), "clone", []),
-                scope,
-                element,
-            )
+            call = MethodCall(Var(source), "clone", [])
+            check_expression(gen, call, scope, element)
+            fn.slot_clone_call = call
             from siec.codegen.checking import check_temporary_cleanup
 
             check_temporary_cleanup(gen, element, {})
@@ -72,12 +67,11 @@ def check_slot_function(gen: CodeGenerator, fn) -> bool:
                                                checked_variable)
 
             name = ".slot.source"
+            call = MethodCall(Var(name), "clone", [])
             check_expression(
-                gen,
-                MethodCall(Var(name), "clone", []),
-                {name: checked_variable(f"const &{element}")},
-                element,
-            )
+                gen, call,
+                {name: checked_variable(f"const &{element}")}, element)
+            fn.slot_clone_call = call
 
     if method in ("drop", "replace") and destroyable(gen, element):
         from siec.codegen.checking import check_temporary_cleanup
@@ -133,9 +127,7 @@ def emit_slot_function(gen: CodeGenerator, builder: ir.IRBuilder,
                 target: Variable(func.args[1], f"&{element}"),
             }
             emit_expression(
-                gen, builder,
-                MethodCall(Var(target), "assign_from", [Var(source)]),
-                None, scope)
+                gen, builder, fn.slot_assign_call, None, scope)
             builder.ret_void()
             return True
 
@@ -147,8 +139,7 @@ def emit_slot_function(gen: CodeGenerator, builder: ir.IRBuilder,
                 source: Variable(storage, f"const &{element}"),
             }
             value = emit_expression(
-                gen, builder,
-                MethodCall(Var(source), "clone", []), None, scope)
+                gen, builder, fn.slot_clone_call, None, scope)
             emit_drop_slot(gen, builder, func.args[1], element)
         else:
             value = load("slot.copy")
@@ -180,7 +171,7 @@ def emit_slot_function(gen: CodeGenerator, builder: ir.IRBuilder,
                 name: Variable(func.args[1], f"const &{element}"),
             }
             value = emit_expression(
-                gen, builder, MethodCall(Var(name), "clone", []), None, scope)
+                gen, builder, fn.slot_clone_call, None, scope)
         else:
             value = builder.load(func.args[1], name="slot.copy")
             if gen.volatile_struct(element):
