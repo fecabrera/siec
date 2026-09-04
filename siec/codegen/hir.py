@@ -95,6 +95,19 @@ class BinaryPlan:
 
 
 @dataclass(frozen=True)
+class ForeachPlan:
+    """The iterator protocol selected for one foreach statement."""
+
+    iterator_type: str
+    iterator_call: Expr | None
+    has_next_call: Expr
+    next_call: Expr
+    has_next_symbol: str
+    next_symbol: str
+    element_reference_type: str
+
+
+@dataclass(frozen=True)
 class TypedExpr:
     """
     View of the typed-HIR fields stamped on an expression.
@@ -110,6 +123,7 @@ class TypedExpr:
     coercion_plan: CoercionPlan | None = None
     aggregate_plan: object | None = None
     binary_plan: BinaryPlan | None = None
+    foreach_plan: ForeachPlan | None = None
     resolved_symbol: str | None = None
     call_plan: CallPlan | None = None
     truthy_symbol: str | None = None
@@ -129,6 +143,7 @@ _TYPED_ATTRS = (
     "coercion_plan",
     "aggregate_plan",
     "binary_plan",
+    "foreach_plan",
     "resolved_symbol",
     "call_plan",
     "truthy_symbol",
@@ -152,6 +167,7 @@ def typed(expr: Expr | object) -> TypedExpr:
         coercion_plan=getattr(expr, "coercion_plan", None),
         aggregate_plan=getattr(expr, "aggregate_plan", None),
         binary_plan=getattr(expr, "binary_plan", None),
+        foreach_plan=getattr(expr, "foreach_plan", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
         call_plan=getattr(expr, "call_plan", None),
         truthy_symbol=getattr(expr, "truthy_symbol", None),
@@ -236,3 +252,8 @@ def checked_aggregate(expr: Expr | object):
 def checked_binary(expr: Expr | object) -> BinaryPlan | None:
     """Return the binary-operation plan recorded during Check, if present."""
     return getattr(expr, "binary_plan", None)
+
+
+def checked_foreach(stmt: object) -> ForeachPlan | None:
+    """Return the iterator protocol selected during Check, if present."""
+    return getattr(stmt, "foreach_plan", None)

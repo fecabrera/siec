@@ -913,6 +913,7 @@ def bind_param_pattern(gen: CodeGenerator, param, scope: dict) -> None:
 def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
                   fn: Function, emit_type: str | None) -> None:
     """Resolve iterator methods and check a foreach body semantically."""
+    from siec.codegen.hir import ForeachPlan, stamp
     from siec.codegen.methods import iteration_getter, resolve_method
 
     source_type = check_expression(gen, stmt.iterable, scope)
@@ -923,10 +924,10 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
     if (getter := iteration_getter(gen, source)) is not None:
         call = MethodCall(stmt.iterable, getter, [])
         it_type = check_expression(gen, call, scope)
-        stmt.iterator_call = call
+        iterator_call = call
     elif resolve_method(gen, source, "has_next") is not None:
         it_type = strip_const(source)
-        stmt.iterator_call = None
+        iterator_call = None
     else:
         raise TypeError(f"cannot iterate a {source_type!r} value: it is "
                         "neither an Iterable nor an Iterator")
@@ -945,15 +946,25 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
     check_call(
         gen, has_next_call, iterator_scope, "bool", resolved=has_next)
     check_call(gen, next_call, iterator_scope, None, resolved=next_)
-    stmt.iterator_type = it_type
-    stmt.has_next_call = has_next_call
-    stmt.next_call = next_call
-
     next_symbol = getattr(next_call, "resolved_symbol", None)
     next_ret = gen.return_types.get(next_symbol)
     if not is_reference(next_ret):
         raise TypeError(f"'foreach' needs {it_type!r}'s 'next' to return "
                         "a reference '&T'")
+
+    stamp(
+        stmt,
+        foreach_plan=ForeachPlan(
+            iterator_type=it_type,
+            iterator_call=iterator_call,
+            has_next_call=has_next_call,
+            next_call=next_call,
+            has_next_symbol=getattr(has_next_call, "resolved_symbol", None),
+            next_symbol=next_symbol,
+            element_reference_type=next_ret,
+        ),
+        overwrite=True,
+    )
 
     inner = dict(scope)
     inner[stmt.name] = checked_variable(next_ret)

@@ -858,7 +858,12 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     """
     from siec.ast import Var
     from siec.codegen.calls import emit_call
+    from siec.codegen.hir import checked_foreach
     from siec.codegen.types import resolve_type
+
+    plan = checked_foreach(stmt)
+    if plan is None:
+        raise RuntimeError("foreach reached Emit without a checked plan")
 
     loop_scope = dict(scope)
     it_name = "__foreach_it"
@@ -866,10 +871,10 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     # an Iterable hands out its iterator - a const source its
     # const_iterator; a value that already is an iterator iterates
     # itself, from a copy of its state
-    it_type = stmt.iterator_type
-    if stmt.iterator_call is not None:
+    it_type = plan.iterator_type
+    if plan.iterator_call is not None:
         it_value = emit_expression(
-            gen, builder, stmt.iterator_call, None, scope)
+            gen, builder, plan.iterator_call, None, scope)
     else:
         it_value = emit_expression(gen, builder, stmt.iterable, None, scope)
 
@@ -880,9 +885,6 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
     builder.store(it_value, slot)
     loop_scope[it_name] = Variable(slot, it_type)
 
-    next_symbol = stmt.next_call.resolved_symbol
-    next_ret = gen.return_types[next_symbol]
-
     func = builder.function
     cond_block = func.append_basic_block("foreach.cond")
     body_block = func.append_basic_block("foreach.body")
@@ -892,17 +894,18 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
 
     builder.position_at_end(cond_block)
     builder.cbranch(emit_bool(
-                        gen, builder, stmt.has_next_call, loop_scope),
+                        gen, builder, plan.has_next_call, loop_scope),
                     body_block, end_block)
 
     # each pass takes the next element's address and binds 'v' to it,
     # the way a reference parameter binds its caller's storage
     builder.position_at_end(body_block)
     address = emit_call(
-        gen, builder, stmt.next_call, loop_scope, as_address=True)
+        gen, builder, plan.next_call, loop_scope, as_address=True)
 
     body_scope = dict(loop_scope)
-    body_scope[stmt.name] = Variable(address, next_ret)
+    body_scope[stmt.name] = Variable(
+        address, plan.element_reference_type)
 
     gen.loop_targets.append((end_block, cond_block, len(gen.defer_frames)))
     emit_block(gen, builder, stmt.body, body_scope)
