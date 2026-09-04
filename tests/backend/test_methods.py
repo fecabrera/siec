@@ -128,6 +128,39 @@ def test_nested_generic_declaration_may_be_defined_out_of_line(run):
     assert run(prelude + definition + declaration + main).returncode == 42
 
 
+def test_out_of_line_method_intersects_inherited_receiver_bounds(run):
+    """A method body and declaration combine their receiver bounds."""
+    prelude = """
+    interface First;
+    interface Second;
+    @extend i32: First, Second;
+    """
+
+    declaration = """
+    struct Box<T: Second> {
+        value: T;
+        fn get(const &self) -> T;
+    }
+    """
+
+    definition = """
+    @where<T: First>
+    fn Box<T>::get(const &self) -> T {
+        return self.value;
+    }
+    """
+
+    main = """
+    fn main() -> i32 {
+        let box: Box<i32> = { 42 };
+        return box.get();
+    }
+    """
+
+    assert run(prelude + declaration + definition + main).returncode == 42
+    assert run(prelude + definition + declaration + main).returncode == 42
+
+
 def test_unused_nested_generic_method_declaration_needs_no_body(run):
     """An unused generic declaration remains a declaration, not a body."""
     source = """

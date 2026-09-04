@@ -13,6 +13,7 @@ import copy
 from llvmlite import ir
 
 from siec.ast import Call, Member, Var
+from siec.constraints import merge_constraints
 from siec.codegen.errors import source_location
 from siec.codegen.generator import CodeGenerator
 from siec.codegen.generics import (constraint_count, split_generic, substitute,
@@ -75,14 +76,7 @@ def inherit_receiver_constraints(target, source) -> None:
         target.receiver_constraints = copy.deepcopy(inherited)
         return
 
-    for param, bound in inherited.items():
-        previous = target.receiver_constraints.get(param)
-        bounds = previous if isinstance(previous, tuple) else (previous,)
-        bounds += bound if isinstance(bound, tuple) else (bound,)
-        ordered = tuple(sorted(value for value in set(bounds)
-                               if value is not None))
-        target.receiver_constraints[param] = (
-            ordered[0] if len(ordered) == 1 else ordered)
+    merge_constraints(target.receiver_constraints, inherited)
 
 
 def concrete_type_like(gen: CodeGenerator, spelling: str) -> bool:

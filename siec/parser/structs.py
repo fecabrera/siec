@@ -1,6 +1,7 @@
 """Parsing of struct declarations."""
 
 from siec.ast import Field, Struct
+from siec.constraints import merge_constraints
 from siec.lexer.token import int_value
 from siec.parser.stream import TokenStream
 from siec.parser.types import parse_type, parse_type_params
@@ -109,7 +110,6 @@ def parse_struct(ts: TokenStream) -> Struct:
                              and ts.peek(3).value in (":", "=")))):
             # deferred import: functions and structs are mutually recursive
             from siec.parser.functions import (
-                merge_constraints,
                 parse_function,
                 parse_receiver_template,
             )
@@ -122,7 +122,7 @@ def parse_struct(ts: TokenStream) -> Struct:
 
             for method in nested:
                 method.receiver_constraints = merge_constraints(
-                    method.receiver_constraints, constraints)
+                    dict(method.receiver_constraints or {}), constraints)
                 actions.append(method)
             continue
 

@@ -14,6 +14,7 @@ from siec.ast import (
     StaticAssert,
     TypeAlias,
 )
+from siec.constraints import merge_constraints
 from siec.parser.constants import parse_const, parse_macro
 from siec.parser.enums import parse_enum
 from siec.parser.expressions import parse_clobbers, parse_expression
@@ -198,23 +199,11 @@ def apply_template_environment(program: Program, params: list[str],
                     f"line {fn.line}: template parameter {shown} is not "
                     f"declared by generic function {fn.name!r}")
 
-            fn.constraints = merge_constraints(fn.constraints, constraints)
+            fn.constraints = merge_constraints(
+                dict(fn.constraints or {}), constraints)
             continue
 
         apply_decorated_method_template(fn, params, constraints)
-
-
-def merge_constraints(left: dict | None, right: dict | None) -> dict:
-    """Merge bound maps, retaining intersections on the same parameter."""
-    merged = dict(left or {})
-    for param, bound in (right or {}).items():
-        previous = merged.get(param)
-        bounds = previous if isinstance(previous, tuple) else (previous,)
-        bounds += bound if isinstance(bound, tuple) else (bound,)
-        ordered = tuple(sorted(value for value in set(bounds)
-                               if value is not None))
-        merged[param] = ordered[0] if len(ordered) == 1 else ordered
-    return merged
 
 
 def apply_method_template(fn: Function, params: list[str],
@@ -230,7 +219,7 @@ def apply_method_template(fn: Function, params: list[str],
         fn.receiver_params = list(params)
 
     fn.receiver_constraints = merge_constraints(
-        fn.receiver_constraints, constraints)
+        dict(fn.receiver_constraints or {}), constraints)
 
 
 def apply_decorated_method_template(fn: Function, params: list[str],
@@ -252,7 +241,8 @@ def apply_decorated_method_template(fn: Function, params: list[str],
             for param in method_params
             if constraints is not None and param in constraints
         }
-        fn.constraints = merge_constraints(fn.constraints, method_constraints)
+        fn.constraints = merge_constraints(
+            dict(fn.constraints or {}), method_constraints)
 
     if receiver_params:
         receiver_constraints = {
@@ -371,7 +361,7 @@ def parse_method_body(ts: TokenStream, receiver: str,
 
         method = parse_function(ts, receiver, receiver_params)
         method.receiver_constraints = merge_constraints(
-            method.receiver_constraints, receiver_constraints)
+            dict(method.receiver_constraints or {}), receiver_constraints)
         methods.append(method)
 
     ts.next()
@@ -395,7 +385,7 @@ def parse_receiver_template(ts: TokenStream, receiver: str,
     else:
         method = parse_function(ts, receiver, receiver_params)
         method.receiver_constraints = merge_constraints(
-            method.receiver_constraints, receiver_constraints)
+            dict(method.receiver_constraints or {}), receiver_constraints)
         methods = [method]
 
     for method in methods:
@@ -925,7 +915,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
                     f"line {at_line}: template parameter {shown} is not "
                     f"declared by generic function {fn.name!r}")
             fn.constraints = merge_constraints(
-                fn.constraints, template_constraints)
+                dict(fn.constraints or {}), template_constraints)
         return fn
 
     # an '@asm' function's body is raw assembly, captured whole by the lexer
