@@ -102,6 +102,37 @@ def test_union_measures_a_generic_instance_member(run):
     assert result.returncode == 42
 
 
+def test_named_and_anonymous_unions_share_storage_readiness(run):
+    """Named and anonymous unions wait for the same member type body."""
+    result = run("""
+        struct Holder {
+            named: Named;
+            anonymous: union {
+                boxed: Box<u8>;
+                number: i64;
+            };
+        }
+
+        union Named {
+            boxed: Box<u8>;
+            number: i64;
+        }
+
+        struct Box<T> {
+            value: T;
+            length: u64;
+        }
+
+        fn main() -> i32 {
+            let holder: Holder;
+            holder.named.number = 40;
+            holder.anonymous.number = 2;
+            return (holder.named.number + holder.anonymous.number) as i32;
+        }
+    """)
+    assert result.returncode == 42
+
+
 def test_narrow_field_reads_the_low_bytes(run):
     """
     A smaller field overlays the start of the storage (little-endian).

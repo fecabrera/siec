@@ -185,6 +185,32 @@ def field_storage_type(gen: CodeGenerator, name: str) -> ir.Type:
     return ir.ArrayType(element, evaluate_size(gen, sized[1]))
 
 
+def resolve_struct_storage_fields(
+        gen: CodeGenerator, info: StructInfo, target: str,
+        context: ir.Context) -> list[ir.Type] | None:
+    """
+    Resolve the storage fields for one struct that is ready to lower.
+    Return None while a field or union member still needs a type body.
+    """
+    try:
+        resolved = [field_storage_type(gen, field.type)
+                    for field in info.fields or ()]
+    except TypeError:
+        return None
+
+    # A member naming a literal struct still under construction resolves
+    # to nothing. A later materialization round retries it.
+    if any(type_ is None for type_ in resolved):
+        return None
+
+    if info.is_union:
+        if not all(layout_sized(type_) for type_ in resolved):
+            return None
+        return union_storage(target, context, resolved)
+
+    return resolved
+
+
 def materialize_struct_types(gen: CodeGenerator, context: ir.Context,
                              target: str) -> None:
     """Populate one struct registry with LLVM types in the given context."""
@@ -213,37 +239,21 @@ def materialize_struct_types(gen: CodeGenerator, context: ir.Context,
     while pending or bodies:
         progress = False
         for info in list(bodies):
-            try:
-                resolved = [field_storage_type(gen, field.type)
-                            for field in info.fields]
-            except TypeError:
+            resolved = resolve_struct_storage_fields(
+                gen, info, target, context)
+            if resolved is None:
                 continue
 
-            # a member naming a literal struct still under construction
-            # resolves to nothing yet; the next round retries it
-            if any(type_ is None for type_ in resolved):
-                continue
-            if info.is_union:
-                if not all(layout_sized(type_) for type_ in resolved):
-                    continue
-                resolved = union_storage(target, context, resolved)
             info.type.set_body(*resolved)
             bodies.remove(info)
             progress = True
 
         for info in list(pending):
-            try:
-                resolved = [field_storage_type(gen, field.type)
-                            for field in info.fields or ()]
-            except TypeError:
+            resolved = resolve_struct_storage_fields(
+                gen, info, target, context)
+            if resolved is None:
                 continue
 
-            if any(type_ is None for type_ in resolved):
-                continue
-            if info.is_union:
-                if not all(layout_sized(type_) for type_ in resolved):
-                    continue
-                resolved = union_storage(target, context, resolved)
             info.type = ir.LiteralStructType(resolved)
             pending.remove(info)
             progress = True
