@@ -5,7 +5,8 @@ import pytest
 from siec.ast import BoolLiteral, Global, Include, IntLiteral, Param, Program, Return
 from siec.lexer import lex
 from siec.parser import parse
-from siec.parser.functions import parse_function, parse_global, parse_program
+from siec.parser.functions import (parse_function, parse_global, parse_program,
+                                   token_after_decorators)
 
 
 def test_inline_decorator(ts):
@@ -143,6 +144,27 @@ def test_program_collects_globals(ts):
     program = parse_program(ts("@extern let x: i64; @extern fn f();"))
     assert program.globals == [Global("x", "i64")]
     assert [fn.name for fn in program.functions] == ["f"]
+
+
+def test_program_routes_decorator_arguments_by_syntax(ts):
+    """A closing parenthesis inside string data does not end lookahead."""
+    program = parse_program(ts("""
+        @extern @symbol(")") let outside: opaque*;
+        @align(8) @private struct Aligned {}
+    """))
+
+    assert program.globals[0].symbol == ")"
+    assert program.structs[0].name == "Aligned"
+
+
+@pytest.mark.parametrize(("source", "value"), (
+    ("@outer((value)) @private union U {}", "union"),
+    ("@outer((value) @private union U {}", ""),
+))
+def test_token_after_decorators_handles_nested_and_unmatched_arguments(
+        ts, source, value):
+    """Decorator lookahead balances arguments or stops at EOF."""
+    assert token_after_decorators(ts(source)).value == value
 
 
 def test_function_without_params_or_return_type(ts):

@@ -15,6 +15,7 @@ from siec.ast import (
     TypeAlias,
 )
 from siec.constraints import merge_constraints
+from siec.lexer import Token
 from siec.parser.constants import parse_const, parse_macro
 from siec.parser.enums import parse_enum
 from siec.parser.expressions import parse_clobbers, parse_expression
@@ -513,25 +514,41 @@ def parse_alias(ts: TokenStream) -> TypeAlias:
                      line=line)
 
 
+def token_after_decorators(ts: TokenStream) -> Token:
+    """
+    Return the token after the decorator run at the stream cursor.
+
+    Parenthesized decorator arguments can nest. An unmatched opening
+    parenthesis consumes the remaining lookahead and returns the EOF token.
+    """
+    i = ts.pos
+    tokens = ts.tokens
+
+    while i < len(tokens) and tokens[i].syntax == "@":
+        i += 2  # the '@' and the decorator's name
+        if i >= len(tokens) or tokens[i].syntax != "(":
+            continue
+
+        depth = 0
+        while i < len(tokens):
+            if tokens[i].syntax == "(":
+                depth += 1
+            elif tokens[i].syntax == ")":
+                depth -= 1
+                if depth == 0:
+                    i += 1
+                    break
+            i += 1
+
+    return tokens[min(i, len(tokens) - 1)]
+
+
 def declares_global(ts: TokenStream) -> bool:
     """
     Whether the '@' decorator run at the cursor leads to a 'let': a global
     declaration, whatever mix of decorators precedes it.
     """
-    i = ts.pos
-    tokens = ts.tokens
-
-    while i < len(tokens) and tokens[i].value == "@":
-        i += 2  # the '@' and the decorator's name
-
-        # skip a parenthesized argument ('@symbol("...")')
-        if i < len(tokens) and tokens[i].value == "(":
-            while i < len(tokens) and tokens[i].value != ")":
-                i += 1
-
-            i += 1
-
-    return i < len(tokens) and tokens[i].value == "let"
+    return token_after_decorators(ts).value == "let"
 
 
 def declares_struct(ts: TokenStream) -> bool:
@@ -541,19 +558,8 @@ def declares_struct(ts: TokenStream) -> bool:
     This distinguishes the shared '@private' decorator on a struct from
     '@private fn', while still allowing it to stack with layout decorators.
     """
-    i = ts.pos
-    tokens = ts.tokens
-
-    while i < len(tokens) and tokens[i].value == "@":
-        i += 2
-        if i < len(tokens) and tokens[i].value == "(":
-            while i < len(tokens) and tokens[i].value != ")":
-                i += 1
-
-            i += 1
-
-    return (i < len(tokens)
-            and tokens[i].value in ("struct", "union", "interface"))
+    return token_after_decorators(ts).value in (
+        "struct", "union", "interface")
 
 
 def parse_global(ts: TokenStream) -> Global:
