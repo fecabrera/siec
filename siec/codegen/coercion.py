@@ -5,7 +5,6 @@ from llvmlite import ir
 from siec.ast import (
     AggregateLiteral,
     ArrayLiteral,
-    Block,
     BlockExpr,
     Call,
     Cast,
@@ -327,19 +326,18 @@ def emit_coerced(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     if target_name is None:
         return emit_expression(gen, builder, expr, None, scope)
 
-    from siec.codegen.macros import resolve_macro_use
+    from siec.codegen.macros import macro_expansion_view
 
-    use = resolve_macro_use(gen, expr, scope)
-    if use is not None:
-        from siec.codegen.expressions import emit_block_expr
-        from siec.codegen.macros import macro_expansion, macro_view
+    with macro_expansion_view(gen, expr, scope) as macro:
+        if macro is not None:
+            expansion = macro.expansion
+            if macro.kind == "block":
+                raise TypeError(
+                    f"macro {macro.name!r} does not 'emit' a value")
 
-        call = use.call
-        expansion = macro_expansion(gen, call)
-        if isinstance(expansion, Block):
-            raise TypeError(f"macro {call.name!r} does not 'emit' a value")
-        with macro_view(gen, call.name):
-            if isinstance(expansion, BlockExpr):
+            from siec.codegen.expressions import emit_block_expr
+
+            if macro.kind == "block_expression":
                 target_name = strip_const(target_name)
                 return emit_block_expr(
                     gen, builder, expansion,
@@ -484,21 +482,16 @@ def _emit_coerced_legacy(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr,
     # a macro use is its expansion: an object-like one's bare name reads
     # as a call; an expression substitutes and coerces in place, and a
     # block's each 'emit' coerces to the target below
-    from siec.codegen.macros import resolve_macro_use
+    from siec.codegen.macros import macro_expansion_view
 
-    use = resolve_macro_use(gen, expr, scope)
-    if use is not None:
-        expr = use.call
+    with macro_expansion_view(gen, expr, scope) as macro:
+        if macro is not None:
+            expansion = macro.expansion
+            if macro.kind == "block":
+                raise TypeError(
+                    f"macro {macro.name!r} does not 'emit' a value")
 
-    if use is not None:
-        from siec.codegen.macros import macro_expansion, macro_view
-
-        expansion = macro_expansion(gen, expr)
-        if isinstance(expansion, Block):
-            raise TypeError(f"macro {expr.name!r} does not 'emit' a value")
-
-        with macro_view(gen, expr.name):
-            if isinstance(expansion, BlockExpr):
+            if macro.kind == "block_expression":
                 stripped = strip_const(target_name)
                 target = (resolve_type(stripped, gen.structs)
                           if stripped is not None else None)

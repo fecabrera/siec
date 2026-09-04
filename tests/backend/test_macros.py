@@ -1,5 +1,7 @@
 """Feature tests for '@macro' declarations."""
 
+from contextlib import contextmanager
+
 import pytest
 
 
@@ -447,3 +449,54 @@ def test_object_macro_passes_by_reference(run):
     }
     """
     assert run(source).returncode == 0
+
+
+def test_macro_expansion_dispatch_is_centralized(monkeypatch, compile_source):
+    """All expansion kinds use the canonical resolver and file view."""
+    from siec.codegen import macros
+
+    original_expansion = macros.macro_expansion
+    original_resolve = macros.resolve_macro_expansion
+    original_view = macros.macro_expansion_view
+    resolving = 0
+    kinds = set()
+
+    def guarded_expansion(gen, call):
+        assert resolving > 0
+        return original_expansion(gen, call)
+
+    def tracked_resolve(gen, expr, scope):
+        nonlocal resolving
+        resolving += 1
+        try:
+            return original_resolve(gen, expr, scope)
+        finally:
+            resolving -= 1
+
+    @contextmanager
+    def tracked_view(gen, expr, scope):
+        with original_view(gen, expr, scope) as expanded:
+            if expanded is not None:
+                assert gen.current_file == gen.macros[expanded.name].file
+                kinds.add(expanded.kind)
+            yield expanded
+
+    monkeypatch.setattr(macros, "macro_expansion", guarded_expansion)
+    monkeypatch.setattr(macros, "resolve_macro_expansion", tracked_resolve)
+    monkeypatch.setattr(macros, "macro_expansion_view", tracked_view)
+
+    compile_source("""
+    @static let count: i32 = 0;
+    @macro seven = 7;
+    @macro choose(value) { emit value; }
+    @macro bump(value) { value += 1; }
+
+    fn main() -> i32 {
+        let inferred = seven;
+        let widened: i64 = choose(inferred);
+        bump(count);
+        return (widened as i32) - 6 - count;
+    }
+    """)
+
+    assert kinds == {"expression", "block_expression", "block"}

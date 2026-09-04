@@ -1940,23 +1940,21 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
     method_receiver = (method_receiver if method_receiver is not None
                        else getattr(call, "method_receiver", None))
 
-    from siec.codegen.macros import resolve_macro_use
+    from siec.codegen.macros import macro_expansion_view
 
-    if resolve_macro_use(gen, call, scope) is not None:
-        from siec.codegen.macros import macro_expansion, macro_view
-
-        expansion = macro_expansion(gen, call)
-        with macro_view(gen, call.name):
-            if isinstance(expansion, Block):
-                target = expected or block_emit_type(gen, expansion.body, scope)
+    with macro_expansion_view(gen, call, scope) as macro:
+        if macro is not None:
+            if macro.kind == "block":
+                target = (expected
+                          or block_emit_type(gen, macro.expansion.body, scope))
                 check_block_expression(
                     gen,
-                    BlockExpr(expansion.body),
+                    BlockExpr(macro.expansion.body),
                     scope,
                     target,
                 )
                 return expected or target
-            return check_expression(gen, expansion, scope, expected)
+            return check_expression(gen, macro.expansion, scope, expected)
 
     if call.name == "enumerate":
         from siec.codegen.methods import rewrite_enumerate

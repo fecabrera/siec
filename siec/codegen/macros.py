@@ -3,6 +3,7 @@
 import copy
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, is_dataclass
+from typing import Literal
 
 from siec.ast import (Assign, Block, BlockExpr, Call, Emit, Index,
                       IndexAssign, Member, MemberAssign, Var)
@@ -88,6 +89,27 @@ class MacroUse:
     """One canonical macro invocation shared by every compiler phase."""
     name: str
     call: Call
+
+
+MacroExpansionKind = Literal["expression", "block_expression", "block"]
+
+
+@dataclass(frozen=True)
+class ExpandedMacro:
+    """A canonical macro call and its cached expansion."""
+
+    name: str
+    call: Call
+    expansion: object
+    kind: MacroExpansionKind
+
+    def value_expression(self):
+        """Return the expression that determines this expansion's value."""
+        if self.kind == "block":
+            return None
+        if self.kind == "block_expression":
+            return first_emit(self.expansion.body).value
+        return self.expansion
 
 
 def resolve_macro_use(gen: CodeGenerator, expr, scope: dict) -> MacroUse | None:
@@ -239,15 +261,44 @@ def macro_expansion(gen: CodeGenerator, call: Call):
     return call.expansion
 
 
+def resolve_macro_expansion(
+        gen: CodeGenerator, expr, scope: dict) -> ExpandedMacro | None:
+    """Resolve one use and classify its cached expansion once."""
+    use = resolve_macro_use(gen, expr, scope)
+    if use is None:
+        return None
+
+    expansion = macro_expansion(gen, use.call)
+    if isinstance(expansion, BlockExpr):
+        kind = "block_expression"
+    elif isinstance(expansion, Block):
+        kind = "block"
+    else:
+        kind = "expression"
+    return ExpandedMacro(use.name, use.call, expansion, kind)
+
+
+@contextmanager
+def macro_expansion_view(gen: CodeGenerator, expr, scope: dict):
+    """Supply one canonical expansion under its declaration's file view."""
+    expanded = resolve_macro_expansion(gen, expr, scope)
+    if expanded is None:
+        yield None
+        return
+
+    with macro_view(gen, expanded.name):
+        yield expanded
+
+
 def macro_place(gen: CodeGenerator, expr, scope: dict):
     """
     The (name, expansion) a macro use in lvalue position stands for: an
     object-like macro's bare name, or a function-like one's call. None
     when the expression is no macro use; a scope variable shadows one.
     """
-    use = resolve_macro_use(gen, expr, scope)
-    if use is not None:
-        return use.name, macro_expansion(gen, use.call)
+    expanded = resolve_macro_expansion(gen, expr, scope)
+    if expanded is not None:
+        return expanded.name, expanded.expansion
 
     return None
 

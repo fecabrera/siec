@@ -2,7 +2,7 @@
 
 from llvmlite import ir
 
-from siec.ast import Block, BlockExpr, Call, Expr, Var
+from siec.ast import Call, Expr, Var
 from siec.codegen.abi import lift_return, lower_argument
 from siec.codegen.coercion import emit_coerced
 from siec.codegen.generator import CodeGenerator, entry_alloca
@@ -32,19 +32,19 @@ def emit_call(gen: CodeGenerator, builder: ir.IRBuilder, call: Call, scope: dict
 
     # a macro call expands in place instead of resolving a function; in
     # an untyped context its 'emit' value types the block
-    from siec.codegen.macros import resolve_macro_use
+    from siec.codegen.macros import macro_expansion_view
 
-    if resolve_macro_use(gen, call, scope) is not None:
-        from siec.codegen.expressions import emit_block_expr, emit_expression
-        from siec.codegen.inference import infer_type
-        from siec.codegen.macros import macro_expansion, macro_view
+    with macro_expansion_view(gen, call, scope) as macro:
+        if macro is not None:
+            expansion = macro.expansion
+            if macro.kind == "block":
+                raise TypeError(
+                    f"macro {macro.name!r} does not 'emit' a value")
 
-        expansion = macro_expansion(gen, call)
-        if isinstance(expansion, Block):
-            raise TypeError(f"macro {call.name!r} does not 'emit' a value")
+            from siec.codegen.expressions import emit_block_expr, emit_expression
+            from siec.codegen.inference import infer_type
 
-        with macro_view(gen, call.name):
-            if isinstance(expansion, BlockExpr):
+            if macro.kind == "block_expression":
                 emitted = (getattr(call, "sie_type", None)
                            or infer_type(gen, call, scope))
                 target = (resolve_type(emitted, gen.structs)

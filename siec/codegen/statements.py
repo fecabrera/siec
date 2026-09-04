@@ -427,16 +427,12 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
     elif isinstance(stmt, ExprStmt):
         # a statement calling a macro splices its block in place; one
         # without an 'emit' has no value to discard, and is fine here
-        from siec.codegen.macros import resolve_macro_use
+        from siec.codegen.macros import macro_expansion_view
 
-        if (isinstance(stmt.expr, Call)
-                and resolve_macro_use(gen, stmt.expr, scope) is not None):
-            from siec.codegen.macros import macro_expansion, macro_view
-
-            expansion = macro_expansion(gen, stmt.expr)
-            if isinstance(expansion, Block):
-                with macro_view(gen, stmt.expr.name):
-                    emit_block(gen, builder, expansion.body, dict(scope))
+        with macro_expansion_view(gen, stmt.expr, scope) as macro:
+            if macro is not None and macro.kind == "block":
+                emit_block(
+                    gen, builder, macro.expansion.body, dict(scope))
                 return
 
         from siec.codegen.ownership import (begin_temporary_frame,
