@@ -739,6 +739,29 @@ def test_array_extend_needs_the_template(compile_source):
         """)
 
 
+@pytest.mark.parametrize(("claim", "message"), (
+    ("@extend<T> T: Convert<T>;",
+     r"'T' does not implement 'Convert<T>': it is missing the method "
+     r"'convert\(const T\) -> T'"),
+    ("@extend T[]: Convert<T>;",
+     r"'T\[\]' does not implement 'Convert<T>': it is missing the method "
+     r"'convert\(const T\) -> T' \('fn T\[\]::convert'\)"),
+))
+def test_receiver_family_claims_share_required_method_diagnostics(
+        compile_source, claim, message):
+    """Receiver families substitute and report one required signature."""
+    with pytest.raises(TypeError, match=message):
+        compile_source(f"""
+        interface Convert<U> {{
+            fn convert(const &self, value: const U) -> U;
+        }}
+
+        {claim}
+
+        fn main() -> i32 {{ return 0; }}
+        """)
+
+
 def test_extend_needs_a_type(compile_source):
     """
     Extending a name that names no type at all is an error.

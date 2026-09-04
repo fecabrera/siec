@@ -8,6 +8,7 @@ interface. There is no runtime dispatch; everything monomorphizes.
 """
 
 import re
+from collections.abc import Callable
 from contextlib import contextmanager
 
 from siec.codegen.errors import source_location
@@ -1064,25 +1065,42 @@ def resolve_type_family_extend(gen: CodeGenerator, ext) -> None:
 
 def check_type_family_extend(gen: CodeGenerator, ext) -> None:
     """Check a resolved type-family claim has every required method."""
+    check_receiver_family_methods(
+        gen, ext,
+        lambda method: method in gen.generic_receiver_methods)
+
+
+def check_receiver_family_methods(
+        gen: CodeGenerator, ext, implemented: Callable[[str], bool],
+        hint: Callable[[str], str] | None = None) -> None:
+    """
+    Check each required interface action for a generic receiver family.
+    The receiver supplies its method lookup rule and an optional hint for
+    a missing method.
+    """
     for spelling in ext.interfaces:
         base, args = split_generic(spelling) or (spelling, [])
         iface = gen.interfaces[base]
+        mapping = dict(zip(iface.params or (), args))
         for (action_iface, method), actions in gen.interface_actions.items():
-            if (action_iface == base
-                    and method not in gen.generic_receiver_methods):
-                action = actions[0]
-                mapping = dict(zip(iface.params or (), args))
-                params = ", ".join(
-                    expand_lax(gen, substitute(p.type, mapping))
-                    for p in action.params[1:])
-                wanted = f"{method}({params})"
-                if action.return_type is not None:
-                    wanted += (" -> " + expand_lax(
-                        gen, substitute(action.return_type, mapping)))
+            if action_iface != base or implemented(method):
+                continue
 
-                raise TypeError(f"{ext.name!r} does not implement "
-                                f"{spelling!r}: it is missing the method "
-                                f"'{wanted}'")
+            action = actions[0]
+            params = ", ".join(
+                expand_lax(gen, substitute(p.type, mapping))
+                for p in action.params[1:])
+            wanted = f"{method}({params})"
+            if action.return_type is not None:
+                wanted += (" -> " + expand_lax(
+                    gen, substitute(action.return_type, mapping)))
+
+            detail = f"'{wanted}'"
+            if hint is not None:
+                detail += f" ({hint(method)})"
+            raise TypeError(f"{ext.name!r} does not implement "
+                            f"{spelling!r}: it is missing the method "
+                            f"{detail}")
 
 
 def is_type_name(gen: CodeGenerator, name: str) -> bool:
@@ -1162,25 +1180,10 @@ def resolve_array_extend(gen: CodeGenerator, ext) -> None:
 def check_array_extend(gen: CodeGenerator, ext) -> None:
     """Check a resolved array-family claim has every required method."""
     elem = ext.name[:-2]
-    for spelling in ext.interfaces:
-        base, args = split_generic(spelling) or (spelling, [])
-        iface = gen.interfaces[base]
-        mapping = dict(zip(iface.params or (), args))
-        for (action_iface, method), actions in gen.interface_actions.items():
-            if (action_iface == base
-                    and ("[]", method) not in gen.generic_methods):
-                action = actions[0]
-                params = ", ".join(
-                    expand_lax(gen, substitute(p.type, mapping))
-                    for p in action.params[1:])
-                wanted = f"{method}({params})"
-                if action.return_type is not None:
-                    wanted += (" -> " + expand_lax(
-                        gen, substitute(action.return_type, mapping)))
-
-                raise TypeError(f"{ext.name!r} does not implement "
-                                f"{spelling!r}: it is missing the method "
-                                f"'{wanted}' ('fn {elem}[]::{method}')")
+    check_receiver_family_methods(
+        gen, ext,
+        lambda method: ("[]", method) in gen.generic_methods,
+        lambda method: f"'fn {elem}[]::{method}'")
 
 
 def check_constraints(gen: CodeGenerator, template, mapping: dict,
