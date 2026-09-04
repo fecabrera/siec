@@ -108,6 +108,20 @@ class ForeachPlan:
 
 
 @dataclass(frozen=True)
+class TryPlan:
+    """The Result arms and propagation action selected for one try."""
+
+    result_type: str
+    value_type: str | None
+    error_type: str
+    ok_member: Expr
+    value_member: Expr | None
+    error_member: Expr
+    propagated_call: Expr | None = None
+    propagated_return_type: str | None = None
+
+
+@dataclass(frozen=True)
 class TypedExpr:
     """
     View of the typed-HIR fields stamped on an expression.
@@ -124,6 +138,7 @@ class TypedExpr:
     aggregate_plan: object | None = None
     binary_plan: BinaryPlan | None = None
     foreach_plan: ForeachPlan | None = None
+    try_plan: TryPlan | None = None
     resolved_symbol: str | None = None
     call_plan: CallPlan | None = None
     truthy_symbol: str | None = None
@@ -144,6 +159,7 @@ _TYPED_ATTRS = (
     "aggregate_plan",
     "binary_plan",
     "foreach_plan",
+    "try_plan",
     "resolved_symbol",
     "call_plan",
     "truthy_symbol",
@@ -168,6 +184,7 @@ def typed(expr: Expr | object) -> TypedExpr:
         aggregate_plan=getattr(expr, "aggregate_plan", None),
         binary_plan=getattr(expr, "binary_plan", None),
         foreach_plan=getattr(expr, "foreach_plan", None),
+        try_plan=getattr(expr, "try_plan", None),
         resolved_symbol=getattr(expr, "resolved_symbol", None),
         call_plan=getattr(expr, "call_plan", None),
         truthy_symbol=getattr(expr, "truthy_symbol", None),
@@ -257,3 +274,8 @@ def checked_binary(expr: Expr | object) -> BinaryPlan | None:
 def checked_foreach(stmt: object) -> ForeachPlan | None:
     """Return the iterator protocol selected during Check, if present."""
     return getattr(stmt, "foreach_plan", None)
+
+
+def checked_try(expr: Expr | object) -> TryPlan | None:
+    """Return the Result and propagation plan recorded during Check."""
+    return getattr(expr, "try_plan", None)

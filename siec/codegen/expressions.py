@@ -66,12 +66,9 @@ from siec.codegen.inference import (
     member_field,
     numeric_class,
     operator_call,
-    result_arms,
     sized_member_array,
-    try_arms,
     type_info,
     value_class,
-    valueless_try,
 )
 from siec.codegen.resolution import fold_qualified
 from siec.codegen.types import (is_array_struct, is_reference, raw_array,
@@ -1768,30 +1765,6 @@ HOLDER = "try.result"
 ERROR = "try.error"
 
 
-def propagated(gen: CodeGenerator, builder: ir.IRBuilder, error_type: str) -> None:
-    """
-    Confirm that a bare 'try' has somewhere to hand its error: the
-    function around it must return a Result carrying the same one, since
-    the error travels on as it is.
-    """
-    from siec.codegen.overloads import display_name
-
-    returned = gen.return_types.get(builder.function.name)
-    shown = display_name(builder.function.name)
-    arms = result_arms(returned)
-
-    if arms is None:
-        carried = repr(returned) if returned is not None else "nothing"
-        raise TypeError(f"a bare 'try' hands its error back to the caller, so "
-                        f"{shown!r} must return a Result; it returns {carried}")
-
-    if strip_const(arms[1]) != strip_const(error_type):
-        raise TypeError(f"cannot hand a {error_type!r} error back from "
-                        f"{shown!r}, which returns {returned!r}: a bare 'try' "
-                        "passes the error on as it is, so both must carry "
-                        "the same one")
-
-
 def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
              expected_type: ir.Type | None, scope: dict):
     """
@@ -1805,11 +1778,14 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     """
     # deferred import: statements and expressions are mutually recursive
     from siec.codegen.statements import emit_block
+    from siec.codegen.hir import checked_try
 
-    result_type = expr_sie_type(gen, expr.result, scope)
-    value_type, error_type = try_arms(gen, expr, scope)
-    if value_type is None and expected_type is not None:
-        raise valueless_try(result_type)
+    plan = checked_try(expr)
+    if plan is None:
+        raise RuntimeError("try expression reached Emit without a checked plan")
+    result_type = plan.result_type
+    value_type = plan.value_type
+    error_type = plan.error_type
 
     # the result lands in storage of its own: both arms read it, and the
     # call must run exactly once
@@ -1831,8 +1807,7 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
         slot = entry_alloca(builder, resolve_type(value_type, gen.structs),
                             "try.value")
 
-    ok_member = getattr(expr, "ok_member", Member(Var(HOLDER), "ok"))
-    ok = emit_bool(gen, builder, ok_member, inner)
+    ok = emit_bool(gen, builder, plan.ok_member, inner)
 
     func = builder.function
     ok_block = func.append_basic_block("try.ok")
@@ -1843,10 +1818,10 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     # the value the result carried, taken where its tag says it holds
     builder.position_at_end(ok_block)
     if slot is not None:
-        value_member = getattr(
-            expr, "value_member", Member(Var(HOLDER), "value"))
+        if plan.value_member is None:
+            raise RuntimeError("valued try has no checked value member")
         builder.store(emit_coerced(
-            gen, builder, value_member, value_type, inner), slot)
+            gen, builder, plan.value_member, value_type, inner), slot)
 
     builder.branch(end_block)
 
@@ -1857,7 +1832,6 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     name = expr.name
     if expr.propagates:
         name = ERROR
-        propagated(gen, builder, error_type)
 
     error_cleanup = None
     if name is not None:
@@ -1866,10 +1840,8 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
 
         error_slot = entry_alloca(builder, resolve_type(error_type, gen.structs),
                                   name)
-        error_member = getattr(
-            expr, "error_member", Member(Var(HOLDER), "error"))
         builder.store(emit_coerced(
-            gen, builder, error_member, error_type, arm), error_slot)
+            gen, builder, plan.error_member, error_type, arm), error_slot)
         owned_error = destroyable(gen, error_type)
         error_flag = new_drop_flag(
             builder, name, initialized=owned_error) if owned_error else None
@@ -1885,7 +1857,9 @@ def emit_try(gen: CodeGenerator, builder: ir.IRBuilder, expr: Try,
     # rebuilt as the Result the function around it returns
     body = expr.body
     if body is None:
-        body = [Return(expr.propagated_call, line=expr.line)]
+        if plan.propagated_call is None:
+            raise RuntimeError("propagating try has no checked return call")
+        body = [Return(plan.propagated_call, line=expr.line)]
 
     # a fallback expression is the value to take, so it emits; where the
     # result carries none to take, it is simply run for its effects

@@ -519,6 +519,10 @@ def _expr_sie_type(gen: CodeGenerator, expr: Expr,
     # a 'try' takes the value its call's result carries; one carrying
     # only an error has none to take
     if isinstance(expr, Try):
+        from siec.codegen.hir import checked_try
+
+        if (plan := checked_try(expr)) is not None:
+            return plan.value_type
         arms = result_arms(expr_sie_type(gen, expr.result, scope))
         return arms[0] if arms is not None else None
 

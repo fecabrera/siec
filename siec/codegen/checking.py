@@ -1430,6 +1430,8 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         return target
 
     if isinstance(expr, Try):
+        from siec.codegen.hir import TryPlan, stamp
+
         check_expression(gen, expr.result, scope)
         result_type = expr_sie_type(gen, expr.result, scope)
         value_type, error_type = try_arms(gen, expr, scope)
@@ -1437,14 +1439,32 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
         result_scope = dict(scope)
         result_scope["try.result"] = checked_variable(result_type)
-        expr.ok_member = Member(Var("try.result"), "ok")
-        check_expression(gen, expr.ok_member, result_scope, "bool")
+        ok_member = Member(Var("try.result"), "ok")
+        check_expression(gen, ok_member, result_scope, "bool")
+        value_member = None
         if value_type is not None:
-            expr.value_member = Member(Var("try.result"), "value")
+            value_member = Member(Var("try.result"), "value")
             check_expression(
-                gen, expr.value_member, result_scope, value_type)
-        expr.error_member = Member(Var("try.result"), "error")
-        check_expression(gen, expr.error_member, result_scope, error_type)
+                gen, value_member, result_scope, value_type)
+        error_member = Member(Var("try.result"), "error")
+        check_expression(gen, error_member, result_scope, error_type)
+
+        def record_try_plan(propagated_call=None,
+                            propagated_return_type=None) -> None:
+            stamp(
+                expr,
+                try_plan=TryPlan(
+                    result_type=result_type,
+                    value_type=value_type,
+                    error_type=error_type,
+                    ok_member=ok_member,
+                    value_member=value_member,
+                    error_member=error_member,
+                    propagated_call=propagated_call,
+                    propagated_return_type=propagated_return_type,
+                ),
+                overwrite=True,
+            )
 
         if value_type is None and expected is not None:
             from siec.codegen.inference import valueless_try
@@ -1454,18 +1474,19 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             require_fit(gen, expr, value_type, expected)
 
         if expr.propagates:
-            check_try_propagation(gen, error_type)
+            returned = check_try_propagation(gen, error_type)
             propagated_scope = dict(scope)
             propagated_scope["try.error"] = checked_variable(error_type)
             check_owned_cleanup(gen, "try.error", propagated_scope)
-            returned = gen.return_types.get(gen.current_function)
             propagated = Call("Error", [Var("try.error")])
             check_expression(
                 gen, propagated, propagated_scope, returned)
-            expr.propagated_call = propagated
             consume_owned_expression(
                 gen, propagated, returned, propagated_scope)
+            record_try_plan(propagated, returned)
             return value_type
+
+        record_try_plan()
 
         inner = dict(scope)
         if expr.name is not None:
@@ -1822,8 +1843,8 @@ def check_block_expression(gen: CodeGenerator, expr: BlockExpr, scope: dict,
     )
 
 
-def check_try_propagation(gen: CodeGenerator, error_type: str) -> None:
-    """Check that a bare ``try`` can return its error from this function."""
+def check_try_propagation(gen: CodeGenerator, error_type: str) -> str:
+    """Check a bare ``try`` and return its enclosing Result type."""
     from siec.codegen.inference import result_arms
     from siec.codegen.overloads import display_name
 
@@ -1841,6 +1862,8 @@ def check_try_propagation(gen: CodeGenerator, error_type: str) -> None:
             f"cannot hand a {error_type!r} error back from {shown!r}, "
             f"which returns {returned!r}: a bare 'try' passes the error "
             "on as it is, so both must carry the same one")
+
+    return returned
 
 
 def check_type_defaults(gen: CodeGenerator, type_name: str | None) -> None:
