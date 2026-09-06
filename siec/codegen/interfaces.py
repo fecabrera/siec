@@ -402,6 +402,12 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
     required_ret = action.return_type and expand_lax(
         gen, substitute(action.return_type, mapping))
 
+    def return_matches(provided: str | None) -> bool:
+        """An indexed getter can supply a value or borrow its stored value."""
+        if action_interface == "GetItem":
+            provided = strip_reference(provided)
+        return implements_or_equals(gen, provided, required_ret)
+
     symbol = resolve_method(gen, name, method, specialize=False)
     if symbol is None:
         wanted = f"{method}({', '.join(required)})"
@@ -455,8 +461,7 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
             continue
 
         shape_matched = True
-        if implements_or_equals(gen, gen.return_types.get(candidate),
-                                required_ret):
+        if return_matches(gen.return_types.get(candidate)):
             return
 
     # A generic overload is checked as the instance the action would call.
@@ -515,7 +520,7 @@ def check_action(gen: CodeGenerator, name: str, template_base: str,
 
         shape_matched = True
         ret = pattern_ret and expand_lax(gen, pattern_ret)
-        if implements_or_equals(gen, ret, required_ret):
+        if return_matches(ret):
             return
 
     if receiver_const_mismatch and not receiver_matched:

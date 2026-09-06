@@ -77,6 +77,18 @@ def test_any_is_one_concrete_type(run):
     assert run(source).returncode == 0
 
 
+def test_any_identity_cast_borrows_the_descriptor(run):
+    """An Any-to-Any reference cast accesses the descriptor, not its payload."""
+    assert run("""
+    fn identity(value: const &Any) -> u64 { return value.id; }
+    fn main() -> i32 {
+        let erased = 42 as Any;
+        if (identity(erased as Any) != @typeid(i32)) return 1;
+        return 0;
+    }
+    """).returncode == 0
+
+
 def test_any_const_view_borrows_owned_value(run):
     """An erased owned value can be inspected without gaining another owner."""
     source = """
@@ -86,9 +98,10 @@ def test_any_const_view_borrows_owned_value(run):
     fn Resource::destroy(&self) { drops += 1; }
 
     fn read(args...) -> i32 {
-        let resource = args[0] as const Resource;
-        return resource.value;
+        return inspect(args[0] as const Resource);
     }
+
+    fn inspect(resource: const &Resource) -> i32 { return resource.value; }
 
     fn exercise() -> i32 {
         let resource: Resource = { 42 };

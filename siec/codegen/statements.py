@@ -213,9 +213,8 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
             owns = begin_temporary_frame(gen)
             initial = emit_coerced(
                 gen, builder, stmt.value, type_name, scope)
-            if not is_const(type_name):
-                consume_temporary(gen, stmt.value)
-                disarm_expression(gen, builder, stmt.value, scope)
+            consume_temporary(gen, stmt.value)
+            disarm_expression(gen, builder, stmt.value, scope)
 
         var_type = resolve_type(type_name, gen.structs)
         slot = entry_alloca(builder, var_type, stmt.name)
@@ -415,12 +414,10 @@ def emit_statement_body(gen: CodeGenerator, builder: ir.IRBuilder, stmt, scope: 
 
             owns = begin_temporary_frame(gen)
             value = emit_coerced(gen, builder, stmt.value, ret_type, scope)
-            if not is_const(ret_type):
-                consume_temporary(gen, stmt.value)
+            consume_temporary(gen, stmt.value)
             from siec.codegen.ownership import disarm_expression
 
-            if not is_const(ret_type):
-                disarm_expression(gen, builder, stmt.value, scope)
+            disarm_expression(gen, builder, stmt.value, scope)
             finish_temporary_frame(gen, builder, owns)
             flush_defers(gen, builder, gen.defer_frames)
             builder.ret(value)

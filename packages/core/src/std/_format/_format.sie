@@ -48,8 +48,7 @@ fn format(str: const &Iterable<char>, args...) -> String {
                     if (arg == null) result.append("(null)");
                     else result.append(arg);
                 when Formattable:
-                    let arg = args[i] as const Formattable;
-                    let tmp = arg.format(modifier.as_array());
+                    let tmp = (args[i] as const Formattable).format(modifier.as_array());
                     result.append(tmp);
                 else:
                     result.append(@typename(args[i]));

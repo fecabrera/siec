@@ -868,6 +868,8 @@ def emit_lvalue(gen: CodeGenerator, builder: ir.IRBuilder, expr: Expr, scope: di
     if isinstance(expr, Index):
         # a tuple's element sits inline: its constant index slots into
         # the base's address
+        if (getter := getattr(expr, "item_get_call", None)) is not None:
+            return emit_lvalue(gen, builder, getter, scope)
         if strip_const(expr_sie_type(gen, expr.base, scope) or "").startswith("Tuple<"):
             _, index, _ = tuple_element(gen, expr, scope)
             base = emit_lvalue(gen, builder, expr.base, scope)
@@ -1183,12 +1185,18 @@ def emit_ternary(gen: CodeGenerator, builder: ir.IRBuilder, expr: Ternary,
         after the join, including one whose storage was never initialized.
         """
         from siec.codegen.ownership import (consume_temporary,
-                                           emit_temporary_drop)
+                                           emit_temporary_drop,
+                                           transfer_cleanup)
 
         frame = (gen.borrowed_temporary_frames[-1]
                  if gen.borrowed_temporary_frames else None)
         prior = {id(cleanup) for cleanup in frame} if frame is not None else set()
-        value = emit_expression(gen, builder, arm, context, scope)
+        owned_type = getattr(expr, "owned_ternary_type", None)
+        if owned_type is not None:
+            value = emit_coerced(gen, builder, arm, owned_type, scope)
+            transfer_cleanup(gen, builder, arm, scope)
+        else:
+            value = emit_expression(gen, builder, arm, context, scope)
         if frame is None:
             return value
 
@@ -1337,6 +1345,9 @@ def emit_planned_aggregate(gen: CodeGenerator, builder: ir.IRBuilder,
     for element in plan.elements:
         filled = emit_coerced(
             gen, builder, element.value, element.target, scope)
+        from siec.codegen.ownership import transfer_cleanup
+
+        transfer_cleanup(gen, builder, element.value, scope)
         value = builder.insert_value(value, filled, element.index)
     return value
 
@@ -1367,6 +1378,9 @@ def emit_union_aggregate(gen: CodeGenerator, builder: ir.IRBuilder,
         field_name = (
             field_names[index] if field_names is not None else field.type)
     value = emit_coerced(gen, builder, element, field_name, scope)
+    from siec.codegen.ownership import transfer_cleanup
+
+    transfer_cleanup(gen, builder, element, scope)
 
     storage = entry_alloca(builder, expected_type, "union.literal")
     builder.store(ir.Constant(expected_type, None), storage)

@@ -851,8 +851,8 @@ def test_reference_return_borrows_an_owned_container_element(compile_source):
     """)
 
 
-def test_const_value_return_is_a_non_owning_element_view(run):
-    """A const by-value accessor does not duplicate cleanup responsibility."""
+def test_const_reference_return_borrows_an_element(run):
+    """A const reference accessor does not duplicate cleanup responsibility."""
     source = r"""
     @extern fn printf(format: char*, ...);
 
@@ -861,26 +861,27 @@ def test_const_value_return_is_a_non_owning_element_view(run):
 
     struct Owner: Destroy { item: Resource; }
     fn Owner::destroy(&self) { drop self.item; }
-    fn Owner::get_item(const &self) -> const Resource {
+    fn Owner::get_item(const &self) -> const &Resource {
         return self.item;
     }
 
     fn main() -> i32 {
         let owner: Owner = {{42}};
-        let view = owner.get_item();
-        printf("use %d\n", view.id);
+        inspect(owner.get_item());
         return 0;
     }
+
+    fn inspect(view: const &Resource) { printf("use %d\n", view.id); }
     """
     result = run(source)
     assert result.returncode == 0
     assert result.stdout == "use 42\ndrop 42\n"
 
 
-def test_const_value_parameter_borrows_named_and_temporary_owners(run):
-    """Const value parameters borrow; caller temporaries still drop after use."""
+def test_const_reference_parameter_borrows_named_and_temporary_owners(run):
+    """Const references borrow; caller temporaries still drop after use."""
     result = run(RESOURCE + r"""
-    fn inspect_value(value: const Resource) {
+    fn inspect_value(value: const &Resource) {
         printf("use %d\n", value.id);
     }
 

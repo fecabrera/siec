@@ -222,9 +222,11 @@ interface Formattable {
         fn format(const &self, modifiers: const &char[]) -> String {
             let result = String();
             result += '[';
-            foreach (el : enumerate(self)) {
-                if (el.index) result += ", ";
-                result += el.value.format(modifiers);
+            let index: u64 = 0;
+            foreach (el : self) {
+                if (index) result += ", ";
+                result += el.format(modifiers);
+                index += 1;
             }
             result += ']';
             return result;

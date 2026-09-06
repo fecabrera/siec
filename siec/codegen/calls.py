@@ -279,12 +279,8 @@ def emit_argument(gen: CodeGenerator, builder: ir.IRBuilder, arg: Expr,
         from siec.codegen.ownership import (consume_temporary,
                                            disarm_expression)
 
-        # A const by-value parameter receives a non-owning view. A temporary
-        # remains the caller's responsibility and is destroyed after the
-        # complete call; a named source remains armed in its own scope.
-        if not is_const(param_name):
-            consume_temporary(gen, arg)
-            disarm_expression(gen, builder, arg, scope)
+        consume_temporary(gen, arg)
+        disarm_expression(gen, builder, arg, scope)
         return value
 
     referenced = strip_reference(param_name)

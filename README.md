@@ -278,6 +278,10 @@ let second = Resource();
 
 Moving, returning, or passing the value by ownership transfers that cleanup. `destroy` is responsible for the whole value, including owned fields. The compiler does not destroy the fields separately. `drop place;` and `value.destroy()` destroy a mutable place and disable its automatic cleanup.
 
+`const` restricts mutation, not ownership. A const local, by-value parameter, or returned value still owns its resources and receives automatic cleanup. A const owner can move to another binding. Direct `drop` and `destroy()` calls still require mutable access.
+
+Use `const &T` to borrow a resource for reading. A `const T` parameter takes ownership when `T` implements `Destroy`. Copying a resource from a reference requires `Clone`; returning an owned field by value requires an explicit clone or a supported ownership transfer. Return `const &T` to borrow the field instead.
+
 `Result<V, E>` and `Result<E>` conditionally implement `Destroy`. A successful result destroys its value when `V` implements `Destroy`. A failed result destroys its error when `E` implements `Destroy`. It never destroys the inactive member.
 
 #### Raw storage slots
@@ -1063,7 +1067,7 @@ table[1] = 40;         // table.set_item(1, 40)
 table[2] += 12;        // get_item, '+', then set_item
 ```
 
-The prelude interface `GetItem<K, V>` requires `get_item(const &self, key: K) -> V`. The `SetItem<K, V>` interface requires `set_item(&self, key: K, value: V)`. A type can claim only the read capability. It can claim both interfaces if it also writes. The shorthand is structural, as with the other operator interfaces. A claim enforces the method signature and permits the capability to bound an interface parameter.
+The prelude interface `GetItem<K, V>` requires `get_item(const &self, key: K) -> V`. A getter can also return `const &V` to borrow its stored value. Reading an owned value from that reference requires `Clone`; passing it to a reference parameter keeps the borrow. The `SetItem<K, V>` interface requires `set_item(&self, key: K, value: V)`. A type can claim only the read capability. It can claim both interfaces if it also writes. The shorthand is structural, as with the other operator interfaces. A claim enforces the method signature and permits the capability to bound an interface parameter.
 
 Native arrays, raw arrays, pointers, and tuples keep their built-in storage indexing: their `[]` never routes through these methods.
 
@@ -2005,7 +2009,7 @@ fn log(args: const Any[]) {
 log([1 as Any, "text" as Any, 2.5 as Any]);
 ```
 
-The array and its `Any` entries are borrowed views. When an erased payload owns resources, inspect it through a const cast (`arg as const Resource`); that view receives no independent cleanup responsibility. Acquiring another owner remains explicit, for example by cloning that const view.
+The array and its `Any` entries are borrowed views. When an erased payload owns resources, pass `arg as const Resource` to a `const &Resource` parameter, or call a const method directly on that cast. The reference accesses the erased payload. To create another owner, call `(arg as const Resource).clone()`. Assigning the cast itself to an owned value is an error, including a const owned value.
 
 `@typeof(x)` returns the type identifier of an expression. For an `Any` operand, it reads the run-time `id` field. For all other operands, the compiler uses the static `@typeid` value and does not evaluate the operand. A comparison with a bare type name uses the identifier of that type. This applies to `==`, `!=`, and `when` arms. Type forms such as `char[]` and `i32*` are also permitted:
 
@@ -2025,8 +2029,7 @@ A `when` can also name an [interface](#interfaces). The compiler creates one arm
 ```
 case (@typeof(args[i])) {
 when Formattable:
-    let arg = args[i] as Formattable;  // 'as i64' in the i64 arm, ...
-    result.append(arg.format(modifier));
+    result.append((args[i] as const Formattable).format(modifier));
 }
 ```
 

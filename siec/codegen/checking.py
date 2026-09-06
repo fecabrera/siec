@@ -197,8 +197,12 @@ def check_owned_cleanup(gen: CodeGenerator, name: str, scope: dict) -> None:
     from siec.codegen.ownership import destroyable
 
     if destroyable(gen, scope[name].type):
+        # Automatic cleanup can end a const owner's lifetime. Resolve it
+        # through private mutable storage without changing the user's scope.
+        inner = dict(scope)
+        inner[name] = checked_variable(strip_const(scope[name].type))
         call = MethodCall(Var(name), "destroy", [])
-        check_expression(gen, call, scope)
+        check_expression(gen, call, inner)
         plans = getattr(gen, "drop_call_plans", None)
         if plans is None:
             plans = gen.drop_call_plans = {}
@@ -233,14 +237,22 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
     )
     from siec.codegen.interfaces import type_implements
 
-    if isinstance(expr, Move):
+    if isinstance(expr, (Move, Ternary)):
+        # These expressions already transfer their selected source while
+        # checking their own control flow.
         return
     source = expr
     if not destroyable(gen, type_name):
         return
     if getattr(expr, "self_transfer", False):
         return
-    if expression_returns_reference(gen, expr):
+    borrowed_local = (isinstance(expr, Var) and expr.name in scope
+                      and is_reference(scope[expr.name].type))
+    if isinstance(expr, Cast):
+        raise TypeError(
+            f"cannot acquire owned {strip_const(type_name)!r} from a cast: "
+            "borrow through a reference or call clone explicitly")
+    if expression_returns_reference(gen, expr) or borrowed_local:
         value_type = strip_const(strip_reference(type_name))
         if not type_implements(gen, value_type, "Clone"):
             raise TypeError(
@@ -357,12 +369,8 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 if inferred and checked is not None:
                     type_name = checked
                     stmt.type = checked
-                # A const binding is a read-only, non-owning value view. It
-                # never takes the source's destruction responsibility.
-                ownership_type = (type_name if is_const(type_name)
-                                  else checked or type_name)
                 consume_owned_expression(
-                    gen, stmt.value, ownership_type, scope)
+                    gen, stmt.value, checked or type_name, scope)
             else:
                 check_type_defaults(gen, type_name)
                 implicitly_initialized = type_has_defaults(gen, type_name)
@@ -525,7 +533,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             # place's owned value out of its container. The stripped type is
             # still the right checking context for implicit reference
             # binding, but only a by-value result transfers ownership.
-            if not is_reference(return_type) and not is_const(return_type):
+            if not is_reference(return_type):
                 consume_owned_expression(
                     gen, stmt.value, strip_reference(return_type), scope)
             return True
@@ -1541,6 +1549,8 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             for element in aggregate_plan.elements:
                 check_expression(
                     gen, element.value, scope, element.target)
+                consume_owned_expression(
+                    gen, element.value, element.target, scope)
             for omitted in aggregate_plan.omitted:
                 check_field_default(gen, omitted.field)
         return expected
@@ -1607,9 +1617,22 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
 
     if isinstance(expr, Ternary):
         check_truth(gen, expr.condition, scope)
+        then_scope = dict(scope)
+        else_scope = dict(scope)
+
+        def check_arm(arm, arm_scope, target):
+            """Check ownership independently on one conditional path."""
+            check_expression(gen, arm, arm_scope, target)
+            consume_owned_expression(gen, arm, target, arm_scope)
+
         if expected is not None:
-            check_expression(gen, expr.then, scope, expected)
-            check_expression(gen, expr.orelse, scope, expected)
+            check_arm(expr.then, then_scope, expected)
+            check_arm(expr.orelse, else_scope, expected)
+            merge_moved(scope, [then_scope, else_scope])
+            from siec.codegen.ownership import destroyable
+
+            if destroyable(gen, expected):
+                expr.owned_ternary_type = expected
             from siec.codegen.hir import CoercionPlan, stamp
 
             stamp(
@@ -1625,9 +1648,9 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             expr_sie_type(gen, expr.then, scope)
             or infer_type(gen, expr.then, scope)
         )
-        check_expression(gen, expr.then, scope, target)
+        check_arm(expr.then, then_scope, target)
         try:
-            check_expression(gen, expr.orelse, scope, target)
+            check_arm(expr.orelse, else_scope, target)
         except TypeError:
             other = (
                 expr_sie_type(gen, expr.orelse, scope)
@@ -1635,6 +1658,11 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             )
             raise TypeError(
                 f"ternary arms disagree: {target} vs {other}") from None
+        merge_moved(scope, [then_scope, else_scope])
+        from siec.codegen.ownership import destroyable
+
+        if destroyable(gen, target):
+            expr.owned_ternary_type = target
         from siec.codegen.hir import CoercionPlan, stamp
 
         stamp(
@@ -1712,8 +1740,8 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             raise TypeError("'move' requires an owned local variable")
         if scope[expr.operand.name].moved:
             raise TypeError(f"value {expr.operand.name!r} was already moved")
-        moved_type = lvalue_type(gen, expr.operand, scope)
-        if is_const(moved_type) or is_reference(moved_type):
+        moved_type = scope[expr.operand.name].type
+        if is_reference(moved_type):
             raise TypeError(f"cannot move a {moved_type!r} value")
         scope[expr.operand.name] = checked_variable(moved_type, moved=True)
         if expected is not None:
@@ -2206,8 +2234,7 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
             check_reference_argument(gen, arg, param, scope)
         else:
             actual = check_expression(gen, arg, scope, param)
-            if not is_const(param):
-                consume_owned_expression(gen, arg, actual or param, scope)
+            consume_owned_expression(gen, arg, actual or param, scope)
     packed = None
     if arity.variadic:
         from siec.codegen.calls import pack_variadic

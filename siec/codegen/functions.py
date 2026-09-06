@@ -405,21 +405,15 @@ def emit_function(gen: CodeGenerator, fn: Function) -> None:
                 if (align := gen.struct_align(param.type)) is not None:
                     slot.align = align
 
-                from siec.codegen.ownership import (DropCleanup,
-                                                   assign_adopts_parameter,
-                                                   destroyable,
-                                                   new_drop_flag)
+                from siec.codegen.ownership import (assign_adopts_parameter,
+                                                   own_parameter)
 
-                owned = (destroyable(gen, param.type)
-                         and not assign_adopts_parameter(
-                             gen, fn, position))
-                drop_flag = (new_drop_flag(builder, param.name, True)
-                             if owned else None)
-                scope[param.name] = Variable(
-                    slot, param.type, drop_flag=drop_flag)
-                if owned:
-                    parameter_cleanups.append(
-                        DropCleanup(param.name, scope[param.name]))
+                scope[param.name] = Variable(slot, param.type)
+                if not assign_adopts_parameter(gen, fn, position):
+                    cleanup = own_parameter(
+                        gen, builder, param.name, scope[param.name])
+                    if cleanup is not None:
+                        parameter_cleanups.append(cleanup)
                 store = builder.store(arg, slot)
                 if gen.volatile_struct(arg.type):
                     make_volatile(store)

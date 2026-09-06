@@ -7,7 +7,7 @@ from llvmlite import ir
 from siec.ast import MethodCall, Var
 from siec.codegen.generator import CodeGenerator, Variable, entry_alloca
 from siec.codegen.interfaces import type_implements
-from siec.codegen.types import (is_const, is_reference, strip_const,
+from siec.codegen.types import (is_reference, strip_const,
                                 strip_reference)
 
 
@@ -41,10 +41,9 @@ def inherit_expression_identity(source, rewritten):
 
 
 def destroyable(gen: CodeGenerator, type_name: str | None) -> bool:
-    """Whether an owned value carries the nominal Destroy contract."""
+    """Whether a value owns cleanup, independently of its const access."""
     if ("Destroy" not in gen.interfaces
-            or type_name is None or is_reference(type_name)
-            or is_const(type_name)):
+            or type_name is None or is_reference(type_name)):
         return False
     return type_implements(
         gen, strip_const(strip_reference(type_name)), "Destroy")
@@ -78,6 +77,15 @@ def set_drop_flag(builder, variable: Variable, active: bool) -> None:
             ir.Constant(ir.IntType(1), int(active)), variable.drop_flag)
 
 
+def own_parameter(gen: CodeGenerator, builder, name: str,
+                  variable: Variable) -> DropCleanup | None:
+    """Arm cleanup for an owned parameter of a function or closure."""
+    if not destroyable(gen, variable.type):
+        return None
+    variable.drop_flag = new_drop_flag(builder, name, True)
+    return DropCleanup(name, variable)
+
+
 def emit_drop_slot(gen: CodeGenerator, builder, slot, type_name: str) -> None:
     """Invoke Destroy::destroy for one known-initialized storage slot."""
     from siec.ast import Call
@@ -86,7 +94,8 @@ def emit_drop_slot(gen: CodeGenerator, builder, slot, type_name: str) -> None:
 
     name = f".drop.value.{gen.temporary_count}"
     gen.temporary_count += 1
-    scope = {name: Variable(slot, type_name)}
+    # Cleanup ends the lifetime; it does not grant mutable user access.
+    scope = {name: Variable(slot, strip_const(type_name))}
     checked = gen.drop_call_plans[strip_const(type_name)]
     symbol = checked.symbol
     call = Call(symbol, [Var(name)])
@@ -193,6 +202,8 @@ def disarm_expression(gen: CodeGenerator, builder, expr, scope: dict) -> None:
     """Transfer ownership out of a whole local expression when applicable."""
     from siec.ast import Member, Move
 
+    if getattr(expr, "owned_copy", None) is not None:
+        return
     source = expr.operand if isinstance(expr, Move) else expr
     if isinstance(source, Member) and source.field in ("value", "error"):
         from siec.codegen.inference import expr_sie_type
@@ -211,8 +222,16 @@ def disarm_expression(gen: CodeGenerator, builder, expr, scope: dict) -> None:
         set_drop_flag(builder, variable, False)
 
 
+def transfer_cleanup(gen: CodeGenerator, builder, expr, scope: dict) -> None:
+    """Release source cleanup after storing its value in another owner."""
+    consume_temporary(gen, expr)
+    disarm_expression(gen, builder, expr, scope)
+
+
 def expression_returns_reference(gen: CodeGenerator, expr) -> bool:
     """Whether a checked call expression aliases callee-owned storage."""
+    if (getter := getattr(expr, "item_get_call", None)) is not None:
+        return expression_returns_reference(gen, getter)
     symbol = getattr(expr, "resolved_symbol", None)
     return symbol is not None and is_reference(gen.return_types.get(symbol))
 

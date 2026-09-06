@@ -68,7 +68,8 @@ def resolve_nested_closures(gen, node, parameters=frozenset()) -> None:
 
 def check_closure(gen, expr, scope: dict) -> str:
     """Check a closure body in its lexical scope and record its captures."""
-    from siec.codegen.checking import check_block, checked_variable
+    from siec.codegen.checking import (check_block, checked_variable,
+                                      check_owned_cleanup)
 
     type_name = expand_closure_signature(gen, expr)
 
@@ -82,6 +83,7 @@ def check_closure(gen, expr, scope: dict) -> str:
     inner = dict(scope)
     for param in expr.params:
         inner[param.name] = checked_variable(param.type)
+        check_owned_cleanup(gen, param.name, inner)
         if param.pattern is not None:
             bind_param_pattern(gen, param, inner)
     synthetic = Function(
@@ -197,6 +199,9 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
                                      drop_flag=variable.drop_flag,
                                      capture_promoted=True)
 
+    from siec.codegen.ownership import own_parameter
+
+    parameter_cleanups = []
     for arg, param in zip(invoke.args[1:], expr.params):
         arg.name = param.name
         if param.type.startswith("&") or param.type.startswith("const &"):
@@ -205,6 +210,10 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
             slot = inner_builder.alloca(arg.type, name=f"{param.name}.addr")
             inner_builder.store(arg, slot)
             inner_scope[param.name] = Variable(slot, param.type)
+            cleanup = own_parameter(
+                gen, inner_builder, param.name, inner_scope[param.name])
+            if cleanup is not None:
+                parameter_cleanups.append(cleanup)
             if param.pattern is not None:
                 from siec.codegen.statements import bind_tuple_value
 
@@ -222,7 +231,8 @@ def emit_closure(gen, builder: ir.IRBuilder, expr, scope: dict):
     gen.return_types[invoke.name] = expr.return_type
     try:
         with gen.flow.nested_function():
-            emit_block(gen, inner_builder, expr.body, inner_scope)
+            emit_block(gen, inner_builder, expr.body, inner_scope,
+                       initial_cleanups=parameter_cleanups)
             if not inner_builder.block.is_terminated:
                 inner_builder.ret_void()
     finally:

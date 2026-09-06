@@ -260,7 +260,7 @@ fn List<T>::get_slice(const &self, start: const u64, finish: const u64) -> List<
  * @param index The index of the element to get.
  * @return The element at the given index.
  */
-fn List<T>::get_item(const &self, index: const u64) -> const T {
+fn List<T>::get_item(const &self, index: const u64) -> const &T {
     assert(index < self.length, "List index is out of bounds");
 
     return self.data[index].get();
@@ -357,7 +357,7 @@ fn List<T>::append(&self, arr: const !T*, n: u64) {
  * @param value The element to add to the List.
  * @return A new List with the given element added.
  */
-fn List<T>::add(&self, value: const T) -> List<T> {
+fn List<T>::add(&self, value: const &T) -> List<T> {
     let result = List<T>(self);
     result.push_from(value);
     return result;
@@ -370,7 +370,7 @@ fn List<T>::add(&self, value: const T) -> List<T> {
  * @return A new List with the given element added.
  */
 @inline
-fn List<T>::add_assign(&self, value: const T) {
+fn List<T>::add_assign(&self, value: const &T) {
     self.push_from(value);
 }
 

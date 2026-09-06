@@ -69,6 +69,16 @@ def emit_reinterpret_address(gen: CodeGenerator, builder: ir.IRBuilder,
         expr.expanded = True
 
     operand_name = expr_sie_type(gen, expr.operand, scope)
+    if (strip_const(strip_reference(operand_name)) == "Any"
+            and strip_const(expr.type) != "Any"):
+        from siec.codegen.expressions import emit_expression
+
+        # Borrow the payload itself, not the Any descriptor's bytes.
+        erased = emit_expression(gen, builder, expr.operand, None, scope)
+        data = builder.extract_value(erased, 1, name="any.data")
+        return builder.bitcast(
+            data, ir.PointerType(resolve_type(expr.type, gen.structs)),
+            name="any.borrow")
     if (not allow_const_copy and is_const(operand_name)
             and not is_const(expr.type)):
         raise TypeError(
