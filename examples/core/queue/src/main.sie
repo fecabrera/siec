@@ -8,15 +8,19 @@ fn main() -> i32 {
     q1.push(String("world"));
     
     std.io.println("q1");
-    foreach (entry : enumerate(q1)) {
-        std.io.println("{}: {}", entry.index, entry.value);
+    let index: u64 = 0;
+    foreach (value : q1) {
+        std.io.println("{}: {}", index, value);
+        index += 1;
     }
 
     let q2 = q1.clone();
 
     std.io.println("q2");
-    foreach (entry : enumerate(q2)) {
-        std.io.println("{}: {}", entry.index, entry.value);
+    index = 0;
+    foreach (value : q2) {
+        std.io.println("{}: {}", index, value);
+        index += 1;
     }
 
     return 0;

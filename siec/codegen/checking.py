@@ -949,6 +949,9 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
 
     iterator_scope = dict(scope)
     iterator_scope["__foreach_it"] = checked_variable(it_type)
+    consume_owned_expression(
+        gen, iterator_call or stmt.iterable, it_type, scope)
+    check_owned_cleanup(gen, "__foreach_it", iterator_scope)
     has_next_call = Call(has_next, [Var("__foreach_it")])
     next_call = Call(next_, [Var("__foreach_it")])
     check_call(
@@ -1988,6 +1991,9 @@ def check_call(gen: CodeGenerator, call: Call, scope: dict,
         from siec.codegen.methods import rewrite_enumerate
 
         if (rewritten := rewrite_enumerate(gen, call, scope)) is not None:
+            from siec.codegen.ownership import inherit_expression_identity
+
+            inherit_expression_identity(call, rewritten)
             result = check_expression(gen, rewritten, scope, expected)
             stamp(
                 call,

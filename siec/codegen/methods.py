@@ -170,7 +170,8 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
         if (fn.receiver_params is not None and fn.receiver.endswith("[]")
                 and fn.receiver_params == [fn.receiver[:-2]]):
             element = fn.receiver[:-2]
-            if concrete_type_like(gen, element):
+            if (element not in (fn.receiver_constraints or {})
+                    and concrete_type_like(gen, element)):
                 fn.receiver_params = None
 
         # The same ambiguity exists in 'Box<X>::m': X is a template
@@ -178,6 +179,10 @@ def resolve_method_declaration(gen: CodeGenerator, fn) -> None:
         # it names a collected type.
         if (fn.receiver_params is not None
                 and fn.receiver in gen.generic_structs
+                # A bound declares a lexical parameter even when a global
+                # type has the same spelling.
+                and not any(param in (fn.receiver_constraints or {})
+                            for param in fn.receiver_params)
                 and all(concrete_type_like(gen, param)
                         for param in fn.receiver_params)):
             receiver = f"{fn.receiver}<{','.join(fn.receiver_params)}>"

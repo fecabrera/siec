@@ -124,10 +124,14 @@ def flush_defers(gen: CodeGenerator, builder: ir.IRBuilder, frames: list) -> Non
     try:
         for frame in reversed(frames):
             for entry in reversed(frame):
-                from siec.codegen.ownership import DropCleanup, emit_drop_cleanup
+                from siec.codegen.ownership import (
+                    DropCleanup, TemporaryDrop, emit_drop_cleanup,
+                    emit_temporary_drop)
 
                 if isinstance(entry, DropCleanup):
                     emit_drop_cleanup(gen, builder, entry)
+                elif isinstance(entry, TemporaryDrop):
+                    emit_temporary_drop(gen, builder, entry)
                 else:
                     stmt, snapshot = entry
                     emit_statement(gen, builder, stmt, snapshot)
@@ -860,16 +864,20 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
 
     loop_scope = dict(scope)
     it_name = "__foreach_it"
+    from siec.codegen.ownership import own_parameter, transfer_cleanup
 
-    # an Iterable hands out its iterator - a const source its
-    # const_iterator; a value that already is an iterator iterates
-    # itself, from a copy of its state
+    # Retain temporary iterable owners until the iterator has been destroyed.
+    gen.borrowed_temporary_frames.append([])
+
+    # An Iterable supplies an iterator. A direct iterator transfers ownership
+    # or copies plain state; a borrowed owner uses its checked Clone call.
     it_type = plan.iterator_type
-    if plan.iterator_call is not None:
-        it_value = emit_expression(
-            gen, builder, plan.iterator_call, None, scope)
-    else:
-        it_value = emit_expression(gen, builder, stmt.iterable, None, scope)
+    iterator_expr = plan.iterator_call or stmt.iterable
+    copied = getattr(iterator_expr, "owned_copy", None)
+    it_value = emit_expression(gen, builder, copied or iterator_expr, None, scope)
+
+    transfer_cleanup(gen, builder, iterator_expr, scope)
+    loop_cleanups = gen.borrowed_temporary_frames.pop()
 
     slot = entry_alloca(builder, resolve_type(it_type, gen.structs), "foreach.it")
     if (align := gen.struct_align(it_type)) is not None:
@@ -877,6 +885,10 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
 
     builder.store(it_value, slot)
     loop_scope[it_name] = Variable(slot, it_type)
+    cleanup = own_parameter(gen, builder, it_name, loop_scope[it_name])
+    if cleanup is not None:
+        loop_cleanups.append(cleanup)
+    gen.defer_frames.append(loop_cleanups)
 
     func = builder.function
     cond_block = func.append_basic_block("foreach.cond")
@@ -908,6 +920,9 @@ def emit_foreach(gen: CodeGenerator, builder: ir.IRBuilder, stmt: Foreach,
         builder.branch(cond_block)
 
     builder.position_at_end(end_block)
+
+    flush_defers(gen, builder, [gen.defer_frames[-1]])
+    gen.defer_frames.pop()
 
 
 def emit_for(gen: CodeGenerator, builder: ir.IRBuilder, stmt: For, scope: dict) -> None:

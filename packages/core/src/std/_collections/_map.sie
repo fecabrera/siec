@@ -181,9 +181,11 @@ fn Map<K, V>::destroy(&self) {
 fn Map<K, V>::format(const &self, modifiers: const &char[]) -> String {
     let str = String();
     str += "{";
-    foreach (entry : enumerate(self)) {
-        if (entry.index) str += ", ";
-        str += entry.value.format(modifiers);
+    let index: u64 = 0;
+    foreach (entry : self) {
+        if (index) str += ", ";
+        str += entry.format(modifiers);
+        index += 1;
     }
     str += "}";
 

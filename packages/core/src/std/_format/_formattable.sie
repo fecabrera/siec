@@ -246,11 +246,13 @@ interface Formattable {
 fn T[]::format(const &self, modifiers: const &char[]) -> String {
     let result = String();
     result += '[';
-    foreach (el : enumerate(self)) {
-        if (el.index) result += ", ";
+    let index: u64 = 0;
+    foreach (el : self) {
+        if (index) result += ", ";
         result += '"';
-        result += el.value.format(modifiers);
+        result += el.format(modifiers);
         result += '"';
+        index += 1;
     }
     result += ']';
     return result;

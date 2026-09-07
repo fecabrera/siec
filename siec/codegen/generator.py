@@ -673,50 +673,109 @@ struct ConstEnumerated<T> {
     value: const T;
 }
 
-struct EnumerateIterator<I, T>: Iterator<Enumerated<T>> {
-    inner: I;
+// Each copied pair owns its payload when T owns resources.
+@where<T: Destroy>
+@extend Enumerated<T>: Destroy {
+    fn destroy(&self) { drop self.value; }
+}
+
+@where<T: Destroy>
+@extend ConstEnumerated<T>: Destroy {
+    fn destroy(&self) {
+        // The pair layouts are identical. Cleanup ends the const payload's
+        // lifetime without granting mutable access to iteration users.
+        drop (self as Enumerated<T>).value;
+    }
+}
+
+@where<T: Clone>
+@extend Enumerated<T>: Clone;
+
+@where<T: Clone>
+fn Enumerated<T>::clone(const &self) -> Enumerated<T> {
+    return {self.index, self.value.clone()};
+}
+
+@where<T: Clone>
+@extend ConstEnumerated<T>: Clone;
+
+@where<T: Clone>
+fn ConstEnumerated<T>::clone(const &self) -> ConstEnumerated<T> {
+    return {self.index, self.value.clone()};
+}
+
+// Both enumeration forms share initialization and cleanup of their state.
+// Raw slots avoid constructing a pair before the first successful next().
+struct EnumerationState<I, P>: Destroy {
+    inner: Slot<I>;
+    current: Slot<P>;
     count: u64;
-    current: Enumerated<T>;
+    live: bool;
+}
+
+fn EnumerationState<I, P>::init(&self, inner: I) {
+    self.inner.write(move inner);
+    self.count = 0;
+    self.live = false;
+}
+
+fn EnumerationState<I, P>::has_next(&self) -> bool {
+    return self.inner.get_mut().has_next();
+}
+
+fn EnumerationState<I, P>::store(&self, pair: P) -> &P {
+    if (self.live) self.current.drop();
+    self.current.write(move pair);
+    self.live = true;
+    self.count += 1;
+    return self.current.get_mut();
+}
+
+fn EnumerationState<I, P>::destroy(&self) {
+    if (self.live) self.current.drop();
+    self.inner.drop();
+}
+
+struct EnumerateIterator<I, T>: Destroy, Iterator<Enumerated<T>> {
+    state: EnumerationState<I, Enumerated<T>>;
 }
 
 fn EnumerateIterator<I, T>::has_next(&self) -> bool {
-    return self.inner.has_next();
+    return self.state.has_next();
 }
 
 fn EnumerateIterator<I, T>::next(&self) -> &Enumerated<T> {
-    self.current = { self.count, self.inner.next() };
-    self.count += 1;
-    return self.current;
+    let pair: Enumerated<T> = {self.state.count, self.state.inner.get_mut().next()};
+    return self.state.store(move pair);
 }
 
-struct ConstEnumerateIterator<I, T>: ConstIterator<ConstEnumerated<T>> {
-    inner: I;
-    count: u64;
-    current: ConstEnumerated<T>;
+fn EnumerateIterator<I, T>::destroy(&self) { drop self.state; }
+
+struct ConstEnumerateIterator<I, T>: Destroy, ConstIterator<ConstEnumerated<T>> {
+    state: EnumerationState<I, ConstEnumerated<T>>;
 }
 
 fn ConstEnumerateIterator<I, T>::has_next(&self) -> bool {
-    return self.inner.has_next();
+    return self.state.has_next();
 }
 
 fn ConstEnumerateIterator<I, T>::next(&self) -> const &ConstEnumerated<T> {
-    self.current = { self.count, self.inner.next() };
-    self.count += 1;
-    return self.current;
+    let pair: ConstEnumerated<T> = {self.state.count, self.state.inner.get_mut().next()};
+    return self.state.store(move pair);
 }
 
+fn ConstEnumerateIterator<I, T>::destroy(&self) { drop self.state; }
+
 fn __enumerate<I, T>(it: I) -> EnumerateIterator<I, T> {
-    let e: EnumerateIterator<I, T>;
-    e.inner = it;
-    e.count = 0;
-    return e;
+    let result: EnumerateIterator<I, T>;
+    result.state.init(move it);
+    return result;
 }
 
 fn __const_enumerate<I, T>(it: I) -> ConstEnumerateIterator<I, T> {
-    let e: ConstEnumerateIterator<I, T>;
-    e.inner = it;
-    e.count = 0;
-    return e;
+    let result: ConstEnumerateIterator<I, T>;
+    result.state.init(move it);
+    return result;
 }
 
 struct Option<T>: Truthy {

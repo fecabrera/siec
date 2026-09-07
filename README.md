@@ -695,6 +695,18 @@ foreach (e : enumerate(nums)) {
 
 `value` is a copy of the element, not a reference into the collection. A mutable iterator produces `Enumerated<T>` pairs through `EnumerateIterator<I, T>`; a const iterator produces `ConstEnumerated<T>` pairs through `ConstEnumerateIterator<I, T>`, whose `value` remains `const T`. A declared function named `enumerate` takes precedence over the built-in function.
 
+When `T` implements `Destroy`, enumeration requires `Clone` and each pair owns its copied value. Advancing destroys the previous pair. The enumeration iterator destroys its last pair and any owned inner iterator when it leaves scope. No pair is initialized for an empty iteration. A pair also implements `Clone` when `T` does, so copying a returned pair creates an independent value.
+
+`foreach` takes ownership of an owned iterator and destroys it when the loop ends, including on `break` or `return`. Temporary iterable owners remain alive through the loop. A non-owning iterator still passes by value. Use direct `foreach` with a separate index when code only needs to borrow the original elements, including elements without `Clone`:
+
+```
+let index: u64 = 0;
+foreach (value : values) {
+    inspect(index, value);
+    index += 1;
+}
+```
+
 #### Break and continue
 
 `break` leaves the innermost enclosing loop; `continue` jumps to its next pass. In a `for`, `continue` lands on the step, so the loop always advances:

@@ -160,6 +160,7 @@ def track_value_temporary(gen: CodeGenerator, builder, expr, value,
     """Give a destructible call result storage through its full expression."""
     if (not gen.borrowed_temporary_frames
             or not destroyable(gen, type_name)
+            or temporary_registered(gen, expr)
             or expression_returns_reference(gen, expr)):
         return value
 
