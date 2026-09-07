@@ -44,6 +44,7 @@ def test_typename_bakes_canonical_names(run):
 
         // inside a generic, T substitutes before the name bakes in
         if (not same(name_of(1.5), "f64")) { return 8; }
+        lst = {null, 0};
         if (not same(name_of(lst), "List<f64>")) { return 9; }
 
         let n = @typename(num);              // an ordinary const char[]

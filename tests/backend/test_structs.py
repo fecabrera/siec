@@ -55,7 +55,7 @@ def test_opaque_struct_passes_through_pointers(run):
     }
 
     fn main() -> i32 {
-        let h: Handle*;
+        let h: Handle* = null;
         return probe(h) * 2;
     }
     """

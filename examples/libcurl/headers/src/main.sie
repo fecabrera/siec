@@ -48,7 +48,7 @@ fn main(args: char*[]) -> i32 {
     }
 
     // a single header can also be picked out by name
-    let picked: curl.curl_header*;
+    let picked: curl.curl_header* = null;
     let found = curl.curl_easy_header(handle, "content-type", 0 as u64,
                                       curl.CURLH_HEADER as u32, -1, &picked);
     if (found == curl.CURLHcode::CURLHE_OK) {

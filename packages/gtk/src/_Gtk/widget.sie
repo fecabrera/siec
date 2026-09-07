@@ -267,10 +267,9 @@ struct Widget: Handler<GtkWidget> {
     }
     
     fn get_size_request(&self) -> Tuple<i32, i32> {
-        let w: i32;
-        let h: i32;
-        gtk_widget_get_size_request(self.handle, &w, &h);
-        return (w, h);
+        let size: Tuple<i32, i32> = (0, 0);
+        gtk_widget_get_size_request(self.handle, &size[0], &size[1]);
+        return size;
     }
     
     fn set_opacity(&self, opacity: f64) {

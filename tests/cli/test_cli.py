@@ -209,7 +209,7 @@ def test_unpicked_inline_overload_declares_without_linkonce(
     import { Box } from boxes;
 
     fn main() -> i32 {
-        let b: Box<i32>;
+        let b: Box<i32> = {0};
         b.set(42);
         return b.value;
     }

@@ -229,6 +229,20 @@ A bare `let v;` with neither type nor initializer is rejected. Values are update
 v = <expr>;
 ```
 
+A local value must be initialized on every path that reaches a read. This also applies when passing it to a value or reference parameter. A reference parameter does not declare an output-only contract. Initialize foreign-call output locals before passing their addresses when the compiler cannot prove the writes.
+
+```
+let value: i32;
+if (condition) {
+    value = 1;
+} else {
+    value = 2;
+}
+use(value);
+```
+
+Fields can be initialized separately. Reading a whole struct or tuple requires all its fields to be initialized. An `init` method must initialize its receiver before it returns. Field defaults, empty array views, and raw `Slot<T>` storage keep their existing initialization rules. Taking an address does not initialize the value. Compile-time type queries do not read it.
+
 #### Assignment and ownership
 
 Initialization creates a new value and never invokes an assignment interface. Plain assignment updates an existing one, choosing its operation from how the right-hand side is owned:
@@ -239,7 +253,7 @@ a = move b;  // consumes b; using b afterward is an error
 a = make();  // consumes the unnamed temporary
 ```
 
-`move` takes an owned local as a whole. After a move, the variable cannot be read until it is reassigned. Three built-in interfaces customize the store:
+`move` takes an owned local as a whole. After a move, the variable cannot be read until it is reassigned. A loop must reinitialize a consumed source before a later iteration uses it. This check includes conditions, steps, and `continue` paths. A path that leaves through `break` or `return` does not repeat its consumption. Three built-in interfaces customize the store:
 
 ```
 interface Clone {
@@ -1757,7 +1771,7 @@ fn main() {
 
 A reference parameter normally aliases assignable storage in the caller. A `const &T` parameter only reads, so it also accepts literals and convertible values. The compiler converts the value when necessary and creates storage with the parameter type. A mutable `&T` requires caller storage of exactly that type. A conversion would create temporary storage and discard writes to it.
 
-A function can return a reference with `-> &T` if the function has a source reference parameter. This source is usually the receiver. The function cannot return a reference to storage that expires after the call, such as a local variable or a parameter copy. The `return` takes the address of the value. Reading the result copies the value. Calling a [method](#methods) on the result, or returning it again, preserves the alias to the original value.
+A function can return a reference with `-> &T` if its first parameter is a reference. A returned place must derive from that parameter or static storage. The first parameter is usually the receiver. Fields, indexing, and nested reference-returning calls preserve the source. A mutable reference return cannot refer to const storage. The function cannot return a reference to storage that expires after the call, such as a local variable or a parameter copy. The `return` takes the address of the value. Reading the result copies the value. Calling a [method](#methods) on the result, or returning it again, preserves the alias to the original value.
 
 ```
 fn List<T>::get(self: &List<T>, index: u64) -> &T {

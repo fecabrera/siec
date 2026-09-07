@@ -42,6 +42,7 @@ def test_any_wraps_and_typeof_dispatches(run):
 
         // one Any[] holds heterogeneous values; one function takes them
         let text: char[] = "hi";
+        s = {null, 0};
         let args: Any[] = [num as Any, text as Any, s as Any, 1.5 as Any];
         let (chars, strs, others) = count_kinds(args);
         if (chars != 1 or strs != 1 or others != 2) { return 8; }

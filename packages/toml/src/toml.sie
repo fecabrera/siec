@@ -44,6 +44,12 @@ fn TOMLObject::init(&self, type: TOMLObjectType) {
         self.tab.init();
     when TOMLObjectType::Float:
         self.flt.init();
+    when TOMLObjectType::Integer:
+        self.int = 0;
+    when TOMLObjectType::Bool:
+        self.bol = false;
+    else:
+        panic("invalid TOMLObjectType");
     }
 }
 

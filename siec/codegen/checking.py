@@ -134,6 +134,10 @@ def check_function(gen: CodeGenerator, fn: Function) -> None:
                 check_owned_cleanup(gen, param.name, scope)
         terminates = check_block(gen, fn.body or [], scope, fn)
 
+        from siec.codegen.local_flow import check_local_flow
+
+        check_local_flow(gen, fn, params)
+
         from siec.codegen.results import check_results
 
         check_results(gen, fn, params)
@@ -268,6 +272,7 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
         variable = scope[source.name]
         if variable.moved:
             raise TypeError(f"use of moved value {source.name!r}")
+        expr.consumed_local = source.name
         scope[source.name] = checked_variable(variable.type, moved=True)
         return
     result_base = source.base if isinstance(source, Member) else None
@@ -290,6 +295,7 @@ def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
         if valid and destroyable(gen, variable.type):
             if variable.moved:
                 raise TypeError(f"use of moved value {base!r}")
+            expr.consumed_local = base
             scope[base] = checked_variable(variable.type, moved=True)
             return
     if isinstance(source, (Member, Index)):
@@ -417,8 +423,10 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                 initializes_uninitialized_member,
             )
 
-            stmt.initialization = initializes_uninitialized_member(
-                target, scope)
+            stmt.initialization = (
+                isinstance(target, Var) and target.name in scope
+                and (not scope[target.name].initialized or scope[target.name].moved)
+            ) or initializes_uninitialized_member(target, scope)
             item_setter = None
             if isinstance(target, Index):
                 from siec.codegen.inference import item_call
@@ -444,6 +452,7 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
                     consume_owned_expression(
                         gen, action.value, target_type, scope)
 
+            stmt.checked_target = target
             if isinstance(target, Var) and target.name in scope:
                 variable = scope[target.name]
                 scope[target.name] = checked_variable(
@@ -656,13 +665,18 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
         if isinstance(stmt, While):
             check_truth(gen, stmt.condition, scope)
             inner = dict(scope)
-            gen.checking_loop_depth += 1
+            paths = push_loop_paths(gen, fn)
             try:
-                check_block(gen, stmt.body, inner, fn, loop=True,
-                            emit_type=emit_type)
+                terminated = check_block(gen, stmt.body, inner, fn, loop=True,
+                                         emit_type=emit_type)
             finally:
-                gen.checking_loop_depth -= 1
-            merge_moved(scope, [scope, inner])
+                pop_loop_paths(gen, fn)
+            from siec.ast import BoolLiteral
+
+            if not (isinstance(stmt.condition, BoolLiteral)
+                    and not stmt.condition.value):
+                merge_moved(scope, [scope] + paths[0] + paths[1]
+                            + ([] if terminated else [inner]))
             return False
 
         if isinstance(stmt, For):
@@ -670,14 +684,19 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             check_statement(gen, stmt.init, inner, fn, loop=True)
             check_truth(gen, stmt.condition, inner)
             body_scope = dict(inner)
-            gen.checking_loop_depth += 1
+            paths = push_loop_paths(gen, fn)
             try:
-                check_block(gen, stmt.body, body_scope, fn, loop=True,
-                            emit_type=emit_type)
-                check_statement(gen, stmt.step, body_scope, fn, loop=True)
+                terminated = check_block(gen, stmt.body, body_scope, fn, loop=True,
+                                         emit_type=emit_type)
+                backs = paths[1] + ([] if terminated else [body_scope])
+                step_scope = dict(inner)
+                if backs:
+                    merge_moved(step_scope, backs)
+                check_statement(gen, stmt.step, step_scope, fn, loop=True)
             finally:
-                gen.checking_loop_depth -= 1
-            merge_moved(inner, [inner, body_scope])
+                pop_loop_paths(gen, fn)
+            merge_moved(inner, [inner] + paths[0]
+                        + ([step_scope] if backs else []))
             merge_moved(scope, [inner])
             return False
 
@@ -739,6 +758,9 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
             if not loop:
                 word = "break" if isinstance(stmt, Break) else "continue"
                 raise TypeError(f"'{word}' outside a loop")
+            paths = getattr(fn, 'checked_loop_paths', [])
+            if paths:
+                paths[-1][isinstance(stmt, Continue)].append(dict(scope))
             return True
 
         raise TypeError(f"cannot check statement {stmt!r}")
@@ -979,13 +1001,30 @@ def check_foreach(gen: CodeGenerator, stmt: Foreach, scope: dict,
 
     inner = dict(scope)
     inner[stmt.name] = checked_variable(next_ret)
-    gen.checking_loop_depth += 1
+    paths = push_loop_paths(gen, fn)
     try:
-        check_block(gen, stmt.body, inner, fn, loop=True,
-                    emit_type=emit_type)
+        terminated = check_block(gen, stmt.body, inner, fn, loop=True,
+                                 emit_type=emit_type)
     finally:
-        gen.checking_loop_depth -= 1
-    merge_moved(scope, [scope, inner])
+        pop_loop_paths(gen, fn)
+    merge_moved(scope, [scope] + paths[0] + paths[1]
+                + ([] if terminated else [inner]))
+
+
+def push_loop_paths(gen: CodeGenerator, fn: Function) -> list:
+    """Collect break and continue states for one checked loop."""
+    if not hasattr(fn, "checked_loop_paths"):
+        fn.checked_loop_paths = []
+    paths = [[], []]
+    fn.checked_loop_paths.append(paths)
+    gen.checking_loop_depth += 1
+    return paths
+
+
+def pop_loop_paths(gen: CodeGenerator, fn: Function) -> None:
+    """Leave the loop whose exit states have been collected."""
+    fn.checked_loop_paths.pop()
+    gen.checking_loop_depth -= 1
 
 
 def check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
@@ -1917,6 +1956,8 @@ def type_has_defaults(gen: CodeGenerator, type_name: str | None,
                       seen: set[str] | None = None) -> bool:
     """Whether a bare declaration receives a recursive struct default."""
     canonical = strip_const(type_name)
+    if canonical and canonical.endswith("[]"):
+        return True
     info = gen.structs.get(canonical)
     if info is None or info.fields is None or info.is_union:
         return False

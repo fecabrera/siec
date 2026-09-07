@@ -519,7 +519,7 @@ def test_generic_reference_returns_chain(run):
     }
 
     fn main() -> i32 {
-        let g: Grid<i32>;
+        let g: Grid<i32> = {{0}};
         g.at().set(42);
         return g.at().value;
     }
@@ -575,7 +575,7 @@ def test_constructors_build_and_init(run, compile_source):
 
     struct List<T> {
         items: @raw<T>[8];
-        length: u64;
+        length: u64 = 0;
     }
 
     fn List<T>::init(self: &List<T>) { self.length = 0; }

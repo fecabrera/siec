@@ -153,7 +153,7 @@ def test_generic_interfaces(run):
 
     fn sum(it: Cursor<i32>) -> i32 {
         let total = 0;
-        let v: i32;
+        let v: i32 = 0;
         while (it.next(v)) {
             total += v;
         }

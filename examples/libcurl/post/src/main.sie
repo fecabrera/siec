@@ -47,7 +47,7 @@ fn main(args: char*[]) -> i32 {
     }
 
     // an HTTP error page still transfers fine; the status decides
-    let status: i64;
+    let status: i64 = -1;
     curl.curl_easy_getinfo(handle, curl.CURLINFO::RESPONSE_CODE, &status);
     return status >= 400 ? 1 : 0;
 }

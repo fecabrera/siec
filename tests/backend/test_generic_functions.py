@@ -167,7 +167,7 @@ def test_interface_bound_infers_its_free_type_arguments(run):
     }
 
     fn main() -> i32 {
-        let key: Key;
+        let key: Key = {0};
         return size(key) as i32 + 38;
     }
     """

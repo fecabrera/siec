@@ -145,7 +145,7 @@ def test_sizeof_reference_parameter_measures_the_referent(run):
         }
 
         fn main() -> i32 {
-            let p: pair;
+            let p: pair = {0, 0};
             return measure(p);
         }
     """)

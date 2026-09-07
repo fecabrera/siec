@@ -336,12 +336,19 @@ def test_private_fields_work_with_generic_structs(run, compile_source):
             value: T;
         }
 
+        fn Box<T>::make(value: T) -> Box<T> {
+            let box: Box<T>;
+            box.handle = null;
+            box.value = value;
+            return box;
+        }
+
         fn peek<T>(box: const Box<T>) -> const opaque* {
             return box.handle;
         }
 
         fn main() -> i32 {
-            let box: Box<i32>;
+            let box = Box<i32>::make(0);
             return peek(box) as i32;
         }
         """)

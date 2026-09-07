@@ -143,10 +143,9 @@ struct Label: Handler<GtkWidget> {
     }
     
     fn get_selection_bounds(&self) -> Tuple<i32, i32> {
-        let x: i32;
-        let y: i32;
-        gtk_label_get_selection_bounds(self.as_gtk_label(), &x, &y);
-        return (x, y);
+        let bounds: Tuple<i32, i32> = (0, 0);
+        gtk_label_get_selection_bounds(self.as_gtk_label(), &bounds[0], &bounds[1]);
+        return bounds;
     }
     
     fn set_single_line_mode(&self, single_line_mode: bool) {

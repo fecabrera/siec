@@ -94,10 +94,9 @@ struct Popover: Handler<GtkWidget> {
     }
     
     fn get_offset(&self) -> Tuple<i32, i32> {
-        let x_offset: i32;
-        let y_offset: i32;
-        gtk_popover_get_offset(self.as_gtk_popover(), &x_offset, &y_offset);
-        return (x_offset, y_offset);
+        let offset: Tuple<i32, i32> = (0, 0);
+        gtk_popover_get_offset(self.as_gtk_popover(), &offset[0], &offset[1]);
+        return offset;
     }
     
     fn set_cascade_popdown(&self, cascade_popdown: bool) {

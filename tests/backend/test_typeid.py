@@ -39,6 +39,8 @@ def test_typeid_hashes_canonical_names(run):
         let arr: i32[];
         if (@typeid(arr) != 5695918721817201349) { return 5; }
 
+        num = 0;
+        s = {null, 0};
         if (id_of(num) != U64_ID) { return 6; }
         if (id_of(s) != @typeid(String)) { return 7; }
 

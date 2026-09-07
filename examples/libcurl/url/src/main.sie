@@ -6,7 +6,7 @@ import curl;
 
 /* fetch one part; absent parts (no query, no fragment) are simply skipped */
 fn part(handle: curl.CURLU*, name: char*, what: curl.CURLUPart, flags: u32) {
-    let value: char*;
+    let value: char* = null;
     let code = curl.curl_url_get(handle, what, &value, flags);
     if (code == curl.CURLUcode::CURLUE_OK) {
         std.io.println("{}: {}", name, value);

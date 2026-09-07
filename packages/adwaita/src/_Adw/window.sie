@@ -46,7 +46,7 @@ struct Window: Handler<GtkWidget> {
     }
 
     fn get_default_size(&self) -> Tuple<i32, i32> {
-        let size: Tuple<i32, i32>;
+        let size: Tuple<i32, i32> = (0, 0);
         gtk_window_get_default_size(GTK_WINDOW(self.handle), &size[0], &size[1]);
         return size;
     }

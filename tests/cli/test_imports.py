@@ -1016,7 +1016,7 @@ def test_methods_resolve_on_carried_foreign_types(tmp_path, monkeypatch):
         fn check(n: u64) -> i32 { return n as i32; }
 
         fn main() -> i32 {
-            let info: Info;
+            let info: Info = {{null, 0}};
             info.fill();
 
             // dotted-chain form, and an indexed receiver in argument
