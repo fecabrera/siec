@@ -19,7 +19,7 @@ import {
 } from gobject;
 import { AdwApplication, adw_application_new } from adwaita;
 
-struct Application: Handler<AdwApplication> {
+struct Application: Handler<AdwApplication>, Destroy {
     @private handle: AdwApplication*;
 
     fn init(&self, handle: AdwApplication*) {
