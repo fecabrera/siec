@@ -35,9 +35,10 @@ struct File: IOReadable, IOSeekable {
     fn close(&self) -> Result<CloseError> {
         if (self.handle == null) return Error(CloseError::AlreadyClosed);
 
-        if (zip_fclose(self.handle) < 0) {
-            return Error(CloseError::SystemError);
-        }
+        let handle = self.handle;
+        self.handle = null;
+
+        if (zip_fclose(handle) != 0) return Error(CloseError::SystemError);
         return Ok();
     }
 

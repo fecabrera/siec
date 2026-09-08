@@ -82,16 +82,16 @@ struct Archive {
     fn close(&self) -> Result<CloseError> {
         if (self.handle == null) return Error(CloseError::AlreadyClosed);
 
-        if (zip_close(self.handle) < 0) {
+        if (zip_close(self.handle) != 0) {
             let error = zip_get_error(self.handle);
             case (error->zip_err) {
             when ZIP_ER::NOZIP:
-                return Error(OpenError::InvalidFile);
+                return Error(CloseError::InvalidFile);
             else:
                 return Error(CloseError::SystemError);
             }
         }
-        
+
         self.handle = null;
         self.mode = ArchiveMode::None;
         

@@ -105,12 +105,11 @@ struct File: IOReadable, IOWritable, IOSeekable {
     fn close(&self) -> Result<CloseError> {
         if (not self.open) return Error(CloseError::AlreadyClosed);
         
-        let res = unistd.close(self.fd);
-        if (res < 0) return Error(CloseError::SystemError);
-
+        let fd = self.fd;
         self.fd = -1;
         self.open = false;
 
+        if (unistd.close(fd) < 0) return Error(CloseError::SystemError);
         return Ok();
     }
 

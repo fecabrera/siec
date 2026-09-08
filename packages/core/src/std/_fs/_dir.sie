@@ -26,6 +26,7 @@ struct DirectoryIterator: Destroy, Iterator<Path> {
      * Destroy the iterator.
      */
     fn destroy(&self) {
+        self.handle = null;
         drop self.path;
     }
 
@@ -113,12 +114,12 @@ struct Directory {
     * @return The result of the operation.
     */
     fn close(&self) -> Result<CloseError> {
-        if (self.handle == null)
-            return Error(CloseError::AlreadyClosed);
+        if (self.handle == null) return Error(CloseError::AlreadyClosed);
         
-        closedir(self.handle);
+        let handle = self.handle;
         self.handle = null;
         
+        if (closedir(handle) != 0) return Error(CloseError::SystemError);
         return Ok();
     }
 

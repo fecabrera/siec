@@ -25,6 +25,7 @@ enum OpenError {
 enum CloseError {
     SystemError = 1,
     FilesystemError,
+    InvalidFile,
     AlreadyClosed,
 }
 
