@@ -271,6 +271,55 @@ interface Assign<T> {
 
 `a = b` calls `assign_from` when claimed, else clones when both sides share a type that implements `Clone`. `a = move b` and assignments from temporaries call `assign` when claimed. Without a matching claim, assignment keeps the ordinary store.
 
+#### Types that cannot be copied
+
+Use `@nocopy` on a struct or union to prevent copies of its values:
+
+```
+@nocopy
+struct Handle {
+    id: i32;
+}
+```
+
+An existing value must be moved explicitly. This makes the original variable unusable:
+
+```
+let first: Handle = {7};
+// let second = first; // Error: Handle cannot be copied.
+let second = move first;
+// first.id;           // Error: first was moved.
+```
+
+The same rule applies to assignment, by-value arguments, and returns. New values from constructors and function calls can be used directly:
+
+```
+fn forward(value: Handle) -> Handle {
+    return move value;
+}
+
+let first: Handle = {7};
+let second = forward(move first);
+```
+
+Reference parameters use the existing reference rules. They do not copy the value:
+
+```
+fn read(value: const &Handle) -> i32 {
+    return value.id;
+}
+```
+
+For an `@nocopy` value, `a = b` and `let a = b` are errors even if its type implements `Clone` or `AssignFrom`. Call `b.clone()` explicitly when the type supports cloning. `move` takes a whole local variable; it cannot take a field or an element through a reference. Use a container's `pop()` or `Slot.take()` to remove a stored value.
+
+A struct or tuple that stores an `@nocopy` value cannot be copied either. This also applies to `Option<Handle>`, `Result<Handle, E>`, and owning containers such as `List<Handle>`. Pointers and array views still refer to existing storage; copying them does not copy the stored values.
+
+To extract a value from a named Result, write `try move result`. A fresh call result can still be used directly with `try make_result()`. Moving an Option into its value type requires a branch that first checks that the Option is present.
+
+Use `items.push(move value)` to store an existing value, or `items.push(value.clone())` to store an explicit clone. Copying methods such as `push_from`, `Slot.write_from`, and `Slot.assign_to` reject `@nocopy` elements. List, Queue, and Stack implement `Clone` when their elements are scalars or implement `Clone`; their explicit `clone()` methods clone each element that implements it.
+
+`@nocopy` does not enable automatic cleanup. A type must still implement `Destroy` to receive it. Manually closed resources remain manually closed. The annotation does not check whether a file was closed or whether an iterator still uses it. A closure cannot move an `@nocopy` value from its captures, because the closure could be called again; pass the value as an explicit parameter instead.
+
 #### Destruction and RAII
 
 Sie uses resource acquisition is initialization (RAII) for deterministic cleanup. Types enable this behavior when they claim the built-in `Destroy` interface:

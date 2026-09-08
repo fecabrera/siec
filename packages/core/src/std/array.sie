@@ -44,7 +44,7 @@ import { String, List } from collections;
     fn add(&self, it: const &Iterable<T>) -> List<T> {
         let result = List<T>(self);
         result.append(it);
-        return result;
+        return move result;
     }
 
     /**
@@ -87,7 +87,7 @@ import { String, List } from collections;
     fn map<ResultType>(const &self, callback: closure fn(const &T) -> ResultType) -> List<ResultType> {
         let result = List<ResultType>();
         foreach (e : self) result.push(callback(e));
-        return result;
+        return move result;
     }
 
     fn from_c_arr(arr: T*, len: u64) -> T[] {

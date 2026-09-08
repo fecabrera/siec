@@ -124,7 +124,16 @@ fn List<T>::get_capacity(const &self) -> u64 {
 fn List<T>::clone(const &self) -> List<T> {
     let lst = List<T>(self.capacity);
     lst.append(self);
-    return lst;
+    return move lst;
+}
+
+/** Clone each element explicitly when it provides Clone. */
+@where<T: Clone>
+@override
+fn List<T>::clone(const &self) -> List<T> {
+    let result = List<T>(self.capacity);
+    foreach (value : self) result.push(value.clone());
+    return move result;
 }
 
 /**
@@ -254,6 +263,18 @@ fn List<T>::get_slice(const &self, start: const u64, finish: const u64) -> List<
     return List<T>(data!, n);
 }
 
+/** Create an independent slice by cloning its elements. */
+@where<T: Clone>
+@override
+fn List<T>::get_slice(const &self, start: const u64, finish: const u64) -> List<T> {
+    let end = finish > self.length ? self.length : finish;
+    let result = List<T>();
+    for (let i = start; i < end; i += 1) {
+        result.push(self.data[i].get().clone());
+    }
+    return move result;
+}
+
 /**
  * Get the element at the given index.
  *
@@ -325,7 +346,7 @@ fn List<T>::pop(&self) -> T {
 fn List<T>::add(&self, it: const &Iterable<T>) -> List<T> {
     let result = List<T>(self);
     result.append(it);
-    return result;
+    return move result;
 }
 
 /**
@@ -360,7 +381,7 @@ fn List<T>::append(&self, arr: const !T*, n: u64) {
 fn List<T>::add(&self, value: const &T) -> List<T> {
     let result = List<T>(self);
     result.push_from(value);
-    return result;
+    return move result;
 }
 
 /**

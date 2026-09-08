@@ -94,6 +94,7 @@ class StructInfo:
     packed: bool = False
     literal: bool = False
     backing: str | None = None
+    nocopy: bool = False
 
     def field(self, name: str) -> tuple[int, str]:
         """
@@ -769,13 +770,13 @@ fn ConstEnumerateIterator<I, T>::destroy(&self) { drop self.state; }
 fn __enumerate<I, T>(it: I) -> EnumerateIterator<I, T> {
     let result: EnumerateIterator<I, T>;
     result.state.init(move it);
-    return result;
+    return move result;
 }
 
 fn __const_enumerate<I, T>(it: I) -> ConstEnumerateIterator<I, T> {
     let result: ConstEnumerateIterator<I, T>;
     result.state.init(move it);
-    return result;
+    return move result;
 }
 
 struct Option<T>: Truthy {
@@ -790,7 +791,7 @@ fn Option<T>::truthy(const &self) -> bool {
 fn None<T>() -> Option<T> {
     let option: Option<T>;
     option.present = false;
-    return option;
+    return move option;
 }
 
 @where<T: Destroy>
@@ -859,37 +860,37 @@ fn Result<E>::truthy(const &self) -> bool {
 fn Ok<V, E>(v: V) -> Result<V, E> {
     let r: Result<V, E>;
     r.ok = true;
-    r.value = v;
-    return r;
+    r.value = move v;
+    return move r;
 }
 
 fn Ok<E>() -> Result<E> {
     let r: Result<E>;
     r.ok = true;
-    return r;
+    return move r;
 }
 
 fn Error<V, E>(e: E) -> Result<V, E> {
     let r: Result<V, E>;
     r.ok = false;
-    r.error = e;
-    return r;
+    r.error = move e;
+    return move r;
 }
 
 fn Error<E>(e: E) -> Result<E> {
     let r: Result<E>;
     r.ok = false;
-    r.error = e;
-    return r;
+    r.error = move e;
+    return move r;
 }
 
 
 @extend T[] {
     @where<ResultType: AddAssign>
     fn sum<ResultType>(const &self, callback: closure fn(const &T) -> ResultType, start: ResultType) -> ResultType {
-        let result = start;
+        let result = move start;
         foreach (e : self) result += callback(e);
-        return result;
+        return move result;
     }
 
     @inline

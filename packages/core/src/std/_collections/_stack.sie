@@ -1,11 +1,16 @@
 import { alloc, free } from std.alloc;
 import { panic } from std;
 
-struct Stack<T>: Destroy, Clone {
+struct Stack<T>: Destroy {
     @private data: Slot<T>*;
     @private top: u64;
     @private capacity: u64;
 }
+
+@where<T: Scalar>
+@extend Stack<T>: Clone;
+@where<T: Clone>
+@extend Stack<T>: Clone;
 
 /**
  * Initialize the Stack.
@@ -43,7 +48,18 @@ fn Stack<T>::clone(const &self) -> Stack<T> {
     for (let i: u64 = 0; i < self.top; i += 1) {
         s.push_from(self.data[i].get());
     }
-    return s;
+    return move s;
+}
+
+/** Clone each element explicitly when it provides Clone. */
+@where<T: Clone>
+@override
+fn Stack<T>::clone(const &self) -> Stack<T> {
+    let result = Stack<T>(self.capacity);
+    for (let i: u64 = 0; i < self.top; i += 1) {
+        result.push(self.data[i].get().clone());
+    }
+    return move result;
 }
 
 /**

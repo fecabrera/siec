@@ -26,6 +26,11 @@ def check_slot_function(gen: CodeGenerator, fn) -> bool:
 
     element, method = found
     from siec.codegen.ownership import destroyable
+    from siec.codegen.nocopy import noncopyable
+
+    if method in ("write_from", "assign_to") and noncopyable(gen, element):
+        raise TypeError(f"cannot copy @nocopy value {element!r} from a Slot; "
+                        "call clone() explicitly or use take() to transfer it")
 
     if method == "assign_to" and destroyable(gen, element):
         from siec.codegen.checking import (check_expression,

@@ -331,6 +331,12 @@ class LocalFlow:
         elif isinstance(expr, ast.Move):
             self.expression(expr.operand, state)
             name = expr.operand.name
+            from siec.codegen.nocopy import noncopyable
+
+            if ('capture' in state[name].storage
+                    and noncopyable(self.gen, state[name].type)):
+                raise TypeError(f"cannot move captured @nocopy value {name!r}; "
+                                "pass it as an explicit value parameter")
             state[name] = replace(state[name], moved=True)
         elif isinstance(expr, ast.UnaryOp) and expr.op == '&':
             self.expression(expr.operand, state, address=True)

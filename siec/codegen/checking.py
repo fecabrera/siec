@@ -233,13 +233,16 @@ def check_temporary_cleanup(gen: CodeGenerator, type_name: str | None,
 
 def consume_owned_expression(gen: CodeGenerator, expr, type_name: str | None,
                              scope: dict) -> None:
-    """Transfer a destructible value expression into a new owner."""
+    """Check explicit-copy restrictions and transfer destructible values."""
     from siec.codegen.ownership import (
         destroyable,
         expression_returns_reference,
         inherit_expression_identity,
     )
     from siec.codegen.interfaces import type_implements
+    from siec.codegen.nocopy import check_copy
+
+    check_copy(gen, expr, type_name, scope)
 
     if isinstance(expr, (Move, Ternary)):
         # These expressions already transfer their selected source while
@@ -389,6 +392,9 @@ def check_statement(gen: CodeGenerator, stmt, scope: dict, fn: Function, *,
 
         if isinstance(stmt, LetTuple):
             value_type = check_expression(gen, stmt.value, scope)
+            from siec.codegen.nocopy import check_copy
+
+            check_copy(gen, stmt.value, value_type, scope)
             stmt.pattern_types = bind_tuple_pattern(
                 gen, stmt.pattern, value_type, scope)
             return False
@@ -1528,7 +1534,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             propagated_scope = dict(scope)
             propagated_scope["try.error"] = checked_variable(error_type)
             check_owned_cleanup(gen, "try.error", propagated_scope)
-            propagated = Call("Error", [Var("try.error")])
+            propagated = Call("Error", [Move(Var("try.error"))])
             check_expression(
                 gen, propagated, propagated_scope, returned)
             consume_owned_expression(
@@ -1621,7 +1627,10 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
                 overwrite=True,
             )
         for value in expr.elements:
-            check_expression(gen, value, scope, element)
+            actual = check_expression(gen, value, scope, element)
+            from siec.codegen.nocopy import check_copy
+
+            check_copy(gen, value, actual or element, scope)
         return expected or infer_type(gen, expr, scope)
 
     if isinstance(expr, TupleLiteral):
@@ -1787,7 +1796,7 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
             raise TypeError(f"cannot move a {moved_type!r} value")
         scope[expr.operand.name] = checked_variable(moved_type, moved=True)
         if expected is not None:
-            require_fit(gen, expr.operand, moved_type, expected)
+            require_fit(gen, expr, moved_type, expected)
             return expected
         return moved_type
 
@@ -1977,6 +1986,9 @@ def check_field_default(gen: CodeGenerator, field) -> None:
     """Check one declared field default, or nested defaults it inherits."""
     if field.default is not None:
         check_expression(gen, field.default, {}, field.type)
+        from siec.codegen.nocopy import check_copy
+
+        check_copy(gen, field.default, field.type, {})
     else:
         check_type_defaults(gen, field.type)
 
@@ -2319,6 +2331,10 @@ def check_call_arguments(gen: CodeGenerator, call: Call, scope: dict,
                     {},
                     params[index],
                 )
+                if not is_reference(params[index]):
+                    from siec.codegen.nocopy import check_copy
+
+                    check_copy(gen, defaults[index], params[index], {})
     finally:
         gen.current_file = previous
 

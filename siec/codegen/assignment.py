@@ -64,6 +64,9 @@ def assignment_action(gen: CodeGenerator, target, target_type: str,
 
     target_type = canonical_value_type(gen, target_type)
     source_type = canonical_value_type(gen, source_type)
+    from siec.codegen.nocopy import check_copy
+
+    check_copy(gen, value, source_type, scope)
 
     if consuming:
         if accepts_source(

@@ -79,12 +79,16 @@ struct ConstQueueIterator<T>: ConstIterator<T> {
 // Linked-list FIFO queue<T>. Values enqueue at the tail and dequeue at the
 // head, both in O(1). Nodes are heap-allocated per push.
 struct Queue<T>
-    : Clone,
-      Destroy,
+    : Destroy,
       Iterable<T> {
     @private head: QueueNode<T>*;   // front: next to dequeue (oldest)
     @private tail: QueueNode<T>*;   // back: last enqueued (newest)
 }
+
+@where<T: Scalar>
+@extend Queue<T>: Clone;
+@where<T: Clone>
+@extend Queue<T>: Clone;
 
 /**
  * Initialize the Queue.
@@ -119,7 +123,16 @@ fn Queue<T>::clone(const &self) -> Queue<T> {
     foreach (v : self) {
         q.push_from(v);
     }
-    return q;
+    return move q;
+}
+
+/** Clone each element explicitly when it provides Clone. */
+@where<T: Clone>
+@override
+fn Queue<T>::clone(const &self) -> Queue<T> {
+    let result = Queue<T>();
+    foreach (value : self) result.push(value.clone());
+    return move result;
 }
 
 /**
@@ -180,7 +193,7 @@ fn Queue<T>::pop(&self) -> T {
     let value = node->value.take();
     free(node);
 
-    return value;
+    return move value;
 }
 
 /**

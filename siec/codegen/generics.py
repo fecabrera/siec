@@ -237,6 +237,7 @@ def _instantiate_generic(gen: CodeGenerator, name: str, seen: tuple = (),
         volatile=template.volatile,
         is_union=template.is_union,
         packed=template.packed,
+        nocopy=template.nocopy,
     )
 
     gen.structs[canonical] = info

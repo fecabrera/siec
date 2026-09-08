@@ -15,6 +15,7 @@ import {
 /**
  * A file inside a ZIP archive.
  */
+@nocopy
 struct File: IOReadable, IOSeekable {
     @private handle: zip_file* = null; /* The underlying zip handle. */
 

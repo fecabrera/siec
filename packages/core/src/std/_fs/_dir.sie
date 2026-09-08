@@ -68,6 +68,7 @@ struct DirectoryIterator: Destroy, Iterator<Path> {
 /**
  * A directory.
  */
+@nocopy
 struct Directory {
     @private handle: DIR*;  /* The underlying pointer to the directory stream */
 

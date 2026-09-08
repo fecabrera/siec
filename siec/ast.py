@@ -694,6 +694,7 @@ class Struct:
     is_private: bool = False  # '@private': visible textually, never through import
     line: int = _line()
     file: str = _file()
+    nocopy: bool = False  # Copies require an explicit clone, never an implicit move.
 
 
 @dataclass

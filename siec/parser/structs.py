@@ -12,7 +12,7 @@ def parse_struct(ts: TokenStream) -> Struct:
     Parse a struct declaration: 'struct Name { a: A; b: B; }', with an optional
     trailing ';', or a bodiless forward declaration 'struct Name;'.
 
-    '@packed', '@align(N)', '@volatile', and '@private' decorators may
+    '@packed', '@align(N)', '@volatile', '@nocopy', and '@private' decorators may
     precede the keyword, in any order.
     """
     line = ts.peek().line
@@ -21,6 +21,7 @@ def parse_struct(ts: TokenStream) -> Struct:
     align = None
     volatile = False
     is_private = False
+    nocopy = False
     while ts.peek().value == "@":
         at_line = ts.peek().line
         ts.next()
@@ -32,6 +33,8 @@ def parse_struct(ts: TokenStream) -> Struct:
             volatile = True
         elif decorator == "private":
             is_private = True
+        elif decorator == "nocopy":
+            nocopy = True
         elif decorator == "align":
             ts.expect("sym", "(")
             literal = ts.expect("int")
@@ -56,6 +59,8 @@ def parse_struct(ts: TokenStream) -> Struct:
 
         ts.next()
     elif is_interface:
+        if nocopy:
+            raise SyntaxError(f"line {line}: '@nocopy' requires a struct or union")
         if packed or align is not None or volatile:
             raise SyntaxError(f"line {line}: an interface has no layout "
                               "to decorate")
@@ -90,7 +95,7 @@ def parse_struct(ts: TokenStream) -> Struct:
                       constraints=constraints,
                       is_interface=is_interface, interfaces=interfaces,
                       is_private=is_private,
-                      line=line)
+                      line=line, nocopy=nocopy)
 
     ts.expect("sym", "{")
 
@@ -175,4 +180,4 @@ def parse_struct(ts: TokenStream) -> Struct:
                   params=params, constraints=constraints,
                   is_interface=is_interface,
                   interfaces=interfaces, actions=actions,
-                  is_private=is_private, line=line)
+                  is_private=is_private, line=line, nocopy=nocopy)

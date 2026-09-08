@@ -89,6 +89,7 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
                                         "more than once")
 
                     template.fields = struct.fields
+                gen.generic_structs[key].nocopy |= struct.nocopy
                 continue
 
             info = gen.structs.get(struct.name)
@@ -105,6 +106,7 @@ def declare_structs(gen: CodeGenerator, program: Program) -> None:
                 info.fields = struct.fields
 
             # decorators apply from whichever declaration carries them
+            info.nocopy |= struct.nocopy
             if struct.packed:
                 info.packed = True
 

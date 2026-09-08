@@ -11,6 +11,7 @@ import { FileMode, OpenError, CloseError, StatError } from _enums;
 /**
  * A file.
  */
+@nocopy
 struct File: IOReadable, IOWritable, IOSeekable {
     @private fd: i32 = -1;                      /* The file descriptor. */
     @private mode: FileMode = FileMode::None;   /* The mode the file was opened in. */

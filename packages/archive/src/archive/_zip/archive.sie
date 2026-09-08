@@ -24,6 +24,7 @@ import { File } from file;
 /**
  * A ZIP archive.
  */
+@nocopy
 struct Archive {
     @private handle: zip* = null;       /* The underlying zip handle. */
     @private mode = ArchiveMode::None;  /* The mode of the archive. */

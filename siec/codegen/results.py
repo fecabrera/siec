@@ -887,6 +887,10 @@ class ResultFlow:
 
     def confirm_option_decay(self, expr) -> None:
         """Require an implicit ``Option<T>`` decay to stand on a present path."""
+        from siec.ast import Move
+
+        if isinstance(expr, Move):
+            expr = expr.operand
         path = path_of(expr)
         if path is None or self.state.get(path) != PRESENT:
             shown = spell(expr)
