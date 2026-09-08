@@ -23,6 +23,12 @@ import {
    through CHUNK bytes at a time so files of any size use constant memory. */
 @const CHUNK = 16384;
 
+enum Action {
+    NoAction,
+    Compress,
+    Decompress,
+}
+
 enum ProgramError {
     ReadError,
     WriteError,
@@ -53,8 +59,13 @@ fn ProgramError::format(const &self, modifiers: const &char[]) -> String {
     }
 }
 
+@inline
+fn show_usage(argv: char**) {
+    std.io.println(std.io.stderr, "usage: {} [-i | -d] input output", argv[0]);
+}
+
 fn main(argc: i32, argv: char**) -> i32 {
-    let fnc: fn (&File, &File) -> Result<ProgramError>;
+    let action = Action::NoAction;
 
     while (true) {
         let opt = unistd.getopt(argc, argv, ":id");
@@ -62,17 +73,17 @@ fn main(argc: i32, argv: char**) -> i32 {
 
         case (opt) {
         when 'i':
-            fnc = decompress_file;
+            action = Action::Decompress;
         when 'd':
-            fnc = compress_file;
+            action = Action::Compress;
         else:
-            std.io.println(std.io.stderr, "usage: {} [-i | -d] input output", argv[0]);
+            show_usage(argv);
             return 1;
         }
     }
 
     if (argc - unistd.optind != 2) {
-        std.io.println(std.io.stderr, "usage: {} [-i | -d] input output", argv[0]);
+        show_usage(argv);
         return 1;
     }
 
@@ -91,7 +102,18 @@ fn main(argc: i32, argv: char**) -> i32 {
     }
     defer output.close();
 
-    try fnc(input, output) except (err) {
+    let res: Result<ProgramError>;
+    case (action) {
+    when Action::Compress:
+        res = compress_file(input, output);
+    when Action::Decompress:
+        res = decompress_file(input, output);
+    else:
+        show_usage(argv);
+        return 1;
+    }
+    
+    try res except (err) {
         std.io.println(std.io.stderr, "{}", err);
         return 1;
     }
