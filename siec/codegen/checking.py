@@ -1347,7 +1347,10 @@ def _check_expression(gen: CodeGenerator, expr: Expr | None, scope: dict,
         if expr.type_args is not None:
             template = reference_template(gen, expr.name)
             if template is not None:
-                instantiate_function(gen, template, expr.type_args)
+                from siec.codegen.hir import stamp
+
+                symbol = instantiate_function(gen, template, expr.type_args)
+                stamp(expr, resolved_symbol=symbol, overwrite=True)
                 return reference_type(gen, expr)
 
         if (expected is not None

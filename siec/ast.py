@@ -647,6 +647,7 @@ class Function:
     constraints: dict | None = None
     variadic: bool = False  # 'args...': trailing borrowed 'const Any[]' sugar
     deprecated: str | None = None  # '@deprecated' or its optional advice
+    nodiscard: bool = False  # Callers must use the result or forward the contract.
     removed: str | None = None  # '@remove("...")': the advice its uses fail with
     is_private: bool = False  # '@private': visible textually, never through import
     # '@override': deliberately replaces a matching declaration

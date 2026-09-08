@@ -76,15 +76,23 @@ def test_override_decorator_marks_functions_and_methods(ts):
     assert method.is_override
 
 
-def test_extern_combines_only_with_noreturn(ts):
+def test_extern_combines_with_signature_decorators(ts):
     """
     '@extern' functions have no body for other decorators to act on;
-    '@noreturn', which describes the signature, is the one exception.
+    '@noreturn' and '@nodiscard' describe the signature instead.
     """
     with pytest.raises(SyntaxError, match="'@extern' only combines"):
         parse_function(ts("@extern @static fn f();"))
 
     assert parse_function(ts("@extern @noreturn fn f();")).noreturn
+    assert parse_function(ts("@extern @nodiscard fn f() -> i32;")).nodiscard
+
+
+def test_nodiscard_decorator(ts):
+    """The required-result annotation can combine with body decorators."""
+    fn = parse_function(ts("@static @inline @nodiscard fn f() -> i32 { return 1; }"))
+    assert fn.nodiscard and fn.is_static and fn.is_inline
+    assert not parse_function(ts("fn f() -> i32 { return 1; }")).nodiscard
 
 
 def test_extern_let_parses_to_a_global(ts):

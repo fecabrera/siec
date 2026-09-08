@@ -177,6 +177,11 @@ def resolve_function_body(gen: CodeGenerator, fn: Function) -> str:
     # among the name's set by their argument types
     symbol = declare_overload(gen, fn, symbol)
 
+    if fn.nodiscard:
+        if fn.return_type is None or fn.noreturn:
+            raise TypeError("'@nodiscard' requires a function that returns a value")
+        gen.nodiscard.add(symbol)
+
     gen.return_types[symbol] = fn.return_type
     gen.param_types[symbol] = [p.type for p in fn.params]
     gen.call_arities[symbol] = CallArity.from_parameters(

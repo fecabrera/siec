@@ -1292,7 +1292,7 @@ Functions can be decorated with `@static` to make them local to their file. Othe
 }
 ```
 
-Decorators can be combined. For example, `@static @inline fn` is both static and inline. An `@extern` function has no body, so body decorators do not apply to it. Only `@noreturn` can be combined with `@extern` because it describes the signature.
+Decorators can be combined. For example, `@static @inline fn` is both static and inline. An `@extern` function has no body, so body decorators do not apply to it. `@noreturn` and `@nodiscard` can be combined with `@extern` because they describe the signature.
 
 `@static let` declares a file-local global variable. One storage location is shared by every call and is visible only in its file. Its initializer must be a compile-time constant. As with a local `let`, the initializer can supply an omitted type. Without an initializer, the type is required and the storage starts at zero. An `@extern let` always keeps its explicit ABI type.
 
@@ -1343,6 +1343,35 @@ fn checked(x: i32) -> i32 {
 ```
 
 Since it hands nothing back, an `@noreturn` function cannot declare a return type, and a `return` inside its body is a compile-time error. The promise passes to LLVM, which optimizes on it.
+
+#### Required return values
+
+`@nodiscard` requires callers to use a function's return value. Discarding the result is a compile error, including when the call is part of a larger expression:
+
+```
+@nodiscard fn status() -> i32 { return 1; }
+
+fn check() {
+    status();       // Error: result is not used.
+    status() + 1;   // Error: expression result is not used.
+    let v = status(); // Valid: the result is stored.
+    if (status() != 0) { /* handle the status */ }
+}
+```
+
+A function that returns the result must also declare `@nodiscard`, even if it changes the value first:
+
+```
+@nodiscard fn adjusted() -> i32 {
+    return status() + 1;
+}
+```
+
+Assignment satisfies the rule. The compiler does not follow the requirement through an ordinary variable, so storing the result and later returning that variable does not require `@nodiscard`. An unused variable warning is planned separately.
+
+Passing the result as a function argument also counts as use. `try` uses a `Result` by checking it for an error. Neither operation proves that an error was handled correctly.
+
+The rule also applies to methods, generic instances, and known calls through function variables. See [Required return values](docs/NODISCARD_PROPOSAL.md) for callback behavior and current limits. A function with no return value cannot declare `@nodiscard`.
 
 #### Deprecated
 

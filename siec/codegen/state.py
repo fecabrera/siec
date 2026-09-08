@@ -73,6 +73,7 @@ class SymbolTable:
     """Declarations, overloads, linkage, privacy, and call metadata."""
 
     return_types: dict[str, str | None] = field(default_factory=dict)
+    nodiscard: set[str] = field(default_factory=set)
     param_types: dict[str, list[str]] = field(default_factory=dict)
     param_defaults: dict[str, tuple[list, str]] = field(default_factory=dict)
     call_arities: dict[str, CallArity] = field(default_factory=dict)

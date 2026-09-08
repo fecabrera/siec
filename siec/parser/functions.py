@@ -622,7 +622,7 @@ def parse_global(ts: TokenStream) -> Global:
 
 DECORATORS = {
     "extern", "inline", "static", "asm", "noreturn", "private",
-    "override",
+    "override", "nodiscard",
 }
 
 
@@ -646,8 +646,8 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     line = ts.peek().line
 
     # decorators may stack ('@static @inline'), except '@extern', whose
-    # function has no body for the others to act on - only '@noreturn',
-    # which describes the signature, rides along with it; '@symbol("name")'
+    # function has no body for the others to act on. '@noreturn' and
+    # '@nodiscard' describe the signature; '@symbol("name")'
     # names the module symbol and combines with any of them
     decorators = set()
     symbol = None
@@ -706,8 +706,9 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
     noreturn = "noreturn" in decorators
     is_override = "override" in decorators
 
-    if is_extern and decorators - {"extern", "noreturn"}:
-        raise SyntaxError(f"line {line}: '@extern' only combines with '@noreturn'")
+    if is_extern and decorators - {"extern", "noreturn", "nodiscard"}:
+        raise SyntaxError(f"line {line}: '@extern' only combines with '@noreturn' "
+                          "or '@nodiscard'")
 
     # a static function's symbol is the compiler's to mangle
     if is_static and symbol is not None:
@@ -896,6 +897,7 @@ def parse_function(ts: TokenStream, receiver: str | None = None,
         "constraints": constraints,
         "variadic": variadic,
         "deprecated": deprecated,
+        "nodiscard": "nodiscard" in decorators,
         "removed": removed,
         "is_private": is_private,
         "is_override": is_override,

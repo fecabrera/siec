@@ -1141,6 +1141,13 @@ def codegen(program: Program, module_name: str, target: str | None = None,
 
     run_semantic_worklist(gen)
 
+    from siec.codegen.nodiscard import check_nodiscard
+    from siec.codegen.worklist import function_instance_symbol
+
+    check_nodiscard(gen, [*ordinary, *(
+        (function_instance_symbol(gen, fn), fn)
+        for fn in gen.checked_instance_bodies)])
+
     complete_semantics(gen)
 
     # Duplicate definitions are a source error even when no application path
