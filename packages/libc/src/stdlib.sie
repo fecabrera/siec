@@ -2,10 +2,10 @@
  * Memory management
  ***************************************/
 
-@extern fn malloc(size: u64) -> opaque*;
-@extern fn calloc(count: u64, size: u64) -> opaque*;
-@extern fn realloc(ptr: opaque*, size: u64) -> opaque*;
-@extern fn aligned_alloc(alignment: u64, size: u64) -> opaque*;
+@extern @nodiscard fn malloc(size: u64) -> opaque*;
+@extern @nodiscard fn calloc(count: u64, size: u64) -> opaque*;
+@extern @nodiscard fn realloc(ptr: opaque*, size: u64) -> opaque*;
+@extern @nodiscard fn aligned_alloc(alignment: u64, size: u64) -> opaque*;
 @extern fn free(ptr: opaque*);
 
 /***************************************

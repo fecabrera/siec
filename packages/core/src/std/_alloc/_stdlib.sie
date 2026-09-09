@@ -3,6 +3,7 @@ import stdlib;
 
 struct StdlibAllocator: Allocator {
     @inline
+    @nodiscard
     fn acquire(&self, size: u64) -> opaque* {
         return stdlib.malloc(size);
     }
