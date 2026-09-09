@@ -277,12 +277,12 @@ struct zip_source;
 @type zip_progress_callback = fn(zip*, f64, opaque*);
 @type zip_cancel_callback = fn(zip*, opaque*) -> i32;
 
-@extern fn zip_close(archive: zip*) -> i32;
-@extern fn zip_delete(archive: zip*,
-                      index: u64) -> i32;
-@extern fn zip_dir_add(archive: zip*,
-                       name: const char*,
-                       flags: zip_flags) -> i64;
+@extern @nodiscard fn zip_close(archive: zip*) -> i32;
+@extern @nodiscard fn zip_delete(archive: zip*,
+                                 index: u64) -> i32;
+@extern @nodiscard fn zip_dir_add(archive: zip*,
+                                  name: const char*,
+                                  flags: zip_flags) -> i64;
 @extern fn zip_discard(archive: zip*);
 
 @extern fn zip_get_error(archive: zip*) -> zip_error*;
@@ -300,140 +300,140 @@ struct zip_source;
                                      src: zip_source*);
 @extern fn zip_error_strerror(error: zip_error*) -> const char*;
 @extern fn zip_error_system_type(error: const zip_error*) -> ZIP_ET;
-@extern fn zip_error_to_data(error: const zip_error*,
-                             data: opaque*,
-                             len: u64) -> i64;
+@extern @nodiscard fn zip_error_to_data(error: const zip_error*,
+                                        data: opaque*,
+                                        len: u64) -> i64;
 
-@extern fn zip_fclose(file: zip_file*) -> i32;
-@extern fn zip_fdopen(fd: i32,
-                      flags: i32,
-                      errorp: ZIP_ER*) -> zip*;
-@extern fn zip_file_add(archive: zip*,
-                        name: const char*,
-                        source: zip_source*,
-                        flags: zip_flags) -> i64;
+@extern @nodiscard fn zip_fclose(file: zip_file*) -> i32;
+@extern @nodiscard fn zip_fdopen(fd: i32,
+                                 flags: i32,
+                                 errorp: ZIP_ER*) -> zip*;
+@extern @nodiscard fn zip_file_add(archive: zip*,
+                                   name: const char*,
+                                   source: zip_source*,
+                                   flags: zip_flags) -> i64;
 @extern fn zip_file_attributes_init(attributes: zip_file_attributes*);
 @extern fn zip_file_error_clear(file: zip_file*);
-@extern fn zip_file_extra_field_delete(archive: zip*,
-                                       index: u64,
-                                       extra_field_index: u16,
-                                       flags: zip_flags) -> i32;
-@extern fn zip_file_extra_field_delete_by_id(archive: zip*,
-                                             index: u64,
-                                             extra_field_id: u16,
-                                             extra_field_index: u16,
-                                             flags: zip_flags) -> i32;
-@extern fn zip_file_extra_field_set(archive: zip*,
-                                    index: u64,
-                                    extra_field_id: u16,
-                                    extra_field_index: u16,
-                                    extra_field_data: const u8*,
-                                    len: u16,
-                                    flags: zip_flags) -> i32;
-@extern fn zip_file_extra_fields_count(archive: zip*,
-                                       index: u64,
-                                       flags: zip_flags) -> i16;
-@extern fn zip_file_extra_fields_count_by_id(archive: zip*,
-                                             index: u64,
-                                             extra_field_id: u16,
-                                             flags: zip_flags) -> i16;
-@extern fn zip_file_extra_field_get(archive: zip*,
-                                    index: u64,
-                                    extra_field_index: u16,
-                                    idp: u16*,
-                                    lenp: u16*,
-                                    flags: zip_flags) -> const u8*;
-@extern fn zip_file_extra_field_get_by_id(archive: zip*,
-                                          index: u64,
-                                          extra_field_id: u16,
-                                          extra_field_index: u16,
-                                          lenp: u16*,
-                                          flags: zip_flags) -> const u8*;
-@extern fn zip_file_get_comment(archive: zip*,
-                                index: u64,
-                                lenp: u32*,
-                                flags: zip_flags) -> const char*;
+@extern @nodiscard fn zip_file_extra_field_delete(archive: zip*,
+                                                  index: u64,
+                                                  extra_field_index: u16,
+                                                  flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_extra_field_delete_by_id(archive: zip*,
+                                                        index: u64,
+                                                        extra_field_id: u16,
+                                                        extra_field_index: u16,
+                                                        flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_extra_field_set(archive: zip*,
+                                               index: u64,
+                                               extra_field_id: u16,
+                                               extra_field_index: u16,
+                                               extra_field_data: const u8*,
+                                               len: u16,
+                                               flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_extra_fields_count(archive: zip*,
+                                                  index: u64,
+                                                  flags: zip_flags) -> i16;
+@extern @nodiscard fn zip_file_extra_fields_count_by_id(archive: zip*,
+                                                        index: u64,
+                                                        extra_field_id: u16,
+                                                        flags: zip_flags) -> i16;
+@extern @nodiscard fn zip_file_extra_field_get(archive: zip*,
+                                               index: u64,
+                                               extra_field_index: u16,
+                                               idp: u16*,
+                                               lenp: u16*,
+                                               flags: zip_flags) -> const u8*;
+@extern @nodiscard fn zip_file_extra_field_get_by_id(archive: zip*,
+                                                     index: u64,
+                                                     extra_field_id: u16,
+                                                     extra_field_index: u16,
+                                                     lenp: u16*,
+                                                     flags: zip_flags) -> const u8*;
+@extern @nodiscard fn zip_file_get_comment(archive: zip*,
+                                           index: u64,
+                                           lenp: u32*,
+                                           flags: zip_flags) -> const char*;
 @extern fn zip_file_get_error(file: zip_file*) -> zip_error*;
-@extern fn zip_file_get_external_attributes(archive: zip*,
-                                            index: u64,
-                                            flags: zip_flags,
-                                            opsys: u8*,
-                                            attributes: u32*) -> i32;
-@extern fn zip_file_is_seekable(file: zip_file*) -> i32;
-@extern fn zip_file_rename(archive: zip*,
-                           index: u64,
-                           name: const char*,
-                           flags: zip_flags) -> i32;
-@extern fn zip_file_replace(archive: zip*,
-                            index: u64,
-                            source: zip_source*,
-                            flags: zip_flags) -> i32;
-@extern fn zip_file_set_comment(archive: zip*,
-                                index: u64,
-                                comment: const char*,
-                                len: u16,
-                                flags: zip_flags) -> i32;
-@extern fn zip_file_set_dostime(archive: zip*,
-                                index: u64,
-                                dostime: u16,
-                                dosdate: u16,
-                                flags: zip_flags) -> i32;
-@extern fn zip_file_set_encryption(archive: zip*,
-                                   index: u64,
-                                   method: ZIP_EM,
-                                   password: const char*) -> i32;
-@extern fn zip_file_set_external_attributes(archive: zip*,
-                                            index: u64,
-                                            flags: zip_flags,
-                                            opsys: u8,
-                                            attributes: u32) -> i32;
-@extern fn zip_file_set_mtime(archive: zip*,
-                              index: u64,
-                              mtime: time_t,
-                              flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_get_external_attributes(archive: zip*,
+                                                       index: u64,
+                                                       flags: zip_flags,
+                                                       opsys: u8*,
+                                                       attributes: u32*) -> i32;
+@extern @nodiscard fn zip_file_is_seekable(file: zip_file*) -> i32;
+@extern @nodiscard fn zip_file_rename(archive: zip*,
+                                      index: u64,
+                                      name: const char*,
+                                      flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_replace(archive: zip*,
+                                       index: u64,
+                                       source: zip_source*,
+                                       flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_set_comment(archive: zip*,
+                                           index: u64,
+                                           comment: const char*,
+                                           len: u16,
+                                           flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_set_dostime(archive: zip*,
+                                           index: u64,
+                                           dostime: u16,
+                                           dosdate: u16,
+                                           flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_file_set_encryption(archive: zip*,
+                                              index: u64,
+                                              method: ZIP_EM,
+                                              password: const char*) -> i32;
+@extern @nodiscard fn zip_file_set_external_attributes(archive: zip*,
+                                                       index: u64,
+                                                       flags: zip_flags,
+                                                       opsys: u8,
+                                                       attributes: u32) -> i32;
+@extern @nodiscard fn zip_file_set_mtime(archive: zip*,
+                                         index: u64,
+                                         mtime: time_t,
+                                         flags: zip_flags) -> i32;
 @extern fn zip_file_strerror(file: zip_file*) -> const char*;
-@extern fn zip_fopen(archive: zip*,
-                     fname: const char*,
-                     flags: zip_flags) -> zip_file*;
-@extern fn zip_fopen_encrypted(archive: zip*,
-                               fname: const char*,
-                               flags: zip_flags,
-                               password: const char*) -> zip_file*;
-@extern fn zip_fopen_index(archive: zip*,
-                           index: u64,
-                           flags: zip_flags) -> zip_file*;
-@extern fn zip_fopen_index_encrypted(archive: zip*,
-                                     index: u64,
-                                     flags: zip_flags,
-                                     password: const char*) -> zip_file*;
-@extern fn zip_fread(file: zip_file*,
-                     buf: opaque*,
-                     nbytes: u64) -> i64;
-@extern fn zip_fseek(file: zip_file*,
-                     offset: i64,
-                     whence: i32) -> i8;
-@extern fn zip_ftell(file: zip_file*) -> i64;
+@extern @nodiscard fn zip_fopen(archive: zip*,
+                                fname: const char*,
+                                flags: zip_flags) -> zip_file*;
+@extern @nodiscard fn zip_fopen_encrypted(archive: zip*,
+                                          fname: const char*,
+                                          flags: zip_flags,
+                                          password: const char*) -> zip_file*;
+@extern @nodiscard fn zip_fopen_index(archive: zip*,
+                                      index: u64,
+                                      flags: zip_flags) -> zip_file*;
+@extern @nodiscard fn zip_fopen_index_encrypted(archive: zip*,
+                                                index: u64,
+                                                flags: zip_flags,
+                                                password: const char*) -> zip_file*;
+@extern @nodiscard fn zip_fread(file: zip_file*,
+                                buf: opaque*,
+                                nbytes: u64) -> i64;
+@extern @nodiscard fn zip_fseek(file: zip_file*,
+                                offset: i64,
+                                whence: i32) -> i8;
+@extern @nodiscard fn zip_ftell(file: zip_file*) -> i64;
 @extern fn zip_get_archive_comment(archive: zip*,
                                    lenp: i32*,
                                    flags: zip_flags) -> const char*;
-@extern fn zip_get_archive_flag(archive: zip*,
-                                flag: zip_flags,
-                                flags: zip_flags) -> i32;
-@extern fn zip_get_name(archive: zip*,
-                        index: u64,
-                        flags: zip_flags) -> const char*;
-@extern fn zip_get_num_entries(archive: zip*,
-                               flags: zip_flags) -> i64;
+@extern @nodiscard fn zip_get_archive_flag(archive: zip*,
+                                           flag: zip_flags,
+                                           flags: zip_flags) -> i32;
+@extern @nodiscard fn zip_get_name(archive: zip*,
+                                   index: u64,
+                                   flags: zip_flags) -> const char*;
+@extern @nodiscard fn zip_get_num_entries(archive: zip*,
+                                          flags: zip_flags) -> i64;
 @extern fn zip_libzip_version() -> const char*;
-@extern fn zip_name_locate(archive: zip*,
-                           fname: const char*,
-                           flags: zip_flags) -> i64;
-@extern fn zip_open(path: const char*,
-                    flags: i32,
-                    errorp: ZIP_ER*) -> zip*;
-@extern fn zip_open_from_source(zs: zip_source*,
-                                flags: i32,
-                                ze: zip_error*) -> zip*;
+@extern @nodiscard fn zip_name_locate(archive: zip*,
+                                      fname: const char*,
+                                      flags: zip_flags) -> i64;
+@extern @nodiscard fn zip_open(path: const char*,
+                               flags: i32,
+                               errorp: ZIP_ER*) -> zip*;
+@extern @nodiscard fn zip_open_from_source(zs: zip_source*,
+                                           flags: i32,
+                                           ze: zip_error*) -> zip*;
 @extern fn zip_register_progress_callback_with_state(archive: zip*,
                                                      precision: f64,
                                                      callback: zip_progress_callback,
@@ -443,152 +443,152 @@ struct zip_source;
                                                    callback: zip_cancel_callback,
                                                    ud_free: fn(opaque*),
                                                    ud: opaque*) -> i32;
-@extern fn zip_set_archive_comment(archive: zip*,
-                                   comment: const char*,
-                                   len: u16) -> i32;
-@extern fn zip_set_archive_flag(archive: zip*,
-                                flag: zip_flags,
-                                value: i32) -> i32;
-@extern fn zip_set_default_password(archive: zip*,
-                                    password: const char*) -> i32;
-@extern fn zip_set_file_compression(archive: zip*,
-                                    index: u64,
-                                    comp: i32,
-                                    comp_flags: u32) -> i32;
+@extern @nodiscard fn zip_set_archive_comment(archive: zip*,
+                                              comment: const char*,
+                                              len: u16) -> i32;
+@extern @nodiscard fn zip_set_archive_flag(archive: zip*,
+                                           flag: zip_flags,
+                                           value: i32) -> i32;
+@extern @nodiscard fn zip_set_default_password(archive: zip*,
+                                               password: const char*) -> i32;
+@extern @nodiscard fn zip_set_file_compression(archive: zip*,
+                                               index: u64,
+                                               comp: i32,
+                                               comp_flags: u32) -> i32;
 @extern fn zip_source_at_eof(source: zip_source*) -> i32;
-@extern fn zip_source_begin_write(source: zip_source*) -> i32;
-@extern fn zip_source_begin_write_cloning(source: zip_source*,
-                                          offset: u64) -> i32;
-@extern fn zip_source_buffer(archive: zip*,
-                             data: const opaque*,
-                             len: u64,
-                             freep: i32) -> zip_source*;
-@extern fn zip_source_buffer_create(data: const opaque*,
-                                    len: u64,
-                                    freep: i32,
-                                    error: zip_error*) -> zip_source*;
-@extern fn zip_source_buffer_fragment(archive: zip*,
-                                      fragments: const zip_buffer_fragment*,
-                                      nfragments: u64,
-                                      freep: i32) -> zip_source*;
-@extern fn zip_source_buffer_fragment_create(fragments: const zip_buffer_fragment*,
-                                             nfragments: u64,
-                                             freep: i32,
-                                             error: zip_error*) -> zip_source*;
-@extern fn zip_source_close(source: zip_source*) -> i32;
-@extern fn zip_source_commit_write(source: zip_source*) -> i32;
+@extern @nodiscard fn zip_source_begin_write(source: zip_source*) -> i32;
+@extern @nodiscard fn zip_source_begin_write_cloning(source: zip_source*,
+                                                     offset: u64) -> i32;
+@extern @nodiscard fn zip_source_buffer(archive: zip*,
+                                        data: const opaque*,
+                                        len: u64,
+                                        freep: i32) -> zip_source*;
+@extern @nodiscard fn zip_source_buffer_create(data: const opaque*,
+                                               len: u64,
+                                               freep: i32,
+                                               error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_buffer_fragment(archive: zip*,
+                                                 fragments: const zip_buffer_fragment*,
+                                                 nfragments: u64,
+                                                 freep: i32) -> zip_source*;
+@extern @nodiscard fn zip_source_buffer_fragment_create(fragments: const zip_buffer_fragment*,
+                                                        nfragments: u64,
+                                                        freep: i32,
+                                                        error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_close(source: zip_source*) -> i32;
+@extern @nodiscard fn zip_source_commit_write(source: zip_source*) -> i32;
 @extern fn zip_source_error(source: zip_source*) -> zip_error*;
-@extern fn zip_source_file(archive: zip*,
-                           fname: const char*,
-                           start: u64,
-                           len: i64) -> zip_source*;
-@extern fn zip_source_file_create(fname: const char*,
-                                  start: u64,
-                                  len: i64,
-                                  error: zip_error*) -> zip_source*;
-@extern fn zip_source_filep(archive: zip*,
-                            file: FILE*,
-                            start: u64,
-                            len: i64) -> zip_source*;
-@extern fn zip_source_filep_create(file: FILE*,
-                                   start: u64,
-                                   len: i64,
-                                   error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_file(archive: zip*,
+                                      fname: const char*,
+                                      start: u64,
+                                      len: i64) -> zip_source*;
+@extern @nodiscard fn zip_source_file_create(fname: const char*,
+                                             start: u64,
+                                             len: i64,
+                                             error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_filep(archive: zip*,
+                                       file: FILE*,
+                                       start: u64,
+                                       len: i64) -> zip_source*;
+@extern @nodiscard fn zip_source_filep_create(file: FILE*,
+                                              start: u64,
+                                              len: i64,
+                                              error: zip_error*) -> zip_source*;
 @extern fn zip_source_free(source: zip_source*);
-@extern fn zip_source_function(archive: zip*,
-                               callback: zip_source_callback,
-                               ud: opaque*) -> zip_source*;
-@extern fn zip_source_function_create(callback: zip_source_callback,
-                                      ud: opaque*,
-                                      error: zip_error*) -> zip_source*;
-@extern fn zip_source_get_file_attributes(source: zip_source*,
-                                          attributes: zip_file_attributes*) -> i32;
+@extern @nodiscard fn zip_source_function(archive: zip*,
+                                          callback: zip_source_callback,
+                                          ud: opaque*) -> zip_source*;
+@extern @nodiscard fn zip_source_function_create(callback: zip_source_callback,
+                                                 ud: opaque*,
+                                                 error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_get_file_attributes(source: zip_source*,
+                                                     attributes: zip_file_attributes*) -> i32;
 @extern fn zip_source_is_deleted(source: zip_source*) -> i32;
 @extern fn zip_source_is_seekable(source: zip_source*) -> i32;
 @extern fn zip_source_keep(source: zip_source*);
-@extern fn zip_source_layered(archive: zip*,
-                              source: zip_source*,
-                              callback: zip_source_layered_callback,
-                              ud: opaque*) -> zip_source*;
-@extern fn zip_source_layered_create(source: zip_source*,
-                                     callback: zip_source_layered_callback,
-                                     ud: opaque*,
-                                     error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_layered(archive: zip*,
+                                         source: zip_source*,
+                                         callback: zip_source_layered_callback,
+                                         ud: opaque*) -> zip_source*;
+@extern @nodiscard fn zip_source_layered_create(source: zip_source*,
+                                                callback: zip_source_layered_callback,
+                                                ud: opaque*,
+                                                error: zip_error*) -> zip_source*;
 @extern fn zip_source_make_command_bitmap(command: zip_source_cmd, ...) -> i64;
-@extern fn zip_source_open(source: zip_source*) -> i32;
+@extern @nodiscard fn zip_source_open(source: zip_source*) -> i32;
 // @extern fn zip_source_pass_to_lower_layer(source: zip_source*, opaque*, u64, command: zip_source_cmd) -> i64;
-@extern fn zip_source_read(source: zip_source*,
-                           data: opaque*,
-                           len: u64) -> i64;
+@extern @nodiscard fn zip_source_read(source: zip_source*,
+                                      data: opaque*,
+                                      len: u64) -> i64;
 @extern fn zip_source_rollback_write(source: zip_source*);
-@extern fn zip_source_seek(source: zip_source*,
-                           offset: i64,
-                           whence: i32) -> i32;
-@extern fn zip_source_seek_compute_offset(offset: u64,
-                                          len: u64,
-                                          data: opaque*,
-                                          data_len: u64,
-                                          error: zip_error*) -> i64;
-@extern fn zip_source_seek_write(source: zip_source*,
-                                 offset: i64,
-                                 whence: i32) -> i32;
-@extern fn zip_source_stat(source: zip_source*,
-                           sb: zip_stat*) -> i32;
-@extern fn zip_sourceell(source: zip_source*) -> i64;
-@extern fn zip_sourceell_write(source: zip_source*) -> i64;
+@extern @nodiscard fn zip_source_seek(source: zip_source*,
+                                      offset: i64,
+                                      whence: i32) -> i32;
+@extern @nodiscard fn zip_source_seek_compute_offset(offset: u64,
+                                                     len: u64,
+                                                     data: opaque*,
+                                                     data_len: u64,
+                                                     error: zip_error*) -> i64;
+@extern @nodiscard fn zip_source_seek_write(source: zip_source*,
+                                            offset: i64,
+                                            whence: i32) -> i32;
+@extern @nodiscard fn zip_source_stat(source: zip_source*,
+                                      sb: zip_stat*) -> i32;
+@extern @nodiscard fn zip_source_tell(source: zip_source*) -> i64;
+@extern @nodiscard fn zip_source_tell_write(source: zip_source*) -> i64;
 @if (TARGET_OS == OS_WINDOWS) {
-@extern fn zip_source_win32a(archive: zip*,
-                             fname: const char*,
-                             start: u64,
-                             len: i64) -> zip_source*;
-@extern fn zip_source_win32a_create(fname: const char*,
-                                    start: u64,
-                                    len: i64,
-                                    error: zip_error*) -> zip_source*;
-@extern fn zip_source_win32handle(archive: zip*, h: opaque*, start: u64, len: i64) -> zip_source*;
-@extern fn zip_source_win32handle_create(h: opaque*, start: u64, len: i64, error: zip_error*) -> zip_source*;
-@extern fn zip_source_win32w(archive: zip*,
-                             fname: const wchar_t*,
-                             start: u64,
-                             len: i64) -> zip_source*;
-@extern fn zip_source_win32w_create(fname: const wchar_t*,
-                                    start: u64,
-                                    len: i64,
-                                    error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_win32a(archive: zip*,
+                                        fname: const char*,
+                                        start: u64,
+                                        len: i64) -> zip_source*;
+@extern @nodiscard fn zip_source_win32a_create(fname: const char*,
+                                               start: u64,
+                                               len: i64,
+                                               error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_win32handle(archive: zip*, h: opaque*, start: u64, len: i64) -> zip_source*;
+@extern @nodiscard fn zip_source_win32handle_create(h: opaque*, start: u64, len: i64, error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_win32w(archive: zip*,
+                                        fname: const wchar_t*,
+                                        start: u64,
+                                        len: i64) -> zip_source*;
+@extern @nodiscard fn zip_source_win32w_create(fname: const wchar_t*,
+                                               start: u64,
+                                               len: i64,
+                                               error: zip_error*) -> zip_source*;
 }
-@extern fn zip_source_window_create(source: zip_source*,
-                                    start: u64,
-                                    len: i64,
-                                    error: zip_error*) -> zip_source*;
-@extern fn zip_source_write(source: zip_source*,
-                            data: const opaque*,
-                            len: u64) -> i64;
-@extern fn zip_source_zip_file(archive: zip*,
-                               srcarchive: zip*,
-                               srcidx: u64,
+@extern @nodiscard fn zip_source_window_create(source: zip_source*,
+                                               start: u64,
+                                               len: i64,
+                                               error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_source_write(source: zip_source*,
+                                       data: const opaque*,
+                                       len: u64) -> i64;
+@extern @nodiscard fn zip_source_zip_file(archive: zip*,
+                                          srcarchive: zip*,
+                                          srcidx: u64,
+                                          flags: zip_flags,
+                                          start: u64,
+                                          len: i64,
+                                          password: const char*) -> zip_source*;
+@extern @nodiscard fn zip_source_zip_file_create(archive: zip*,
+                                                 srcidx: u64,
+                                                 flags: zip_flags,
+                                                 start: u64,
+                                                 len: i64,
+                                                 password: const char*,
+                                                 error: zip_error*) -> zip_source*;
+@extern @nodiscard fn zip_stat(archive: zip*,
+                               fname: const char*,
                                flags: zip_flags,
-                               start: u64,
-                               len: i64,
-                               password: const char*) -> zip_source*;
-@extern fn zip_source_zip_file_create(archive: zip*,
-                                      srcidx: u64,
-                                      flags: zip_flags,
-                                      start: u64,
-                                      len: i64,
-                                      password: const char*,
-                                      error: zip_error*) -> zip_source*;
-@extern fn zip_stat(archive: zip*,
-                    fname: const char*,
-                    flags: zip_flags,
-                    sb: zip_stat*) -> i32;
-@extern fn zip_stat_index(archive: zip*,
-                          index: u64,
-                          flags: zip_flags,
-                          sb: zip_stat*) -> i32;
+                               sb: zip_stat*) -> i32;
+@extern @nodiscard fn zip_stat_index(archive: zip*,
+                                     index: u64,
+                                     flags: zip_flags,
+                                     sb: zip_stat*) -> i32;
 @extern fn zip_stat_init(sb: zip_stat*);
 @extern fn zip_strerror(archive: zip*) -> const char*;
-@extern fn zip_unchange(archive: zip*, index: u64) -> i32;
-@extern fn zip_unchange_all(archive: zip*) -> i32;
-@extern fn zip_unchange_archive(archive: zip*) -> i32;
+@extern @nodiscard fn zip_unchange(archive: zip*, index: u64) -> i32;
+@extern @nodiscard fn zip_unchange_all(archive: zip*) -> i32;
+@extern @nodiscard fn zip_unchange_archive(archive: zip*) -> i32;
 @extern fn zip_compression_method_supported(method: i32, compress: i32) -> i32;
 @extern fn zip_encryption_method_supported(method: u16, encode: i32) -> i32;
